@@ -67,6 +67,8 @@ ffmpeg -rtsp_transport tcp -i "rtsp://user:pass@<cam-ip>/stream1" \
 
 Rejected: recording to microSD and exporting via the Tapo app — many small segments, manual export, and no certainty about what frame rate and audio actually got written. Pulling RTSP means the file processed is the file preflight validated.
 
+**Timestamps and clean stop.** Include `-use_wallclock_as_timestamps 1` in the capture invocation — the camera's RTP timestamps are unreliable and non-monotonic (ADR-030). End recordings with ffmpeg's own `-t <duration>` flag or SIGINT; never stop with an external hard kill (`timeout`/SIGKILL) — that was observed to corrupt the output container (ADR-031). If the audio codec is `pcm_alaw`, the container **must** be MKV — MP4 does not support that codec tag.
+
 ---
 
 ## 2. Prior art

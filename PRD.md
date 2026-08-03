@@ -139,7 +139,7 @@ These are limits users must know about — conditions under which the product wo
 
 ### Privacy
 
-Recording at a public court captures strangers who haven't consented. Therefore: footage stays local by default, nothing is retained in the cloud beyond a processing window, no face recognition ever, and the operator is responsible for local law and for telling other players.
+Recording at a public court captures strangers who haven't consented. Therefore: footage stays local by default, nothing is retained in the cloud beyond a processing window, no face recognition ever — this is intended to cover non-consented re-identification generally, not just literal facial recognition — and the operator is responsible for local law and for telling other players.
 
 ---
 
@@ -210,6 +210,8 @@ The first two are the most likely to actually bite. The second is the quiet one 
 5. **Singles or doubles for the eval sets?** Doubles has more occlusion and more talking. Probably label both and report separately — a system tuned on singles may not transfer.
 6. **How tight should boundaries be?** The 1.0 s target is an assumption. Generous padding may feel better than tight cuts.
 7. **Does the reel need ordering beyond chronological?** Building to a climax is how humans edit highlights. Chronological is the safe default; worth one experiment later.
+8. **Camera capture reliability over wifi RTSP.** Testing showed intermittent frame drops — one test captured 113 of 900 expected frames. Root cause was trusting the camera's RTP timestamps rather than wallclock time; fix is `-use_wallclock_as_timestamps 1`, plus always using a clean stop (`-t N` flag or SIGINT) rather than a hard kill, to avoid corrupting the MKV container. Recommend microSD local recording over wifi capture once available, to remove the network dependency entirely.
+9. **SD card sizing.** Measured stream bitrate is ~1.4 Mbps — possibly the substream; the main stream could be 4–8 Mbps — so a 2-hour session is ~1.26–5.4 GB. Recommend 64GB minimum. Verify the camera's actual max supported card size and required filesystem before purchase (FAT32 caps at 32GB).
 
 ---
 
@@ -218,9 +220,9 @@ The first two are the most likely to actually bite. The second is the quiet one 
 Each needs its own success criteria before it starts.
 
 - **Preference-validated ranking** — the most likely thing to matter, since a dull reel is the highest-impact risk no metric catches
-- **Score tracking** (N1)
+- **Score tracking** (N1) — winner determination likely requires line-call-level accuracy, already ruled out (N8), so audio-based score-calling (players speaking the score aloud) is a more promising path than vision-only winner detection, *if* sessions use rally scoring (need to confirm ruleset). Serve/side attribution is comparatively tractable and reuses the existing position-tracking signal.
 - **Shot classification** (N2)
-- **Per-player statistics**
+- **Per-player statistics / player tracking** — distinguish anonymous within-session tracking (tractable, reuses existing position data, no privacy conflict) from cross-session identification (requires some form of re-identification, in tension with the "no face recognition ever" stance, §6). Recommend opt-in check-in (QR code or name selection) or a visual marker (wristband/pinnie) as the identity-linking mechanism instead of biometric re-ID.
 - **Multi-court generalization** — the only scenario where automated court detection earns its cost
 - **Live processing**
 - Everything in §1's out-of-scope list

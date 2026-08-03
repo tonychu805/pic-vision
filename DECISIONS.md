@@ -500,6 +500,66 @@ Two further findings worth keeping:
 
 ---
 
+## ADR-030 — Use wallclock timestamps, not camera RTP timestamps, for RTSP capture
+
+**Date:** 2026-08-04 · **Status:** accepted
+
+**Context.** RTSP capture testing over wifi showed intermittent frame drops — one test captured 113 of 900 expected frames. The TP-Link camera's RTP timestamps proved unreliable and non-monotonic, which compounds the problem of handling dropped frames downstream.
+
+**Decision.** Pass `-use_wallclock_as_timestamps 1` to ffmpeg on capture, rather than trusting the camera's RTP timestamps.
+
+**Consequences.** Timestamps reflect local receive time instead of camera-side timing, consistent with PTS already being the source of truth (ADR-025) and never `frame_index / fps`. Does not fix the underlying frame drops — that's ADR-032 — but stops bad timestamps from silently corrupting downstream analysis.
+
+---
+
+## ADR-031 — Clean-stop requirement for recordings
+
+**Date:** 2026-08-04 · **Status:** accepted
+
+**Context.** Hard-killing an ffmpeg capture process (e.g., via `timeout`/SIGKILL) risks corrupting the output container — observed with the pcm_alaw audio codec in an MKV wrapper.
+
+**Decision.** Always stop recordings cleanly: use ffmpeg's own `-t <duration>` flag to end automatically, or send SIGINT and let ffmpeg finalize the file. Never externally hard-kill the process.
+
+**Consequences.** Slightly less flexible for ad-hoc early stops — must send SIGINT, not SIGKILL. In exchange, output files are reliably valid and playable; an external hard kill was observed to corrupt the MKV container.
+
+---
+
+## ADR-032 — Prefer local microSD recording over wifi/RTSP capture, once available
+
+**Date:** 2026-08-04 · **Status:** accepted
+
+**Context.** Wifi RTSP capture testing showed intermittent, severe frame drops (113/900 frames in one test) — a network-reliability problem that timestamp handling (ADR-030) and clean stops (ADR-031) don't fix.
+
+**Decision.** Once the camera has a card installed, prefer recording locally to microSD over pulling RTSP to the Mac. This removes the network-reliability dependency entirely.
+
+**Consequences.** Requires a manual pull/export step after each session — this was previously rejected for the Tapo C200 (`TECH_SPEC.md` §1.2) for different reasons (no certainty about frame rate/audio actually written). The trade-off may differ for this camera; worth re-evaluating card size (PRD §9) and export path once hardware is in hand. Wifi RTSP remains the fallback where local recording isn't available.
+
+---
+
+## ADR-033 — Hybrid local/cloud split for future stats/identity features
+
+**Date:** 2026-08-04 · **Status:** accepted (post-prototype; not built now)
+
+**Context.** Any future score-tracking, player-tracking, or per-player-stats feature (PRD §10, deferred) will eventually raise the question of where data lives. The prototype's privacy stance (PRD §6) is local-only by default.
+
+**Decision.** If these features are ever built: raw video and all detection/inference stay local, always. Only small, consented, non-video data — player profiles, aggregate stats — are candidates for cloud sync, and only with explicit opt-in.
+
+**Consequences.** Keeps the highest-risk data — video of people who haven't consented — off the network categorically, rather than relying on per-feature judgment calls later. Non-video stats sync is deferred design, not a commitment; this just fixes the boundary in advance.
+
+---
+
+## ADR-034 — Check-in/opt-in identity linking over biometric re-identification
+
+**Date:** 2026-08-04 · **Status:** accepted (post-prototype; not built now)
+
+**Context.** Cross-session player identification, needed for any longitudinal stats, requires some form of re-identification. Biometric re-ID (face or gait recognition) is in direct tension with the "no face recognition ever" stance (PRD §6), which is intended to cover non-consented re-identification generally, not just literal facial recognition.
+
+**Decision.** If cross-session identification is ever built, use an opt-in check-in mechanism — a QR code scan or name selection at session start — or a visual marker (wristband/pinnie) for within-session linking, instead of any biometric re-ID.
+
+**Consequences.** Anonymous within-session tracking is unaffected (ADR-008) — it needs no identity linking at all. Cross-session identification becomes opt-in and revocable rather than automatic, at the cost of requiring active participation from players. No biometric data is ever collected.
+
+---
+
 ## Template
 
 ```markdown

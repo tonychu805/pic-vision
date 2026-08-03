@@ -1,0 +1,20 @@
+# Session captures / recordings & pipeline video outputs — never commit video
+# (covers highlights.mp4, rallies_full.mp4, and raw session_*.mkv captures)
+*.mp4
+*.mkv
+*.mov
+*.avi
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+venv/
+.pytest_cache/
+
+# macOS
+.DS_Store
+
+# NOT ignored, on purpose — commit these:
+#   labels/*.jsonl        hand-labeled ground truth (the whole basis for §5 metrics)
+#   court_calibration.json, sessions.jsonl, tallies/*.md   small config / notes
