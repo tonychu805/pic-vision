@@ -151,7 +151,7 @@ Ordered so the riskiest assumptions are tested first and something watchable exi
 |---|---|---|---|
 | **0. Instrument** | Verified capture, labeled eval sets, calibrated court, working eval harness | Harness reports the §5 tables on a hand-written stub | 2 days |
 | **0.5. Benchmark prior art** | Existing open-source rally detectors scored against our eval set | A baseline number exists | 1 day |
-| **0.6. Validate the approach** | Measure how often "play has stopped" markers fire *during* labeled rallies | Near zero. **If not, the detection approach is unsound** and changes before anything is built. | 1 day |
+| **0.6. Validate the approach** | Measure how often "play has stopped" markers misfire — two cases named: **during dink rallies** (low-motion real play) and **after points on courtesy returns** (motion during dead time) | Both near zero. **If not, the detection approach is unsound** and changes before anything is built. | 1 day |
 | **1. Core pipeline** | End-to-end: player positions → rally segmentation → ranked selection → both artifacts | A watchable ≤10-min reel exists. Recall and FP measured. Subjective gate run once. | 1 week |
 | **1.5. Sharpen boundaries** | Dense sampling around rally edges | Boundary error ≤ 1.0 s | 3 days |
 | **2. Ball presence** | Off-the-shelf ball detection — no training | FP improves, recall doesn't regress | 3 days |
@@ -162,7 +162,7 @@ Ordered so the riskiest assumptions are tested first and something watchable exi
 
 **Total: 3–4.5 weeks**, depending on the Phase 3 gate.
 
-**Phase 0.6 is the real gate.** The detection approach works by spotting when play *stops* — someone crosses the net, walks off court, picks up the ball — and treating everything else as a rally. That's more robust than trying to score how "rally-like" a moment looks, but only if those markers are clean. One day of measurement confirms or kills it before a week of building.
+**Phase 0.6 is the real gate.** The detection approach works by spotting when play *stops* — someone crosses the net, walks off court, picks up the ball — and treating everything else as a rally. That's more robust than trying to score how "rally-like" a moment looks, but only if those markers are clean. One day of measurement confirms or kills it before a week of building. The two cases most likely to break it are pickleball-specific and must be measured explicitly, not averaged away: **dink rallies**, where players barely move during real play so a motion-based marker reads live play as dead time; and **courtesy returns**, where the tap-back after a point looks like a short rally. The easy 80% of points isn't the test — these two are.
 
 **Phase 0.5 is new and deliberately early.** Several open-source pickleball rally detectors already exist, one of which implements roughly Phases 1–2 — but none publishes a single accuracy number. Measuring them costs a day and either saves two weeks or produces a baseline to beat. Building first and comparing later would repeat the mistake this plan exists to avoid.
 
@@ -185,6 +185,7 @@ Audio being unusable is no longer on this list. It was once a project-ending ris
 | Risk | Likelihood | Impact | Response |
 |---|---|---|---|
 | **Player detection is noisy or occluded**, so dead-time markers fire during real rallies | Medium | **High** | The whole detection design rests on these being clean. Validated by measurement in Phase 0.6 *before* the segmenter is built; if it fails, fall back to positive scoring. |
+| **Far-court pose estimation too noisy to trigger on** — small, partly-occluded players from an 8-ft baseline mount | Medium | Medium | Keypoint-based rally triggers (swing/stance detection) may be unreliable at range. Test pose quality on the *far* court before depending on it; position and motion markers, not pose, are the fallback signal. |
 | Thresholds overfit to one session | **High** | **High** | Strict holdout separation; recall regressions auto-revert |
 | **Courtesy returns** read as short rallies — happens after *every* point, so systematic | **High** | Medium | Require ≥ 2 ball crossings plus minimum duration |
 | Adjacent courts contaminate audio | High in venues | Low | Audio is optional and auto-disabled by a usability gate. It was demoted from primary precisely because of this. |
