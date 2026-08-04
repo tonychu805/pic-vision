@@ -504,11 +504,11 @@ Two further findings worth keeping:
 
 **Date:** 2026-08-04 · **Status:** accepted
 
-**Context.** RTSP capture testing over wifi showed intermittent frame drops — one test captured 113 of 900 expected frames. The TP-Link camera's RTP timestamps proved unreliable and non-monotonic, which compounds the problem of handling dropped frames downstream.
+**Context.** RTSP capture testing over wifi showed intermittent frame drops — one test captured 113 of 900 expected frames. The TP-Link camera's RTP timestamps proved unreliable and non-monotonic, which compounds the problem of handling dropped frames downstream. Follow-up measurement (n=4 captures, 8–39 s, counting decoded frames) put *typical* delivery at 90–96% of expected @30fps — so the 113/900 (~12.5%) case is the intermittent worst run, not the norm. Loss is bursty (isolated stalls of ~1–4 s), not a steady low rate, and all four were short captures on a network measuring 6–11 ms ping / 0% loss at the time — congestion or a full 2-hour session could still be worse.
 
 **Decision.** Pass `-use_wallclock_as_timestamps 1` to ffmpeg on capture, rather than trusting the camera's RTP timestamps.
 
-**Consequences.** Timestamps reflect local receive time instead of camera-side timing, consistent with PTS already being the source of truth (ADR-025) and never `frame_index / fps`. Does not fix the underlying frame drops — that's ADR-032 — but stops bad timestamps from silently corrupting downstream analysis.
+**Consequences.** Timestamps reflect local receive time instead of camera-side timing, consistent with PTS already being the source of truth (ADR-025) and never `frame_index / fps`. Does not fix the underlying frame drops — that's ADR-032 — but stops bad timestamps from silently corrupting downstream analysis. **Caveat, observed live:** even with the flag set, ffmpeg still logged `Timestamps are unset in a packet for stream 0` while writing the MKV. The output probed cleanly (PTS present, gaps measurable) so it didn't bite, but the flag isn't fully overriding the muxer path this ADR assumes — verify before trusting it for a real session.
 
 ---
 
