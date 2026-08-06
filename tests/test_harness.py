@@ -75,3 +75,32 @@ def test_detection_boundary_error_median():
     gts = [{"start": 0.0, "end": 10.0}]
     m = detection_metrics(preds, gts, source_duration_sec=600.0)
     assert m["boundary_error_median_sec"] == 1.0
+
+
+from eval.harness import selection_metrics
+
+
+def test_selection_within_budget():
+    # selected durations 200 + 300 = 500 s of a 600 s budget
+    preds = [
+        {"start": 0.0, "end": 200.0, "selected": True},
+        {"start": 200.0, "end": 500.0, "selected": True},
+        {"start": 500.0, "end": 600.0, "selected": False},
+    ]
+    m = selection_metrics(preds)
+    assert m["selected_duration_sec"] == 500.0
+    assert m["budget_compliant"] is True
+    assert abs(m["utilization"] - (500.0 / 600.0)) < 1e-9
+    assert m["rally_count"] == 2
+    assert abs(m["keep_rate"] - (2.0 / 3.0)) < 1e-9
+
+
+def test_selection_over_budget_is_not_compliant():
+    # selected durations 400 + 300 = 700 s -> over the 600 s hard budget
+    preds = [
+        {"start": 0.0, "end": 400.0, "selected": True},
+        {"start": 400.0, "end": 700.0, "selected": True},
+    ]
+    m = selection_metrics(preds)
+    assert m["selected_duration_sec"] == 700.0
+    assert m["budget_compliant"] is False

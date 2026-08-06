@@ -78,3 +78,24 @@ def detection_metrics(preds, gts, source_duration_sec):
         "n_pred": n_pred,
         "n_matched": n_matched,
     }
+
+
+def selection_metrics(preds, budget_sec=600.0):
+    """Selection table (PRD §5). Reads the 'selected' flag.
+
+    - selected_duration_sec: total length of selected rallies
+    - budget_compliant: total <= budget (hard limit)
+    - utilization: total / budget
+    - rally_count: number of selected rallies
+    - keep_rate: selected / all detected
+    """
+    selected = [p for p in preds if p.get("selected")]
+    selected_dur = sum(p["end"] - p["start"] for p in selected)
+    n_pred = len(preds)
+    return {
+        "selected_duration_sec": selected_dur,
+        "budget_compliant": selected_dur <= budget_sec,
+        "utilization": selected_dur / budget_sec if budget_sec else 0.0,
+        "rally_count": len(selected),
+        "keep_rate": len(selected) / n_pred if n_pred else 0.0,
+    }
