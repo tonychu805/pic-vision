@@ -2,3 +2,6 @@
 # Added to as the pipeline grows; today covers the calibration + labeling tools.
 opencv-python
 numpy
+
+# dev only
+pytest
