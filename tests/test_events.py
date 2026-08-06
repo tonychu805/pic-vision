@@ -1,4 +1,15 @@
-from src.events import mean_motion, motion_series
+from src.events import mean_motion, motion_series, n_at_kitchen, kitchen_series
+
+
+def test_n_at_kitchen_counts_players_near_nvz_lines():
+    # near-kitchen (y=14), far-kitchen (y=30), near-baseline (y=5), far-baseline (y=40)
+    pos = [(10, 14), (10, 30), (10, 5), (10, 40)]
+    assert n_at_kitchen(pos) == 2
+
+
+def test_kitchen_series_is_per_frame():
+    tracks = [(0.0, [(10, 15), (10, 29)]), (0.2, [(10, 5)])]
+    assert kitchen_series(tracks) == [(0.0, 2), (0.2, 0)]
 
 
 def test_mean_motion_single_player():

@@ -28,3 +28,20 @@ def motion_series(tracks):
         (_, prev), (t, cur) = tracks[i - 1], tracks[i]
         out.append((t, mean_motion(prev, cur)))
     return out
+
+
+# Non-volley-zone (kitchen) lines in court feet — near team plays behind y=15,
+# far team behind y=29 (calibrate.py POINTS).
+KITCHEN_LINES = (15.0, 29.0)
+
+
+def n_at_kitchen(positions, band=4.0, lines=KITCHEN_LINES):
+    """How many players are within `band` feet of a kitchen (NVZ) line — the
+    'both teams up at the net' formation of dink and net play, which is live
+    even when motion is near zero."""
+    return sum(1 for _, y in positions if min(abs(y - l) for l in lines) <= band)
+
+
+def kitchen_series(tracks):
+    """Per-frame (time_sec, n_at_kitchen) from court-position tracks."""
+    return [(t, n_at_kitchen(pos)) for t, pos in tracks]
