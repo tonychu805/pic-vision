@@ -13,3 +13,35 @@ def test_iou_half_overlap():
 
 def test_iou_no_overlap_is_zero():
     assert iou({"start": 0.0, "end": 10.0}, {"start": 20.0, "end": 30.0}) == 0.0
+
+
+from eval.harness import match_intervals
+
+
+def test_match_perfect_one_to_one():
+    preds = [{"start": 0.0, "end": 10.0}]
+    gts = [{"start": 0.0, "end": 10.0}]
+    result = match_intervals(preds, gts)
+    assert len(result["matches"]) == 1
+    assert result["missed"] == []
+    assert result["false_pos"] == []
+
+
+def test_match_one_prediction_cannot_claim_two_labels():
+    # pred spans both labels; IoU with each is exactly 0.5 (>= threshold),
+    # but greedy one-to-one must credit only ONE. The other is a miss.
+    preds = [{"start": 0.0, "end": 20.0}]
+    gts = [{"start": 0.0, "end": 10.0}, {"start": 10.0, "end": 20.0}]
+    result = match_intervals(preds, gts)
+    assert len(result["matches"]) == 1
+    assert len(result["missed"]) == 1
+    assert result["false_pos"] == []
+
+
+def test_match_reports_miss_and_false_positive():
+    preds = [{"start": 0.0, "end": 10.0}, {"start": 200.0, "end": 210.0}]
+    gts = [{"start": 0.0, "end": 10.0}, {"start": 100.0, "end": 110.0}]
+    result = match_intervals(preds, gts)
+    assert len(result["matches"]) == 1
+    assert result["missed"] == [1]      # gt at 100-110 unmatched
+    assert result["false_pos"] == [1]   # pred at 200-210 unmatched
