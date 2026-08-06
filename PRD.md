@@ -81,7 +81,7 @@ The only user is Tony. These are the modes.
 
 ### Definitions
 
-- A **rally** runs from serve contact to the last ball contact of the point.
+- A **rally** runs from serve contact to the moment the ball becomes dead — it next touches the ground or goes out of play (`LABELING.md` v2).
 - A predicted rally **matches** a labeled rally when their overlap-over-union in time is ≥ 0.5.
 
 ### Detection targets — measured on the complete rally list

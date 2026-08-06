@@ -2,15 +2,15 @@
 
 **Fill in the bracketed decisions after watching your first session (step 3), then don't change them.** Consistency matters more than which choice you make — an inconsistent labeler puts a ceiling on every metric the project will ever produce.
 
-Version: 1 · Last changed: —
+Version: 2 · Last changed: 2026-08-06
 
 ---
 
 ## What a rally is
 
-A rally runs from **serve contact** to **[ the last paddle contact | the moment the ball next touches the ground or goes out of play ]**.
+A rally runs from **serve contact** to **the moment the ball next touches the ground or goes out of play** — the ball becoming *dead*, not merely the last paddle contact.
 
-Pick one and write it here: ______________________
+**Decided (v2):** ball-dead. This is deliberately *later* than the original "last ball contact"; PRD §5 has been updated to match, so the two agree.
 
 The difference is up to a second on any point that ends with the ball sailing long, which is a large fraction of your 1.0 s boundary target.
 
@@ -18,11 +18,11 @@ The difference is up to a second on any point that ends with the ball sailing lo
 
 | Case | Rule |
 |---|---|
-| **Serve fault / second serve** | [ label as one rally including both attempts \| label only the successful serve \| exclude ] |
-| **Let serve** (replayed) | [ exclude \| label the replay only ] |
+| **Serve fault** | **Not a rally** — a faulted serve is a dead ball, no play occurred. (Pickleball has no second-serve do-over.) *(default — override if your games differ)* |
+| **Let serve** (if your games replay it) | **Label the replay only**; the let itself is not a rally. Note: current USAP rules keep a net-serve that lands in *live* — then it is a normal rally. *(default — override if your games differ)* |
 | **Courtesy return** — ball tapped back to the server after the point | **Never a rally.** Non-negotiable — this is the exact false positive the detector must reject, so the labels must be unambiguous. |
-| **Warm-up / dinking practice** | [ exclude entirely \| label as rallies ] — if excluded, note the timestamp where warm-up ends |
-| **Rally interrupted** by a stray ball from the next court | [ label up to the interruption \| exclude ] |
+| **Warm-up / dinking practice** | **Exclude entirely.** Note the timestamp where real play begins. |
+| **Rally interrupted** by a stray ball from the next court | **Label up to the interruption** — the real play counts; the interruption is just an early end. |
 | **A point nobody plays out** (obvious out, players stop) | Label to the last contact anyway |
 | **Between-game breaks** | Not rallies. Obviously. |
 
