@@ -45,3 +45,33 @@ def test_match_reports_miss_and_false_positive():
     assert len(result["matches"]) == 1
     assert result["missed"] == [1]      # gt at 100-110 unmatched
     assert result["false_pos"] == [1]   # pred at 200-210 unmatched
+
+
+from eval.harness import detection_metrics
+
+
+def test_detection_perfect_run():
+    preds = [{"start": 0.0, "end": 10.0}]
+    gts = [{"start": 0.0, "end": 10.0}]
+    m = detection_metrics(preds, gts, source_duration_sec=600.0)
+    assert m["recall"] == 1.0
+    assert m["false_pos_per_10min"] == 0.0
+    assert m["boundary_error_median_sec"] == 0.0
+
+
+def test_detection_recall_and_false_positive_rate():
+    # 2 labels, 1 matched -> recall 0.5.
+    # 1 false prediction over 1200 s of source -> 1 / (1200/600) = 0.5 per 10 min.
+    preds = [{"start": 0.0, "end": 10.0}, {"start": 200.0, "end": 210.0}]
+    gts = [{"start": 0.0, "end": 10.0}, {"start": 100.0, "end": 110.0}]
+    m = detection_metrics(preds, gts, source_duration_sec=1200.0)
+    assert m["recall"] == 0.5
+    assert m["false_pos_per_10min"] == 0.5
+
+
+def test_detection_boundary_error_median():
+    # matched pair off by 1 s at each end -> pooled errors [1, 1] -> median 1.0
+    preds = [{"start": 1.0, "end": 11.0}]
+    gts = [{"start": 0.0, "end": 10.0}]
+    m = detection_metrics(preds, gts, source_duration_sec=600.0)
+    assert m["boundary_error_median_sec"] == 1.0
