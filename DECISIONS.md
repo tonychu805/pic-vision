@@ -560,6 +560,47 @@ Two further findings worth keeping:
 
 ---
 
+## ADR-035 — Order-independent court calibration
+
+**Date:** 2026-08-06 · **Status:** accepted
+
+**Context.** `calibrate.py` required the 12 court points to be clicked in the tool's prompted sequence (corners → kitchen lines → centerline). A natural near→far clicking order silently mismatched clicks to labels and produced a garbage homography — **28.2 ft reprojection RMSE on correctly-placed clicks**. Click order is an error-prone constraint, and it gets worse anywhere a non-expert calibrates.
+
+**Decision.** Make calibration order-independent. The tool fits a homography from convex-hull corner candidates (trying all orderings), matches the remaining clicks to court points by minimum reprojection error, then resolves the court's near/far and left/right symmetry using the behind-baseline framing (near baseline lower in the image; near-left left of near-right). Points may be clicked in any order.
+
+**Consequences.** Removes an entire class of calibration error — the same 28-ft mis-ordered clicks now yield 0.36–0.42 ft. Assumes the four corners lie on the convex hull (true for any full-court view above the feet-visible elevation) and a standard, non-mirrored behind-baseline camera to fix left/right. A perfectly symmetric projection is ambiguous in principle, but real cameras break the symmetry. `compute_calibration` is split out of the GUI and covered by a synthetic round-trip test plus the real mis-ordered clicks as a fixture.
+
+---
+
+## ADR-036 — Detection runs in court coordinates; calibration absorbs camera pose, not occlusion
+
+**Date:** 2026-08-06 · **Status:** accepted
+
+**Context.** Different courts mount the camera at different heights and positions, so the court's image points differ court by court. Does that break a shared detection model across courts?
+
+**Decision.** Run all detection logic in **court coordinates** (feet, top-down), never raw pixels. Detect players off-the-shelf in pixels, take the **foot point** (bottom-centre of the box), and project it to court coordinates via that court's calibration. Dead-time markers and all geometry are computed in court space.
+
+**Consequences.** Per-court calibration absorbs camera elevation and position, so one model generalises across courts without retraining — "player at the kitchen line" is the same court coordinate everywhere. What calibration does **not** normalise: occlusion (a lower camera hides far players more) and, later, ball parallax (the ball is off the ground plane). So a minimum elevation must be enforced (PRD §6, ≥ 8 ft, feet visible); above it, elevation is a calibration detail, below it occlusion breaks detection regardless of the homography. Ties to the multi-venue architecture in `STRATEGY.md` §4 (universal model in court-normalised space + per-venue calibration).
+
+---
+
+## ADR-037 — Two-sided live/stopped evidence; no marker decides alone
+
+**Date:** 2026-08-06 · **Status:** accepted
+
+**Context.** ADR-026 detects dead time and takes rallies as the complement. But several of its dead-time markers are **context-ambiguous** — they also fire during *live* play. Chasing a lob or a wide shot trips "player left the court" mid-rally; a dink exchange trips "all players stationary" while the point is very much on. A single geometric marker cannot separate "walked off between points" from "sprinted off-court to return a lob."
+
+**Decision.** Keep dead-time inversion as the backbone, but make it two-sided: maintain a **live-play marker list alongside the stopped-play list**, and have the segmenter **weigh live evidence against stopped evidence** per time window. No single marker flips the state; an ambiguous stopped-marker is overridden when live markers corroborate.
+
+- *Stopped-play (dead time):* net-line crossing · ball held/stationary · casual low-energy walking · left the play envelope **and stayed** · players clustered facing each other · sustained stillness in relaxed posture.
+- *Live-play (rally ongoing):* ball in fast flight / crossing the net · high player motion (sprint / lunge / backpedal / direction reversal) · athletic ready stance facing the net at kitchen/baseline · recent paddle swing · all four players engaged.
+
+The two hard cases resolve by pairing: a **lob chase** fires "left court" (stopped) but high motion + ball-in-flight (live) win; a **dink** fires "stillness" (stopped) but engaged kitchen stance + ball-crossing (live) win.
+
+**Consequences.** More robust than pure inversion, at the cost of more signals to combine (persistence + corroboration, not raw counting). The two hardest cases split on motion: **lobs are high-motion** (caught without the ball), **dinks are low-motion** — so the cleanest "still live" signal for a dink is the **ball**, which means ball presence may be needed earlier than "just a refinement" for the dink case specifically. Position/pose may suffice (kitchen ready stance ≠ relaxed dead-time posture) — Phase 0.6 must measure it, not assume it. This supersedes nothing in ADR-026; it promotes that ADR's §6.2 positive-scoring fallback to a first-class counter-signal. Validation is now two-directional (`EXPERIMENTS.md`): each stopped marker's fire-rate during rallies, and each live marker's during dead time.
+
+---
+
 ## Template
 
 ```markdown
