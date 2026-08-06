@@ -18,6 +18,9 @@ venv/
 # Pipeline stage artifacts (regenerable)
 cache/
 
+# Model weights (auto-downloaded)
+*.pt
+
 # NOT ignored, on purpose — commit these:
 #   eval/labels/*.jsonl   hand-labeled ground truth (the whole basis for §5 metrics)
 #   court_calibration.json, sessions.jsonl, tallies/*.md   small config / notes

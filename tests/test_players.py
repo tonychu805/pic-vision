@@ -3,7 +3,13 @@ import json
 import cv2
 import numpy as np
 
-from src.players import foot_point, to_court, load_calibration
+from src.players import foot_point, to_court, load_calibration, frame_step
+
+
+def test_frame_step_subsamples():
+    assert frame_step(30, 5) == 6      # 30fps sampled at 5fps -> every 6th frame
+    assert frame_step(30, 30) == 1     # same rate -> every frame
+    assert frame_step(30, 60) == 1     # never below 1
 
 
 def test_foot_point_is_bottom_center():
