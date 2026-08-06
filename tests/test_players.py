@@ -3,7 +3,14 @@ import json
 import cv2
 import numpy as np
 
-from src.players import foot_point, to_court, load_calibration, frame_step
+from src.players import foot_point, to_court, load_calibration, frame_step, on_court
+
+
+def test_on_court_keeps_players_drops_sideline_bystanders():
+    assert on_court((10, 22))        # centre court
+    assert on_court((10, -6))        # backed up behind the near baseline (lob chase)
+    assert not on_court((27, 23))    # line judge off the right sideline
+    assert not on_court((10, 62))    # crowd behind the far baseline
 
 
 def test_frame_step_subsamples():

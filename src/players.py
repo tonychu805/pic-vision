@@ -66,3 +66,22 @@ def detect_players(video_path, sample_fps=5.0, conf=0.3, imgsz=1280,
         idx += 1
     cap.release()
     return out
+
+
+def on_court(court_point, x_margin=4.0, y_margin=10.0):
+    """Is a court-coordinate point (feet) within the 20x44 court plus a margin?
+    Sidelines are tight — bystanders (line judges) sit just off them; baselines
+    are generous — players back well behind to return lobs, which is live play."""
+    x, y = court_point
+    return (-x_margin <= x <= 20.0 + x_margin) and (-y_margin <= y <= 44.0 + y_margin)
+
+
+def court_positions(video_path, homography, sample_fps=5.0, **kwargs):
+    """Per-sampled-frame on-court player foot positions in court feet. Detects
+    people, projects each foot point to court coordinates, and keeps only those
+    on the court. Returns a list of (time_sec, [(x_ft, y_ft), ...])."""
+    out = []
+    for t, boxes in detect_players(video_path, sample_fps=sample_fps, **kwargs):
+        court = to_court([foot_point(b) for b in boxes], homography) if boxes else []
+        out.append((t, [p for p in court if on_court(p)]))
+    return out
