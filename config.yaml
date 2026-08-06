@@ -1,0 +1,14 @@
+# config.yaml — all thresholds and weights (TECH_SPEC §12).
+# Temporal parameters are configured in seconds and converted to frames at
+# runtime (TECH_SPEC §1.1) — never hard-coded frame counts.
+#
+# This starts with only what's already established. Detection, segmentation,
+# selection, and ranking thresholds are added and tuned per PRD phase (§7),
+# not guessed here.
+
+capture:
+  fps: 30                     # confirmed once at setup, fixed (PRD §6)
+  resolution: [1920, 1080]
+
+output:
+  highlight_budget_sec: 600   # <= 10:00, hard budget (PRD §5)

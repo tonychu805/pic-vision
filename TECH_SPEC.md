@@ -537,11 +537,16 @@ pic-vision/
 ├── PRD.md                    # what and why
 ├── TECH_SPEC.md              # this file
 ├── DECISIONS.md              # decision log
+├── STRATEGY.md               # post-prototype direction (exploratory)
 ├── EXPERIMENTS.md            # append-only run log
+├── LABELING.md               # rally-labeling protocol
+├── TALLY.md                  # per-session watch-through template
 ├── README.md                 # how to run
+├── requirements.txt          # Python dependencies
 ├── config.yaml               # all thresholds and weights
 ├── cut.py                    # entry point
 ├── calibrate.py              # 12-point court calibration
+├── label.py                  # rally interval labeller
 ├── src/
 │   ├── capture.py            # preflight + RTSP recording
 │   ├── motion.py             # T0′ pre-filter
@@ -555,7 +560,9 @@ pic-vision/
 ├── eval/
 │   ├── harness.py            # §11.3
 │   └── labels/               # eval-set-A / dev-set-B / eval-set-C
-└── cache/                    # stage artifacts (NFR3)
+├── sessions.jsonl            # session role assignments (LABELING.md)
+├── tallies/                  # per-session watch notes
+└── cache/                    # stage artifacts (NFR3), gitignored
 ```
 
 ---

@@ -15,6 +15,9 @@ venv/
 # macOS
 .DS_Store
 
+# Pipeline stage artifacts (regenerable)
+cache/
+
 # NOT ignored, on purpose — commit these:
-#   labels/*.jsonl        hand-labeled ground truth (the whole basis for §5 metrics)
+#   eval/labels/*.jsonl   hand-labeled ground truth (the whole basis for §5 metrics)
 #   court_calibration.json, sessions.jsonl, tallies/*.md   small config / notes

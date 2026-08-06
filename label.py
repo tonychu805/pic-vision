@@ -3,7 +3,7 @@
 Rally interval labeller.
 
 Usage:
-    python label.py session.mp4 --out labels/session-001.jsonl --from 600 --to 1800
+    python label.py session.mp4 --out eval/labels/session-001.jsonl --from 600 --to 1800
 
 Controls:
     SPACE    play / pause
