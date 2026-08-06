@@ -2,6 +2,8 @@
 hand-labeled rallies and prints the two PRD §5 tables. Reads JSON only,
 never video."""
 
+import argparse
+import json
 import statistics
 
 
@@ -99,3 +101,56 @@ def selection_metrics(preds, budget_sec=600.0):
         "rally_count": len(selected),
         "keep_rate": len(selected) / n_pred if n_pred else 0.0,
     }
+
+
+def load_rallies(path):
+    """Read a predictions file (rallies.json). Returns (source_duration_sec, rallies)."""
+    with open(path) as f:
+        data = json.load(f)
+    return data["source_duration_sec"], data["rallies"]
+
+
+def load_labels(path):
+    """Read a ground-truth label file (one JSON object per line, from label.py)."""
+    labels = []
+    with open(path) as f:
+        for line in f:
+            line = line.strip()
+            if line:
+                labels.append(json.loads(line))
+    return labels
+
+
+def format_tables(det, sel):
+    """Render the two PRD §5 tables as plain text."""
+    return "\n".join([
+        "Detection",
+        f"  rally recall            {det['recall']:.2f}  ({det['n_matched']}/{det['n_labeled']})",
+        f"  false positives /10min  {det['false_pos_per_10min']:.2f}",
+        f"  boundary error (median) {det['boundary_error_median_sec']:.2f} s",
+        "Selection",
+        f"  budget compliant        {sel['budget_compliant']}"
+        f"  ({sel['selected_duration_sec']:.1f}s / 600s)",
+        f"  utilization             {sel['utilization']:.2f}",
+        f"  rally count             {sel['rally_count']}",
+        f"  keep rate               {sel['keep_rate']:.2f}",
+    ])
+
+
+def main(argv=None):
+    ap = argparse.ArgumentParser(
+        description="Score predicted rallies against labels (PRD §5)."
+    )
+    ap.add_argument("--pred", required=True, help="rallies.json (predictions)")
+    ap.add_argument("--labels", required=True, help="label file, JSON-per-line (ground truth)")
+    args = ap.parse_args(argv)
+
+    source_dur, preds = load_rallies(args.pred)
+    gts = load_labels(args.labels)
+    det = detection_metrics(preds, gts, source_dur)
+    sel = selection_metrics(preds)
+    print(format_tables(det, sel))
+
+
+if __name__ == "__main__":
+    main()

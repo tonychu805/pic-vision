@@ -104,3 +104,26 @@ def test_selection_over_budget_is_not_compliant():
     m = selection_metrics(preds)
     assert m["selected_duration_sec"] == 700.0
     assert m["budget_compliant"] is False
+
+
+import json
+from eval.harness import main
+
+
+def test_main_prints_both_tables(tmp_path, capsys):
+    pred_file = tmp_path / "rallies.json"
+    pred_file.write_text(json.dumps({
+        "source_duration_sec": 600.0,
+        "rallies": [{"start": 0.0, "end": 10.0, "selected": True}],
+    }))
+    labels_file = tmp_path / "labels.jsonl"
+    labels_file.write_text(
+        json.dumps({"start": 0.0, "end": 10.0, "duration": 10.0, "rally_id": 1}) + "\n"
+    )
+
+    main(["--pred", str(pred_file), "--labels", str(labels_file)])
+
+    out = capsys.readouterr().out
+    assert "Detection" in out
+    assert "Selection" in out
+    assert "1.00" in out  # perfect recall on this stub
