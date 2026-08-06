@@ -105,3 +105,21 @@ The low-motion rally frames (n=25) turned out **not to be dinks** — players si
 **Conclusion.** Single position/motion markers are weak, and the hard rally moments on this clip are **serves**, which are positionally near-identical to dead time (players still, near the baseline). Consistent with ADR-037 (no marker decides alone) and hints the **ball/pose may be needed earlier than Phase 2** for the still moments. Not a verdict — tiny non-domain sample; stopped here to avoid overfitting to one clip.
 
 **Follow-up.** The real read is measurements 1/1b on raw single-camera footage. Carry "does the ball need to move earlier?" as a live hypothesis.
+
+---
+
+## 2026-08-06 — Prior-art assessment: vinod-polinati ball-presence detector (ADR-021)
+
+**Assessment, not a benchmark** — no footage to score against yet. Read the repo's README + `rallysplitv.py`.
+
+**What it is.** ~200 lines, MIT. YOLOv8x on *every* frame → COCO "sports ball" → size / shoe-zone / physics(teleport) filters → binary ball-present timeline → 0.6 s gap-tolerance state machine → rally clips (min 1.0 s). No court geometry; players used only to reject foot-zone ball detections. No accuracy numbers reported.
+
+**Decision — beat it, don't adopt.**
+- **Too slow:** YOLOv8x every frame (~1 TFLOP/frame, hours on an M2) vs. the ≤0.5× budget — and the ball can't be subsampled, so the cost is structural, not tunable.
+- **Hard-coded pixel thresholds** (65 px size, 300 px jump, 45% shoe) are overfit to the author's rig; violates the "court-units, not pixels" principle (TECH_SPEC §1.1).
+- No validation, no court geometry, no temporal smoothing.
+- **Untested crux:** whether COCO sports-ball reliably detects a real pickleball at our distance/lighting (the §6 "untrackable smear" risk).
+
+**Keep from it** (for the Phase 2 ball path): the shoe filter, the physics/teleport filter (implausible jump doubles as scene-cut detection), the gap-tolerance state machine.
+
+**The measurement that decides it** (needs footage — rows 10/11): ball-detection recall on our footage. If an off-the-shelf detector reliably finds our ball, the ball-presence approach is viable and complements player-only on the still moments (serves/dinks) that beat it in the read above. Fusion (ADR-022) remains the likely answer.
