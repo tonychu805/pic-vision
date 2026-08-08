@@ -6,7 +6,7 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 **First real footage (2026-08-08) came in but was compromised by camera zoom/pan** — not a fixed view, so the single calibration broke and players left frame. The read was confounded — *not* a fair test. Full detail in EXPERIMENTS.md (2026-08-08). Two things gate progress:
 
-1. **Capture CLEAN fixed footage** — rigid mount, **NO zoom, NO pan**, whole court in frame the entire time. Indoor is OK (the ball *is* detectable indoors, 5/6 frames); daylight better. **This is the blocker.**
+1. **Capture CLEAN fixed footage** — rigid mount, **NO zoom, NO pan**, whole court in frame, **well-lit (daylight / bright court)** so the ball is trackable. Indoor works (ball detectable 5/6 frames) but brighter is better. **This is the blocker.** *(No hardware upgrade yet — prove the net-crossing count in software + lighting first; camera-over-compute only if ever needed — ADR-038.)*
 2. **Re-label to competitive rallies only** (`LABELING.md` v2) — today's labels were "any play" (warm-up/casual included), a target mismatch.
 
 Then the **priority build — the pivot**: a **ball-net-crossing rally counter** (detect ball → filter false positives → track → count crossings of the net line). On real casual play, player *activity* is inverted (dead time is more active than low-energy casual rallies), so **the ball — "is a point being contested across the net" (ADR-028) — is the real rally signal**, not player motion. Also add **ByteTrack** to stabilize player positions (revisits ADR-008). Then a fair Phase 0.6.

@@ -601,6 +601,21 @@ The two hard cases resolve by pairing: a **lob chase** fires "left court" (stopp
 
 ---
 
+## ADR-038 — Prove the ball signal in software (and lighting) before any hardware upgrade
+
+**Date:** 2026-08-08 · **Status:** accepted
+
+**Context.** The rally signal is pivoting toward ball net-crossings (EXPERIMENTS.md 2026-08-08). Ball tracking is the hard part — small, fast, and prone to an indoor "smear" (PRD §6) — which raises the question of whether a hardware upgrade (higher-fps/higher-res camera, or more compute) is needed. Jumping to hardware before proving the mechanism in software risks optimizing for an approach that hasn't been shown to work.
+
+**Decision.** Before any hardware spend, prove the net-crossing count in software:
+- **The requirement is coarser than full ball tracking** — count net-side↔far-side sign changes from intermittent/noisy detections, not a complete trajectory. Missing frames are tolerable if enough of the arc is caught.
+- **Fix the free lever first — lighting.** Indoor smear (§6) is the root cause; test on daylight / well-lit *fixed* footage before buying anything.
+- **Only if software + good lighting still fail, then hardware — and camera over compute.** Detection is capture-limited: a higher frame rate (60–120 fps), faster shutter, and higher resolution make a fast ball detectable far more than raw compute does. Dense per-frame ball-detection *compute* is a deployment-scale concern (STRATEGY), not a prototype blocker (it's just slow on the M2, not impossible).
+
+**Consequences.** Avoids premature hardware optimization for an unproven mechanism and keeps the prototype cheap (current camera + better lighting). Records the hardware priority order if it does become necessary: **camera capture quality (fps/shutter/res) first, compute later.** If the target domain is indoor casual venues, camera spec becomes a real product-design lever — but informed by the prototype, not before it.
+
+---
+
 ## Template
 
 ```markdown
