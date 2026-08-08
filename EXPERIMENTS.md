@@ -123,3 +123,22 @@ The low-motion rally frames (n=25) turned out **not to be dinks** — players si
 **Keep from it** (for the Phase 2 ball path): the shoe filter, the physics/teleport filter (implausible jump doubles as scene-cut detection), the gap-tolerance state machine.
 
 **The measurement that decides it** (needs footage — rows 10/11): ball-detection recall on our footage. If an off-the-shelf detector reliably finds our ball, the ball-presence approach is viable and complements player-only on the still moments (serves/dinks) that beat it in the read above. Fusion (ADR-022) remains the likely answer.
+
+---
+
+## 2026-08-08 — First real footage (indoor drop-in): compromised by zoom; approach unresolved, ball direction reinforced
+
+**Footage.** Two phone clips from an indoor casual session (IMG_7652 ~13 min, IMG_7655 ~9.4 min), 1080p/30fps, ~0 dropped frames. **Not fixed-camera — the phone zoomed/panned during play**, which invalidates the single homography (calibration only holds for a fixed view) and pushes players out of frame. So the read below is confounded — not a fair test.
+
+**Setup.** Order-independent calibration (RMSE 0.45 ft, borderline far-corner). YOLOv8n @5fps → foot → court coords → on-court filter → motion + kitchen markers, scored vs 32 hand-labeled *plays*. Labels were "any play" (warm-up/casual included), not strict competitive rallies — a target mismatch.
+
+**Result (confounded).**
+- Player detection noisy: median **2–3 players/frame, only 21% find 4** (occlusion + nano model + players off-frame from zoom + adjacent-court leakage).
+- Markers **inverted** even on clean 4-player frames: motion RALLY 2.4 vs DEAD 3.2 ft/s; kitchen RALLY 0.43 vs DEAD 0.77. No separation.
+- Ball probe: COCO sports-ball detected in **5/6 in-play frames** (2 at 0.88–0.91 conf) — **detectable indoors**, but noisy (false positives, misses).
+
+**Conclusion.** Not a verdict on the approach — confounded by zoom (broken calibration + off-frame players), broad labels, and detection noise. Two directions reinforced: (1) player-activity likely can't separate low-energy casual rallies from active dead-time → the **ball / net-crossing count** (ADR-028) is the real rally signal; (2) **tracking (ByteTrack) and the ball are both needed earlier** than planned (revisit ADR-008 / ADR-022). The ball being detectable makes the net-crossing path viable.
+
+**Decisions.** Target = competitive rallies; domain = casual drop-in play. Fixed camera non-negotiable (no zoom/pan). Pivot to the ball-net-crossing rally counter as the next build.
+
+**Follow-up.** Capture clean **fixed** footage (no zoom/pan, whole court). Re-label to competitive rallies only. Build the ball-net-crossing counter + ByteTrack. Then a fair Phase 0.6.

@@ -4,16 +4,14 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**The project is blocked on one thing: field footage of a real session.** No code to build until it exists — building now would be guessing. When Tony brings footage:
+**First real footage (2026-08-08) came in but was compromised by camera zoom/pan** — not a fixed view, so the single calibration broke and players left frame. The read was confounded — *not* a fair test. Full detail in EXPERIMENTS.md (2026-08-08). Two things gate progress:
 
-1. `calibrate.py <session> --out <calib>.json` (order-independent; RMSE < 0.5 ft)
-2. `label.py <session> --out eval/labels/<name>.jsonl` — rally start/end per **`LABELING.md` v2** (rally = serve → ball dead; warm-up excluded; interruption = label up to it)
-3. Generate court tracks + score markers vs labels = **the real Phase 0.6** (do player markers separate rallies from dead time?)
-4. Read → fork: markers hold → build segmenter/selection/render/`cut.py`; ball needed → build ball-presence pass first.
+1. **Capture CLEAN fixed footage** — rigid mount, **NO zoom, NO pan**, whole court in frame the entire time. Indoor is OK (the ball *is* detectable indoors, 5/6 frames); daylight better. **This is the blocker.**
+2. **Re-label to competitive rallies only** (`LABELING.md` v2) — today's labels were "any play" (warm-up/casual included), a target mismatch.
 
-**If no footage yet:** the only action is capture — mount (behind baseline, ≥8 ft, centered, rigid) → 30 s **shakedown** → framing check (**far feet visible at the kitchen line**) → `calibrate.py` on it → full session over **wifi/RTSP** (microSD skipped), 10-min segments, clean stop. Capture command + fixes in TECH_SPEC §1.2 / ADR-030–032.
+Then the **priority build — the pivot**: a **ball-net-crossing rally counter** (detect ball → filter false positives → track → count crossings of the net line). On real casual play, player *activity* is inverted (dead time is more active than low-energy casual rallies), so **the ball — "is a point being contested across the net" (ADR-028) — is the real rally signal**, not player motion. Also add **ByteTrack** to stabilize player positions (revisits ADR-008). Then a fair Phase 0.6.
 
-**Live hypothesis to settle:** the preliminary read (broadcast clip, dev-scaffold) showed single player-markers are weak on *still* moments (serves) → **the ball may be needed earlier than Phase 2**. Test on real footage; fusion (ADR-022) is the likely answer.
+**Why the pivot:** activity/position markers failed on real casual footage (motion + kitchen both inverted, even on clean frames). Tracking + ball both look needed *earlier* than the prototype planned (ADR-008 / ADR-022). The ball being detectable indoors makes the net-crossing path viable.
 
 ## Status at a glance
 
@@ -24,6 +22,14 @@ Plain-language record of what's been built and decided, newest first. Git histor
 - `main` is ahead of `origin` (local, unpushed).
 
 ---
+
+## 2026-08-08 — First real footage; pivot to the ball
+
+- Captured 2 real indoor clips (IMG_7652/7655) but **compromised by camera zoom/pan** → calibration invalid, players off-frame. Confounded read, not a fair test.
+- Real footage exposed: player detection is **noisy/occluded** on real footage (median 2–3/frame), and **player-activity markers are inverted** on casual play (dead time more active than low-energy rallies).
+- **Ball is detectable indoors** (5/6 in-play frames, noisy) → the ball-net-crossing count is a viable rally signal.
+- **Decisions:** target = competitive rallies; domain = casual drop-in; fixed camera non-negotiable (no zoom/pan); **pivot to the ball-net-crossing rally counter** as the next build; tracking + ball needed earlier than planned. Full run in EXPERIMENTS.md.
+- Tooling held up: order-independent calibration worked on real footage (RMSE 0.45).
 
 ## 2026-08-06 — First detection pipeline + preliminary read
 
