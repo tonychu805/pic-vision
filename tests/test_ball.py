@@ -1,4 +1,9 @@
-from src.ball import count_crossings
+from src.ball import count_crossings, net_image_y
+
+
+def test_net_image_y_identity_homography():
+    identity = [[1, 0, 0], [0, 1, 0], [0, 0, 1]]   # image==court -> net at court-y 22
+    assert abs(net_image_y(identity) - 22.0) < 1e-4
 
 
 def test_count_crossings_back_and_forth():
