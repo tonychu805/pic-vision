@@ -25,7 +25,7 @@ Then the **priority build — the pivot**: a **ball-net-crossing rally counter**
 
 ## 2026-08-09 — v0 segmenter + v0/v1 plan
 
-- Built `src/segment.py` — signal-agnostic, gap-tolerant, min-duration rally segmenter (4 tests). **Completes the v0 loop**: tracks → activity markers → segment → `rallies.json` → harness, proven end-to-end (garbage number on the compromised 7652, but plumbing closes).
+- Built `src/segment.py` — signal-agnostic, gap-tolerant, min-duration rally segmenter (4 tests). Proved the v0 loop closes end-to-end (tracks → activity → segment → `rallies.json` → harness) **on `IMG_7652.MOV` (the zoom-compromised clip)** — a **plumbing check only**: it produced rally **timestamps, not a highlight video** (99 junk segments, recall 0.16, on compromised footage + inverted signal). **No render/cut module exists yet** — `rallies.json → highlights.mp4` is unbuilt (Phase 1 back half); no meaningful or persisted output was produced.
 - **ADR-039:** frozen **v0 (player, ADR-026/028)** baseline kept intact; **v1 (ball net-crossings)** to be built as additive new modules; harness compares both on the same labels. Rally definition under review → moving toward **exchange-based** (≥ N net crossings, crossing count = ranking score).
 - Next: on clean fixed footage, build **v1 ball detector + net-crossing counter**, run both, compare.
 
