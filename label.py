@@ -3,9 +3,10 @@
 Rally interval labeller.
 
 Usage:
-    python label.py session.mp4 --out eval/labels/session-001.jsonl --from 600 --to 1800
+    label   python label.py session.mp4 --out eval/labels/session-001.jsonl --from 600 --to 1800
+    review  python label.py session.mp4 --out eval/labels/session-001.jsonl --review
 
-Controls:
+Controls (label):
     SPACE    play / pause
     s        mark rally START at current position
     e        mark rally END   (writes the interval)
@@ -16,6 +17,13 @@ Controls:
     x        cancel a pending START
     w        save now
     q        save and quit
+
+Controls (review) — play each labelled segment, keep or drop it:
+    k        keep this segment, advance
+    d        drop this segment, advance
+    n / p    next / previous segment
+    SPACE    replay current segment
+    q        save the kept set and quit
 
 Timestamps come from CAP_PROP_POS_MSEC, which is PTS-based - correct even if
 the source is variable frame rate.
@@ -35,6 +43,81 @@ def fmt(t):
     return f"{int(t // 60):02d}:{t % 60:05.2f}"
 
 
+def load_rallies(path):
+    """Load labelled rally intervals from a jsonl file (empty list if absent)."""
+    if not os.path.exists(path):
+        return []
+    with open(path) as f:
+        return [json.loads(line) for line in f if line.strip()]
+
+
+def save_rallies(rallies, path):
+    """Write rallies to jsonl, sorted by start and renumbered rally_id 1..N."""
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    with open(path, "w") as f:
+        for i, r in enumerate(sorted(rallies, key=lambda r: r["start"])):
+            f.write(json.dumps(dict(r, rally_id=i + 1)) + "\n")
+
+
+def review(args):
+    """Play each labelled segment and keep or drop it; save the kept set.
+
+    Use to curate auto-generated (or any) labels: drop low-quality segments,
+    then re-run without --review to add rallies the detector missed."""
+    rallies = sorted(load_rallies(args.out), key=lambda r: r["start"])
+    if not rallies:
+        sys.exit(f"no labels to review in {args.out}")
+    cap = cv2.VideoCapture(args.video)
+    if not cap.isOpened():
+        sys.exit(f"cannot open {args.video}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    help_line = "k keep  d drop  n/p next/prev  SPACE replay  q save+quit"
+    keep = [True] * len(rallies)
+    i, seek = 0, True
+    cv2.namedWindow("review", cv2.WINDOW_NORMAL)
+    while True:
+        r = rallies[i]
+        if seek:
+            cap.set(cv2.CAP_PROP_POS_MSEC, r["start"] * 1000)
+            seek = False
+        ok, frame = cap.read()
+        t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
+        if not ok or t >= r["end"]:
+            seek = True          # loop within the segment
+            continue
+        img = frame.copy()
+        w = img.shape[1]
+        cv2.rectangle(img, (0, 0), (w, 64), (0, 0, 0), -1)
+        state = "KEEP" if keep[i] else "DROP"
+        colour = (0, 255, 0) if keep[i] else (0, 0, 255)
+        cv2.putText(img, f"rally {i + 1}/{len(rallies)}  "
+                    f"{fmt(r['start'])}-{fmt(r['end'])}  ({r['duration']:.1f}s)  [{state}]",
+                    (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.7, colour, 2)
+        cv2.putText(img, help_line, (10, 52), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                    (180, 180, 180), 1)
+        cv2.imshow("review", img)
+        k = cv2.waitKey(max(1, int(1000 / fps))) & 0xFF
+        if k in (ord("k"), ord("d")):
+            keep[i] = (k == ord("k"))
+            i = min(i + 1, len(rallies) - 1)
+            seek = True
+        elif k == ord("n"):
+            i = min(i + 1, len(rallies) - 1)
+            seek = True
+        elif k == ord("p"):
+            i = max(i - 1, 0)
+            seek = True
+        elif k == ord(" "):
+            seek = True
+        elif k == ord("q"):
+            break
+    cap.release()
+    cv2.destroyAllWindows()
+    kept = [r for r, kp in zip(rallies, keep) if kp]
+    save_rallies(kept, args.out)
+    print(f"kept {len(kept)} of {len(rallies)} intervals -> {args.out}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("video")
@@ -42,7 +125,12 @@ def main():
     ap.add_argument("--from", dest="start", type=float, default=0.0)
     ap.add_argument("--to", dest="end", type=float, default=None)
     ap.add_argument("--speed", type=float, default=2.0)
+    ap.add_argument("--review", action="store_true",
+                    help="review existing labels: play each segment and keep/drop")
     args = ap.parse_args()
+
+    if args.review:
+        return review(args)
 
     cap = cv2.VideoCapture(args.video)
     if not cap.isOpened():
@@ -52,11 +140,8 @@ def main():
     end_at = args.end if args.end is not None else dur
     cap.set(cv2.CAP_PROP_POS_MSEC, args.start * 1000)
 
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    rallies = []
-    if os.path.exists(args.out):
-        with open(args.out) as f:
-            rallies = [json.loads(l) for l in f if l.strip()]
+    rallies = load_rallies(args.out)
+    if rallies:
         print(f"resuming - {len(rallies)} intervals already labelled")
 
     pending = None
@@ -67,10 +152,7 @@ def main():
     cv2.namedWindow("label", cv2.WINDOW_NORMAL)
 
     def save():
-        with open(args.out, "w") as f:
-            for i, r in enumerate(sorted(rallies, key=lambda r: r["start"])):
-                r = dict(r, rally_id=i + 1)
-                f.write(json.dumps(r) + "\n")
+        save_rallies(rallies, args.out)
         print(f"saved {len(rallies)} intervals -> {args.out}")
 
     while True:
