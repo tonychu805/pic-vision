@@ -25,23 +25,31 @@ def net_image_y(homography, x_ft=10.0, net_y_ft=22.0):
 
 
 def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
-                weights="yolov8n.pt"):
-    """Per-frame best 'sports ball' image-y between start and end (seconds).
-    Returns [(time_sec, y or None)] — dense (every frame), since the ball moves
-    too fast to subsample. Takes the highest-confidence detection per frame."""
+                weights="yolov8n.pt", sample_fps=None):
+    """Best 'sports ball' image-y per sampled frame between start and end (sec).
+    Returns [(time_sec, y or None)]. sample_fps=None runs every frame (dense,
+    for exact crossing counts); set it lower (e.g. 10) to scan a whole clip
+    affordably — enough density to see the ball alternate sides during a rally.
+    Takes the highest-confidence detection per frame."""
     from ultralytics import YOLO
 
     model = YOLO(weights)
     cap = cv2.VideoCapture(video_path)
+    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
+    stride = 1 if not sample_fps else max(1, round(src_fps / sample_fps))
     cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
     out = []
+    i = -1
     while True:
         ok, frame = cap.read()
         if not ok:
             break
+        i += 1
         t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
         if end is not None and t > end:
             break
+        if i % stride:
+            continue  # skip YOLO on non-sampled frames (decode is cheap, YOLO isn't)
         b = model(frame, imgsz=imgsz, conf=conf, classes=[32], verbose=False)[0].boxes
         if len(b):
             confs = b.conf.cpu().numpy()
@@ -51,6 +59,44 @@ def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
             out.append((t, None))
     cap.release()
     return out
+
+
+def crossing_times(track, net_y, band=0.0):
+    """Timestamps where the ball crosses the net. track = [(time, y or None)].
+    Same side logic as count_crossings, but returns the times so bursts can be
+    located and clustered into rallies."""
+    times = []
+    last_side = None
+    for t, y in track:
+        if y is None:
+            continue
+        if y > net_y + band:
+            side = "near"
+        elif y < net_y - band:
+            side = "far"
+        else:
+            continue
+        if last_side is not None and side != last_side:
+            times.append(t)
+        last_side = side
+    return times
+
+
+def cluster_crossings(times, gap_sec, min_crossings=2):
+    """Group dense bursts of crossing times into rally segments. Consecutive
+    crossings within gap_sec belong to the same rally; a burst is kept only if
+    it has >= min_crossings (an exchange, not a stray). Returns
+    [{start, end, crossings}] — the auto-annotated rallies."""
+    if not times:
+        return []
+    clusters = [[times[0]]]
+    for t in times[1:]:
+        if t - clusters[-1][-1] <= gap_sec:
+            clusters[-1].append(t)
+        else:
+            clusters.append([t])
+    return [{"start": c[0], "end": c[-1], "crossings": len(c)}
+            for c in clusters if len(c) >= min_crossings]
 
 
 def count_crossings(ball_ys, net_y, band=0.0):
