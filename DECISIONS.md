@@ -616,6 +616,21 @@ The two hard cases resolve by pairing: a **lob chase** fires "left court" (stopp
 
 ---
 
+## ADR-039 — Frozen v0 (player) baseline + additive v1 (ball) challenger, compared by the harness
+
+**Date:** 2026-08-09 · **Status:** accepted (v1 direction proposed, pending clean-footage validation)
+
+**Context.** The 2026-08-08 real-footage read (confounded by camera zoom) suggested player activity can't separate casual rallies from active dead-time, pointing at **ball net-crossings** as the rally signal — which would invert ADR-026/028 (player-primary). But the player approach was never *fairly* tested (the footage was compromised), so it must not be discarded.
+
+**Decision.** Keep two approaches side by side, compared by the eval harness against the same labels — non-destructive:
+- **v0 (player, frozen baseline):** player detection → court coords → activity markers (`events.py` motion/kitchen) → `segment.py` → `rallies.json`. This *is* ADR-026/028. Left intact; not altered.
+- **v1 (ball, additive challenger):** ball detection → net-crossing count → `segment.py` → `rallies.json`. New modules. Uses the **exchange-based rally definition** (a rally = a continuous ball-in-play exchange with ≥ N net crossings, ≥ min duration; the crossing count doubles as the ranking score).
+- Both emit the **same `rallies.json` schema** and feed the **same signal-agnostic segmenter**; the harness scores both → a direct v0-vs-v1 number.
+
+**Consequences.** ADR-026/028 are **not revoked** — they define v0. v1 is a proposed challenger; **clean-footage evidence decides primacy** — v1 may supersede v0, v0 may win on clean daylight competitive footage, or fusion may beat both (ADR-022). No work is thrown away. The full v0 loop (tracks → activity → `segment.py` → `rallies.json` → harness) is proven end-to-end. Firming v1 as primary would be an approach-level decision warranting adversarial review.
+
+---
+
 ## Template
 
 ```markdown
