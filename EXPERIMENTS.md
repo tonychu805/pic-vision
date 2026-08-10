@@ -165,3 +165,25 @@ Distribution: MATCH segments median 7 crossings (max 22); spurious median 4 (max
 **Conclusion.** Kept. Recall is the headline: v1 misses no labeled rally. The 81% "spurious" rate is confounded, not a clean precision number — the labels are a curated *competitive* subset (9 of an original ~32), so much of the "extra" is genuine casual play the crossing signal correctly detects. Confirms crossing-count is a real rally signal (consistent with the 7652/7655 smoke tests). Not validated — compromised footage.
 
 **Follow-up.** (1) Clean fixed footage for a real precision number. (2) Raise `min_crossings` / widen band to shed the ≤3-crossing noise. (3) Separating *competitive* from *casual* likely needs rally length/intensity, not crossings alone — a ranking layer, not a detection fix. (4) Same scan on 7655.
+
+---
+
+## 2026-08-10 — Ball detection: nano vs yolov8x (visual diagnostic, both clips)
+
+**Hypothesis.** The prior-art splitter (Medium, Polinati) uses yolov8**x**; we use nano. A bigger model should cut the false "ball = head" detections we saw.
+
+**Setup.** Annotated a labeled rally with ball boxes + net line drawn on frames. 7652 window 58–77.5s, 7655 window 86–101s (net line reused from IMG_7652_calib.json). nano vs yolov8x. Commit `c10888b`/`8a193a9` (branch `feat/ball-recipe`).
+
+**Result (visual, verified by zooming into detections).**
+
+| Case | Ball detected? | Confidence |
+|---|---|---|
+| 7652, ball mid-court (t=69) | yes, real ball | **0.91** |
+| 7655, ball at the net (t=98) | yes, real ball | **0.20–0.32** |
+| Both, false positives (heads/bodies) | — | 0.19–0.4 |
+
+nano crossings 22 → yolov8x 15 (7652); 7655 yolov8x 14. Net line wrong (below the net) on **both** clips — reused calibration + zoom.
+
+**Conclusion.** yolov8x is clearly better than nano — it finds the real ball, and on a **big** (mid-court) ball the 0.9-vs-0.3 gap cleanly separates ball from junk. **But confidence is size-dependent:** the ball *at the net* — small and far from a behind-baseline camera — scores only 0.2–0.3, overlapping the false-positive range. **Sharp implication: the crossing moment (ball at the net) is intrinsically the hardest detection from this camera angle**, because the net is the farthest point. A plain confidence cutoff would drop exactly the frames we care about. Net-line error confirmed on both clips → the derived line is unreliable; mark it.
+
+**Follow-up (filed as ADR-040 candidate).** (1) Ship yolov8x default + `ball_box_ok` size filter + `net_line_y` marked-net (done, `feat/ball-recipe`). (2) Confidence alone insufficient → need size filter + a tracker (bridge/interpolate the small-ball frames) — TrackNet-style is the real answer for the tiny far ball. (3) Camera angle matters: side/elevated so the net isn't the farthest point, or higher resolution — a capture lever, not a software one (ADR-038). (4) Re-test the full recipe only on clean fixed footage with a marked net.
