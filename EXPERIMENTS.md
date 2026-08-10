@@ -210,3 +210,26 @@ Also: the net line moved **y=260 → 170** between two rallies of the same clip 
 **Conclusion.** Rallies reprocess cleanly with a correct net line — the net-line + model fixes work *during play*. But **dead time still produces phantom crossings**, and it's a *third* cause the earlier fixes don't touch: in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle balls, warm-up) — genuine ball-sized detections in the wrong place — and taking "best ball anywhere" per frame makes the pick hop between them, flipping sides. Not a net-line or size problem.
 
 **Follow-up.** Dead-time rejection needs a **ball tracker** (single-ball motion continuity + reject teleports, à la the prior-art cut logic) — this moves tracking from "maybe later" to **required** for dead-time discrimination. Possibly an image-region gate for the active court too. Rendering note: OpenCV writes mp4v (not web-playable) — re-encode to H.264 before delivery.
+
+---
+
+## 2026-08-11 — Ball tracker wired into the crossing pipeline: dead time → 0, rally preserved
+
+**Hypothesis.** The single-ball tracker (`track_ball`, teleport rejection) should drop the 659–666s dead-time phantom crossings toward ~0 *without* erasing a real rally's crossings. Until now the tracker was tested only on synthetic candidate lists — never run against the benchmark that motivated it, because the glue from `detect_candidates` → `track_ball` → `crossing_times` didn't exist.
+
+**Setup.** New `src/pipeline.py` (`rally_segments_from_candidates`, `detect_rallies`) chains detect → track → crossing → cluster. IMG_7652 (compromised/zoomed footage), dense per-frame yolov8x, per-window hand-measured net line, `max_jump=150`, `band=0`, `max_ball_px=None`. commit f28ccba. Compared naive "best ball per frame" vs tracked on the *same* detections.
+
+**Result.**
+
+| Window | net y | naive crossings | tracked crossings | tracked rallies (gap=3s, min=5) |
+|---|---|---|---|---|
+| DEAD 659–666 | 160 | 22 | **0** | **0** |
+| RALLY 58–77.5 | 260 | 36 | 16 | 1 |
+
+Tracked crossings stable across `max_jump` 100–200 (dead=0, rally=16); at 300 the rally dropped to 11. Clustering sweep on the rally (16 crossings, inter-crossing gaps up to ~2s): `gap_sec=1.0` → 0 rallies (dissolved), `2.0` → 2, `3.0–4.0` → 1 (15/16 crossings clustered). Dead time stayed 0 at every gap.
+
+**Conclusion.** The tracker works on real footage: dead-time phantom crossings **22 → 0**, while the real rally keeps a strong 16-crossing signal — clean separation, the core v1 mechanism validated end-to-end for the first time (resolves the prior entry's follow-up). Two findings: (1) `max_jump` 100–200 is safe here; 300 starts dropping real crossings. (2) **`gap_sec=1.0` is too tight** — rally net-crossings are up to ~2s apart, use ~3s; a recipe value, not a code default.
+
+**Caveats.** One rally + one dead-time window, still on **compromised (zoomed)** footage with per-window hand-measured net lines. Validates the *mechanism*, not a benchmark number. Clean fixed-camera footage is still the gate for a real recall/FP measurement and for tuning `max_jump`/`gap_sec`/`max_ball_px` without overfitting to one clip.
+
+**Follow-up.** On clean footage: measure ball pixel size → set `max_ball_px`, compute one net line from calibration, run `detect_rallies` across all labeled rallies vs the harness. Then wire selection/ranking + `cut.py` (footage → clips) — `render.py` primitives already exist.

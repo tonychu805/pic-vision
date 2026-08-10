@@ -17,7 +17,7 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 **Then run the shipped recipe and get the first real number:** `detect_ball` (yolov8x default) with `max_ball_px` set to the **measured** ball pixel size, marked net via `net_line_y`, → `crossing_times` → `cluster_crossings` (min_crossings ≈ 5) → segments → harness vs labels. **Measure the ball's pixel size first**.
 
-**A ball tracker is now REQUIRED (not optional).** 2026-08-10 reprocessing (EXPERIMENTS): with a correct net line, real rallies read clean, but **dead time still produced phantom crossings** — in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle/warm-up balls) and "best ball anywhere per frame" hops between them, flipping sides. Net-line + size filter don't fix this. Fix = **single-ball tracker + reject teleports** (prior-art cut logic), plus maybe an image-region gate for the active court. This is the main thing standing between "rallies look right" and "dead time reads quiet."
+**The ball tracker is now BUILT, WIRED, and validated on real footage (2026-08-11, EXPERIMENTS).** Background: 2026-08-10 reprocessing showed that with a correct net line real rallies read clean, but dead time still produced phantom crossings — in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle/warm-up) and "best ball anywhere per frame" hops between them, flipping sides. `src/pipeline.py` now chains `detect_candidates → track_ball → crossing_times → cluster_crossings`; the single-ball tracker rejects teleports. On IMG_7652: dead-time 659–666s dropped **22 → 0** tracked crossings while the 58–77.5s rally kept **16** — clean separation. Still on compromised footage: this validates the *mechanism*, not a benchmark number. Recipe note: use `gap_sec≈3s` (crossings are up to ~2s apart; 1.0s dissolves real rallies).
 
 ## Benchmark cases (real-footage pass/fail targets)
 
@@ -28,19 +28,27 @@ Concrete windows from the compromised clips, human-verified, to check any detect
 | IMG_7652 58–77.5s (net y=260) | RALLY | yes (play dead at end) | 33 | high ✅ |
 | IMG_7652 620–638s (net y=170) | RALLY | yes | 12 | high ✅ |
 | IMG_7655 86–101s (net y=210) | RALLY | yes | 20 | high ✅ |
-| **IMG_7652 659–666s (net y=160)** | **DEAD** | **yes (not a rally)** | **18** | **~0 ❌** |
+| **IMG_7652 659–666s (net y=160)** | **DEAD** | **yes (not a rally)** | **0 (tracked) ✅** | **~0 ✅** |
 
-**The 659–666s dead-time case is the standing regression test for the ball tracker:** it must drop to ~0 once out-of-play-ball rejection (single-ball tracking + reject teleports) lands. Currently 18 false crossings.
+**The 659–666s dead-time regression now PASSES (2026-08-11, EXPERIMENTS).** With the tracker wired in (`src/pipeline.py`), tracked crossings drop to **0** on this window (naive best-per-frame was 22), while the 58–77.5s rally keeps **16** — the tracker suppresses phantom crossings without erasing the rally signal. Note the RALLY-row crossing counts above are from the pre-tracker naive path; tracked counts are lower (rally 58–77.5s: 36 naive → 16 tracked) but still cleanly separated from dead-time's 0.
 
 ## Status at a glance
 
-- **Built + tested (53 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `detect_candidates`, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · **single-ball spatial tracker** (`src/track.py`: `track_ball`, teleport-rejection, auto-reset) · **cut module** (`src/render.py`: `cut_clips`, H.264 + manifest) · scoring against labels.
-- **Not built (Phase 1, after the gate):** selection · `cut.py` end-to-end orchestrator (footage → clips in one pass) — the final wiring step. Render/cut primitives exist; they just need connecting.
+- **Built + tested (55 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `detect_candidates`, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · **single-ball spatial tracker** (`src/track.py`: `track_ball`, teleport-rejection, auto-reset) · **v1 rally pipeline** (`src/pipeline.py`: `rally_segments_from_candidates`, `detect_rallies` — chains detect→track→crossing→cluster, validated on real footage) · **cut module** (`src/render.py`: `cut_clips`, H.264 + manifest) · scoring against labels.
+- **Not built (Phase 1, after the gate):** selection/ranking (competitive vs casual) · `cut.py` end-to-end orchestrator (footage → clips in one pass) — the final wiring step. Detection→segments is now wired (`pipeline.py`); render/cut primitives exist; selection + the footage→clips CLI still need connecting.
 - **Decided:** ADR-035 (order-independent calibration), ADR-036 (court coords; calibration absorbs pose not occlusion), ADR-037 (two-sided live/stopped markers), LABELING.md v2, prior art assessed (beat, don't adopt — EXPERIMENTS.md).
 - **Capture:** wifi/RTSP (tested, ~90–96% delivery, bursty drops; PTS handles drops). microSD skipped.
-- `main` is ahead of `origin` (local, unpushed).
+- `main` pushed to `origin`. v1 pipeline work on branch `feat/rally-pipeline`.
 
 ---
+
+## 2026-08-11 — Wired the v1 pipeline; tracker validated on real footage
+
+- **Found the gap:** `track_ball`/`detect_candidates` were called only from tests — no runnable path from video → segments through the tracker, and a shape mismatch (`detect_candidates` pairs times, `track_ball` drops them, `crossing_times` needs them back). So PROGRESS's "tracker fixes dead time" was an **unvalidated assumption** — the tracker had never been run on the 659–666s benchmark that motivated it.
+- **Shipped `src/pipeline.py`** (branch `feat/rally-pipeline`): `rally_segments_from_candidates` (pure) + `detect_rallies` (video), chaining detect→track→crossing→cluster. TDD, 2 new tests (smooth rally; phantom-crossing rejection). 55 tests.
+- **Validated on IMG_7652** (compromised footage, per-window measured net line): dead-time 659–666s **22 → 0** tracked crossings; rally 58–77.5s keeps **16** (naive 36). End-to-end with `gap_sec=3s`: rally → 1 segment, dead time → 0. Clean separation — the v1 mechanism works on real footage for the first time. Full run in EXPERIMENTS.md.
+- **Two recipe findings:** `max_jump` 100–200 safe (300 starts dropping real crossings); **`gap_sec=1.0` too tight** (crossings up to ~2s apart) → use ~3s.
+- **Still the gate:** one rally + one dead window on zoomed footage validates the mechanism, not a benchmark number. Clean fixed footage remains required for a real recall/FP measurement and non-overfit tuning.
 
 ## 2026-08-10 — Diagnosed v1 on real footage; ball recipe + net marking
 
