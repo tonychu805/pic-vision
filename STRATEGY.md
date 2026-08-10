@@ -1,6 +1,6 @@
 # STRATEGY — Beyond the Prototype
 
-**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-04
+**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-10
 
 **Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. If the core detection signal doesn't hold on one mount, most of this is moot. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
 
@@ -134,7 +134,35 @@ The "No" rows all require the ball and align with the prototype's non-goals.
 
 ---
 
-## 9. Open questions, priority-ordered
+## 9. Business model & monetization (directional)
+
+From a business-model exploration (2026-08-10). Distilled here because it's sound thinking, but **gated on the same thing as everything else: the clipper reliably producing good highlights.** As of 2026-08-10 that is not yet proven — see the caveat at the end, which is the most important part of this section.
+
+**Shape — B2B2C.** The **venue is the buyer**, the **players are the consumers**. The venue installs the system to make its courts more attractive and command a premium; players pay for keepsake clips.
+
+- **Venue side (recurring):** two ways to price the box —
+  - **HaaS (preferred, lowest adoption barrier):** no/low upfront; hardware amortized into a monthly fee over a 24–36 month contract. Indicative ~$140–150/court/month (BOM ÷ 24 + SaaS margin) — *but see the BOM caveat; this number is optimistic.*
+  - **Buyout + maintenance:** one-time hardware+install, then ~10–20%/yr software/updates. Lower recurring, higher friction.
+- **Player side (value-added):** free **low-res, venue-watermarked** 15–30s clip (the venue gets free IG/TikTok promotion) → paid **premium** (HD/4K, no watermark, multi-angle, personal stats) at ~$1–3/session or ~$10/month. **Revenue-share with the venue** (≈5:5 / 6:4) so the venue installs at zero cost and earns on traffic.
+
+**Pricing mechanics that matter:**
+- **Per-court (per-device) licensing with volume tiers** (e.g. 1–2 / 3–5 / 6+ courts at descending per-court rates). Aligns price with the per-court hardware; the tiering is what stops it reading as "greedy." Players never see the license — to them it's "buy the 4K download," not "buy a device."
+- **The A/B-test wedge (the strongest go-to-market move):** install on **1–2 courts for ~2 months**, and *prove with the venue's own numbers* that the "smart court" books more and sustains a **+20–40% price premium** before proposing full rollout. KPIs: booking / off-peak fill rate, premium payback in 3–6 months, referral reach from watermarked clips. Turns "trust me" into "here's your data."
+- **Taiwan billing:** charge via **綠界 (ECPay)** with 開發票 — consistent with the earlier payments discussion; you provide system-integration service, not a foreign SaaS subscription.
+
+**Edge economics (why on-device wins here):** doing the clipping on the edge box (Jetson / Mac mini, §5) means **near-zero cloud-GPU cost** — the cloud only stores files and serves the CDN + payments. That makes SaaS margin high and, because compute is a *fixed* per-box cost, **margin improves the more highlights a court produces.** The trade is a higher device cost and an **OTA fleet-management burden** (pushing model updates to every box) — the same fleet-ops cost already flagged in §5.
+
+**⚠️ The caveat that governs this whole section.** The business case quietly assumes the hardest technical thing is solved. This session (2026-08-10) says it isn't:
+- **The BOM is optimistic.** The exploration assumed **Orin Nano + YOLOv8n, ~$700–1,000/court**. But nano-class detection is exactly what produced the head-as-ball noise we spent the day diagnosing; usable detection needed **yolov8x** (~10× heavier). Real hardware is likely **Orin NX/AGX** or serious model-optimization work — which moves the BOM and therefore the HaaS math upward.
+- **The core signal isn't validated.** Rally detection *during play* looks promising, but **dead-time rejection is unsolved** (needs a ball tracker — the 659–666s benchmark), and nothing is proven on **clean fixed footage**. Selling an A/B test before the clipper is reliable would backfire — a failed pilot poisons the wedge.
+- **Multi-camera is unbuilt.** The exploration assumes 4 cameras/court with best-angle splicing; everything built so far is **single fixed camera**. That's a whole additional system, not a config flag.
+- **Privacy is a real operational item.** A multi-court gym captures bystanders and adjacent courts (the same adjacent-court balls that caused today's noise) — face-blur + opt-in check-in (§7) are required, not optional.
+
+**In one line:** the model is the right destination; the critical path is still *proving the clipper works on clean footage*, not designing the pricing. Don't let a polished monetization plan imply the product is further along than it is.
+
+---
+
+## 10. Open questions, priority-ordered
 
 1. **Do player-only markers cleanly separate dinks and courtesy returns at real camera geometry?** — Phase 0.6. Gates everything below.
 2. **Which piece is actually defensible** — the labeled corpus, the ranking model, or neither?
@@ -143,3 +171,6 @@ The "No" rows all require the ball and align with the prototype's non-goals.
 5. **How much labeled data per new angle category** before it works?
 6. **Is 30 minutes a firm user-facing promise** (→ Option B rolling) or is ~1 hour fine (→ Option A, less code)?
 7. **Far-court pose reliability** — usable as a trigger, or position/motion only? (Now a prototype risk.)
+8. **What's the real BOM** once detection quality is pinned down (yolov8x-class, not Nano; camera resolution to resolve the ball)? Decides whether the HaaS ~$150/court/month math holds.
+9. **Does the A/B-test wedge hold** — will a proven "smart court" actually command a booking premium, or do players value the clips but not enough to pay/switch?
+10. **HaaS vs buyout vs rev-share** as the lead motion — which one gets the first venues to yes?
