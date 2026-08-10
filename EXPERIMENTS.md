@@ -187,3 +187,26 @@ nano crossings 22 → yolov8x 15 (7652); 7655 yolov8x 14. Net line wrong (below 
 **Conclusion.** yolov8x is clearly better than nano — it finds the real ball, and on a **big** (mid-court) ball the 0.9-vs-0.3 gap cleanly separates ball from junk. **But confidence is size-dependent:** the ball *at the net* — small and far from a behind-baseline camera — scores only 0.2–0.3, overlapping the false-positive range. **Sharp implication: the crossing moment (ball at the net) is intrinsically the hardest detection from this camera angle**, because the net is the farthest point. A plain confidence cutoff would drop exactly the frames we care about. Net-line error confirmed on both clips → the derived line is unreliable; mark it.
 
 **Follow-up (filed as ADR-040 candidate).** (1) Ship yolov8x default + `ball_box_ok` size filter + `net_line_y` marked-net (done, `feat/ball-recipe`). (2) Confidence alone insufficient → need size filter + a tracker (bridge/interpolate the small-ball frames) — TrackNet-style is the real answer for the tiny far ball. (3) Camera angle matters: side/elevated so the net isn't the farthest point, or higher resolution — a capture lever, not a software one (ADR-038). (4) Re-test the full recipe only on clean fixed footage with a marked net.
+
+---
+
+## 2026-08-10 — Reprocess with corrected net line: rallies clean, dead time still noisy (needs a tracker)
+
+**Hypothesis.** With the net line hand-placed correctly + yolov8x + size filter, real rallies should show clean crossings AND dead time should go quiet.
+
+**Setup.** Rendered annotated clips (yolov8x, `max_ball_px=50`, per-window hand-measured net line): 7652 rally 58–77.5 (net y=260), 7652 rally 620–638 (y=170), 7655 rally 86–101 (y=210), and a "dead" segment 659–666 (y=160). Crossings counted on the drawn output.
+
+**Result.**
+
+| Window | net y | crossings | read |
+|---|---|---|---|
+| 7652 rally 58–77.5 | 260 | 33 | clean rally, net line on the net |
+| 7652 rally 620–638 | 170 | 12 | clean (vs 20 with the old wrong line — noise removed) |
+| 7655 rally 86–101 | 210 | 20 | clean, even with the ball small at the net |
+| 7652 DEAD 659–666 | 160 | **18** | **noise persists — 2.6/s, higher than rallies** |
+
+Also: the net line moved **y=260 → 170** between two rallies of the same clip — pure zoom. Confirms one calibration can't hold across a zooming clip.
+
+**Conclusion.** Rallies reprocess cleanly with a correct net line — the net-line + model fixes work *during play*. But **dead time still produces phantom crossings**, and it's a *third* cause the earlier fixes don't touch: in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle balls, warm-up) — genuine ball-sized detections in the wrong place — and taking "best ball anywhere" per frame makes the pick hop between them, flipping sides. Not a net-line or size problem.
+
+**Follow-up.** Dead-time rejection needs a **ball tracker** (single-ball motion continuity + reject teleports, à la the prior-art cut logic) — this moves tracking from "maybe later" to **required** for dead-time discrimination. Possibly an image-region gate for the active court too. Rendering note: OpenCV writes mp4v (not web-playable) — re-encode to H.264 before delivery.

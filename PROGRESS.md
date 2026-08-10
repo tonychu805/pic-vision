@@ -13,7 +13,9 @@ Plain-language record of what's been built and decided, newest first. Git histor
 2. Calibrate with the **new flow: 12 court points + 2 net-tape clicks** (net marking now in `calibrate.py`).
 3. Re-label to **competitive rallies only** (`LABELING.md` v2).
 
-**Then run the shipped recipe and get the first real number:** `detect_ball` (yolov8x default) with `max_ball_px` set to the **measured** ball pixel size, marked net via `net_line_y`, → `crossing_times` → `cluster_crossings` (min_crossings ≈ 5) → segments → harness vs labels. **Measure the ball's pixel size first** — it decides whether size-filter + marked-net is enough, or we need a **tracker (TrackNet-style)** for the far/small ball.
+**Then run the shipped recipe and get the first real number:** `detect_ball` (yolov8x default) with `max_ball_px` set to the **measured** ball pixel size, marked net via `net_line_y`, → `crossing_times` → `cluster_crossings` (min_crossings ≈ 5) → segments → harness vs labels. **Measure the ball's pixel size first**.
+
+**A ball tracker is now REQUIRED (not optional).** 2026-08-10 reprocessing (EXPERIMENTS): with a correct net line, real rallies read clean, but **dead time still produced phantom crossings** — in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle/warm-up balls) and "best ball anywhere per frame" hops between them, flipping sides. Net-line + size filter don't fix this. Fix = **single-ball tracker + reject teleports** (prior-art cut logic), plus maybe an image-region gate for the active court. This is the main thing standing between "rallies look right" and "dead time reads quiet."
 
 ## Status at a glance
 
