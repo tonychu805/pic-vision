@@ -4,19 +4,21 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**First real footage (2026-08-08) came in but was compromised by camera zoom/pan** — not a fixed view, so the single calibration broke and players left frame. The read was confounded — *not* a fair test. Full detail in EXPERIMENTS.md (2026-08-08). Two things gate progress:
+**The v1 ball-net-crossing rally detector is built and diagnosed. The mechanism is sound; its two inputs broke on the zoom-compromised clips. Fixes are shipped. The blocker is one clean, fixed clip to validate on.** Full diagnosis: EXPERIMENTS.md 2026-08-10.
 
-1. **Capture CLEAN fixed footage** — rigid mount, **NO zoom, NO pan**, whole court in frame, **well-lit (daylight / bright court)** so the ball is trackable. Indoor works (ball detectable 5/6 frames) but brighter is better. **This is the blocker.** *(No hardware upgrade yet — prove the net-crossing count in software + lighting first; camera-over-compute only if ever needed — ADR-038.)*
-2. **Re-label to competitive rallies only** (`LABELING.md` v2) — today's labels were "any play" (warm-up/casual included), a target mismatch.
+**What we proved (on IMG_7652/7655, both compromised):** the crossing logic is fine (tested), but (1) the **derived net line landed below the real net** (calibration on a zoomed frame), and (2) **nano tagged heads as "ball."** So the crossing counts were noise and the "9/9 recall" was hollow (watched clips weren't real rallies). yolov8x finds the real ball (0.91 mid-court) but only 0.2–0.3 at the net (small/far) — the crossing moment is the hardest detection from a behind-baseline camera.
 
-Then the **priority build — the pivot**: a **ball-net-crossing rally counter** (detect ball → filter false positives → track → count crossings of the net line). On real casual play, player *activity* is inverted (dead time is more active than low-energy casual rallies), so **the ball — "is a point being contested across the net" (ADR-028) — is the real rally signal**, not player motion. Also add **ByteTrack** to stabilize player positions (revisits ADR-008). Then a fair Phase 0.6.
+**The single gate — capture ONE clean clip:**
+1. Rigid mount, **NO zoom, NO pan**, whole court in frame, well-lit. Mount **higher / side-on** if possible so the net isn't the farthest, smallest point.
+2. Calibrate with the **new flow: 12 court points + 2 net-tape clicks** (net marking now in `calibrate.py`).
+3. Re-label to **competitive rallies only** (`LABELING.md` v2).
 
-**Why the pivot:** activity/position markers failed on real casual footage (motion + kitchen both inverted, even on clean frames). Tracking + ball both look needed *earlier* than the prototype planned (ADR-008 / ADR-022). The ball being detectable indoors makes the net-crossing path viable.
+**Then run the shipped recipe and get the first real number:** `detect_ball` (yolov8x default) with `max_ball_px` set to the **measured** ball pixel size, marked net via `net_line_y`, → `crossing_times` → `cluster_crossings` (min_crossings ≈ 5) → segments → harness vs labels. **Measure the ball's pixel size first** — it decides whether size-filter + marked-net is enough, or we need a **tracker (TrackNet-style)** for the far/small ball.
 
 ## Status at a glance
 
-- **Built + tested (26 tests):** eval harness · calibration (order-independent) · detection pipeline front-end (`src/players.py`, `src/events.py` — detection → court coords → court filter → motion + kitchen markers) · scoring against labels.
-- **Not built (Phase 1, after the gate):** segmenter, selection, render, `cut.py` orchestrator — the session→reel back half.
+- **Built + tested (47 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · scoring against labels.
+- **Not built (Phase 1, after the gate):** selection, render, `cut.py` orchestrator — the `rallies.json → highlights.mp4` back half. Also unbuilt: a **ball tracker** (TrackNet-style) if the far/small ball needs it.
 - **Decided:** ADR-035 (order-independent calibration), ADR-036 (court coords; calibration absorbs pose not occlusion), ADR-037 (two-sided live/stopped markers), LABELING.md v2, prior art assessed (beat, don't adopt — EXPERIMENTS.md).
 - **Capture:** wifi/RTSP (tested, ~90–96% delivery, bursty drops; PTS handles drops). microSD skipped.
 - `main` is ahead of `origin` (local, unpushed).
