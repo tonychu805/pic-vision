@@ -17,6 +17,19 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 **A ball tracker is now REQUIRED (not optional).** 2026-08-10 reprocessing (EXPERIMENTS): with a correct net line, real rallies read clean, but **dead time still produced phantom crossings** — in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle/warm-up balls) and "best ball anywhere per frame" hops between them, flipping sides. Net-line + size filter don't fix this. Fix = **single-ball tracker + reject teleports** (prior-art cut logic), plus maybe an image-region gate for the active court. This is the main thing standing between "rallies look right" and "dead time reads quiet."
 
+## Benchmark cases (real-footage pass/fail targets)
+
+Concrete windows from the compromised clips, human-verified, to check any detector change against. Net line was hand-measured per window (the camera zooms — no single line holds); a clean fixed clip will replace these with one calibration. Scores below are current v1 (yolov8x + size filter + correct net line).
+
+| Window | Type | Verified | Current crossings | Target |
+|---|---|---|---|---|
+| IMG_7652 58–77.5s (net y=260) | RALLY | yes (play dead at end) | 33 | high ✅ |
+| IMG_7652 620–638s (net y=170) | RALLY | yes | 12 | high ✅ |
+| IMG_7655 86–101s (net y=210) | RALLY | yes | 20 | high ✅ |
+| **IMG_7652 659–666s (net y=160)** | **DEAD** | **yes (not a rally)** | **18** | **~0 ❌** |
+
+**The 659–666s dead-time case is the standing regression test for the ball tracker:** it must drop to ~0 once out-of-play-ball rejection (single-ball tracking + reject teleports) lands. Currently 18 false crossings.
+
 ## Status at a glance
 
 - **Built + tested (47 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · scoring against labels.
