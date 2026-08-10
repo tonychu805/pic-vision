@@ -32,8 +32,8 @@ Concrete windows from the compromised clips, human-verified, to check any detect
 
 ## Status at a glance
 
-- **Built + tested (47 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · scoring against labels.
-- **Not built (Phase 1, after the gate):** selection, render, `cut.py` orchestrator — the `rallies.json → highlights.mp4` back half. Also unbuilt: a **ball tracker** (TrackNet-style) if the far/small ball needs it.
+- **Built + tested (53 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `detect_candidates`, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · **single-ball spatial tracker** (`src/track.py`: `track_ball`, teleport-rejection, auto-reset) · **cut module** (`src/render.py`: `cut_clips`, H.264 + manifest) · scoring against labels.
+- **Not built (Phase 1, after the gate):** selection · `cut.py` end-to-end orchestrator (footage → clips in one pass) — the final wiring step. Render/cut primitives exist; they just need connecting.
 - **Decided:** ADR-035 (order-independent calibration), ADR-036 (court coords; calibration absorbs pose not occlusion), ADR-037 (two-sided live/stopped markers), LABELING.md v2, prior art assessed (beat, don't adopt — EXPERIMENTS.md).
 - **Capture:** wifi/RTSP (tested, ~90–96% delivery, bursty drops; PTS handles drops). microSD skipped.
 - `main` is ahead of `origin` (local, unpushed).
