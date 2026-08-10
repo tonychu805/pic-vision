@@ -48,7 +48,7 @@ Built test-first throughout (git history: harness and segmenter landed with test
 - **Synthetic signals over fixtures:** tests construct tiny tracks/series (`test_ball.py`'s crossing sequences, `test_track.py`'s smooth-ball-vs-distractor frames) rather than storing video.
 - **Behavior-named cases:** e.g. `test_match_one_prediction_cannot_claim_two_labels`, `test_rejects_teleport_to_far_ball`, `test_reacquires_after_long_gap`, `test_net_line_y_prefers_marked_net` — the test names document the ADR-backed rule.
 
-Coverage map: `test_harness.py` (IoU/matching/metrics, 12), `test_calibrate.py` (order-independent assignment, homography fit), `test_ball.py` (16: net line, size filter, crossings, clustering), `test_track.py` (4), `test_players.py` / `test_events.py` (v0 front-end), `test_segment.py` (4), `test_render.py` (2: ffmpeg command shape, manifest), `test_label.py` (I/O + review mode).
+Coverage map: `test_harness.py` (IoU/matching/metrics, 12), `test_calibrate.py` (order-independent assignment, homography fit, 3), `test_ball.py` (14: net line, size filter, crossings, clustering), `test_track.py` (4), `test_players.py` (5) / `test_events.py` (6) (v0 front-end), `test_segment.py` (4), `test_render.py` (2: ffmpeg command shape, manifest), `test_label.py` (3: I/O + review mode).
 
 ## What to run when changing things
 

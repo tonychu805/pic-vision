@@ -8,7 +8,7 @@ resource: README.md
 
 # pic-vision — Pickleball Rally Cutter
 
-**One-line:** a prototype CLI pipeline that turns a two-hour fixed-camera pickleball session into a watchable highlight reel (≤ 10 min) plus a full rally cut, by detecting rallies and cutting the dead time. Source of truth for scope: [`PRD.md`](/PRD.md); how it's built: [`TECH_SPEC.md`](/TECH_SPEC.md); why: [`DECISIONS.md`](/DECISIONS.md) (39 ADRs).
+**One-line:** a prototype CLI pipeline that turns a two-hour fixed-camera pickleball session into a watchable highlight reel (≤ 10 min) plus a full rally cut, by detecting rallies and cutting the dead time. Source of truth for scope: [`PRD.md`](/PRD.md); how it's built: [`TECH_SPEC.md`](/TECH_SPEC.md); why: [`DECISIONS.md`](/DECISIONS.md) (39 ADRs + template).
 
 **Status:** mid-Phase-1. All detection primitives are built and unit-tested (53 tests), but the end-to-end orchestrator (`cut.py`) and ranker (`src/select.py`) are not wired yet. See [Operations & Status](operations/runbook.md) for the phase checklist.
 

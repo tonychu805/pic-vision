@@ -29,13 +29,16 @@ Both paths converge on the **shared spine**: `src/segment.py` (signal-agnostic g
 
 The v1 chain, per CHECKLIST.md, wires:
 
+<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
+```text
+flowchart TD
+    A["detect_candidates — src/ball.py<br>all sports-ball boxes per frame<br>yolov8x, size-filtered"] --> B["track_ball — src/track.py<br>one ball by continuity<br>rejects teleports from other courts"]
+    B --> C["crossing_times — src/ball.py<br>side flips across the net line<br>hysteresis band"]
+    C --> D["cluster_crossings — src/ball.py<br>dense crossing bursts to rally segments<br>min_crossings suppresses courtesy returns"]
+    D --> E["cut_clips — src/render.py<br>H.264 clips + manifest.json"]
 ```
-detect_candidates (src/ball.py — all sports-ball boxes per frame, yolov8x, size-filtered)
-  → track_ball      (src/track.py — one ball by continuity; rejects teleports = other courts' balls)
-  → crossing_times  (src/ball.py — side flips across the net line, hysteresis band)
-  → cluster_crossings (src/ball.py — dense crossing bursts → rally segments)
-  → cut_clips       (src/render.py — H.264 clips + manifest.json)
-```
+
+The v1 detection chain: dense per-frame candidates feed the single-ball tracker, whose track yields net-crossing times that cluster into rally segments and render as clips.
 
 The domain reasoning behind each step lives in [Rally Detection Concepts](../concepts/rally-detection.md); the operator recipe is in [Key Workflows](../workflows/pipeline.md).
 

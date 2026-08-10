@@ -39,7 +39,7 @@ Files appear as phases land — nothing is stubbed ahead of time (README §Pipel
 
 ## `tests/` (53 tests, `make test`)
 
-One file per module: `test_harness.py`, `test_calibrate.py`, `test_ball.py`, `test_track.py`, `test_players.py`, `test_events.py`, `test_segment.py`, `test_render.py`, `test_label.py`. Suite runs without torch/weights/video — see [testing conventions](testing/evaluation.md#unit-test-suite-tests-53-tests-make-test).
+One file per module: `test_ball.py` (14), `test_harness.py` (12), `test_events.py` (6), `test_players.py` (5), `test_track.py` (4), `test_segment.py` (4), `test_calibrate.py` (3), `test_label.py` (3), `test_render.py` (2). Suite runs without torch/weights/video — see [testing conventions](testing/evaluation.md#unit-test-suite-tests-53-tests-make-test).
 
 ## Root documents (the product's memory)
 
@@ -47,7 +47,8 @@ One file per module: `test_harness.py`, `test_calibrate.py`, `test_ball.py`, `te
 |---|---|
 | `PRD.md` | Scope, goals/non-goals, success metrics, phases, risks, open questions. Prototype, not product. |
 | `TECH_SPEC.md` | Capture, prior art, tier specs, segmentation, selection, rendering, compute budget, NFRs, repo layout, build order. |
-| `DECISIONS.md` | 39 append-only ADRs. Early tier naming (T0/T1/T2) differs from current (T0′/T1′/T2′) — note at top of file. |
+| `DECISIONS.md` | 39 append-only ADRs (ADR-001…039, plus a blank `ADR-NNN` template at the tail). Early tier naming (T0/T1/T2) differs from current (T0′/T1′/T2′) — note at top of file. |
+| `docs/superpowers/plans/2026-08-05-eval-harness.md` | Committed design plan behind the eval harness — the "build the measurement first" slice that started Phase 0. |
 | `EXPERIMENTS.md` | Append-only run log; hypothesis-before-result rule. The 2026-08-10 entries hold the v1 diagnosis. |
 | `PROGRESS.md` | Newest-first narrative + "NEXT SESSION — start here" block. The fastest way to pick up context. |
 | `CHECKLIST.md` | Phase-gate tracker with per-item status and the benchmark-window results table. |
