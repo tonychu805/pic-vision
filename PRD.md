@@ -151,8 +151,8 @@ Ordered so the riskiest assumptions are tested first and something watchable exi
 |---|---|---|---|
 | **0. Instrument** | Verified capture, labeled eval sets, calibrated court, working eval harness | Harness reports the §5 tables on a hand-written stub | 2 days |
 | **0.5. Benchmark prior art** | Existing open-source rally detectors scored against our eval set | A baseline number exists | 1 day |
-| **0.6. Validate the approach** | Measure how often "play has stopped" markers misfire — two cases named: **during dink rallies** (low-motion real play) and **after points on courtesy returns** (motion during dead time) | Both near zero. **If not, the detection approach is unsound** and changes before anything is built. | 1 day |
-| **1. Core pipeline** | End-to-end: player positions → rally segmentation → ranked selection → both artifacts | A watchable ≤10-min reel exists. Recall and FP measured. Subjective gate run once. | 1 week |
+| **0.6. Validate the approach** | Measure how often "play has stopped" markers misfire — two cases named: **during dink rallies** (low-motion real play) and **after points on courtesy returns** (motion during dead time) | Both near zero. **If not, the detection approach is unsound** and changes before anything is built. → **Measured 2026-08-08: markers inverted on casual play (dead time more active than dink rallies). Led to ADR-039 — v1 pivot.** | 1 day |
+| **1. Core pipeline** | End-to-end detection → ranked selection → both artifacts. **Two parallel tracks (ADR-039):** v0 (player dead-time inversion, frozen baseline) and v1 (ball net-crossings, current primary effort). | A watchable ≤10-min reel exists. Recall and FP measured. Subjective gate run once. | 1 week |
 | **1.5. Sharpen boundaries** | Dense sampling around rally edges | Boundary error ≤ 1.0 s | 3 days |
 | **2. Ball presence** | Off-the-shelf ball detection — no training | FP improves, recall doesn't regress | 3 days |
 | **2.5. Audio** (conditional) | Impact timing, only if the recording's audio is usable | Boundary error improves | 3 days |
@@ -162,7 +162,7 @@ Ordered so the riskiest assumptions are tested first and something watchable exi
 
 **Total: 3–4.5 weeks**, depending on the Phase 3 gate.
 
-**Phase 0.6 is the real gate.** The detection approach works by spotting when play *stops* — someone crosses the net, walks off court, picks up the ball — and treating everything else as a rally. That's more robust than trying to score how "rally-like" a moment looks, but only if those markers are clean. One day of measurement confirms or kills it before a week of building. The two cases most likely to break it are pickleball-specific and must be measured explicitly, not averaged away: **dink rallies**, where players barely move during real play so a motion-based marker reads live play as dead time; and **courtesy returns**, where the tap-back after a point looks like a short rally. The easy 80% of points isn't the test — these two are.
+**Phase 0.6 is the real gate.** The detection approach works by spotting when play *stops* — someone crosses the net, walks off court, picks up the ball — and treating everything else as a rally. That's more robust than trying to score how "rally-like" a moment looks, but only if those markers are clean. One day of measurement confirms or kills it before a week of building. The two cases most likely to break it are pickleball-specific and must be measured explicitly, not averaged away: **dink rallies**, where players barely move during real play so a motion-based marker reads live play as dead time; and **courtesy returns**, where the tap-back after a point looks like a short rally. The easy 80% of points isn't the test — these two are. → **Measured 2026-08-08 on real footage: dink rallies were the failure case — dead time registered as more active than live play. The gate failed; v0 (player) is frozen as a baseline and v1 (ball net-crossings) is the current primary approach (ADR-039).**
 
 **Phase 0.5 is new and deliberately early.** Several open-source pickleball rally detectors already exist, one of which implements roughly Phases 1–2 — but none publishes a single accuracy number. Measuring them costs a day and either saves two weeks or produces a baseline to beat. Building first and comparing later would repeat the mistake this plan exists to avoid.
 
@@ -174,7 +174,7 @@ The prototype exists to produce this fork, not just an artifact:
 - **Detection works, reel is dull** → the problem is ranking, not vision. Go to 3.5, not 3.
 - **Detection is weak** → Phase 2, then 2.5, then the Phase 3 gate.
 - **Prior art already beats what we build** → adopt it and spend the time on selection and ranking, which nobody else has done.
-- **Player detection is too noisy to trust** (Phase 0.6 fails) → the detection approach needs rethinking, not more tiers. Better camera placement or a better detector, before anything else.
+- **Player detection is too noisy to trust** (Phase 0.6 fails) → the detection approach needs rethinking, not more tiers. Better camera placement or a better detector, before anything else. → **This fork was taken (2026-08-08). Current primary: v1 ball net-crossings (ADR-039).**
 
 Audio being unusable is no longer on this list. It was once a project-ending risk; it is now a configuration choice.
 
@@ -184,7 +184,7 @@ Audio being unusable is no longer on this list. It was once a project-ending ris
 
 | Risk | Likelihood | Impact | Response |
 |---|---|---|---|
-| **Player detection is noisy or occluded**, so dead-time markers fire during real rallies | Medium | **High** | The whole detection design rests on these being clean. Validated by measurement in Phase 0.6 *before* the segmenter is built; if it fails, fall back to positive scoring. |
+| **Player detection is noisy or occluded**, so dead-time markers fire during real rallies | **Realized** | **High** | Measured 2026-08-08: markers inverted on casual play. Response: ADR-039 — v1 (ball net-crossings) as primary; v0 (player) frozen as baseline. |
 | **Far-court pose estimation too noisy to trigger on** — small, partly-occluded players from an 8-ft baseline mount | Medium | Medium | Keypoint-based rally triggers (swing/stance detection) may be unreliable at range. Test pose quality on the *far* court before depending on it; position and motion markers, not pose, are the fallback signal. |
 | Thresholds overfit to one session | **High** | **High** | Strict holdout separation; recall regressions auto-revert |
 | **Courtesy returns** read as short rallies — happens after *every* point, so systematic | **High** | Medium | Require ≥ 2 ball crossings plus minimum duration |
@@ -203,7 +203,7 @@ The first two are the most likely to actually bite. The second is the quiet one 
 
 ## 9. Open questions
 
-1. **Are the "play has stopped" markers clean enough to build on?** Phase 0.6. If occlusion or detection noise makes them fire during real rallies, the detection approach changes. This is the question that gates the project.
+1. **Are the "play has stopped" markers clean enough to build on?** → **Answered No (2026-08-08).** Markers inverted on casual play — dead time more active than dink rallies. Led to ADR-039 (v1 ball net-crossings as primary; v0 frozen as baseline).
 2. **How good is existing open-source rally detection, really?** None of it publishes accuracy numbers. Phase 0.5 answers this and may reshape the whole plan.
 2b. **Is this recording's audio usable at all?** Measured, not assumed — it determines whether Phase 2.5 happens, and nothing more.
 3. **Is the public pickleball dataset usable?** Camera angles, class list, image count, and licence all unverified. Broadcast or mixed-angle footage won't transfer to a fixed baseline mount, and a domain-mismatched dataset is worse than none.

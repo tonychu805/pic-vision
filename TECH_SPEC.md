@@ -98,7 +98,9 @@ Surveyed 2026-07-30. **Benchmark these against `eval-set-A` before writing a det
 
 ## 3. Architecture
 
-**Detection is video-primary and works with audio entirely absent** (ADR-004, ADR-028). Rallies are found by detecting *dead time* and taking the complement (ADR-026).
+> **Current primary approach (2026-08-09): v1 — ball net-crossings.** Real footage showed player dead-time markers inverted on casual play (ADR-039). v0 (T1′ player geometry as primary detector, described below) is frozen as a baseline. v1 wires `detect_candidates → track_ball → crossing_times → cluster_crossings → segment → render`. Both paths share `segment.py`, `render.py`, and the eval harness. The v0 architecture below remains the spec for the frozen baseline.
+
+**Detection is video-primary and works with audio entirely absent** (ADR-004, ADR-028). Rallies are found by detecting *dead time* and taking the complement (ADR-026). *(v0 architecture — frozen baseline)*
 
 ```
                     ┌─────────────────────────────────────┐

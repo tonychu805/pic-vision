@@ -2,6 +2,8 @@
 
 Plain-language record of what's been built and decided, newest first. Git history has the detail; this is the map. Metric-producing runs go in [`EXPERIMENTS.md`](./EXPERIMENTS.md); decisions in [`DECISIONS.md`](./DECISIONS.md).
 
+## Phase gate tracker → [`CHECKLIST.md`](./CHECKLIST.md)
+
 ## ▶ NEXT SESSION — start here
 
 **The v1 ball-net-crossing rally detector is built and diagnosed. The mechanism is sound; its two inputs broke on the zoom-compromised clips. Fixes are shipped. The blocker is one clean, fixed clip to validate on.** Full diagnosis: EXPERIMENTS.md 2026-08-10.
