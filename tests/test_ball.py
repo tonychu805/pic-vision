@@ -1,4 +1,18 @@
-from src.ball import count_crossings, net_image_y, crossing_times, cluster_crossings
+from src.ball import (count_crossings, net_image_y, crossing_times,
+                      cluster_crossings, ball_box_ok)
+
+
+def test_ball_box_ok_accepts_small_square():
+    assert ball_box_ok((100, 100, 120, 122), max_dim_px=50)
+
+
+def test_ball_box_ok_rejects_oversized():
+    assert not ball_box_ok((100, 100, 180, 180), max_dim_px=50)   # head-sized blob
+
+
+def test_ball_box_ok_rejects_elongated():
+    # within the size cap but too tall to be a ball (a body/limb)
+    assert not ball_box_ok((100, 100, 130, 170), max_dim_px=100, max_aspect=2.0)
 
 
 def test_crossing_times_returns_timestamps():

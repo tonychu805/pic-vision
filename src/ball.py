@@ -24,13 +24,28 @@ def net_image_y(homography, x_ft=10.0, net_y_ft=22.0):
     return float(pt[0, 0, 1])
 
 
+def ball_box_ok(box, max_dim_px, max_aspect=2.0):
+    """True if a detection box is ball-shaped: not larger than max_dim_px on its
+    long side (drops heads/bodies) and roughly square (drops elongated limbs).
+    box = (x1, y1, x2, y2). max_dim_px must be calibrated to the ball's pixel
+    size on the actual footage — see detect_ball's max_ball_px."""
+    x1, y1, x2, y2 = box
+    w, h = x2 - x1, y2 - y1
+    long, short = max(w, h), max(min(w, h), 1)
+    return long <= max_dim_px and long / short <= max_aspect
+
+
 def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
-                weights="yolov8n.pt", sample_fps=None):
+                weights="yolov8x.pt", sample_fps=None, max_ball_px=None):
     """Best 'sports ball' image-y per sampled frame between start and end (sec).
     Returns [(time_sec, y or None)]. sample_fps=None runs every frame (dense,
     for exact crossing counts); set it lower (e.g. 10) to scan a whole clip
-    affordably — enough density to see the ball alternate sides during a rally.
-    Takes the highest-confidence detection per frame."""
+    affordably. Default weights are yolov8x — the large model detects the real
+    ball at high confidence and pushes false positives to low confidence
+    (evidence: EXPERIMENTS.md 2026-08-10). max_ball_px, when set, drops boxes
+    too big/elongated to be a ball (heads, bodies); leave None until it's
+    calibrated to the ball's pixel size on clean footage. Takes the
+    highest-confidence surviving detection per frame."""
     from ultralytics import YOLO
 
     model = YOLO(weights)
@@ -51,9 +66,13 @@ def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
         if i % stride:
             continue  # skip YOLO on non-sampled frames (decode is cheap, YOLO isn't)
         b = model(frame, imgsz=imgsz, conf=conf, classes=[32], verbose=False)[0].boxes
-        if len(b):
-            confs = b.conf.cpu().numpy()
-            x1, y1, x2, y2 = b.xyxy.cpu().numpy()[confs.argmax()]
+        confs = b.conf.cpu().numpy()
+        xyxy = b.xyxy.cpu().numpy()
+        idx = [j for j in range(len(xyxy))
+               if max_ball_px is None or ball_box_ok(xyxy[j], max_ball_px)]
+        if idx:
+            best = max(idx, key=lambda j: confs[j])
+            x1, y1, x2, y2 = xyxy[best]
             out.append((t, float((y1 + y2) / 2.0)))
         else:
             out.append((t, None))
