@@ -1,15 +1,17 @@
 #!/usr/bin/env python3
 """
-Court calibration — click 12 court intersections once per camera mount.
+Court calibration — click 12 court intersections + 2 net-tape points once per
+camera mount. The net points mark the net line directly (the ball crosses over
+the tape), which is more reliable than deriving it from the homography.
 
 Usage:
     python calibrate.py session.mp4 --at 300 --out court_calibration.json
 
 Controls:
-    left click   place the next point
+    left click   place the next point (12 court points, then 2 net-tape points)
     u            undo last point
     r            reset all
-    ENTER        save (once all 12 placed)
+    ENTER        save (once all 12 court + 2 net placed)
     q            quit without saving
 """
 import argparse
@@ -37,23 +39,38 @@ POINTS = [
     ("far centerline x NVZ line", (10.0, 29.0)),
 ]
 
+# After the 12 court points, mark the net line directly (the ball crosses over
+# the net tape, so mark the TOP of the net, not its base).
+NET_PROMPTS = ["net tape - LEFT end (top of net)", "net tape - RIGHT end (top of net)"]
+TOTAL = len(POINTS) + len(NET_PROMPTS)
+
 clicked: list[tuple[int, int]] = []
 
 
 def on_mouse(event, x, y, flags, param):
-    if event == cv2.EVENT_LBUTTONDOWN and len(clicked) < len(POINTS):
+    if event == cv2.EVENT_LBUTTONDOWN and len(clicked) < TOTAL:
         clicked.append((x, y))
 
 
 def draw(frame):
     img = frame.copy()
     for i, (px, py) in enumerate(clicked):
-        cv2.circle(img, (px, py), 6, (0, 255, 0), -1)
-        cv2.putText(img, str(i + 1), (px + 9, py - 9),
-                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, (0, 255, 0), 2)
+        net = i >= len(POINTS)
+        col = (0, 0, 255) if net else (0, 255, 0)          # net points in red
+        label = "N%d" % (i - len(POINTS) + 1) if net else str(i + 1)
+        cv2.circle(img, (px, py), 6, col, -1)
+        cv2.putText(img, label, (px + 9, py - 9),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.7, col, 2)
+    if len(clicked) == TOTAL:                              # draw the marked net line
+        (x1, y1), (x2, y2) = clicked[len(POINTS):TOTAL]
+        cv2.line(img, (x1, y1), (x2, y2), (0, 0, 255), 2)
     n = len(clicked)
-    msg = "ALL 12 PLACED - press ENTER to save" if n == len(POINTS) \
-        else f"{n + 1}/12  ->  {POINTS[n][0]}"
+    if n < len(POINTS):
+        msg = f"{n + 1}/12 court  ->  {POINTS[n][0]}"
+    elif n < TOTAL:
+        msg = f"NET {n - len(POINTS) + 1}/2  ->  {NET_PROMPTS[n - len(POINTS)]}"
+    else:
+        msg = "ALL PLACED (12 court + 2 net) - press ENTER to save"
     cv2.rectangle(img, (0, 0), (img.shape[1], 40), (0, 0, 0), -1)
     cv2.putText(img, msg, (10, 28), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
                 (255, 255, 255), 2)
@@ -206,13 +223,15 @@ def main():
             clicked.pop()
         if k == ord("r"):
             clicked.clear()
-        if k in (13, 10) and len(clicked) == len(POINTS):
+        if k in (13, 10) and len(clicked) == TOTAL:
             break
 
     cv2.destroyAllWindows()
 
-    # Click order does not matter: figure out which landmark each click is.
-    ordered, _ = solve_assignment(clicked)
+    # First 12 clicks are court points (order auto-detected); last 2 mark the net.
+    court_clicks = clicked[:len(POINTS)]
+    net_clicks = clicked[len(POINTS):TOTAL]
+    ordered, _ = solve_assignment(court_clicks)
     result = compute_calibration(ordered)
     rmse_ft = result["reprojection_rmse_ft"]
 
@@ -220,6 +239,7 @@ def main():
         "video": args.video,
         "frame_at_sec": args.at,
         **result,
+        "net_image_points": [[float(x), float(y)] for x, y in net_clicks],
         "court_size_ft": [20.0, 44.0],
         "net_y_ft": 22.0,
     }

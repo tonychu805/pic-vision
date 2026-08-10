@@ -35,6 +35,18 @@ def ball_box_ok(box, max_dim_px, max_aspect=2.0):
     return long <= max_dim_px and long / short <= max_aspect
 
 
+def net_line_y(calib):
+    """Net line image-y from a calibration dict. Prefers a hand-marked net
+    (calib['net_image_points'], from calibrate.py) — the reliable source when
+    the camera is fixed — and falls back to projecting it through the homography
+    when no net was marked. Marking removes the derived-line error we hit on
+    zoomed footage (EXPERIMENTS.md 2026-08-10)."""
+    pts = calib.get("net_image_points")
+    if pts:
+        return sum(p[1] for p in pts) / len(pts)
+    return net_image_y(calib["homography"])
+
+
 def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
                 weights="yolov8x.pt", sample_fps=None, max_ball_px=None):
     """Best 'sports ball' image-y per sampled frame between start and end (sec).

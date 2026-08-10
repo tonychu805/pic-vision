@@ -1,5 +1,16 @@
 from src.ball import (count_crossings, net_image_y, crossing_times,
-                      cluster_crossings, ball_box_ok)
+                      cluster_crossings, ball_box_ok, net_line_y)
+
+
+def test_net_line_y_prefers_marked_net():
+    calib = {"net_image_points": [[100, 300], [500, 320]],
+             "homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]}
+    assert net_line_y(calib) == 310.0            # average of the two marked y's
+
+
+def test_net_line_y_falls_back_to_homography():
+    calib = {"homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]}
+    assert abs(net_line_y(calib) - 22.0) < 1e-4  # derived (identity -> court y=22)
 
 
 def test_ball_box_ok_accepts_small_square():
