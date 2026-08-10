@@ -142,3 +142,26 @@ The low-motion rally frames (n=25) turned out **not to be dinks** — players si
 **Decisions.** Target = competitive rallies; domain = casual drop-in play. Fixed camera non-negotiable (no zoom/pan). Pivot to the ball-net-crossing rally counter as the next build.
 
 **Follow-up.** Capture clean **fixed** footage (no zoom/pan, whole court). Re-label to competitive rallies only. Build the ball-net-crossing counter + ByteTrack. Then a fair Phase 0.6.
+
+---
+
+## 2026-08-09 — v1 auto-annotator on full 7652 (raw footage → rally segments)
+
+**Hypothesis.** If the ball-net-crossing signal is a real rally detector, scanning the whole raw clip and clustering dense crossing-bursts into segments should cover the hand-labeled rallies. Expected good recall, unknown precision.
+
+**Setup.** `IMG_7652.MOV` (zoom-compromised), whole clip at `sample_fps=10`, `band=15`, `cluster gap_sec=2.0`, `min_crossings=2`. Net line reused from `IMG_7652_calib.json`. Ground truth = curated `IMG_7652.jsonl` (9 competitive rallies). Commit `e47ac73` (branch `feat/v1-annotate`).
+
+**Result.**
+
+| Metric | Value |
+|---|---|
+| Labels covered (recall) | 9 / 9 (100%) |
+| v1 proposed rallies | 96 |
+| Spurious vs labels | 78 / 96 (81%) |
+| Sampled frames / ball-present | 7769 / 5408 (70%) |
+
+Distribution: MATCH segments median 7 crossings (max 22); spurious median 4 (max 20). **10 spurious segments have ≥10 crossings** — near-certainly real sustained play, just not in the competitive-9. **31 spurious have ≤3 crossings** — likely noise (zoom moving the net line + loose `min_crossings=2`).
+
+**Conclusion.** Kept. Recall is the headline: v1 misses no labeled rally. The 81% "spurious" rate is confounded, not a clean precision number — the labels are a curated *competitive* subset (9 of an original ~32), so much of the "extra" is genuine casual play the crossing signal correctly detects. Confirms crossing-count is a real rally signal (consistent with the 7652/7655 smoke tests). Not validated — compromised footage.
+
+**Follow-up.** (1) Clean fixed footage for a real precision number. (2) Raise `min_crossings` / widen band to shed the ≤3-crossing noise. (3) Separating *competitive* from *casual* likely needs rally length/intensity, not crossings alone — a ranking layer, not a detection fix. (4) Same scan on 7655.
