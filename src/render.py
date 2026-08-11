@@ -44,7 +44,7 @@ def concat_clips(manifest, out_dir):
     filelist = os.path.join(out_dir, "_filelist.txt")
     with open(filelist, "w") as f:
         for entry in manifest:
-            f.write(f"file '{os.path.join(out_dir, entry['file'])}'\n")
+            f.write(f"file '{entry['file']}'\n")
     out_path = os.path.join(out_dir, "highlight.mp4")
     subprocess.run([
         "ffmpeg", "-y", "-v", "error",

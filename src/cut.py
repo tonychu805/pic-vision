@@ -12,6 +12,7 @@ import json
 from src.pipeline import detect_rallies
 from src.render import cut_clips, concat_clips
 from src.ball import net_line_y
+from src.calib import detect_net_y, pick_net_y
 
 
 def cut_rallies(video, net_y, out_dir, *, max_jump, gap_sec, band=0.0,
@@ -34,8 +35,12 @@ def cut_rallies(video, net_y, out_dir, *, max_jump, gap_sec, band=0.0,
 def main(argv=None):
     p = argparse.ArgumentParser(description="Cut rally clips from footage.")
     p.add_argument("--video", required=True)
-    p.add_argument("--calib", required=True,
-                   help="calibration json (net line comes from it)")
+    p.add_argument("--calib", default=None,
+                   help="calibration json containing net_y")
+    p.add_argument("--net-y", type=float, default=None,
+                   help="net line pixel y-coordinate (overrides --calib and picker)")
+    p.add_argument("--auto-detect", action="store_true",
+                   help="headless Hough-based net detection instead of interactive picker")
     p.add_argument("--out", required=True, help="output dir for clips + manifest")
     p.add_argument("--max-jump", type=float, default=150.0,
                    help="tracker teleport threshold, px (100-200 validated)")
@@ -44,20 +49,37 @@ def main(argv=None):
     p.add_argument("--min-crossings", type=int, default=5)
     p.add_argument("--band", type=float, default=0.0,
                    help="net hysteresis band, px")
+    p.add_argument("--sample-fps", type=float, default=10.0,
+                   help="frames per second to sample for ball detection (default 10)")
+    p.add_argument("--weights", default="yolov8x.pt",
+                   help="YOLO weights file (default yolov8x.pt; use yolov8n.pt for speed)")
     p.add_argument("--max-ball-px", type=float, default=None,
                    help="ball size filter; measure on the actual footage first")
     p.add_argument("--court-id", default=None)
     p.add_argument("--session-id", default=None)
     args = p.parse_args(argv)
 
-    with open(args.calib) as f:
-        calib = json.load(f)
-    net_y = net_line_y(calib)
+    if args.net_y is not None:
+        net_y = args.net_y
+        print(f"net_y = {net_y:.1f} (from --net-y)")
+    elif args.calib:
+        with open(args.calib) as f:
+            calib = json.load(f)
+        net_y = net_line_y(calib)
+        print(f"net_y = {net_y:.1f} (from calibration)")
+    elif args.auto_detect:
+        print("auto-detecting net line from footage...")
+        net_y = detect_net_y(args.video)
+        print(f"net_y = {net_y:.1f} (auto-detected)")
+    else:
+        net_y = pick_net_y(args.video)
+        print(f"net_y = {net_y:.1f} (picked interactively)")
     manifest = cut_rallies(
         args.video, net_y, args.out, max_jump=args.max_jump,
         gap_sec=args.gap_sec, band=args.band, min_crossings=args.min_crossings,
         court_id=args.court_id, session_id=args.session_id,
-        max_ball_px=args.max_ball_px)
+        sample_fps=args.sample_fps, max_ball_px=args.max_ball_px,
+        weights=args.weights)
     print(f"cut {len(manifest)} rallies -> {args.out}/manifest.json")
     if manifest:
         print(f"highlight -> {args.out}/highlight.mp4")

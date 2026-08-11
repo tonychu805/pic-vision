@@ -631,6 +631,55 @@ The two hard cases resolve by pairing: a **lob chase** fires "left court" (stopp
 
 ---
 
+## ADR-040 — Fine-tuning path: yolov8n on own footage → Jetson TensorRT
+
+**Date:** 2026-08-11 · **Status:** accepted (post-demo; not built now)
+
+**Context.** The generic yolov8x "sports ball" detector works well enough for the demo but has two production blockers: (1) too slow for real-time on Jetson Orin (yolov8x ~1 TFLOP/frame); (2) occasional false positives (ceiling lights, heads at low confidence) that the tracker suppresses but doesn't eliminate. Alternative detectors surveyed (PikleYOLO, TrackNet badminton, AndrewDettor) all have blockers on macOS — see EXPERIMENTS.md 2026-08-11.
+
+**Decision.** Fine-tune yolov8n (tiny model, 6 MB) on our own fixed-mount pickleball footage:
+- **Dataset:** 1500–2000 labeled frames, sampled at 1 fps across 4–6 sessions. Variety (lighting, players, ball speed) matters more than quantity. Hard cases (ball near net, motion blur) must be included.
+- **Labeling:** Roboflow (free tier covers initial runs; no footage upload required for on-premise alternative).
+- **Training:** Roboflow Train (free, 3 credits) or RunPod (~$0.10–0.30/run on RTX 3090).
+- **Export:** TensorRT `.engine` file exported on the Jetson Orin itself (not on the training machine — Ada GPU TensorRT ≠ Jetson TensorRT CUDA version).
+- **Integration:** single `--weights best.pt` flag in `src/cut.py`; no other pipeline changes.
+
+**Consequences.** Unlocks real-time inference on Jetson Orin and near-zero false positives on our specific court. The blocker is clean fixed-mount footage — handheld/zoomed footage produces a model that learns bad camera habits. Do not attempt until a permanent camera mount is installed. AndrewDettor TrackNet-Pickleball is worth re-testing on Jetson (CUDA available) before committing to a full labeling effort — it may already work.
+
+---
+
+## ADR-041 — Interactive net picker as default calibration; --net-y for reuse
+
+**Date:** 2026-08-11 · **Status:** accepted
+
+**Context.** The calibration JSON (`--calib`) approach requires running a separate calibration tool and clicking multiple court landmarks — overkill for a handheld demo. The Hough-line auto-detection (`detect_net_y`) finds the floor service line at ~52px error rather than the net, because the net mesh creates no strong horizontal edge (EXPERIMENTS.md 2026-08-11). A 52px error in a 1080-tall frame degrades crossing detection for shots near the net.
+
+**Decision.** Default to `pick_net_y()`: on first run, show the first video frame in a window with a horizontal guide line that follows the mouse. One click on the net tape records the exact pixel y-coordinate and the pipeline proceeds. Subsequent runs reuse the known value via `--net-y 260` (no window). Modes in priority order:
+1. `--net-y <value>` — explicit, fastest, for repeated use
+2. `--calib <json>` — full court geometry, for permanent mounts
+3. *(default)* — interactive picker, one click, zero setup
+4. `--auto-detect` — headless Hough estimate, rough use / CI only
+
+**Consequences.** One-time 5-second step per camera angle instead of a full calibration session. Net_y must be re-picked if the camera moves. The `--calib` path remains the right choice for a permanent fixed-mount production setup where calibration is done once and never repeated.
+
+---
+
+## ADR-042 — Band tuning for dink rallies; separate from fine-tuning
+
+**Date:** 2026-08-11 · **Status:** accepted
+
+**Context.** During a dink rally, both players are at the kitchen line and the ball stays just above the net. In image space the ball's y-position hovers within ±20px of `net_y`. With `band=0`, detection noise causes the ball to oscillate above/below `net_y` within a single shot, registering phantom crossings. If `net_y` is measured slightly low (ball never clearly crosses to the "far" side), the rally is missed entirely.
+
+**Decision.** Tune `--band` empirically per camera angle; it is not a model parameter. Run the pipeline at band=0, 15, 30 on a known dink-heavy clip and compare crossing counts to ground truth. Pick the band that suppresses noise without dropping real crossings. Expected range: 15–30px for a behind-baseline 1080p view.
+
+This is explicitly **not** a fine-tuning concern — even a perfect ball detector needs the right band, because band encodes court geometry (how much y-range the net zone occupies in pixels at this camera angle), not detection quality. Fine-tuning improves detection confidence; band corrects the geometry.
+
+**Tuning order:** net_y → band → fine-tune model → recheck band (usually stable).
+
+**Consequences.** Band is a per-venue, per-mount constant once tuned. Document it alongside `net_y` when a permanent mount is installed.
+
+---
+
 ## Template
 
 ```markdown

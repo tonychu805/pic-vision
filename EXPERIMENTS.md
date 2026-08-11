@@ -233,3 +233,54 @@ Tracked crossings stable across `max_jump` 100–200 (dead=0, rally=16); at 300 
 **Caveats.** One rally + one dead-time window, still on **compromised (zoomed)** footage with per-window hand-measured net lines. Validates the *mechanism*, not a benchmark number. Clean fixed-camera footage is still the gate for a real recall/FP measurement and for tuning `max_jump`/`gap_sec`/`max_ball_px` without overfitting to one clip.
 
 **Follow-up.** On clean footage: measure ball pixel size → set `max_ball_px`, compute one net line from calibration, run `detect_rallies` across all labeled rallies vs the harness. Then wire selection/ranking + `cut.py` (footage → clips) — `render.py` primitives already exist.
+
+---
+
+## 2026-08-11 — Alternative ball detector survey: PikleYOLO, TrackNet (badminton), AndrewDettor TrackNet-Pickleball
+
+**Hypothesis.** A domain-specific ball tracker (TrackNet architecture, trained on paddle-sport footage) might outperform the generic yolov8x "sports ball" class, especially for the small ball at the net.
+
+**Setup.** Tested four detectors against two benchmark windows on IMG_7652 — a known rally (58–77.5s, net_y=260, expected: 16 crossings → 1 rally) and a known dead segment (659–666s, net_y=160, expected: 0 crossings). yolov8x result reused from the 2026-08-11 tracker experiment.
+
+| Detector | RALLY crossings | DEAD crossings | Verdict |
+|---|---|---|---|
+| yolov8x (tracked, baseline) | 16 → 1 rally | 0 → 0 rallies | ✅ clean separation |
+| PikleYOLO yolov8n | 0 → 0 | 0 → 0 | ❌ detects at cy=3–47px (ceiling artifacts) |
+| TrackNet badminton pretrained | 0 → 0 | 0 → 0 | ❌ detects at y=5–176px (domain gap + temporal mismatch) |
+| AndrewDettor TrackNet-Pickleball | cannot run | cannot run | ❌ CUDA-only: TF Conv2D NCHW requires NVIDIA GPU |
+
+**PikleYOLO:** yolov8n trained on pickleball, but appears to have been fine-tuned on a different court setup. On this footage it fires almost exclusively at the ceiling, never detecting the ball in play.
+
+**TrackNet (badminton):** VGG16 encoder-decoder trained on badminton shuttlecock, NCHW input, 9-channel (3 RGB frames stacked). Loaded via community PyTorch port (tf2torch). The model does produce heatmaps but detects at the top of the frame — classic domain gap from a near-overhead camera angle used in badminton vs. behind-baseline pickleball.
+
+**AndrewDettor TrackNet-Pickleball:** TF 2.11 SavedModel, trained on pickleball footage. Loads successfully under TF 2.13 (Keras 2, earliest ARM64-compatible version). But the Conv2D layers use `data_format='channels_first'` (NCHW), which TF only supports on CUDA GPUs — not macOS CPU or Apple Silicon. Cannot run without NVIDIA hardware.
+
+**Conclusion.** yolov8x remains the only working detector for this pipeline on macOS. The alternatives all have blockers: PikleYOLO is overfit to a different court, TrackNet badminton has an irreconcilable domain gap, AndrewDettor requires a CUDA GPU. AndrewDettor is worth re-testing on Jetson Orin (which has CUDA) — it was trained on pickleball footage and the architecture is right for ball tracking.
+
+**Follow-up.** (1) Re-test AndrewDettor on Jetson once it's available. (2) Fine-tune yolov8n on our own fixed-mount footage — this is the production path (see ADR-040).
+
+---
+
+## 2026-08-11 — Auto net-line detection from raw footage (Hough lines on temporal median)
+
+**Hypothesis.** A temporal median of sampled frames erases moving players/ball, leaving static court structure. Hough line detection on the median should find the net line without manual calibration.
+
+**Setup.** `detect_net_y()` in `src/calib.py`. Samples 20 frames from first 20% of video, computes per-pixel median, applies Canny + HoughLinesP restricted to 15–65% of frame height, filters to near-horizontal lines with left-half-frame coverage, takes the topmost sufficient cluster. Tested on IMG_7652 (known net_y=260).
+
+**Result.** Auto-detected net_y = 312 (error = 52px, ~5% of frame height). The algorithm finds the far service line painted on the floor, not the pickleball net itself. Root cause: the net is a dark mesh that creates no strong horizontal Hough edge. The service line at y≈308–312 is the topmost spanning horizontal line the algorithm can reliably find.
+
+At sample_fps=5 (for speed), crossing counts with net_y=312 collapsed to 1 vs 5 with net_y=260 on the rally window — confirming the 52px error degrades detection meaningfully on this footage. Not tested at full fps.
+
+**Conclusion.** Hough-on-median auto-detection is not reliable for this court setup. Kept as a `--auto-detect` flag for rough use. The interactive picker (`pick_net_y`, default mode) is the practical solution: one click on the first frame gives exact net_y in under 5 seconds. See ADR-041.
+
+**Follow-up.** On a court with a white net tape against a dark background, the Hough approach may work — worth re-testing with fixed footage. Long-term, net post detection (find vertical posts → derive net_y from post height) is more robust than line detection.
+
+---
+
+## 2026-08-11 — sample_fps=10 default; hanging on long videos without it
+
+**Observation.** Running `python -m src.cut` on a full 13-minute clip at default `sample_fps=None` (every frame) would take several hours on a MacBook CPU — yolov8x processes ~2 fps, so 23,000 frames = ~3 hours. The CLI had no `--sample-fps` argument, so there was no way to reduce this without editing source code.
+
+**Fix.** Added `--sample-fps` to the CLI defaulting to 10 fps. At 10 fps on a 13-min clip: ~7,800 frames, ~65 minutes on CPU. Reduces to ~30 min at 5 fps (with some crossing miss rate on very fast exchanges). The underlying `detect_candidates` already accepted `sample_fps` — this was a missing CLI wiring.
+
+**Note.** sample_fps=5 in a benchmark test showed 5 crossings vs 16 at full fps for the same rally window — many crossings are missed between samples. At 10 fps the miss rate should be acceptable for rally-level detection (the ball completes a net crossing in ~0.1s; at 10fps there is a 0.1s gap between samples, so some crossings are borderline). Full fps remains the most accurate path if time allows.

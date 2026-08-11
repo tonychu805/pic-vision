@@ -18,6 +18,9 @@ def test_concat_clips_builds_ffmpeg_concat_command(monkeypatch, tmp_path):
 
     def fake_run(cmd, check):
         called["cmd"] = cmd
+        # capture filelist while it still exists (deleted after this call)
+        filelist = next(a for a in cmd if "_filelist.txt" in a)
+        called["filelist_content"] = open(filelist).read()
 
     monkeypatch.setattr(render.subprocess, "run", fake_run)
     manifest = [{"file": "rally_001.mp4"}, {"file": "rally_002.mp4"}]
@@ -26,6 +29,11 @@ def test_concat_clips_builds_ffmpeg_concat_command(monkeypatch, tmp_path):
     assert out == str(tmp_path / "highlight.mp4")
     assert "-f" in called["cmd"] and "concat" in called["cmd"]
     assert str(tmp_path / "highlight.mp4") in called["cmd"]
+    # filelist entries must use just the filename so ffmpeg resolves them
+    # relative to the filelist's directory (not cwd), avoiding doubled paths
+    content = called["filelist_content"]
+    assert "rally_001.mp4" in content
+    assert str(tmp_path) not in content
 
 
 def test_concat_clips_returns_none_for_empty(tmp_path):
