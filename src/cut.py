@@ -10,7 +10,7 @@ import argparse
 import json
 
 from src.pipeline import detect_rallies
-from src.render import cut_clips
+from src.render import cut_clips, concat_clips
 from src.ball import net_line_y
 
 
@@ -25,8 +25,10 @@ def cut_rallies(video, net_y, out_dir, *, max_jump, gap_sec, band=0.0,
                               band=band, min_crossings=min_crossings,
                               **detect_kwargs)
     scored = [{**s, "score": s["crossings"]} for s in segments]
-    return cut_clips(video, scored, out_dir,
-                     court_id=court_id, session_id=session_id)
+    manifest = cut_clips(video, scored, out_dir,
+                         court_id=court_id, session_id=session_id)
+    concat_clips(manifest, out_dir)
+    return manifest
 
 
 def main(argv=None):
@@ -57,6 +59,8 @@ def main(argv=None):
         court_id=args.court_id, session_id=args.session_id,
         max_ball_px=args.max_ball_px)
     print(f"cut {len(manifest)} rallies -> {args.out}/manifest.json")
+    if manifest:
+        print(f"highlight -> {args.out}/highlight.mp4")
 
 
 if __name__ == "__main__":
