@@ -1,4 +1,6 @@
-from src.render import clip_command, manifest_entry
+import os
+import src.render as render
+from src.render import clip_command, manifest_entry, concat_clips
 
 
 def test_clip_command_builds_h264_ffmpeg_args():
@@ -9,6 +11,25 @@ def test_clip_command_builds_h264_ffmpeg_args():
     assert "10.0" in cmd            # seek to start
     assert "5.5" in cmd             # duration = end - start
     assert "libx264" in cmd         # H.264 so clips play inline (mp4v doesn't)
+
+
+def test_concat_clips_builds_ffmpeg_concat_command(monkeypatch, tmp_path):
+    called = {}
+
+    def fake_run(cmd, check):
+        called["cmd"] = cmd
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    manifest = [{"file": "rally_001.mp4"}, {"file": "rally_002.mp4"}]
+    out = concat_clips(manifest, str(tmp_path))
+
+    assert out == str(tmp_path / "highlight.mp4")
+    assert "-f" in called["cmd"] and "concat" in called["cmd"]
+    assert str(tmp_path / "highlight.mp4") in called["cmd"]
+
+
+def test_concat_clips_returns_none_for_empty(tmp_path):
+    assert concat_clips([], str(tmp_path)) is None
 
 
 def test_manifest_entry_carries_court_time_score():

@@ -36,6 +36,25 @@ def manifest_entry(seg, rally_id, file, court_id=None, session_id=None):
     }
 
 
+def concat_clips(manifest, out_dir):
+    """Concatenate all rally clips in manifest into highlight.mp4 in out_dir.
+    Returns the output path, or None if manifest is empty."""
+    if not manifest:
+        return None
+    filelist = os.path.join(out_dir, "_filelist.txt")
+    with open(filelist, "w") as f:
+        for entry in manifest:
+            f.write(f"file '{os.path.join(out_dir, entry['file'])}'\n")
+    out_path = os.path.join(out_dir, "highlight.mp4")
+    subprocess.run([
+        "ffmpeg", "-y", "-v", "error",
+        "-f", "concat", "-safe", "0",
+        "-i", filelist, "-c", "copy", out_path,
+    ], check=True)
+    os.remove(filelist)
+    return out_path
+
+
 def cut_clips(video, segments, out_dir, court_id=None, session_id=None):
     """Cut each segment into an H.264 clip in out_dir and write manifest.json.
     Returns the manifest (list of manifest_entry dicts, sorted by start)."""

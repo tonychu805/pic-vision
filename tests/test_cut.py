@@ -14,6 +14,7 @@ def test_cut_rallies_forwards_scored_segments(monkeypatch):
         return ["manifest"]
 
     monkeypatch.setattr(cut, "cut_clips", fake_cut_clips)
+    monkeypatch.setattr(cut, "concat_clips", lambda manifest, out_dir: None)
 
     result = cut.cut_rallies("s.mp4", net_y=260, out_dir="/tmp/x",
                              max_jump=150, gap_sec=3.0, min_crossings=5,
@@ -33,6 +34,7 @@ def test_cut_rallies_handles_no_rallies(monkeypatch):
     monkeypatch.setattr(cut, "cut_clips",
                         lambda video, segments, out_dir, **kw:
                         captured.update(segments=segments) or [])
+    monkeypatch.setattr(cut, "concat_clips", lambda manifest, out_dir: None)
     result = cut.cut_rallies("s.mp4", net_y=260, out_dir="/tmp/x",
                              max_jump=150, gap_sec=3.0)
     assert captured["segments"] == []               # empty -> empty manifest
