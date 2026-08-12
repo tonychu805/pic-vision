@@ -8,7 +8,7 @@ resource: PROGRESS.md
 
 # Key Workflows
 
-The pipeline runs batch on local files, never live (ADR-013). The end-to-end orchestrator `cut.py` is **not built yet** — the steps below are run as separate tools/library calls until it's wired (Phase 1 back half; see [Operations & Status](../operations/runbook.md)).
+The pipeline runs batch on local files, never live (ADR-013). The end-to-end orchestrator now exists at **`src/cut.py`** — footage → rally clips → `highlight.mp4` in one pass (see step 4). The manual step-by-step library calls below remain the way to inspect or tune individual stages; see [Operations & Status](../operations/runbook.md) for what's still unbuilt (the ranker, `select.py`).
 
 ## 1. Capture a session (the current gate)
 
@@ -49,7 +49,16 @@ Keys: `s`/`e` mark start/end, `j/l`/`J/L` seek 2 s/10 s, `u` undo, `q` save+quit
 
 ## 4. Run v1 detection (shipped recipe)
 
-From PROGRESS.md's "single gate" block — the exact chain to run once clean footage exists:
+**One command, now wired:**
+
+```bash
+python -m src.cut --video session.mp4 --calib court_calibration.json --out out/session-001 \
+  --court-id court-1 --session-id 2026-08-11T18:00
+```
+
+`src/cut.py` pulls the net line from the calibration (`net_line_y`, marked-net preferred), runs the full v1 chain, cuts one H.264 clip per rally, writes `manifest.json`, and concatenates all clips into `highlight.mp4`. Defaults are the validated recipe: `max_jump=150`, `gap_sec=3.0`, `min_crossings=5`. **Measure the ball's pixel size on the footage and pass `--max-ball-px`** — it is deliberately unset by default because it can't be tuned on the zoom-compromised clips.
+
+The manual chain (below) is what the orchestrator runs and remains the way to tune a single stage:
 
 1. **Measure the ball's pixel size on the footage** and set `max_ball_px` (it is deliberately unset; it can't be tuned on zoomed clips).
 2. `detect_candidates(video, weights="yolov8x.pt", max_ball_px=<measured>)` → per-frame candidate lists (`src/ball.py`).
@@ -57,9 +66,9 @@ From PROGRESS.md's "single gate" block — the exact chain to run once clean foo
 4. `crossing_times(track, net_y=net_line_y(calib), band=…)` → crossing timestamps (`src/ball.py`).
 5. `cluster_crossings(times, gap_sec=…, min_crossings≈5)` → rally segments.
 6. Sanity-check against the benchmark windows before believing any change ([Testing](../testing/evaluation.md#benchmark-windows)).
-7. `cut_clips(video, segments, out_dir)` → H.264 clips + `manifest.json` (`src/render.py`).
+7. `cut_clips(video, segments, out_dir)` then `concat_clips(manifest, out_dir)` → H.264 clips + `manifest.json` + `highlight.mp4` (`src/render.py`).
 
-For a cheap whole-clip scan, `detect_ball(..., sample_fps=10)` trades exact crossing counts for speed (YOLO is skipped on non-sampled frames; decode is cheap, YOLO isn't).
+Two recipe constraints that come from measured behavior, not preference: the tracker needs **dense per-frame candidates** (subsampling via `sample_fps` breaks the `max_jump` motion assumption — `detect_rallies` leaves it dense on purpose), and `gap_sec=1.0` dissolves real rallies whose crossings are ~2 s apart — use ~3 s.
 
 ## 5. Score against labels
 

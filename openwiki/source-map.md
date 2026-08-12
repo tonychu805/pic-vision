@@ -16,8 +16,9 @@ Files appear as phases land — nothing is stubbed ahead of time (README §Pipel
 |---|---|
 | `calibrate.py` | Click 12 court points (any order) + 2 net-tape points → `court_calibration.json` (homography, RMSE ft, `net_image_points`). OpenCV GUI; core math in `compute_calibration` / order-independent assignment helpers. |
 | `label.py` | Rally interval labeler → JSONL. `--review` mode replays segments for keep/drop curation. Timestamps from PTS (`CAP_PROP_POS_MSEC`). |
+| `src/cut.py` | End-to-end orchestrator + CLI (`python -m src.cut --video … --calib … --out …`). `cut_rallies` runs `detect_rallies`, scores each segment by crossing count, and calls `cut_clips` + `concat_clips`. Lives under `src/`; the root-level `cut.py` of NFR7 / TECH_SPEC §12 is the intended final entry shape. |
 
-**Planned, not built:** `cut.py` (single-command orchestrator, NFR7) and `src/capture.py` (preflight + RTSP recording — the procedure lives in [Operations](operations/runbook.md#capture-pitfalls)).
+**Planned, not built:** `src/capture.py` (preflight + RTSP recording — the procedure lives in [Operations](operations/runbook.md#capture-pitfalls)).
 
 ## `src/` — detection library
 
@@ -28,7 +29,9 @@ Files appear as phases land — nothing is stubbed ahead of time (README §Pipel
 | `players.py` | v0 | `detect_players` (YOLOv8n person, sampled), `foot_point`, `to_court` (homography → court feet), `on_court` (asymmetric margin filter), `court_positions`, `load_calibration`. |
 | `events.py` | v0 | `mean_motion` / `motion_series` (tracking-free displacement), `n_at_kitchen` / `kitchen_series` (NVZ-formation marker; `KITCHEN_LINES = (15, 29)` ft). |
 | `segment.py` | shared | `segment(series, threshold, gap_sec, min_dur_sec)` — signal-agnostic gap-tolerant min-duration segmenter. |
-| `render.py` | shared | `clip_command` (ffmpeg → libx264/faststart, audio dropped for now), `cut_clips` (segments → `rally_NNN.mp4` + `manifest.json` keyed by court/session/time). |
+| `render.py` | shared | `clip_command` (ffmpeg → libx264/faststart, audio dropped for now), `manifest_entry` (one browse record per clip), `cut_clips` (segments → `rally_NNN.mp4` + `manifest.json` keyed by court/session/time), `concat_clips` (all manifest clips → `highlight.mp4` via the ffmpeg concat demuxer; `None` on empty manifest). |
+| `pipeline.py` | v1 | `rally_segments_from_candidates` (pure core: candidates → `track_ball` → `crossing_times` → `cluster_crossings`), `detect_rallies` (adds the YOLO front-end over a video). Requires dense per-frame candidates — subsampling breaks the tracker's `max_jump` motion assumption. |
+| `cut.py` | wiring | `cut_rallies` (detect → score-by-crossings → `cut_clips` → `concat_clips`) + `main` CLI. Validated defaults `max_jump=150`, `gap_sec=3.0`, `min_crossings=5`. |
 
 **Planned, not built:** `motion.py` (T0′ CPU pre-filter), `select.py` (rank + budget selection, TECH_SPEC §7), `audio.py` (gated spectral-flux onsets, §5.1b). The v0-vs-v1 meaning of each module: [Architecture](architecture/overview.md#the-v0v1-split-adr-039--the-most-important-structural-fact).
 
@@ -37,9 +40,9 @@ Files appear as phases land — nothing is stubbed ahead of time (README §Pipel
 - `eval/harness.py` — IoU, greedy one-to-one matching, detection + selection metric tables, CLI (`make eval`). Details: [Testing & Evaluation](testing/evaluation.md).
 - `eval/labels/` — `IMG_7652.jsonl` (9 curated competitive rallies), `IMG_7655.jsonl`, `austin_rally2.jsonl`.
 
-## `tests/` (53 tests, `make test`)
+## `tests/` (61 tests, `make test`)
 
-One file per module: `test_harness.py`, `test_calibrate.py`, `test_ball.py`, `test_track.py`, `test_players.py`, `test_events.py`, `test_segment.py`, `test_render.py`, `test_label.py`. Suite runs without torch/weights/video — see [testing conventions](testing/evaluation.md#unit-test-suite-tests-53-tests-make-test).
+One file per module: `test_harness.py`, `test_calibrate.py`, `test_ball.py`, `test_track.py`, `test_players.py`, `test_events.py`, `test_segment.py`, `test_render.py`, `test_label.py`, plus the wiring tests `test_pipeline.py` (pure candidate→segment chain) and `test_cut.py` (orchestrator glue, heavy ends monkeypatched). Suite runs without torch/weights/video — see [testing conventions](testing/evaluation.md#unit-test-suite-tests-61-tests-make-test).
 
 ## Root documents (the product's memory)
 
@@ -54,8 +57,8 @@ One file per module: `test_harness.py`, `test_calibrate.py`, `test_ball.py`, `te
 | `LABELING.md` | Rally definition (v2: ball-dead) + edge cases + set discipline. |
 | `STRATEGY.md` | Post-prototype direction (multi-venue, B2B2C highlights-as-a-service). Exploratory, uncommitted. |
 | `TALLY.md` | Per-session watch-through template (`tallies/` holds filled copies). |
-| `config.yaml` | Minimal config surface (fps, resolution, 600 s budget); grows per phase. |
-| `Makefile` | `make test`, `make eval`. |
+| `config.yaml` | Minimal config surface (fps, resolution, 600 s budget); grows per phase. Note: detection parameters (`max_jump`, `gap_sec`, `min_crossings`, `max_ball_px`) are currently **CLI flags on `src/cut.py`, not in config.yaml** — the recipe values live in code defaults pending clean-footage tuning. |
+| `Makefile` | `make test`, `make eval` (`eval` is the default/first target). |
 | `requirements.txt` | opencv-python, numpy, ultralytics, pyyaml; pytest for dev. |
 
 ## Local artifacts (not source)
