@@ -1,6 +1,6 @@
 import os
 import src.render as render
-from src.render import clip_command, manifest_entry, concat_clips
+from src.render import clip_command, manifest_entry, concat_clips, cut_clips
 
 
 def test_clip_command_builds_h264_ffmpeg_args():
@@ -38,6 +38,26 @@ def test_concat_clips_builds_ffmpeg_concat_command(monkeypatch, tmp_path):
 
 def test_concat_clips_returns_none_for_empty(tmp_path):
     assert concat_clips([], str(tmp_path)) is None
+
+
+def test_cut_clips_applies_padding(monkeypatch, tmp_path):
+    calls = []
+
+    def fake_run(cmd, check):
+        calls.append(cmd)
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
+    cut_clips("game.mp4", segs, str(tmp_path), pad_sec=3.0)
+
+    ffmpeg_call = calls[0]
+    # -ss is the seek position, -t is the duration
+    ss_idx = ffmpeg_call.index("-ss")
+    t_idx = ffmpeg_call.index("-t")
+    seek = float(ffmpeg_call[ss_idx + 1])
+    dur  = float(ffmpeg_call[t_idx + 1])
+    assert seek == 57.0          # start - 3s pad
+    assert dur  == 11.0          # (65-60) + 6s pad total
 
 
 def test_manifest_entry_carries_court_time_score():

@@ -55,14 +55,18 @@ def concat_clips(manifest, out_dir):
     return out_path
 
 
-def cut_clips(video, segments, out_dir, court_id=None, session_id=None):
+def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
+              pad_sec=3.0):
     """Cut each segment into an H.264 clip in out_dir and write manifest.json.
+    pad_sec adds context before/after each crossing burst so clips are watchable.
     Returns the manifest (list of manifest_entry dicts, sorted by start)."""
     os.makedirs(out_dir, exist_ok=True)
     manifest = []
     for i, seg in enumerate(sorted(segments, key=lambda s: s["start"]), 1):
         fname = f"rally_{i:03d}.mp4"
-        subprocess.run(clip_command(video, seg["start"], seg["end"],
+        start = max(0.0, seg["start"] - pad_sec)
+        end = seg["end"] + pad_sec
+        subprocess.run(clip_command(video, start, end,
                                     os.path.join(out_dir, fname)), check=True)
         manifest.append(manifest_entry(seg, i, fname, court_id, session_id))
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:

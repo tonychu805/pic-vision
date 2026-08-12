@@ -17,17 +17,19 @@ from src.calib import detect_net_y, pick_net_y
 
 def cut_rallies(video, net_y, out_dir, *, max_jump, gap_sec, band=0.0,
                 min_crossings=5, court_id=None, session_id=None,
-                **detect_kwargs):
+                pad_sec=3.0, **detect_kwargs):
     """Footage -> rally clips in one pass: detect rallies, score each by its
     crossing count (ADR-039), cut H.264 clips + manifest.json into out_dir.
-    Returns the manifest (list of clip records). detect_kwargs pass through to
-    detect_rallies (start, end, conf, imgsz, weights, sample_fps, max_ball_px)."""
+    pad_sec adds context before/after each crossing burst (default 3s).
+    detect_kwargs pass through to detect_rallies (start, end, conf, imgsz,
+    weights, sample_fps, max_ball_px)."""
     segments = detect_rallies(video, net_y, max_jump=max_jump, gap_sec=gap_sec,
                               band=band, min_crossings=min_crossings,
                               **detect_kwargs)
     scored = [{**s, "score": s["crossings"]} for s in segments]
     manifest = cut_clips(video, scored, out_dir,
-                         court_id=court_id, session_id=session_id)
+                         court_id=court_id, session_id=session_id,
+                         pad_sec=pad_sec)
     concat_clips(manifest, out_dir)
     return manifest
 
@@ -53,6 +55,8 @@ def main(argv=None):
                    help="frames per second to sample for ball detection (default 10)")
     p.add_argument("--weights", default="yolov8x.pt",
                    help="YOLO weights file (default yolov8x.pt; use yolov8n.pt for speed)")
+    p.add_argument("--pad-sec", type=float, default=3.0,
+                   help="seconds of context added before/after each rally burst (default 3)")
     p.add_argument("--max-ball-px", type=float, default=None,
                    help="ball size filter; measure on the actual footage first")
     p.add_argument("--court-id", default=None)
@@ -79,7 +83,7 @@ def main(argv=None):
         gap_sec=args.gap_sec, band=args.band, min_crossings=args.min_crossings,
         court_id=args.court_id, session_id=args.session_id,
         sample_fps=args.sample_fps, max_ball_px=args.max_ball_px,
-        weights=args.weights)
+        weights=args.weights, pad_sec=args.pad_sec)
     print(f"cut {len(manifest)} rallies -> {args.out}/manifest.json")
     if manifest:
         print(f"highlight -> {args.out}/highlight.mp4")

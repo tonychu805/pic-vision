@@ -8,7 +8,8 @@ def test_cut_rallies_forwards_scored_segments(monkeypatch):
                             {"start": 58.0, "end": 77.5, "crossings": 16}])
     captured = {}
 
-    def fake_cut_clips(video, segments, out_dir, court_id=None, session_id=None):
+    def fake_cut_clips(video, segments, out_dir, court_id=None, session_id=None,
+                       pad_sec=3.0):
         captured.update(video=video, segments=segments, out_dir=out_dir,
                         court_id=court_id, session_id=session_id)
         return ["manifest"]
