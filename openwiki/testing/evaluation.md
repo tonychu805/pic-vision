@@ -40,20 +40,22 @@ Concrete human-verified windows from the (compromised) footage, per-window hand-
 
 The 659–666 s dead window is the **standing regression test for the tracker**: any change that lets out-of-play balls produce phantom crossings shows up here first. A clean fixed clip will replace these per-window lines with one calibration.
 
-## Unit test suite (`tests/`, 53 tests, `make test`)
+## Unit test suite (`tests/`, 61 tests, `make test`)
 
 Built test-first throughout (git history: harness and segmenter landed with tests before the detectors they score). Conventions worth preserving:
 
 - **Dependency-light:** torch/ultralytics is imported lazily inside functions (`players.py`, `ball.py`), so the whole suite runs without a GPU, model weights, or video files.
 - **Synthetic signals over fixtures:** tests construct tiny tracks/series (`test_ball.py`'s crossing sequences, `test_track.py`'s smooth-ball-vs-distractor frames) rather than storing video.
-- **Behavior-named cases:** e.g. `test_match_one_prediction_cannot_claim_two_labels`, `test_rejects_teleport_to_far_ball`, `test_reacquires_after_long_gap`, `test_net_line_y_prefers_marked_net` — the test names document the ADR-backed rule.
+- **Heavy ends faked at the wiring layer:** `test_cut.py` monkeypatches `detect_rallies` / `cut_clips` / `concat_clips` to assert the orchestrator glue without running YOLO or ffmpeg; `test_render.py`'s concat test monkeypatches `subprocess.run`.
+- **Behavior-named cases:** e.g. `test_match_one_prediction_cannot_claim_two_labels`, `test_rejects_teleport_to_far_ball`, `test_reacquires_after_long_gap`, `test_net_line_y_prefers_marked_net`, `test_out_of_play_balls_produce_no_phantom_rally` — the test names document the ADR-backed rule.
 
-Coverage map: `test_harness.py` (IoU/matching/metrics, 12), `test_calibrate.py` (order-independent assignment, homography fit), `test_ball.py` (16: net line, size filter, crossings, clustering), `test_track.py` (4), `test_players.py` / `test_events.py` (v0 front-end), `test_segment.py` (4), `test_render.py` (2: ffmpeg command shape, manifest), `test_label.py` (I/O + review mode).
+Coverage map: `test_harness.py` (IoU/matching/metrics, 12), `test_calibrate.py` (order-independent assignment, homography fit), `test_ball.py` (net line, size filter, crossings, clustering), `test_track.py` (4), `test_pipeline.py` (2: pure candidate→segment chain — smooth rally clusters to one segment; out-of-play ball teleport yields no phantom rally), `test_cut.py` (2: orchestrator forwards scored segments, empty-input manifest), `test_players.py` / `test_events.py` (v0 front-end), `test_segment.py` (4), `test_render.py` (4: ffmpeg command shape, manifest, concat cmd + empty-manifest→None), `test_label.py` (I/O + review mode).
 
 ## What to run when changing things
 
 - Touching matching/metrics → `test_harness.py` + re-run `make eval` on a known `rallies.json`.
-- Touching detection or the tracker → the four benchmark windows above, then the harness; record the run in EXPERIMENTS.md (hypothesis first, one change per entry).
+- Touching detection or the tracker → `test_ball.py` / `test_track.py` / `test_pipeline.py`, then the four benchmark windows above, then the harness; record the run in EXPERIMENTS.md (hypothesis first, one change per entry).
+- Touching the orchestration glue (`src/cut.py`) → `test_cut.py` (heavy ends are monkeypatched; no YOLO/ffmpeg needed).
 - Touching calibration → `test_calibrate.py` and a fresh re-click on real footage (the 0.356 ft RMSE check is the reference).
 - Any selection/budget change → the harness's selection table is the check; budget violation must fail loudly.
 

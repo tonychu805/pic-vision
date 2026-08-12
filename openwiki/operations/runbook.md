@@ -15,14 +15,14 @@ resource: CHECKLIST.md
 | 0 — Instrument (calibrate, label, harness) | Harness reports both PRD tables on a stub | **PASSED** (eval-set-A not formally locked yet — do before any tuning run) |
 | 0.5 — Benchmark prior art | Baseline number exists | NOT DONE (qualitative only; deprioritized since v1 went direct to detection) |
 | 0.6 — Validate dead-time inversion | Markers near-zero during rallies | **FAILED → SKIPPED** (markers inverted on real footage → ADR-039 pivot to v1) |
-| 1 — Core pipeline, v0 path | Watchable ≤ 10-min reel, measured | NOT DONE — components exist, not wired, no numbers |
-| 1 — v1 path (primary) | Same, on clean footage | NOT DONE — **all primitives built + tested; blocked on one clean clip** |
+| 1 — Core pipeline, v0 path | Watchable ≤ 10-min reel, measured | NOT DONE — frozen baseline; v1 is primary |
+| 1 — v1 path (primary) | Same, on clean footage | NOT DONE — **fully wired (`pipeline.py` + `cut.py`), tracker validated on real footage; blocked on one clean clip for real metrics** |
 | 1.5 — Boundary refinement | ≤ 1.0 s boundary error | NOT STARTED |
 | 2 — Ball presence | FP improves, recall holds | PARTIAL (detector + tracker + size filter in; shoe filter missing) |
 | 2.5 — Audio (conditional) | Usability gate passes, then helps | NOT STARTED |
-| 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED |
+| 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED (ranker `select.py` is the remaining piece before a budgeted reel) |
 
-**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker), `cut.py` (orchestrator — the final wiring step). **Built:** everything else in `src/` plus `calibrate.py`, `label.py`, `eval/harness.py`, 53 tests.
+**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + budget selection). **Built:** everything else in `src/` (including the `pipeline.py` chain and the `cut.py` orchestrator) plus `calibrate.py`, `label.py`, `eval/harness.py`, 61 tests.
 
 ## Capture pitfalls
 
@@ -49,12 +49,12 @@ Privacy is a product constraint, not a feature (PRD §6): footage stays local by
 - Fanless → sustained loads throttle 20–40%.
 - 8 GB RAM → stream frames, accumulate only per-timestep scalars, never hold frame arrays (all current modules follow this: OpenCV `VideoCapture` loops, no frame storage).
 - Sampling rate is the cost lever; `detect_ball(sample_fps=10)` exists for affordable whole-clip scans.
-- Encoding: `src/render.py` uses libx264/veryfast + faststart (clips play inline everywhere); the spec's `accurate` mode calls for `h264_videotoolbox` when the full reel renderer lands. OpenCV's default mp4v output is **not** web-playable — re-encode to H.264 before delivery (noted in EXPERIMENTS 2026-08-10).
+- Encoding: `src/render.py` uses libx264/veryfast + faststart (clips play inline everywhere) and joins the per-rally clips into `highlight.mp4` with the ffmpeg **concat demuxer + stream copy** (`-c copy` — no re-encode, near-free on CPU). The spec's `accurate` mode calls for `h264_videotoolbox` when the full reel renderer lands. OpenCV's default mp4v output is **not** web-playable — re-encode to H.264 before delivery (noted in EXPERIMENTS 2026-08-10).
 - Do not use moviepy (slow/fragile at 200k-frame scale); ffmpeg via subprocess, as `render.py` does.
 
 ## Repo housekeeping
 
-- `main` is local-only, ahead of origin (unpushed, per PROGRESS.md).
+- `main` tracks `origin/main` (github.com/tonychu805/pic-vision). Feature work lands via short-lived branches (e.g. `feat/rally-pipeline`, `feat/highlight-concat`) merged by PR.
 - Video sources, `yolov8*.pt` weights, and `cache/` are local artifacts — don't commit them.
 - The OpenWiki GitHub Action (`.github/workflows/openwiki-update.yml`) regenerates this wiki daily via PR; don't hand-edit generated pages.
 - `AGENTS.md`/`CLAUDE.md` point agents at this wiki; `/openwiki/INSTRUCTIONS.md` is the user-authored brief.
