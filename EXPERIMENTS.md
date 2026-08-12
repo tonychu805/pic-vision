@@ -284,3 +284,37 @@ At sample_fps=5 (for speed), crossing counts with net_y=312 collapsed to 1 vs 5 
 **Fix.** Added `--sample-fps` to the CLI defaulting to 10 fps. At 10 fps on a 13-min clip: ~7,800 frames, ~65 minutes on CPU. Reduces to ~30 min at 5 fps (with some crossing miss rate on very fast exchanges). The underlying `detect_candidates` already accepted `sample_fps` — this was a missing CLI wiring.
 
 **Note.** sample_fps=5 in a benchmark test showed 5 crossings vs 16 at full fps for the same rally window — many crossings are missed between samples. At 10 fps the miss rate should be acceptable for rally-level detection (the ball completes a net crossing in ~0.1s; at 10fps there is a 0.1s gap between samples, so some crossings are borderline). Full fps remains the most accurate path if time allows.
+
+---
+
+## 2026-08-12 — TrackNet-Pickleball on RunPod RTX 3090: 25 crossings vs YOLO's 5
+
+**Hypothesis.** AndrewDettor's TrackNet-Pickleball (3-frame heatmap architecture, trained on pickleball) should detect more ball crossings in the benchmark rally window than yolov8x, because it was designed specifically for small, fast-moving ball tracking across a net.
+
+**Setup.** RunPod RTX 3090 community pod ($0.22/hr, CUDA 12.8, TF 2.21). `IMG_7652.MOV` 55–80s clip (covers rally #3: 58–77.5s). Model: **old TrackNetV2 badminton weights** (`TNV2_old_weights`, 130MB HDF5, loaded with `compile=False` to bypass Keras 3 optimizer deserialization failure). The pickleball fine-tuned weights (`weights_k14_epoch19` SavedModel) could not be loaded: TF 2.21 Keras 3 refuses legacy TF 2.11 SavedModel format. Full fps inference, net_y=260 (per-window hand-measured), clip offset=55s. Script: `/workspace/tracknet_infer.py` on pod.
+
+**Result.**
+
+| Metric | YOLO (yolov8x, best params) | TrackNet (old badminton weights) |
+|---|---|---|
+| Crossings in rally #3 window (58–77.5s) | 5 | **25** |
+| Visible frames | ~5 | 409 / 750 (54.5%) |
+| Clustered events (gap=2s) | 1 | ~4 |
+
+Raw crossing timestamps (all within 58–77.5s): 62.17, 62.40, 62.90, 62.93, 63.00, 63.13, 63.57, 63.93, 65.30, 66.03, 67.70, 67.73, 68.10, 68.80, 70.40, 71.03, 71.90, 72.00, 72.20, 72.40, 73.83, 74.70, 75.83, 76.07, 76.50.
+
+With gap=2.0s clustering: 4 events (~62–64s, ~65–66s, ~67–69s, ~70–77s). With gap=1.0s: ~9 events.
+
+**Conclusion.** TrackNet detects 5× more crossing evidence than yolov8x on this footage. Even with mismatched badminton weights (wrong domain), the 3-frame heatmap architecture sees the ball across the net where YOLO cannot. The 54.5% visible rate is higher than expected and likely contains false positives from the domain-mismatched model — but the crossing density (25 in a 19.5s window) aligns with observed play intensity.
+
+**Caveats.**
+1. **Wrong weights** — badminton-trained, not pickleball fine-tuned. The fine-tuned `weights_k14_epoch19` SavedModel can't load under TF 2.21 due to the Keras 3 format break. Pickleball weights should perform better (or at least differently — lower false positive rate).
+2. **54.5% detection rate** is suspicious on handheld indoor footage. Some "visible" frames are almost certainly false positives from the badminton model treating non-ball objects as shuttlecocks.
+3. **No dead-time control** — didn't run the equivalent dead-time segment (659–666s) through TrackNet to measure false positive rate. That's the key missing number.
+4. **Footage is compromised** — handheld/zoomed; still not a clean benchmark.
+
+**Follow-up.**
+1. Re-run with pickleball fine-tuned weights once TF version mismatch is resolved: either use TF 2.13 + Python 3.10 pod image, or re-export the SavedModel to `.keras` format in the original environment.
+2. Run the dead-time segment (659–666s) through TrackNet to measure FP rate — essential before concluding TrackNet is better.
+3. Add TrackNet as an optional ball detector in the pipeline (`--detector tracknet`) once weights are loadable on macOS (requires CUDA; Jetson Orin is the target deployment).
+4. The production path is still fine-tuning yolov8n on fixed-mount footage (ADR-040) — TrackNet requires CUDA which rules it out for the Mac mini / N100 deployment shape. TrackNet is the right answer for the cloud-GPU inference shape (ADR-043).

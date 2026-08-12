@@ -6,8 +6,11 @@ browse-ready output the venue console / player app read. H.264 (not OpenCV's
 mp4v) so the clips play inline everywhere."""
 
 import json
+import logging
 import os
 import subprocess
+
+log = logging.getLogger(__name__)
 
 
 def clip_command(video, start, end, out_path):
@@ -61,15 +64,20 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
     pad_sec adds context before/after each crossing burst so clips are watchable.
     Returns the manifest (list of manifest_entry dicts, sorted by start)."""
     os.makedirs(out_dir, exist_ok=True)
+    sorted_segs = sorted(segments, key=lambda s: s["start"])
+    n = len(sorted_segs)
     manifest = []
-    for i, seg in enumerate(sorted(segments, key=lambda s: s["start"]), 1):
+    for i, seg in enumerate(sorted_segs, 1):
         fname = f"rally_{i:03d}.mp4"
         start = max(0.0, seg["start"] - pad_sec)
         end = seg["end"] + pad_sec
+        log.info("[%d/%d] %.1f–%.1fs  (%.1fs, %d crossings)",
+                 i, n, start, end, end - start, seg.get("crossings", 0))
         subprocess.run(clip_command(video, start, end,
                                     os.path.join(out_dir, fname)), check=True)
         manifest.append(manifest_entry(seg, i, fname, court_id, session_id))
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
         json.dump({"video": video, "court_id": court_id, "session_id": session_id,
                    "clips": manifest}, f, indent=2)
+    log.info("wrote %d clips + manifest.json -> %s", n, out_dir)
     return manifest

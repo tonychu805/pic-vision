@@ -86,30 +86,30 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 
 | Item | Status | Notes |
 |---|---|---|
-| `src/ball.py` — `detect_candidates` (all per-frame candidates) | ✅ | yolov8x + size filter; 6 tests |
-| `src/ball.py` — `detect_ball` (best-confidence per frame) | ✅ | — |
-| `src/ball.py` — `net_line_y` (prefers hand-marked net) | ✅ | Falls back to homography; 2 tests |
-| `src/ball.py` — `crossing_times` + `cluster_crossings` | ✅ | Crossing burst → rally segments; 6 tests |
+| `src/ball.py` — `net_line_y`, `crossing_times`, `cluster_crossings` | ✅ | Backend-agnostic; 8 tests |
 | `src/track.py` — `track_ball` (teleport-rejecting spatial tracker) | ✅ | 4 tests |
+| `src/tracknet.py` — parse predictions.csv → rally segments | ✅ | 4 tests; replaces YOLO pipeline (ADR-046) |
 | `src/segment.py` — shared with v0 | ✅ | — |
 | `src/render.py` — shared with v0 | ✅ | — |
-| `cut.py` — end-to-end orchestrator | ❌ | Needs wiring: `detect_candidates → track_ball → crossing_times → cluster_crossings → cut_clips` |
-| `max_ball_px` calibrated to actual ball pixel size | ❌ | Requires clean fixed footage; can't tune on zoom-compromised clips |
-| End-to-end plumbing check on IMG_7652 | ❌ | Not run yet; would be on compromised footage |
+| `src/cut.py` — end-to-end orchestrator (TrackNet path) | ✅ | `cut_rallies_from_predictions` + CLI; 2 tests |
+| `scripts/pod_infer.py` — RunPod GPU inference script | ✅ | Produces predictions.csv; argparse CLI |
+| `scripts/process_footage.py` — local: CSV + video → clips | ✅ | `make process VIDEO=... CSV=... NET_Y=... OUT=...` |
+| TrackNet FP rate on dead-time window | ❌ | 659–666s window not yet run through TrackNet |
+| Pickleball fine-tuned weights loaded | ❌ | TF 2.11/Ada compatibility check pending on workstation |
+| `max_ball_px` calibrated to actual ball pixel size | ❌ | Requires clean fixed footage |
 | Recall measured on `eval-set-A` | ❌ | Requires clean footage |
 | FP/10min measured | ❌ | — |
 | Boundary error measured | ❌ | — |
 
 **Benchmark results (compromised footage, not eval):**
 
-| Window | Type | v1 (no tracker) | v1 + tracker | Target |
+| Window | Type | YOLO | TrackNet (badminton wts) | Target |
 |---|---|---|---|---|
-| IMG_7652 58–77.5s (net y=260) | RALLY | 33 crossings | 15 crossings | high ✅ |
-| IMG_7652 620–638s (net y=170) | RALLY | 12 crossings | not re-run | high |
-| IMG_7655 86–101s (net y=210) | RALLY | 20 crossings | not re-run | high |
-| IMG_7652 659–666s (net y=160) | DEAD | 18 crossings | **0 crossings** | ~0 ✅ |
+| IMG_7652 58–77.5s (net y=260) | RALLY | 5 crossings | 25 crossings | high ✅ |
+| IMG_7655 full video (net y=210 fixed) | 36 rallies | — | 5/36 usable clips (14% recall) | — |
+| IMG_7652 659–666s (net y=160) | DEAD | 0 (tracked) ✅ | not yet run | ~0 |
 
-**Gate status: NOT DONE** — all primitives built and tested; end-to-end plumbing not wired; no harness numbers. Blocked on clean footage for meaningful metrics.
+**Gate status: NOT DONE** — e2e pipeline wired and runnable; no harness numbers. Blocked on clean footage for meaningful metrics.
 
 ---
 

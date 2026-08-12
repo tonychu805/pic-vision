@@ -680,6 +680,69 @@ This is explicitly **not** a fine-tuning concern — even a perfect ball detecto
 
 ---
 
+## ADR-043 — Cloud-hybrid architecture: N100 edge box + RunPod cloud GPU
+
+**Date:** 2026-08-12 · **Status:** accepted (post-prototype; not built now)
+
+**Context.** The laptop-only pipeline processes a 13-min clip in ~14–28 min (1.7× faster with CoreML). A venue-scale deployment needs to process a 2-hour session and deliver results within ~30–60 minutes of the session ending. A discussion evaluated: (1) all-local on Mac mini / Jetson, (2) N100 mini PC + cloud GPU for detection, (3) full cloud.
+
+**Decision.** N100 edge + cloud GPU as the production POC shape:
+
+- N100 mini PC (local, ~$150–300): captures full-res → encodes **720p 2 Mbps proxy** (~90 MB / 60 min) → uploads to RunPod serverless
+- RunPod GPU worker (~$0.34/hr): runs yolov8x detection on proxy → returns timestamps JSON only
+- N100: cuts full-res local footage using returned timestamps → uploads highlight to S3 → delivers via LINE Messaging API
+
+The **proxy video trick** is the key: send 720p for detection instead of full-res (~750 MB / hr), cutting upload volume ~8×. Timestamps apply to the locally-held full-res copy for cutting.
+
+**Consequences.** Raw footage never leaves the building (privacy preserved). Key risk: measure venue upstream bandwidth before committing — at 2 Mbps required upload, a 50 Mbps venue link supports ~25 courts in parallel. RunPod cost ≈ $0.011/session at prototype scale. For the current POC, the MacBook with CoreML (ADR-044) is used; N100+cloud is the production direction. Ties to ADR-012, ADR-024, ADR-013.
+
+---
+
+## ADR-044 — CoreML export of yolov8x at imgsz=1280 for Apple Neural Engine inference
+
+**Date:** 2026-08-12 · **Status:** accepted
+
+**Context.** PyTorch/Metal inference of yolov8x at imgsz=1280 measured ~365 ms/frame on the MacBook Air M2, making a 10-fps scan of a 13-min clip take ~70 min — too slow for iteration.
+
+**Decision.** Export yolov8x to CoreML (`yolov8x.mlpackage`, 130.5 MB, in project root) at `imgsz=1280` for the Apple Neural Engine. Pass `--weights yolov8x.mlpackage` in pipeline calls.
+
+**Measured result:** 216 ms/frame ANE vs 365 ms/frame CPU — **1.7× faster**. Export command: `YOLO("yolov8x.pt").export(format="coreml", imgsz=1280, nms=True)`. `imgsz` must match at export and inference (`RuntimeError` otherwise — re-export at 1280 if mismatched). Ties to ADR-023 (ONNX is still the cross-platform canonical format; CoreML is the Apple deployment target).
+
+---
+
+## ADR-045 — `max_ball_px` filter is mandatory; eliminates player-body false positives
+
+**Date:** 2026-08-12 · **Status:** accepted
+
+**Context.** With `conf=0.10` and no size filter, YOLO's `sports ball` class latched onto player bodies (heads/torsos score plausibly at low confidence). The tracker followed players instead of the ball, producing false rallies with no real net crossings. All "players walking, no ball" clips traced to this root cause.
+
+**Decision.** Always set `--max-ball-px` to the measured ball pixel size for the camera geometry. For behind-baseline 1080p handheld footage: ball = 10–21 px; player bodies = 30–60 px → use `--max-ball-px 25`. Also raise `conf` to 0.25 (from 0.10) to suppress the worst player-body hits before the size filter.
+
+**Best working params as of 2026-08-12** (IMG_7652.MOV, 13-min handheld test):
+`--conf 0.25 --max-ball-px 25 --band 10 --max-jump 100 --gap-sec 2.0 --sample-fps 10 --weights yolov8x.mlpackage`
+
+**Consequences.** `max_ball_px` is camera-geometry-specific — measure the ball in pixels at the expected distance before setting. `band=10` (±10 px around net_y) suppresses crossing noise from camera jitter; `max-jump=100` rejects position jumps from camera movement. Both work alongside `max_ball_px`. On clean fixed-mount footage with a closer camera, the ball appears larger — increase `max_ball_px` accordingly (e.g. 30–35 px).
+
+---
+
+## ADR-046 — Retire YOLO pipeline; TrackNet/RunPod is the active ball-detection path
+
+**Date:** 2026-08-12 · **Status:** accepted
+
+**Context.** On the rally #3 benchmark window (58–77.5s, IMG_7652.MOV) TrackNet with badminton-trained weights found 25 net-crossings vs YOLO's 5 (5×). On a full 9.4-minute video (IMG_7655.MOV, 36 labeled rallies), TrackNet found 7 matched segments with 5/7 usable after qualitative review. The 5× crossing-count gap on the same footage is too large to bridge with YOLO tuning. TrackNet is CUDA-only and cannot run on the Mac or N100, making RunPod GPU the natural backend — consistent with ADR-043.
+
+**Decision.** Archive the YOLO ball-detection pipeline and make TrackNet/RunPod the default:
+- `src/pipeline.py` (YOLO orchestration), `detect_ball`/`detect_candidates` from `src/ball.py` → `archive/`
+- `src/tracknet.py` (new) — parses TrackNet `predictions.csv` → rally segments, using the same backend-agnostic `crossing_times`/`cluster_crossings` from `src/ball.py`
+- `scripts/pod_infer.py` (new) — runs on the RunPod GPU pod; emits `predictions.csv`
+- `scripts/process_footage.py` (new) — local orchestration: `predictions.csv` + video → clips
+- `src/cut.py` updated to `cut_rallies_from_predictions`; CLI takes `--predictions`
+- `Makefile` gains a `process` target: `make process VIDEO=... CSV=... NET_Y=... OUT=...`
+
+**Consequences.** Inference requires a GPU pod (RunPod, ~$0.28/hr) — no longer runs entirely local. The proxy-video trick from ADR-043 applies: upload 720p for detection, cut full-res locally. The backend-agnostic signal functions (`crossing_times`, `cluster_crossings`, `net_line_y`) are unchanged; they feed TrackNet output the same way they fed YOLO output. The YOLO archive remains recoverable if a future local-inference path (fine-tuned yolov8n on Jetson, ADR-040) outperforms TrackNet on clean footage.
+
+---
+
 ## Template
 
 ```markdown

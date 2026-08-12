@@ -1,18 +1,16 @@
-"""v1 rally signal: ball net-crossing counter (ADR-039, ADR-028).
+"""Ball net-crossing signal: backend-agnostic crossing counter and net-line helpers.
 
-The ball flies above the ground plane, so the court homography mis-locates it
-(parallax). Instead we work in image space: in a behind-baseline view the ball's
-vertical pixel position (image-y) tells us which side of the net it's on — near
-= bottom (large y), far = top (small y). A net-crossing is the ball's image-y
-crossing the net line, with a hysteresis band so jitter near the net doesn't
-inflate the count. Missing/ambiguous frames are skipped.
+Works in image space: in a behind-baseline view the ball's vertical pixel
+position (image-y) tells us which side of the net it's on. A crossing is the
+ball's image-y crossing the net line, with a hysteresis band so jitter near the
+net doesn't inflate the count. Missing/ambiguous frames are skipped.
 
-Ball detection (YOLO 'sports ball' + false-positive filters) and the net line
-from calibration are separate slices; this is the testable core."""
+These functions accept any ball track (YOLO, TrackNet, or synthetic) — they are
+not detector-specific. The TrackNet inference path (src/tracknet.py) is the
+active detector; the retired YOLO path lives in archive/."""
 
 import cv2
 import numpy as np
-from tqdm import tqdm
 
 
 def net_image_y(homography, x_ft=10.0, net_y_ft=22.0):
@@ -36,49 +34,6 @@ def ball_box_ok(box, max_dim_px, max_aspect=2.0):
     return long <= max_dim_px and long / short <= max_aspect
 
 
-def detect_candidates(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
-                      weights="yolov8x.pt", sample_fps=None, max_ball_px=None):
-    """Like detect_ball but keeps ALL surviving 'sports ball' candidates per
-    frame as (x_center, y_center, conf) — the input the tracker needs to choose
-    the in-play ball by continuity instead of by confidence. Returns
-    [(time_sec, [(x, y, conf), ...])]."""
-    from ultralytics import YOLO
-
-    model = YOLO(weights)
-    cap = cv2.VideoCapture(video_path)
-    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    stride = 1 if not sample_fps else max(1, round(src_fps / sample_fps))
-    cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
-    total_sampled = total_frames // stride
-    out = []
-    i = -1
-    with tqdm(total=total_sampled, unit="frame", desc="detecting") as bar:
-        while True:
-            ok, frame = cap.read()
-            if not ok:
-                break
-            i += 1
-            t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-            if end is not None and t > end:
-                break
-            if i % stride:
-                continue
-            b = model(frame, imgsz=imgsz, conf=conf, classes=[32], verbose=False)[0].boxes
-            confs = b.conf.cpu().numpy()
-            xyxy = b.xyxy.cpu().numpy()
-            cands = []
-            for j in range(len(xyxy)):
-                if max_ball_px is not None and not ball_box_ok(xyxy[j], max_ball_px):
-                    continue
-                x1, y1, x2, y2 = xyxy[j]
-                cands.append(((x1 + x2) / 2.0, (y1 + y2) / 2.0, float(confs[j])))
-            out.append((t, cands))
-            bar.update(1)
-    cap.release()
-    return out
-
-
 def net_line_y(calib):
     """Net line image-y from a calibration dict. Prefers a hand-marked net
     (calib['net_image_points'], from calibrate.py) — the reliable source when
@@ -89,51 +44,6 @@ def net_line_y(calib):
     if pts:
         return sum(p[1] for p in pts) / len(pts)
     return net_image_y(calib["homography"])
-
-
-def detect_ball(video_path, start=0.0, end=None, conf=0.10, imgsz=1280,
-                weights="yolov8x.pt", sample_fps=None, max_ball_px=None):
-    """Best 'sports ball' image-y per sampled frame between start and end (sec).
-    Returns [(time_sec, y or None)]. sample_fps=None runs every frame (dense,
-    for exact crossing counts); set it lower (e.g. 10) to scan a whole clip
-    affordably. Default weights are yolov8x — the large model detects the real
-    ball at high confidence and pushes false positives to low confidence
-    (evidence: EXPERIMENTS.md 2026-08-10). max_ball_px, when set, drops boxes
-    too big/elongated to be a ball (heads, bodies); leave None until it's
-    calibrated to the ball's pixel size on clean footage. Takes the
-    highest-confidence surviving detection per frame."""
-    from ultralytics import YOLO
-
-    model = YOLO(weights)
-    cap = cv2.VideoCapture(video_path)
-    src_fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    stride = 1 if not sample_fps else max(1, round(src_fps / sample_fps))
-    cap.set(cv2.CAP_PROP_POS_MSEC, start * 1000)
-    out = []
-    i = -1
-    while True:
-        ok, frame = cap.read()
-        if not ok:
-            break
-        i += 1
-        t = cap.get(cv2.CAP_PROP_POS_MSEC) / 1000.0
-        if end is not None and t > end:
-            break
-        if i % stride:
-            continue  # skip YOLO on non-sampled frames (decode is cheap, YOLO isn't)
-        b = model(frame, imgsz=imgsz, conf=conf, classes=[32], verbose=False)[0].boxes
-        confs = b.conf.cpu().numpy()
-        xyxy = b.xyxy.cpu().numpy()
-        idx = [j for j in range(len(xyxy))
-               if max_ball_px is None or ball_box_ok(xyxy[j], max_ball_px)]
-        if idx:
-            best = max(idx, key=lambda j: confs[j])
-            x1, y1, x2, y2 = xyxy[best]
-            out.append((t, float((y1 + y2) / 2.0)))
-        else:
-            out.append((t, None))
-    cap.release()
-    return out
 
 
 def crossing_times(track, net_y, band=0.0):

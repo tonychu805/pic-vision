@@ -60,7 +60,7 @@ The only user is Tony. These are the modes.
 - **G1.** `highlights.mp4` under 10 minutes, unattended, from one command.
 - **G2.** `rallies_full.mp4` from the same run.
 - **G3.** High recall on rally *detection* — missing a rally is the primary failure mode.
-- **G4.** Runs on a MacBook Air M2 for the core pipeline, with a stated runtime budget.
+- **G4.** Runs on the RTX 2000 Ada workstation for PoC iteration; production target is N100 edge + RunPod GPU (ADR-043). Runtime budget stated per platform.
 - **G5.** Every quality claim measurable against a labeled holdout set.
 
 ### Non-goals

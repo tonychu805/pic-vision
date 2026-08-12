@@ -6,7 +6,16 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**The v1 ball-net-crossing rally detector is built and diagnosed. The mechanism is sound; its two inputs broke on the zoom-compromised clips. Fixes are shipped. The blocker is one clean, fixed clip to validate on.** Full diagnosis: EXPERIMENTS.md 2026-08-10.
+**Hardware:** RTX 2000 Ada workstation now available (2026-08-12) — use for PoC iteration and TrackNet fine-tuning instead of M2 Mac. 16GB VRAM, Ada Lovelace. Use TF 2.11 via Docker (`tensorflow/tensorflow:2.11.0-gpu`) to load the pickleball fine-tuned weights.
+
+**YOLO pipeline retired. TrackNet/RunPod is the active detection path (ADR-046). The blocker is unchanged: one clean fixed-mount clip to validate on.**
+
+**What's runnable now:**
+1. `python3 scripts/pod_infer.py --video game.MOV` — on RunPod GPU pod, produces `predictions.csv`
+2. Copy `predictions.csv` locally
+3. `make process VIDEO=game.MOV CSV=predictions.csv NET_Y=<click> OUT=clips/`
+
+**Net_y:** pick once per camera angle with `python3 -c "from src.calib import pick_net_y; print(pick_net_y('game.MOV'))"`, then reuse with `--net-y`.
 
 **What we proved (on IMG_7652/7655, both compromised):** the crossing logic is fine (tested), but (1) the **derived net line landed below the real net** (calibration on a zoomed frame), and (2) **nano tagged heads as "ball."** So the crossing counts were noise and the "9/9 recall" was hollow (watched clips weren't real rallies). yolov8x finds the real ball (0.91 mid-court) but only 0.2–0.3 at the net (small/far) — the crossing moment is the hardest detection from a behind-baseline camera.
 
@@ -41,6 +50,24 @@ Concrete windows from the compromised clips, human-verified, to check any detect
 - `main` pushed to `origin`. v1 pipeline work on branch `feat/rally-pipeline`.
 
 ---
+
+## 2026-08-12 — TrackNet-Pickleball on RunPod RTX 3090: 25 crossings vs YOLO's 5
+
+- **RunPod experiment** to test whether AndrewDettor's TrackNet-Pickleball (3-frame heatmap) outperforms yolov8x for net-crossing detection. RTX 3090, $0.22/hr.
+- **Result: 25 crossings** in rally #3 window (58–77.5s) vs **YOLO's 5**, using old badminton-trained weights (pickleball fine-tuned weights couldn't load: TF 2.21 Keras 3 broke legacy TF 2.11 SavedModel format). Clustering at gap=2s gives ~4 distinct events. Full numbers in EXPERIMENTS.md.
+- **Key finding:** the 3-frame heatmap architecture sees the ball across the net on footage where YOLO largely misses it. Even with mismatched badminton weights, 5× more crossing evidence.
+- **Key caveat:** dead-time FP rate not yet measured for TrackNet (only ran the rally window). 54.5% detection rate is higher than expected — likely some false positives from domain-mismatched badminton model.
+- **Follow-up items:** (1) Load pickleball fine-tuned weights with TF 2.13 + Python 3.10 or by re-exporting to `.keras`. (2) Run dead-time segment (659–666s) through TrackNet to confirm FP rate. (3) TrackNet is CUDA-only so the production deployment on Mac mini/N100 still uses yolov8x; TrackNet is the cloud-GPU inference path (ADR-043).
+
+## 2026-08-12 — CoreML acceleration + false-positive root cause + cloud architecture
+
+- **Root cause of "players walking, no ball" clips:** `max_ball_px` was not set → YOLO `sports ball` class latched onto player bodies (heads/torsos = 30–60 px) instead of the ball (10–21 px). Fixed by `--max-ball-px 25`. Also raised `--conf` to 0.25 (from 0.10) to cut the worst player-body hits before the size filter. This was the primary false-positive source for all earlier bad clips (ADR-045).
+- **CoreML export:** `yolov8x.mlpackage` (imgsz=1280, 130.5 MB) exported and validated — 216 ms/frame ANE vs 365 ms/frame CPU = **1.7× faster** (ADR-044). Lives in project root. Use `--weights yolov8x.mlpackage`.
+- **Best working params (13-min handheld IMG_7652.MOV, 10 fps scan):** `--conf 0.25 --max-ball-px 25 --band 10 --max-jump 100 --gap-sec 2.0 --sample-fps 10 --weights yolov8x.mlpackage`. Found 3 candidates: 00:05 (3 crossings), 01:06 (4 crossings), 02:33 (3 crossings). 02:33 confirmed false positive (camera pan); 00:05 and 01:06 candidates, user verification pending.
+- **New diagnostic scripts:** `scripts/scan_crossings.py` (fast scan, prints crossing clusters without cutting) and `scripts/debug_detections.py` (renders annotated JPEG frames with YOLO boxes + net_y overlaid — red=NEAR, blue=FAR side).
+- **`pad_sec=3.0` added to `cut_clips`** — clips were 3.8s and 0.6s (unusable) without it. Fixed by adding pre/post padding. Wired through `src/render.py` and `src/cut.py` with `--pad-sec` CLI arg.
+- **Cloud-hybrid architecture discussed** (ADR-043): N100 mini PC + RunPod serverless GPU. Proxy video trick: send 720p 2Mbps (~90 MB/hr) for detection instead of full-res (~750 MB/hr). N100 cuts from full-res local footage using returned timestamps. LINE Messaging API for delivery. Local POC continues on MacBook with CoreML; N100+cloud is the production direction.
+- **`clips_v2/`** (5 fps scan): rally_01 + rally_02 are real; rally_03 (04:30) is camera-pan false positive suppressed by `--band 10 --max-jump 100`. **`clips_v3/`** (10 fps, best params): 3 clips produced; user verification in progress.
 
 ## 2026-08-11 — Wired the v1 pipeline; tracker validated on real footage
 

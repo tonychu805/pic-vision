@@ -1,10 +1,14 @@
 # Tech Spec — Pickleball Rally Cutter
 
-**Status:** Draft · **Owner:** Tony · **Last updated:** 2026-07-30
+**Status:** Draft · **Owner:** Tony · **Last updated:** 2026-08-12
 
 Requirements and success criteria: [`PRD.md`](./PRD.md). Rationale for the choices below: [`DECISIONS.md`](./DECISIONS.md).
 
-Target machine: MacBook Air M2 (fanless). Camera: Tapo C200 V3.
+Dev machines:
+- **RTX 2000 Ada workstation** (16 GB VRAM, Ada Lovelace, Ubuntu 26.04 LTS) — primary for TrackNet fine-tuning and GPU training. Spec: ASRock X299E-ITX/ac · Corsair H80i · SF450 · MONTECH TEN ITX · NVMe + SATA SSDs.
+- **MacBook Air M2** — CoreML (ANE inference, yolov8x.mlpackage) and MLX where applicable. Still in use for lightweight iteration and on-device inference experiments.
+
+Camera: Tapo C200 V3. Production target: N100 edge box + RunPod GPU (ADR-043).
 
 ---
 
@@ -275,7 +279,7 @@ Applies to all rungs:
 - **Bounce detection in image space**, from trajectory curvature — not in court space (ADR-009).
 - **Auto-disable:** if recall over the first 2 minutes falls below 40%, log a warning, skip refinement, fall back to T1′ boundaries. Lighting was inadequate; the run must still produce output.
 
-**Training** (rungs 2–3 only) goes to free cloud GPU — Kaggle offers 30 h/week on a P100 16 GB with 12 h sessions. Metal training works but some ops silently fall back to CPU. Export to ONNX (ADR-023), convert to CoreML for local inference.
+**Training** (rungs 2–3 only) runs on the RTX 2000 Ada workstation (16 GB VRAM) — preferred over cloud for iteration speed and zero cost. Use Docker `tensorflow/tensorflow:2.11.0-gpu` for TrackNet fine-tuning (pickleball weights require TF 2.11). Fallback: RunPod (~$0.10–0.30/run) or Kaggle P100 (30 h/week free). Export to ONNX (ADR-023); TensorRT export for Jetson must be done on the Jetson itself.
 
 ---
 
@@ -431,6 +435,15 @@ Estimates from FLOPs-and-utilization arithmetic, **not measurement** (ADR-014). 
 | Ball presence (optional) | ANE | +5–8 min |
 | **Full pipeline** | | **~30–40 min → ~0.3× realtime** |
 
+**v1 ball-net-crossing POC measurements (2026-08-12, MacBook Air M2):**
+
+| Config | Per-frame | 13-min clip @ 10 fps |
+|---|---|---|
+| yolov8x @ imgsz=1280, PyTorch CPU | ~365 ms | ~70 min |
+| yolov8x.mlpackage @ imgsz=1280, CoreML ANE | **~216 ms (1.7×)** | **~14–28 min** |
+
+At 10 fps with CoreML, a 2-hour session takes ~260–520 min — well above realtime on the MacBook. This is why the N100+cloud shape (ADR-043) is the production direction; the MacBook is viable for POC iteration on short clips only.
+
 Notes:
 
 - **Player detection is now the dominant cost**, because it runs across the whole session rather than on candidates (ADR-028). The motion pre-filter clawing back 30–40% of frames is what keeps it affordable.
@@ -473,22 +486,39 @@ Models are trained anywhere and exported to **ONNX** as the canonical format; pe
 
 ### 10.2 Venue deployment (post-prototype sketch)
 
-Not built now. Recorded so the shape is known if it happens (ADR-024).
+Not built now. Recorded so the shape is known if it happens (ADR-024, ADR-043).
+
+**Preferred shape — N100 edge box + cloud GPU (ADR-043):**
 
 ```
-venue: capture + T0′ on a dedicated box you control (~$100–200 mini PC / Pi)
-   │   ── uploads candidate segments only, ~40% of the session ──►
-cloud: cheap CPU workers (T0′ verify) → GPU workers (T1′/T2′ on candidates)
-   │   ◄── rallies.json ──
-venue: render locally from the original full-quality file
+N100 mini PC (~$150–300, on-site):
+  capture full-res → encode 720p 2Mbps proxy (~90MB/hr)
+  ── upload proxy only ──►
+RunPod serverless GPU (~$0.34/hr):
+  yolov8x detection → return timestamps JSON
+  ◄── timestamps.json ──
+N100:
+  cut full-res local footage → assemble highlight
+  ── push to S3 ──► LINE Messaging API delivery
 ```
 
-Constraints that decide the design:
+The **proxy video trick** (ADR-043): upload 720p for detection (~90 MB/hr) instead of full-res (~750 MB/hr) — 8× upload reduction while keeping ball detectable. All cutting happens from the locally-held full-res copy.
 
-- **Bandwidth is the ceiling, not compute.** ~2.7 GB per 2-hour session; a 4-court venue produces ~43 GB/day, roughly 5 hours of saturated 20 Mbps uplink. Beyond ~6 courts, upload-everything stops working — hence edge T0.
+**Alternative: all-local on Jetson Orin / Mac mini**
+
+```
+venue: capture + full pipeline on a dedicated edge box
+   → render locally → push highlight to delivery channel
+```
+
+Viable if the venue has the compute (Jetson Orin NX can run yolov8x in real-time; Mac mini M-series is the zero-port option matching the prototype). No cloud GPU bill; fleet-management (OTA updates) is the main operational cost.
+
+Constraints that apply to both shapes:
+
+- **Bandwidth is the ceiling, not compute.** Full-res upload (~2.7 GB per 2-hour session) stops working at ~6+ courts on a typical venue uplink. The proxy trick pushes this to ~50+ courts on a 50 Mbps line.
 - **Do not use the venue's PC.** Hardware is unknown and varied. A dedicated box removes the variable rather than routing around it.
-- **Privacy inverts** and becomes a work stream: encryption in transit and at rest, retention with hard deletion, per-venue isolation, consent signage, a data processing agreement. This contradicts NFR6 and must be resolved deliberately, not by drift.
-- Indoor venues largely rule out ball trajectory (ADR-002), so audio and player motion carry the product.
+- **Privacy:** raw footage stays on-site with both shapes. With the cloud shape, the proxy (lossy 720p, no faces identifiable at detection resolution) is the only thing leaving the building, plus timestamps. Still requires a data processing agreement and retention policy.
+- Indoor venues largely rule out ball trajectory (ADR-002), so audio and player motion carry the product at indoor venues.
 
 ---
 

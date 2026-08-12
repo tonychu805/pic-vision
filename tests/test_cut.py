@@ -1,10 +1,10 @@
 import src.cut as cut
 
 
-def test_cut_rallies_forwards_scored_segments(monkeypatch):
-    # fake the heavy ends (YOLO detect + ffmpeg cut); assert the glue between them
-    monkeypatch.setattr(cut, "detect_rallies",
-                        lambda video, net_y, **kw: [
+def test_cut_rallies_from_predictions_forwards_scored_segments(monkeypatch):
+    # fake TrackNet predictions -> segments, and ffmpeg cut; assert the glue
+    monkeypatch.setattr(cut, "rally_segments_from_predictions",
+                        lambda csv_path, fps, net_y, **kw: [
                             {"start": 58.0, "end": 77.5, "crossings": 16}])
     captured = {}
 
@@ -17,9 +17,11 @@ def test_cut_rallies_forwards_scored_segments(monkeypatch):
     monkeypatch.setattr(cut, "cut_clips", fake_cut_clips)
     monkeypatch.setattr(cut, "concat_clips", lambda manifest, out_dir: None)
 
-    result = cut.cut_rallies("s.mp4", net_y=260, out_dir="/tmp/x",
-                             max_jump=150, gap_sec=3.0, min_crossings=5,
-                             court_id="court-1", session_id="sess-1")
+    result = cut.cut_rallies_from_predictions(
+        "s.mp4", "preds.csv", fps=30.0, net_y=260, out_dir="/tmp/x",
+        gap_sec=3.0, min_crossings=3,
+        court_id="court-1", session_id="sess-1",
+    )
 
     seg = captured["segments"][0]
     assert seg["score"] == 16                       # crossings surfaced as score
@@ -29,14 +31,18 @@ def test_cut_rallies_forwards_scored_segments(monkeypatch):
     assert result == ["manifest"]
 
 
-def test_cut_rallies_handles_no_rallies(monkeypatch):
-    monkeypatch.setattr(cut, "detect_rallies", lambda video, net_y, **kw: [])
+def test_cut_rallies_from_predictions_handles_no_rallies(monkeypatch):
+    monkeypatch.setattr(cut, "rally_segments_from_predictions",
+                        lambda csv_path, fps, net_y, **kw: [])
     captured = {}
     monkeypatch.setattr(cut, "cut_clips",
                         lambda video, segments, out_dir, **kw:
                         captured.update(segments=segments) or [])
     monkeypatch.setattr(cut, "concat_clips", lambda manifest, out_dir: None)
-    result = cut.cut_rallies("s.mp4", net_y=260, out_dir="/tmp/x",
-                             max_jump=150, gap_sec=3.0)
+
+    result = cut.cut_rallies_from_predictions(
+        "s.mp4", "preds.csv", fps=30.0, net_y=260, out_dir="/tmp/x",
+        gap_sec=3.0, min_crossings=3,
+    )
     assert captured["segments"] == []               # empty -> empty manifest
     assert result == []

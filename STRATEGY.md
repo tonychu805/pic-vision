@@ -1,6 +1,6 @@
 # STRATEGY — Beyond the Prototype
 
-**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-10
+**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12
 
 **Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. If the core detection signal doesn't hold on one mount, most of this is moot. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
 
@@ -72,7 +72,15 @@ So "universal" is honest for court-plane player *positions* and a fiction for ap
 
 **Batch, not live.** One highlight produced per booking (~2 hours), per court, delivered within ~30–60 minutes of the booking ending.
 
-**Hardware:** on-device / edge, ~$500–1,000 per court, **one box per court** (resilience, simple wiring, natural per-court output). Apple silicon (Mac mini — same Neural Engine as the prototype M2, zero port) or NVIDIA Jetson. This class of single-camera analysis runs on-device — SwingVision does it on a phone — which also keeps footage local, consistent with the privacy stance.
+**Hardware options, ordered by cost vs complexity:**
+
+| Shape | Hardware | Cost | Cloud bill | Notes |
+|---|---|---|---|---|
+| **N100 + cloud GPU** (preferred POC) | N100 mini PC, ~$150–300 | Low | ~$0.011/session | Proxy video trick: 720p to cloud, cut from local full-res. See ADR-043. |
+| **All-local, Jetson** | Jetson Orin NX/AGX | ~$500–800 | None | TensorRT inference; fleet management (OTA) is the ops burden |
+| **All-local, Mac mini** | Apple Silicon Mac mini | ~$600–800 | None | Zero-port from prototype; CoreML ANE; same pipeline, no code changes |
+
+**One box per court** (resilience, simple wiring, natural per-court output). SwingVision runs this class of analysis on a phone — compute is not the constraint. This class of single-camera analysis runs on-device, which keeps footage local, consistent with the privacy stance.
 
 **The 30-minute question decides the architecture:**
 
@@ -152,11 +160,11 @@ From a business-model exploration (2026-08-10). Distilled here because it's soun
 
 **Edge economics (why on-device wins here):** doing the clipping on the edge box (Jetson / Mac mini, §5) means **near-zero cloud-GPU cost** — the cloud only stores files and serves the CDN + payments. That makes SaaS margin high and, because compute is a *fixed* per-box cost, **margin improves the more highlights a court produces.** The trade is a higher device cost and an **OTA fleet-management burden** (pushing model updates to every box) — the same fleet-ops cost already flagged in §5.
 
-**⚠️ The caveat that governs this whole section.** The business case quietly assumes the hardest technical thing is solved. This session (2026-08-10) says it isn't:
-- **The BOM is optimistic.** The exploration assumed **Orin Nano + YOLOv8n, ~$700–1,000/court**. But nano-class detection is exactly what produced the head-as-ball noise we spent the day diagnosing; usable detection needed **yolov8x** (~10× heavier). Real hardware is likely **Orin NX/AGX** or serious model-optimization work — which moves the BOM and therefore the HaaS math upward.
-- **The core signal isn't validated.** Rally detection *during play* looks promising, but **dead-time rejection is unsolved** (needs a ball tracker — the 659–666s benchmark), and nothing is proven on **clean fixed footage**. Selling an A/B test before the clipper is reliable would backfire — a failed pilot poisons the wedge.
+**⚠️ The caveat that governs this whole section.** The business case quietly assumes the hardest technical thing is solved. As of 2026-08-12 it's closer but not there yet:
+- **The BOM is optimistic.** The exploration assumed **Orin Nano + YOLOv8n, ~$700–1,000/court**. But nano-class detection produced head-as-ball noise; usable detection requires **yolov8x** (~10× heavier). Real hardware is likely **Orin NX/AGX** or serious model-optimization (fine-tuned yolov8n — ADR-040) — which moves the BOM upward. Fine-tuning on our own fixed-mount footage is the path to nano viability (ADR-040).
+- **False-positive root cause fixed, but only on handheld footage.** The `max_ball_px=25` filter (ADR-045) eliminated player-body false positives. The mechanism is validated on a 13-min handheld clip. **Still unproven on clean fixed-mount footage** — which is the gate for a real benchmark number.
 - **Multi-camera is unbuilt.** The exploration assumes 4 cameras/court with best-angle splicing; everything built so far is **single fixed camera**. That's a whole additional system, not a config flag.
-- **Privacy is a real operational item.** A multi-court gym captures bystanders and adjacent courts (the same adjacent-court balls that caused today's noise) — face-blur + opt-in check-in (§7) are required, not optional.
+- **Privacy is a real operational item.** A multi-court gym captures bystanders and adjacent courts — face-blur + opt-in check-in (§7) are required, not optional. The N100+cloud shape keeps raw footage local; only a 720p proxy leaves the building (ADR-043).
 
 **In one line:** the model is the right destination; the critical path is still *proving the clipper works on clean footage*, not designing the pricing. Don't let a polished monetization plan imply the product is further along than it is.
 

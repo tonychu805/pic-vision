@@ -8,7 +8,7 @@
 # Python
 __pycache__/
 *.pyc
-.venv/
+.venv*/
 venv/
 .pytest_cache/
 
@@ -18,8 +18,15 @@ venv/
 # Pipeline stage artifacts (regenerable)
 cache/
 
-# Model weights (auto-downloaded)
+# Model weights (auto-downloaded or too large for git)
 *.pt
+*.h5
+*.mlpackage/
+
+# Pipeline inference outputs (regenerable from footage + pod_infer.py)
+predictions*.csv
+clips/
+debug_frames/
 
 # NOT ignored, on purpose — commit these:
 #   eval/labels/*.jsonl   hand-labeled ground truth (the whole basis for §5 metrics)
