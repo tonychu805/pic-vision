@@ -7,9 +7,10 @@ ADR-046).
 
 Typical flow:
     python3 scripts/pod_infer.py --video game.MOV           # on pod
-    # copy predictions.csv back locally
-    python3 scripts/process_footage.py --video game.MOV \
-        --predictions predictions.csv --net-y 260 --out clips/
+    # copy predictions.csv back locally, then (interactive net picker):
+    make process VIDEO=game.MOV CSV=predictions.csv OUT=clips/
+    # or reuse a known net line:
+    make process VIDEO=game.MOV CSV=predictions.csv NET_Y=210 OUT=clips/
 """
 
 import argparse

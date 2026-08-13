@@ -743,6 +743,18 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 
 ---
 
+## ADR-047 — Ball-first (TrackNet on full video) is the primary segmentation path; player-tracking deferred
+
+**Date:** 2026-08-13 · **Status:** accepted
+
+**Context.** STRATEGY §3 proposed **player-tracking as the foundation, with the ball as a refinement that runs only on selected clips** — justified by two assumptions: ball detection is expensive at full-session scale, and the ball is untrackable in many conditions. Recent results overturn both for our setup: TrackNet on the full video found 25 crossings vs YOLO's 5 on the rally-3 window and 5/7 usable segments on the full 9.4-min IMG_7655 (ADR-046), and cloud GPU (ADR-043/046) makes full-video ball inference cheap enough (~$0.28/hr) that the throughput objection no longer binds. The **built pipeline already runs ball-first on the full video**; the code and STRATEGY §3 currently disagree. This ADR reconciles them.
+
+**Decision.** Ball net-crossing detection (**TrackNet on the full video**) is the primary and current rally-segmentation signal. The v0 player-geometry path (ADR-039; `src/players.py`, `src/events.py`) stays **frozen** — not revoked, not the spine. Player-tracking is **deferred to a later phase**, to be revisited for: (a) movement-analytics second product (STRATEGY §7–8), (b) fusion to sharpen ball-derived boundaries, or (c) a fallback if ball detection proves unreliable on clean fixed-mount footage. STRATEGY §3's "player-first, ball-on-selected-clips" is **superseded as the near-term architecture** (the strategy doc's longer-term framing still stands as an option).
+
+**Consequences.** Full-video ball inference requires a GPU (no local-only path; ties ADR-043/046). The movement-analytics second surface is deferred along with player tracking. The frozen v0 modules stay in-tree but out of the hot path. **Revisit if** the clean-footage benchmark shows ball recall is poor precisely where player geometry would have held, or if full-video ball inference proves impractical at venue scale. Does not unfreeze v0.
+
+---
+
 ## Template
 
 ```markdown

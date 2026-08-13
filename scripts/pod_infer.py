@@ -4,7 +4,7 @@ Usage (on the pod):
     python3 pod_infer.py --video /workspace/game.MOV --output /workspace/predictions.csv
 
 The script writes a CSV with columns Frame,Visibility,X,Y.
-Copy it back locally and feed to scripts/process_footage.py.
+Copy it back locally and feed to `make process` (src/cut.py).
 
 Model: TNV2_old_weights.h5 must be at /workspace/TNV2_old_weights.h5.
        Download from: https://github.com/AndrewDettor/TrackNet-Pickleball
