@@ -1,9 +1,17 @@
 ---
 type: Architecture
-title: Architecture Overview — tiered detection, v0/v1 split
-description: The pipeline architecture of pic-vision — the tiered degrade-don't-fail design, the frozen v0 player-geometry baseline, the v1 ball net-crossing challenger that is now primary, and the shared segmentation/render/eval spine. Grounded in TECH_SPEC §3/§13 and ADRs 003, 004, 026, 028, 039.
-tags: [architecture, pipeline, detection, adrs]
+title: Architecture Overview — tiered detection, three detection eras
+description: The pipeline architecture of pic-vision — the tiered degrade-don't-fail design, the frozen v0 player-geometry baseline, the retired YOLO ball detector, and the primary TrackNet-on-RunPod path feeding a backend-agnostic crossing/segment/render/eval spine. Grounded in TECH_SPEC §3/§13 and ADRs 003, 004, 026, 028, 039, 041, 046, 047.
+tags: [architecture, pipeline, detection, adrs, tracknet]
 resource: TECH_SPEC.md
+openwiki:
+  roles: [architecture]
+  change_kinds: [detection-pipeline, lifecycle]
+  source_paths: [src/ball.py, src/tracknet.py, src/cut.py, src/render.py, src/segment.py]
+  symbols: [crossing_times, cluster_crossings, rally_segments_from_predictions, cut_rallies_from_predictions, cut_clips, concat_clips]
+  test_paths: [tests/test_ball.py, tests/test_tracknet.py, tests/test_cut.py, tests/test_render.py]
+  invariants: ["The crossing/cluster spine in src/ball.py is detector-agnostic; swap detectors by replacing the track producer only.", "Timestamps come from PTS, never frame_index / fps."]
+  validation_commands: [python3 -m pytest tests/test_ball.py tests/test_tracknet.py tests/test_cut.py -q]
 ---
 
 # Architecture Overview
@@ -14,47 +22,58 @@ ADR-003 forces every detection tier to be independently shippable: if ball detec
 
 The full v0 spec (TECH_SPEC §3) is a four-tier cascade: **T0′** motion pre-filter (CPU frame-diff in court ROI, skips 30–40% of frames; not built yet) → **T1′** player detection + geometry (primary) → **T2′** ball presence (optional) → optional gated audio → mask inversion → `rallies.json` → render. **`rallies.json` is the contract** between detection and rendering, and the only artifact the [eval harness](../testing/evaluation.md) reads.
 
-## The v0/v1 split (ADR-039) — the most important structural fact
+## Three detection eras (ADR-039 → 046 → 047) — the most important structural fact
 
-On 2026-08-08 the first real footage showed player-activity markers **inverted** on casual drop-in play: dead time (ball retrieval, walking) registered more active than low-energy dink rallies. Phase 0.6's gate failed. Because the footage was also zoom-compromised (a confounded test), ADR-039 froze v0 intact and added v1 as an additive challenger rather than revoking ADR-026/028:
+The rally signal has moved twice, each time on measured evidence, and the losers were preserved rather than deleted:
 
-| | v0 — player dead-time inversion (frozen baseline) | v1 — ball net-crossings (current primary) |
-|---|---|---|
-| Signal | Players' court positions & motion | Ball's image-y crossing the net line |
-| ADRs | 026 (detect dead time, take complement), 028 (player geometry primary), 037 (two-sided markers) | 039 (challenger), 022 (ball presence as signal), 028 (courtesy-return suppression) |
-| Modules | `src/players.py`, `src/events.py` | `src/ball.py`, `src/track.py` |
-| Status | Proven end-to-end as plumbing only (junk output on compromised footage) | All primitives built + benchmarked; blocked on clean footage |
+| | v0 — player dead-time inversion | v1-YOLO — sports-ball crossings | v1-TrackNet — heatmap crossings (**primary**) |
+|---|---|---|---|
+| Signal | Players' court positions & motion | Ball image-y crossing the net line | Same net-crossing signal, better detector |
+| ADRs | 026, 028, 037; frozen by 039 | 039, 022; retired by 046 | 046 (retire YOLO), 047 (ball-first primary) |
+| Detector | YOLOv8n person, local | yolov8x COCO `sports ball`, local (CoreML option, ADR-044) | TrackNet 3-frame heatmap on RunPod GPU (CUDA-only) |
+| Modules | `src/players.py`, `src/events.py` | `archive/yolo_detect.py`, `archive/yolo_pipeline.py` | `scripts/pod_infer.py` → `src/tracknet.py` → `src/cut.py` |
+| Status | Frozen baseline; proven as plumbing only (markers inverted on casual play, 2026-08-08) | Archived 2026-08-12: 5 crossings vs TrackNet's 25 on the same rally window | Runnable end-to-end; blocked on one clean fixed-mount clip for real metrics |
 
-Both paths converge on the **shared spine**: `src/segment.py` (signal-agnostic gap-tolerant segmenter) → `src/render.py` (H.264 clips + manifest) → `eval/harness.py`. Clean-footage evidence decides primacy — v1 may supersede v0, v0 may win on clean daylight footage, or fusion may beat both.
+ADR-039 froze v0 intact instead of revoking it (the footage that indicted it was zoom-compromised — a confounded test). ADR-046 applied the same rule to YOLO: the 5× crossing-count gap was too large to bridge with tuning, so the YOLO detector moved to `archive/` — recoverable if a local-inference path (fine-tuned yolov8n on Jetson, ADR-040) ever beats TrackNet on clean footage. ADR-047 then settled the direction: **ball-first on the full video is the architecture**, player-tracking is deferred (superseding STRATEGY §3's player-first framing for the near term; v0 stays frozen, not revoked).
 
-The v1 chain, per CHECKLIST.md, wires:
+All eras converge on the **shared, backend-agnostic spine** in `src/ball.py` + `src/segment.py` + `src/render.py` + `eval/harness.py`. `crossing_times` / `cluster_crossings` / `net_line_y` accept any ball track — YOLO, TrackNet, or synthetic — which is exactly what made the detector swap cheap.
 
+## The active TrackNet chain (runnable today)
+
+<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
+```text
+flowchart LR
+    subgraph pod ["RunPod GPU pod"]
+        A["pod_infer.py<br/>3-frame heatmap inference"] --> B["predictions.csv<br/>Frame, Visibility, X, Y"]
+    end
+    subgraph local ["Local — src/cut.py orchestrator"]
+        B --> C["tracknet.load_predictions<br/>→ ball track"]
+        C --> D["ball.crossing_times<br/>net_y ± band hysteresis"]
+        D --> E["ball.cluster_crossings<br/>bursts ≥ min_crossings"]
+        E --> F["render.cut_clips<br/>H.264 clips + manifest.json"]
+        F --> G["render.concat_clips<br/>highlight.mp4"]
+    end
+    H["net_y source<br/>--net-y / calib JSON /<br/>pick_net_y / detect_net_y"] --> D
 ```
-detect_candidates (src/ball.py — all sports-ball boxes per frame, yolov8x, size-filtered)
-  → track_ball      (src/track.py — one ball by continuity; rejects teleports = other courts' balls)
-  → crossing_times  (src/ball.py — side flips across the net line, hysteresis band)
-  → cluster_crossings (src/ball.py — dense crossing bursts → rally segments)
-  → cut_clips       (src/render.py — H.264 clips + manifest.json)
-```
 
-The domain reasoning behind each step lives in [Rally Detection Concepts](../concepts/rally-detection.md); the operator recipe is in [Key Workflows](../workflows/pipeline.md).
+*The active pipeline: GPU inference on the pod produces a CSV; everything downstream is local and backend-agnostic.* The net-crossing concept stays identical across detectors — only the track producer changes. Validated parameters (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. The operator recipe is in [Key Workflows](../workflows/pipeline.md); the domain reasoning in [Rally Detection Concepts](../concepts/rally-detection.md).
 
 ## Why image space for the ball, court space for players
 
-`src/players.py` projects foot points through the calibration homography into court feet, so all player logic is pose-independent (ADR-036: calibration absorbs camera pose, not occlusion; ADR-009: ground-plane projection is valid for feet only). The ball flies *above* the ground plane, so the same homography mis-locates it (parallax). v1 therefore works in **image space**: from a behind-baseline camera, image-y tells you which side of the net the ball is on. This is the load-bearing geometric decision in `src/ball.py`.
+`src/players.py` projects foot points through the calibration homography into court feet, so all player logic is pose-independent (ADR-036: calibration absorbs camera pose, not occlusion; ADR-009: ground-plane projection is valid for feet only). The ball flies *above* the ground plane, so the same homography mis-locates it (parallax). The ball path therefore works in **image space**: from a behind-baseline camera, image-y tells you which side of the net the ball is on. This is the load-bearing geometric decision in `src/ball.py`, and the reason a net line pixel-y — not a full calibration — is the only geometric input the TrackNet path needs (four resolution modes, ADR-041: `--net-y` > `--calib` > interactive picker > Hough auto-detect).
 
-## Selection and rendering (built for, mostly not wired)
+## Selection and rendering (partially wired)
 
-One detection pass feeds two artifacts (ADR-017): `highlights.mp4` (ranked, ≤ 600 s hard budget — `config.yaml` `output.highlight_budget_sec`) and `rallies_full.mp4` (everything). The ranker is deliberately dumb (ADR-019): `score = 0.4·duration + 0.4·n_impacts + 0.2·peak_motion`, greedy knapsack under budget, re-sorted chronologically before render (ADR-020). `src/select.py` and the `cut.py` orchestrator are the missing Phase 1 back half; `src/render.py` already cuts clips and writes a browse manifest keyed by court/session/time (the seam toward the venue-console direction in `STRATEGY.md`).
+One detection pass feeds two artifacts (ADR-017): `highlights.mp4` (ranked, ≤ 600 s hard budget — `config.yaml` `output.highlight_budget_sec`) and `rallies_full.mp4` (everything). The ranker is deliberately dumb (ADR-019): `score = 0.4·duration + 0.4·n_impacts + 0.2·peak_motion`, greedy knapsack under budget, re-sorted chronologically before render (ADR-020). `src/select.py` is the remaining unbuilt piece — the current `src/cut.py` scores segments by raw crossing count (`score = crossings`) and `src/render.py` cuts padded H.264 clips, writes `manifest.json` keyed by court/session/time, and concatenates `highlight.mp4` from all clips (no budget enforcement yet — the 600 s assert lands with the ranker). The manifest is the seam toward the venue-console direction in `STRATEGY.md`; the production deployment shape is the ADR-043 cloud hybrid (N100 edge cuts full-res locally from cloud-returned timestamps — raw footage never leaves the building).
 
 ## Non-functional invariants (TECH_SPEC §10)
 
 - **NFR3 idempotent/resumable** — every stage writes `cache/{stage}/{content_hash}.json` (cache dir exists; discipline applies as stages land).
 - **NFR4 deterministic** — same input + config → byte-identical `rallies.json`; the eval loop is meaningless otherwise.
-- **NFR7 single command** — `python cut.py session.mp4 --budget 600` (target shape; `cut.py` not yet written).
-- **NFR8 hard budget assert** — ffprobe the render; fail rather than emit a non-conforming file.
-- Compute budget target: ≤ 0.5× source duration on a fanless MacBook Air M2; decode and YOLO inference dominate; sampling rate is the cost lever.
+- **NFR7 single command** — the spec shape is `python cut.py session.mp4 --budget 600` (root `cut.py` with capture→detect→select→render). Today's runnable form is two steps: `pod_infer.py` on the pod, then `make process VIDEO=… CSV=… OUT=…` locally (`src/cut.py`). The one-command local form lands with `select.py`.
+- **NFR8 hard budget assert** — ffprobe the render; fail rather than emit a non-conforming file. Not yet enforced (no ranker).
+- Compute budget target: ≤ 0.5× source duration on a fanless MacBook Air M2. Detection moved off the laptop (RunPod GPU, ~$0.28/hr; proxy-video trick from ADR-043 cuts upload ~8×), so local wall clock is now decode + ffmpeg-cut bound. An RTX 2000 Ada workstation (available 2026-08-12) is the iteration/fine-tuning box. See [Operations](../operations/runbook.md#compute-reality-split-cloud-gpu-for-detection-local-for-the-rest).
 
 ## Evolution worth knowing (git history)
 
-The repo grew bottom-up, test-first, in this order: eval harness first (Phase 0, "the thing prior art lacks") → calibration hardened to order-independent clicking (ADR-035) → player pipeline (2026-08-06) → real-footage pivot to the ball (2026-08-08/09: `ball.py` crossing core, auto-annotator, yolov8x + net marking fixes) → tracker + render module (commit `eb05461`, closing pipeline items 2 & 3). `DECISIONS.md` is append-only with tier renames recorded in-place; read it when a design choice looks odd — it was probably a measured correction, not an accident.
+The repo grew bottom-up, test-first: eval harness first (Phase 0, "the thing prior art lacks") → calibration hardened to order-independent clicking (ADR-035) → player pipeline (2026-08-06) → real-footage pivot to the ball (2026-08-08/09) → tracker + render (2026-08-11) → wired YOLO pipeline + validated tracker (2026-08-11) → CoreML export + `max_ball_px` FP fix (2026-08-12, ADR-044/045) → TrackNet beat YOLO 25-to-5 on the benchmark rally and the whole detection path swapped to RunPod (2026-08-12/13, ADR-046/047). `DECISIONS.md` is append-only with tier renames recorded in-place; read it when a design choice looks odd — it was probably a measured correction, not an accident.

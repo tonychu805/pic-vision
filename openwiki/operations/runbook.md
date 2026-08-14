@@ -1,9 +1,15 @@
 ---
 type: Runbook
-title: Operations & Status — camera pitfalls, config, phase gates
-description: Operational knowledge for pic-vision — camera/capture pitfalls with their ADRs, config surface and invariants, compute/runtime constraints on the M2, and the current phase-gate status from CHECKLIST.md with what remains unbuilt.
-tags: [operations, runbook, camera, config, phase-status]
+title: Operations & Status — camera pitfalls, config, compute, phase gates
+description: Operational knowledge for pic-vision — camera/capture pitfalls with their ADRs, config surface and invariants, compute reality (RunPod GPU for inference, CoreML/M2 and RTX 2000 Ada locally), and the current phase-gate status from CHECKLIST.md with what remains unbuilt.
+tags: [operations, runbook, camera, config, phase-status, runpod]
 resource: CHECKLIST.md
+openwiki:
+  roles: [operations]
+  change_kinds: [operations, capture]
+  source_paths: [config.yaml, Makefile, scripts/pod_infer.py]
+  symbols: [pick_net_y, detect_net_y]
+  validation_commands: [python3 -m pytest -q]
 ---
 
 # Operations & Runbook
@@ -15,14 +21,16 @@ resource: CHECKLIST.md
 | 0 — Instrument (calibrate, label, harness) | Harness reports both PRD tables on a stub | **PASSED** (eval-set-A not formally locked yet — do before any tuning run) |
 | 0.5 — Benchmark prior art | Baseline number exists | NOT DONE (qualitative only; deprioritized since v1 went direct to detection) |
 | 0.6 — Validate dead-time inversion | Markers near-zero during rallies | **FAILED → SKIPPED** (markers inverted on real footage → ADR-039 pivot to v1) |
-| 1 — Core pipeline, v0 path | Watchable ≤ 10-min reel, measured | NOT DONE — components exist, not wired, no numbers |
-| 1 — v1 path (primary) | Same, on clean footage | NOT DONE — **all primitives built + tested; blocked on one clean clip** |
+| 1 — Core pipeline, v0 path | Watchable ≤ 10-min reel, measured | NOT DONE — v0 frozen; superseded in the hot path by ADR-046/047 |
+| 1 — TrackNet path (primary) | Same, on clean footage | NOT DONE — **e2e wired and runnable** (`pod_infer.py` → `make process`); blocked on one clean clip for metrics |
 | 1.5 — Boundary refinement | ≤ 1.0 s boundary error | NOT STARTED |
-| 2 — Ball presence | FP improves, recall holds | PARTIAL (detector + tracker + size filter in; shoe filter missing) |
+| 2 — Ball presence | FP improves, recall holds | PARTIAL (absorbed into the ball-primary path; shoe filter missing) |
 | 2.5 — Audio (conditional) | Usability gate passes, then helps | NOT STARTED |
-| 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED |
+| 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED (`select.py` not built; root one-command `cut.py` per NFR7 not built) |
 
-**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker), `cut.py` (orchestrator — the final wiring step). **Built:** everything else in `src/` plus `calibrate.py`, `label.py`, `eval/harness.py`, 53 tests.
+**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + 600 s budget enforce), root `cut.py` (NFR7 single command with capture→select→render), stage caching (NFR3), `run.log` (NFR9). **Built:** TrackNet path end-to-end (`scripts/pod_infer.py`, `src/tracknet.py`, `src/cut.py`, `src/render.py` incl. `concat_clips` + `pad_sec`), net-line tooling (`src/calib.py` picker + Hough), `calibrate.py` (12+2 clicks), `label.py`, `eval/harness.py`, frozen v0 (`players.py`, `events.py`), YOLO-era `track.py`, 65 tests.
+
+**Standing measurement debts** (CHECKLIST.md): TrackNet FP rate on the 659–666 s dead window; pickleball fine-tuned weights loading (TF 2.11 SavedModel vs Keras 3 — TF 2.13/Py3.10 pod or `.keras` re-export); recall/FP/boundary numbers on `eval-set-A` (all blocked on the same clean clip).
 
 ## Capture pitfalls
 
@@ -43,19 +51,20 @@ Measured/observed on this rig:
 
 Privacy is a product constraint, not a feature (PRD §6): footage stays local by default, nothing retained in cloud past a processing window, no face recognition / non-consented re-identification ever (ADR-034 prefers opt-in check-in over biometric re-ID for any future identity feature).
 
-## Compute reality (MacBook Air M2, fanless)
+## Compute reality (split: cloud GPU for detection, local for the rest)
 
-- Estimates in TECH_SPEC §9 are FLOPs arithmetic, **not measurements** — the Phase 0 benchmark table in EXPERIMENTS.md ("Pending") is the list of numbers still owed (decode throughput, YOLO CoreML-vs-Metal, thermal behavior, end-to-end wall clock).
-- Fanless → sustained loads throttle 20–40%.
-- 8 GB RAM → stream frames, accumulate only per-timestep scalars, never hold frame arrays (all current modules follow this: OpenCV `VideoCapture` loops, no frame storage).
-- Sampling rate is the cost lever; `detect_ball(sample_fps=10)` exists for affordable whole-clip scans.
+- **Detection runs on a RunPod GPU pod** (ADR-046) — TrackNet is CUDA-only (TF Conv2D NCHW is unsupported on macOS/Apple Silicon). Community RTX 3090 pod ≈ $0.22–0.28/hr; a full session's inference is minutes. Known pod-side gotchas: load weights with `compile=False` (Keras 3 chokes on the legacy Adadelta config); the pickleball fine-tuned SavedModel needs TF 2.13/Python 3.10 or a `.keras` re-export.
+- **An RTX 2000 Ada workstation is now available** (2026-08-12, 16 GB VRAM) — designated for PoC iteration and TrackNet fine-tuning instead of the M2; use the `tensorflow/tensorflow:2.11.0-gpu` Docker image for the legacy weights.
+- **Local machine (MacBook Air M2, fanless):** decode + ffmpeg cutting only — cheap. Estimates in TECH_SPEC §9 are FLOPs arithmetic, **not measurements**; fanless sustained loads throttle 20–40%; 8 GB RAM → stream frames, never hold frame arrays (all modules follow this).
+- **Production direction** (ADR-043, post-prototype): N100 edge box captures full-res → encodes a 720p/2 Mbps proxy (~90 MB/hr, ~8× smaller than full-res) → cloud GPU returns *timestamps only* → N100 cuts from local full-res. Raw footage never leaves the building (privacy); a 50 Mbps venue uplink supports ~25 courts.
+- **Archived local-inference notes** (if the YOLO path returns, ADR-040): CoreML `yolov8x.mlpackage` at imgsz=1280 measured 216 ms/frame ANE vs 365 CPU (1.7×, ADR-044); export imgsz must match inference imgsz.
 - Encoding: `src/render.py` uses libx264/veryfast + faststart (clips play inline everywhere); the spec's `accurate` mode calls for `h264_videotoolbox` when the full reel renderer lands. OpenCV's default mp4v output is **not** web-playable — re-encode to H.264 before delivery (noted in EXPERIMENTS 2026-08-10).
 - Do not use moviepy (slow/fragile at 200k-frame scale); ffmpeg via subprocess, as `render.py` does.
 
 ## Repo housekeeping
 
-- `main` is local-only, ahead of origin (unpushed, per PROGRESS.md).
-- Video sources, `yolov8*.pt` weights, and `cache/` are local artifacts — don't commit them.
+- `main` is pushed to `origin` (per PROGRESS.md 2026-08-12); active pipeline work happened on `feat/rally-pipeline` and `feat/ball-recipe` branches.
+- Video sources, YOLO weights (`yolov8x.pt`, `yolov8x.mlpackage`), and `cache/` are local artifacts — don't commit them. TrackNet weights live **on the pod** (`/workspace/TNV2_old_weights.h5`, from AndrewDettor's TrackNet-Pickleball repo), not in this repo.
 - The OpenWiki GitHub Action (`.github/workflows/openwiki-update.yml`) regenerates this wiki daily via PR; don't hand-edit generated pages.
 - `AGENTS.md`/`CLAUDE.md` point agents at this wiki; `/openwiki/INSTRUCTIONS.md` is the user-authored brief.
 
