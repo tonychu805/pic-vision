@@ -40,20 +40,19 @@ All eras converge on the **shared, backend-agnostic spine** in `src/ball.py` + `
 
 ## The active TrackNet chain (runnable today)
 
-<!-- openwiki: mermaid parse failed and this diagram was converted to a text fence so it does not break rendering. Fix the diagram source and restore the mermaid fence. Parser error: Heuristic: an unescaped angle bracket inside a label breaks rendering; rephrase the label. -->
-```text
+```mermaid
 flowchart LR
     subgraph pod ["RunPod GPU pod"]
-        A["pod_infer.py<br/>3-frame heatmap inference"] --> B["predictions.csv<br/>Frame, Visibility, X, Y"]
+        A["pod_infer.py - 3-frame heatmap inference"] --> B["predictions.csv - Frame, Visibility, X, Y"]
     end
-    subgraph local ["Local — src/cut.py orchestrator"]
-        B --> C["tracknet.load_predictions<br/>→ ball track"]
-        C --> D["ball.crossing_times<br/>net_y ± band hysteresis"]
-        D --> E["ball.cluster_crossings<br/>bursts ≥ min_crossings"]
-        E --> F["render.cut_clips<br/>H.264 clips + manifest.json"]
-        F --> G["render.concat_clips<br/>highlight.mp4"]
+    subgraph local ["Local - src/cut.py orchestrator"]
+        B --> C["tracknet.load_predictions - ball track"]
+        C --> D["ball.crossing_times - net_y plus-minus band hysteresis"]
+        D --> E["ball.cluster_crossings - bursts with min_crossings"]
+        E --> F["render.cut_clips - H.264 clips + manifest.json"]
+        F --> G["render.concat_clips - highlight.mp4"]
     end
-    H["net_y source<br/>--net-y / calib JSON /<br/>pick_net_y / detect_net_y"] --> D
+    H["net_y source - flag, calib JSON, pick_net_y, detect_net_y"] --> D
 ```
 
 *The active pipeline: GPU inference on the pod produces a CSV; everything downstream is local and backend-agnostic.* The net-crossing concept stays identical across detectors — only the track producer changes. Validated parameters (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. The operator recipe is in [Key Workflows](../workflows/pipeline.md); the domain reasoning in [Rally Detection Concepts](../concepts/rally-detection.md).
