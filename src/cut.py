@@ -22,17 +22,21 @@ import cv2
 from src.tracknet import rally_segments_from_predictions
 from src.render import cut_clips, concat_clips
 from src.ball import net_line_y
-from src.calib import detect_net_y, pick_net_y
+from src.calib import detect_net_y, pick_net_y, court_x_range
 
 
 def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
                                  gap_sec=3.0, min_crossings=3, band=0.0,
+                                 max_jump=150, reset_after=15,
+                                 court_x_min=None, court_x_max=None,
                                  court_id=None, session_id=None, pad_sec=3.0):
     """TrackNet CSV -> rally clips in one pass: parse predictions, score by
     crossing count (ADR-039), cut H.264 clips + manifest.json into out_dir."""
     segments = rally_segments_from_predictions(
         csv_path, fps, net_y,
         gap_sec=gap_sec, min_crossings=min_crossings, band=band,
+        max_jump=max_jump, reset_after=reset_after,
+        court_x_min=court_x_min, court_x_max=court_x_max,
     )
     scored = [{**s, "score": s["crossings"]} for s in segments]
     manifest = cut_clips(video, scored, out_dir,
@@ -62,6 +66,16 @@ def main(argv=None):
                    help="minimum crossings to count as a rally (default 3)")
     p.add_argument("--band", type=float, default=0.0,
                    help="net hysteresis band, px (tune for dink rallies: 15-30px)")
+    p.add_argument("--max-jump", type=float, default=150,
+                   help="track_ball teleport-rejection threshold, px between consecutive frames (default 150)")
+    p.add_argument("--reset-after", type=int, default=15,
+                   help="frames of no detection before track_ball allows re-acquiring elsewhere (default 15)")
+    p.add_argument("--court-x-min", type=float, default=None,
+                   help="reject detections left of this image-x (multi-court gate, gap-independent; default: derive from --calib)")
+    p.add_argument("--court-x-max", type=float, default=None,
+                   help="reject detections right of this image-x (multi-court gate, gap-independent; default: derive from --calib)")
+    p.add_argument("--court-margin", type=float, default=50.0,
+                   help="px padding applied to --calib-derived court X-range (default 50)")
     p.add_argument("--pad-sec", type=float, default=3.0,
                    help="seconds of context added before/after each rally burst (default 3)")
     p.add_argument("--court-id", default=None)
@@ -70,12 +84,15 @@ def main(argv=None):
 
     logging.basicConfig(level=logging.INFO, format="%(asctime)s  %(message)s", datefmt="%H:%M:%S")
 
+    calib = None
+    if args.calib:
+        with open(args.calib) as f:
+            calib = json.load(f)
+
     if args.net_y is not None:
         net_y = args.net_y
         print(f"net_y = {net_y:.1f} (from --net-y)")
-    elif args.calib:
-        with open(args.calib) as f:
-            calib = json.load(f)
+    elif calib:
         net_y = net_line_y(calib)
         print(f"net_y = {net_y:.1f} (from calibration)")
     elif args.auto_detect:
@@ -85,6 +102,12 @@ def main(argv=None):
     else:
         net_y = pick_net_y(args.video)
         print(f"net_y = {net_y:.1f} (picked interactively)")
+
+    court_x_min, court_x_max = args.court_x_min, args.court_x_max
+    if court_x_min is None and court_x_max is None and calib:
+        court_x_min, court_x_max = court_x_range(calib, margin_px=args.court_margin)
+        print(f"court X-range = [{court_x_min:.0f}, {court_x_max:.0f}] "
+              f"(from calibration, margin={args.court_margin:.0f}px)")
 
     if args.fps:
         fps = args.fps
@@ -97,7 +120,9 @@ def main(argv=None):
     manifest = cut_rallies_from_predictions(
         args.video, args.predictions, fps, net_y, args.out,
         gap_sec=args.gap_sec, min_crossings=args.min_crossings,
-        band=args.band, court_id=args.court_id, session_id=args.session_id,
+        band=args.band, max_jump=args.max_jump, reset_after=args.reset_after,
+        court_x_min=court_x_min, court_x_max=court_x_max,
+        court_id=args.court_id, session_id=args.session_id,
         pad_sec=args.pad_sec,
     )
     print(f"cut {len(manifest)} rallies -> {args.out}/manifest.json")

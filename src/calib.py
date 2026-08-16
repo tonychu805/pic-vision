@@ -66,6 +66,18 @@ def pick_net_y(video_path):
     return float(state["y"] / scale)
 
 
+def court_x_range(calib, margin_px=50.0):
+    """Image-x bounds of the tracked court, from calibrate.py's 12 clicked
+    court points (calib['image_points']). A ball can arc slightly outside the
+    painted lines (net play, out calls, follow-through) so margin_px pads both
+    sides. Used to gate TrackNet detections to the tracked court, independent
+    of track_ball's teleport-rejection/reset state — see src/tracknet.py for
+    why gap-independence matters (a same-frame teleport check alone doesn't
+    catch a different court's ball reappearing after real dead time)."""
+    xs = [p[0] for p in calib["image_points"]]
+    return (min(xs) - margin_px, max(xs) + margin_px)
+
+
 def detect_net_y(video_path, n_frames=20):
     """Estimate net-line image-y from raw footage with no manual calibration.
 

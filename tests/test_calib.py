@@ -1,7 +1,7 @@
 import numpy as np
 import pytest
 import src.calib as calib_mod
-from src.calib import detect_net_y
+from src.calib import court_x_range, detect_net_y
 
 
 def _make_frame_with_line(h, w, line_y, color=200):
@@ -71,3 +71,14 @@ def test_detect_net_y_raises_on_no_frames(monkeypatch):
     monkeypatch.setattr(calib_mod.cv2, "VideoCapture", lambda _: EmptyCap())
     with pytest.raises(RuntimeError, match="Too few"):
         detect_net_y("empty.mp4")
+
+
+def test_court_x_range_spans_corner_clicks_plus_margin():
+    calib = {"image_points": [
+        [280, 690], [1010, 660], [470, 185], [805, 165],   # 4 corners
+        [340, 610], [950, 590], [500, 260], [770, 245],    # NVZ lines
+        [645, 675], [635, 175], [620, 435], [630, 420],    # centerline
+    ]}
+    x_min, x_max = court_x_range(calib, margin_px=50.0)
+    assert x_min == 280 - 50.0   # leftmost click (near-left corner) minus margin
+    assert x_max == 1010 + 50.0  # rightmost click (near-right corner) plus margin
