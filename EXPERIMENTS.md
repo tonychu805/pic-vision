@@ -385,10 +385,26 @@ Junk has a *higher* crossing rate and *better* ball visibility than real play. D
 
 **Recall is a second, smaller problem.** Of the 13 rallies missed: 5 had <3 raw crossings inside them (invisible to any threshold — the ball simply wasn't tracked across the net enough), 8 had ≥3 and were lost to clustering/boundary effects (recoverable by tuning).
 
-**Conclusion.** Net-crossing count is a good *play* detector and a poor *rally* detector. It answers "is a ball going over the net" — which is true during warm-up, practice serves, and idle knocking. Distinguishing a point being played needs context the ball alone does not carry: whether four players are present and in position, whether a serve occurred, whether players are rallying or standing around. **This is precisely the revisit condition named in ADR-047** ("revisit if the clean-footage benchmark shows ball recall is poor precisely where player geometry would have held"). The frozen v0 player signal (`src/players.py`, `src/events.py`) should return — as a gate on ball-derived candidates, not as a replacement.
+**CORRECTION (same day, after user review of the pass-3 clips).** The conclusion first drawn from the table above — that junk segments were casual-but-real play, physically identical to a rally, implying a signal ceiling — **was wrong**. It rested entirely on aggregate statistics and never checked *where* the detections were. The user's review forced a recheck: "a lot of them are just people walking, passing the ball back, or dead time."
+
+**Plotting the tracked positions on a frame settled it in one look.** Real rallies plot as clean arcing ball trajectories in a tight column over the near court between the players. Junk plots as a diffuse, structureless cloud over the **adjacent court to the left, the far wall, the barrier netting and the ceiling** — with almost nothing on the near court. The false positives are **hallucinated detections in background clutter**, not real play. Because that cloud straddles the net line, `track_ball` wanders inside it and manufactures crossing bursts. This also explains the paradoxical stats: a distant blob jittering near the net line flips sides constantly, giving junk a *higher* crossings/sec than real play.
+
+**Also checked and found correct: the hand-marked net line (y=552).** It sits above the calibrated far baseline (589), which looks geometrically impossible and was briefly taken as a calibration bug. It isn't. The camera is mounted below net-tape height — the marked tape is below the ground plane's horizon (y=526) — so an elevated object at 22ft legitimately projects above a ground point at 44ft. The homography-derived alternative (y=638) is the net's *base*, and is visibly wrong on the frame. `net_line_y`'s preference for hand-marked points is correct.
+
+**What the correct diagnosis buys.** `court_x_range` is inoperative on this footage: derived from the near-baseline corners it spans x=4..1915 on a 1920px frame and excludes nothing. Replacing it with a **perspective-aware wedge** — the court's x-extent interpolated as a function of image-y, plus a margin — cuts the left adjacent-court cluster and 43% of all detections.
+
+| config | precision | recall | F1 |
+|---|---|---|---|
+| shipped (x-range gate, min_crossings 3) | 0.10 | 0.61 | 0.17 |
+| court wedge +80px, min_crossings 3 | 0.12 | 0.52 | 0.19 |
+| **court wedge +80px, min_crossings 7** | **0.31** | 0.45 | **0.37** |
+
+**Still unsolved.** Much remaining junk sits in the column *directly above* the near court, where no spatial gate separates it from real play. The distinguishing feature there is **trajectory coherence** — real balls trace smooth parabolic arcs, junk jumps incoherently — so the indicated next experiment is a velocity/smoothness constraint in `track_ball` (its `max_jump=150` px/frame is permissive enough to let the tracker roam the cloud), not another count threshold.
+
+**Method note worth keeping:** aggregate statistics could not distinguish "casual play looks like a rally" from "the detector is hallucinating in the background"; a scatter plot of detections on the frame distinguished them immediately. Plot before theorising.
 
 **Follow-up.**
-1. Un-freeze player geometry as a *filter*: require N players on court and plausible rally formation before accepting a crossing burst. Score the gate against these same 33 labels — the harness now makes that a seconds-long experiment.
-2. Raise `min_crossings` from 3 to ~7–9 as an interim (precision 0.10→0.25) and settle the long-standing min_crossings inconsistency at the same time.
-3. The 11 grade-1 labels are the first highlight-ranking data; crossing count does *not* obviously predict them (real-rally crossings median 13 vs 8 among found ones) — check before assuming ranking comes free.
+1. Implement the perspective-aware court wedge in `src/calib.py` (replacing/alongside `court_x_range`) and re-score.
+2. Add a trajectory-smoothness constraint to `track_ball` and re-score.
+3. Raise `min_crossings` from 3 to ~7 and settle the long-standing inconsistency.
 4. Repeat the benchmark on IMG_7744 (repaired, side-on angle) to see whether the conclusion is angle-dependent.
