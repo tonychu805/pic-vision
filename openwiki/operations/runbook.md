@@ -28,7 +28,7 @@ openwiki:
 | 2.5 — Audio (conditional) | Usability gate passes, then helps | NOT STARTED |
 | 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED (`select.py` not built; root one-command `cut.py` per NFR7 not built) |
 
-**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + 600 s budget enforce), root `cut.py` (NFR7 single command with capture→select→render), stage caching (NFR3), `run.log` (NFR9). **Built:** TrackNet path end-to-end (`scripts/pod_infer.py`, `src/tracknet.py`, `src/cut.py`, `src/render.py` incl. `concat_clips` + `pad_sec`), net-line tooling (`src/calib.py` picker + Hough), `calibrate.py` (12+2 clicks), `label.py`, `eval/harness.py`, frozen v0 (`players.py`, `events.py`), YOLO-era `track.py`, 65 tests.
+**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + 600 s budget enforce), root `cut.py` (NFR7 single command with capture→select→render), stage caching (NFR3), `run.log` (NFR9). **Built:** TrackNet path end-to-end (`scripts/pod_infer.py`, `src/tracknet.py` incl. the multi-court X-gate + `track_ball` wiring, `src/cut.py`, `src/render.py` incl. `concat_clips` + `pad_sec`), net-line tooling (`src/calib.py` picker + Hough + `court_x_range`), `calibrate.py` (12+2 clicks), `label.py`, `eval/harness.py`, frozen v0 (`players.py`, `events.py`), `track.py` (single-ball tracker, shared by both eras), 67 tests.
 
 **Standing measurement debts** (CHECKLIST.md): TrackNet FP rate on the 659–666 s dead window; pickleball fine-tuned weights loading (TF 2.11 SavedModel vs Keras 3 — TF 2.13/Py3.10 pod or `.keras` re-export); recall/FP/boundary numbers on `eval-set-A` (all blocked on the same clean clip).
 

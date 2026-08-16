@@ -8,7 +8,7 @@ openwiki:
   roles: [workflow, operations]
   change_kinds: [detection-pipeline, operations]
   source_paths: [scripts/pod_infer.py, src/cut.py, src/calib.py, calibrate.py, label.py]
-  symbols: [cut_rallies_from_predictions, pick_net_y, detect_net_y]
+  symbols: [cut_rallies_from_predictions, pick_net_y, detect_net_y, court_x_range]
   test_paths: [tests/test_cut.py, tests/test_calib.py]
   validation_commands: [python3 -m pytest tests/test_cut.py tests/test_calib.py -q]
 ---
@@ -50,7 +50,7 @@ Click order is free (ADR-035): the **12 court points** in any order, then the **
 Full calibration is overkill for the TrackNet path — it needs only the net's image-y, not court geometry. `src/cut.py` resolves it in this priority order:
 
 1. `--net-y <value>` — explicit, fastest; reuse a known value for a fixed camera.
-2. `--calib <json>` — full calibration JSON from step 2 (`net_line_y` prefers the marked net points) — the right choice for a permanent mount.
+2. `--calib <json>` — full calibration JSON from step 2 (`net_line_y` prefers the marked net points) — the right choice for a permanent mount. A `--calib` also auto-derives the **court X-gate** bounds (`court_x_range` from the 12 clicked court points, `--court-margin` px padding, default 50) used in step 5 to reject adjacent-court detections.
 3. *(default)* interactive picker — `pick_net_y` shows the first frame with a guide line following the mouse; one click on the net tape. Standalone: `python3 -c "from src.calib import pick_net_y; print(pick_net_y('game.MOV'))"`.
 4. `--auto-detect` — headless Hough estimate (`detect_net_y`); rough use / CI only (it tends to find the floor service line ~50 px off, not the net — the net mesh has no strong horizontal edge).
 
@@ -84,9 +84,11 @@ ADR-046 retired the YOLO detector (5 crossings vs TrackNet's 25 on the benchmark
    make process VIDEO=game.MOV CSV=predictions.csv NET_Y=210 OUT=clips/  # reuse known net_y
    ```
 
-   This runs `src/cut.py`: `load_predictions` (CSV → timed ball track, invisible frames → `None`) → `crossing_times` (side flips across `net_y ± band`) → `cluster_crossings` (bursts with ≥ `min_crossings` → segments) → score = crossing count → `cut_clips` (H.264, `pad_sec=3` context) → `manifest.json` + `concat_clips` → `highlight.mp4`.
+   This runs `src/cut.py`: `load_predictions` (CSV → timed ball track, invisible frames → `None`) → **court X-gate** (drop detections outside `court_x_min/max`) → **`track_ball`** (reject within-court teleports) → `crossing_times` (side flips across `net_y ± band`) → `cluster_crossings` (bursts with ≥ `min_crossings` → segments) → score = crossing count → `cut_clips` (H.264, `pad_sec=3` context) → `manifest.json` + `concat_clips` → `highlight.mp4`.
 
-3. **Validated parameters** (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. Use `band=15–30` for dink-heavy footage (ADR-042). `cut.py` flags: `--gap-sec --min-crossings --band --pad-sec --court-id --session-id --fps`.
+   The X-gate + tracker exist because TrackNet's per-frame best-guess ball can land on an adjacent court's real ball (confirmed 2026-08-16 on IMG_7744), and `track_ball` alone re-acquires on it after real dead time exceeds `reset_after`. Passing `--calib` derives the bounds automatically; in a multi-court gym, prefer `--calib` (or explicit `--court-x-min/--court-x-max`) over `--net-y` alone, which gates nothing.
+
+3. **Validated parameters** (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. Use `band=15–30` for dink-heavy footage (ADR-042). `cut.py` flags: `--gap-sec --min-crossings --band --pad-sec --court-id --session-id --fps`, plus the tracker/gate knobs `--max-jump --reset-after --court-x-min --court-x-max --court-margin`.
 
 4. Sanity-check against the benchmark windows before believing any change ([Testing](../testing/evaluation.md#benchmark-windows)). Standing gaps: TrackNet's FP rate on the 659–666 s dead window is **not yet measured**, and the pickleball fine-tuned weights are **not yet loaded** (TF 2.11 SavedModel vs Keras 3 format break — use a TF 2.13/Python 3.10 pod image or re-export to `.keras`).
 

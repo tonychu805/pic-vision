@@ -47,15 +47,18 @@ flowchart LR
     end
     subgraph local ["Local - src/cut.py orchestrator"]
         B --> C["tracknet.load_predictions - ball track"]
-        C --> D["ball.crossing_times - net_y plus-minus band hysteresis"]
+        C --> C2["court X-gate - court_x_min/max from calib.court_x_range"]
+        C2 --> C3["track.track_ball - within-court teleport rejection"]
+        C3 --> D["ball.crossing_times - net_y plus-minus band hysteresis"]
         D --> E["ball.cluster_crossings - bursts with min_crossings"]
         E --> F["render.cut_clips - H.264 clips + manifest.json"]
         F --> G["render.concat_clips - highlight.mp4"]
     end
     H["net_y source - flag, calib JSON, pick_net_y, detect_net_y"] --> D
+    I["calib JSON image_points"] --> C2
 ```
 
-*The active pipeline: GPU inference on the pod produces a CSV; everything downstream is local and backend-agnostic.* The net-crossing concept stays identical across detectors — only the track producer changes. Validated parameters (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. The operator recipe is in [Key Workflows](../workflows/pipeline.md); the domain reasoning in [Rally Detection Concepts](../concepts/rally-detection.md).
+*The active pipeline: GPU inference on the pod produces a CSV; everything downstream is local and backend-agnostic.* The net-crossing concept stays identical across detectors — only the track producer changes. Two detector-specific pre-spine stages sit between `load_predictions` and `crossing_times`: the **court X-gate** (drops detections on adjacent courts, gap-independent) and **`track_ball`** (within-court teleport rejection) — added 2026-08-16 after IMG_7744 showed TrackNet's best-guess ball hopping to a neighbouring court and producing phantom rallies the tracker alone couldn't stop (its `reset_after` releases during real dead time). Validated parameters (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. The operator recipe is in [Key Workflows](../workflows/pipeline.md); the domain reasoning in [Rally Detection Concepts](../concepts/rally-detection.md).
 
 ## Why image space for the ball, court space for players
 
