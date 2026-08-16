@@ -69,9 +69,10 @@ def run(video_path, model_path, output_csv):
 
         while ok:
             unit = prep3([img1, img2, img3], ratio)
-            y_pred = model.predict(unit, batch_size=1, verbose=0)
-            y_pred = (y_pred > 0.5).astype(np.float32)
-            h_pred = (y_pred[0] * 255).astype(np.uint8)
+            raw_pred = model.predict(unit, batch_size=1, verbose=0)
+            mask_pred = (raw_pred > 0.5).astype(np.float32)
+            h_pred = (mask_pred[0] * 255).astype(np.uint8)
+            probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred
 
             for i in range(3):
                 if np.amax(h_pred[i]) <= 0:
@@ -80,8 +81,16 @@ def run(video_path, model_path, output_csv):
                     cnts, _ = cv2.findContours(
                         h_pred[i].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
                     )
-                    rects = [cv2.boundingRect(c) for c in cnts]
-                    best = max(rects, key=lambda r: r[2] * r[3])
+                    # Pick by peak confidence within the blob, not bounding-box
+                    # area — a larger-but-lower-confidence false positive (e.g. a
+                    # background feature made more salient by preprocessing)
+                    # would otherwise beat a smaller, higher-confidence real ball.
+                    def blob_confidence(c, i=i):
+                        blob_mask = np.zeros_like(h_pred[i])
+                        cv2.drawContours(blob_mask, [c], -1, 1, thickness=-1)
+                        return float(probs[i][blob_mask.astype(bool)].max())
+                    best_c = max(cnts, key=blob_confidence)
+                    best = cv2.boundingRect(best_c)
                     cx = int(ratio * (best[0] + best[2] / 2))
                     cy = int(ratio * (best[1] + best[3] / 2))
                     writer.writerow([count, 1, cx, cy])
@@ -101,6 +110,18 @@ def run(video_path, model_path, output_csv):
         elapsed = time.time() - t0
         print(f"\nDone: {count} frames in {elapsed / 60:.1f} min ({count / elapsed:.1f} fps)")
         print(f"Output: {output_csv}")
+
+        # A corrupt region makes cv2.VideoCapture stop reading and return cleanly,
+        # so a truncated run is otherwise indistinguishable from a complete one —
+        # it just writes a short CSV (2026-08-16: IMG_7743.MOV yielded 930 of
+        # 121,013 frames, exit 0). Downstream only sees the CSV, so fail loudly.
+        if n_frames and count < 0.98 * n_frames:
+            raise SystemExit(
+                f"ERROR: decoded {count} of {n_frames} frames ({100 * count / n_frames:.1f}%). "
+                f"The source video is likely corrupt — re-encode it before inference:\n"
+                f"  ffmpeg -err_detect ignore_err -i IN.MOV -c:v h264_nvenc -preset p4 "
+                f"-cq 20 -an -fps_mode cfr -r 30 OUT.mp4\n"
+                f"(-fps_mode cfr keeps output timestamps aligned with the original.)")
 
 
 def main():

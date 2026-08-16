@@ -318,3 +318,77 @@ With gap=2.0s clustering: 4 events (~62–64s, ~65–66s, ~67–69s, ~70–77s).
 2. Run the dead-time segment (659–666s) through TrackNet to measure FP rate — essential before concluding TrackNet is better.
 3. Add TrackNet as an optional ball detector in the pipeline (`--detector tracknet`) once weights are loadable on macOS (requires CUDA; Jetson Orin is the target deployment).
 4. The production path is still fine-tuning yolov8n on fixed-mount footage (ADR-040) — TrackNet requires CUDA which rules it out for the Mac mini / N100 deployment shape. TrackNet is the right answer for the cloud-GPU inference shape (ADR-043).
+
+---
+
+## 2026-08-16 — Pickleball fine-tuned weights (k14) vs badminton weights: full IMG_7655 A/B on local GPU
+
+**Hypothesis.** The pickleball fine-tuned `weights_k14_epoch19` (blocked since 2026-08-12 by the Keras 3 format break) should beat the badminton `TNV2_old_weights` at the source — fewer false positives, better boundaries — making downstream filter tuning easier.
+
+**Unblocking the weights (no Docker needed).** The TF 2.11-era SavedModel loads cleanly under **TF 2.15.1 (last Keras-2 release) with `compile=False`** — same trick as the .h5. Docker daemon was down and sudo unavailable; instead built a standalone env: python-build-standalone 3.11.16 + `tensorflow[and-cuda]==2.15.1` at `/mnt/fast_scratch/tf215_env/` (set `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs). `tf.saved_model.load` on TF 2.21 still fails (optimizer `add_slot` error) — it's the Keras-2 `load_model` path that works. Weights downloaded from the TrackNet-Pickleball Google Drive ("New Weights") to `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19/`.
+
+**Throughput (answers the real-time question).** Both weight sets run at **~58 fps on the RTX 2000 Ada** (17,004 frames in 4.9 min, batch-1 `tf.function` call) — ~2× faster than the 30 fps footage. Real-time inference is feasible on this GPU; the batch architecture is a choice, not a compute constraint.
+
+**Setup.** Full IMG_7655.MOV (566.9s, 17,004 frames), local inference mirror of `scripts/pod_infer.py` (same prep, same blob-confidence peak pick). Both CSVs through the identical pipeline: `rally_segments_from_predictions`, net_y=210 (hand-measured at the 86–101s window), gap_sec=3.0, min_crossings=3, band=0, max_jump=150, reset_after=15, no court X-gate (no 7655 calib). Scored with `eval/harness.py` vs the 36 labels in `eval/labels/IMG_7655.jsonl`. CSVs: `IMG_7655_predictions_k14.csv`, `IMG_7655_predictions_badminton.csv`.
+
+| Metric | pickleball k14 | badminton old |
+|---|---|---|
+| Visible frames | 4,627 (27%) | 5,504 (32%) |
+| track_ball teleport drops | 1,108 (24% of visible) | 1,477 (27% of visible) |
+| Raw crossings | 238 | 278 |
+| Segments (min_crossings=3) | 32 | 36 |
+| Recall @ IoU≥0.5 | **11/36 (31%)** | 5/36 (14%) |
+| FP /10min @ IoU≥0.5 | **22.2** | 32.8 |
+| Boundary error (median) | **1.05 s** | 1.34 s |
+| Recall @ IoU≥0.3 | 20/36, 12 FP | 19/36, 17 FP |
+| Recall @ IoU≥0.1 | 25/36, 7 FP | 28/36, 8 FP |
+
+**Read.** At loose overlap both arms find roughly the same rallies (25 vs 28 of 36) — but the pickleball weights get the *boundaries* right: strict-IoU recall more than doubles (11 vs 5) and boundary error drops 1.34→1.05s. The badminton arm's segments are longer and blurrier (e.g. 91.5–111.2s spanning past the labeled rally), which inflates loose-overlap recall while failing strict matching. Pickleball is also cleaner upstream: 5% fewer raw detections, a lower teleport-drop rate, fewer sub-threshold noise clusters. Domain-matched weights win on precision and boundary quality at equal recall — as hypothesized.
+
+**Caveats.**
+1. **Fixed net_y=210 on zoomed footage** — the net line drifts across the clip, so absolute recall is meaningless; only the A/B delta is meaningful (both arms share the handicap).
+2. Labels are "any play", not strict competitive rallies (2026-08-08 caveat still applies).
+3. No court X-gate (no 7655 calibration) — adjacent-court noise not filtered.
+
+**Follow-up.**
+1. **Make k14 the default weights** for pod/local inference (pod needs the TF 2.15 image or this env, not TF 2.21).
+2. Re-run the A/B on clean fixed-mount footage (IMG_7743/7744) with real calibration + court gate — needs the ground-truth labeling pass (benchmark plan step 1).
+3. Local GPU at 58 fps makes the RunPod round-trip optional for ≤~30-min footage — prefer local inference for iteration.
+
+---
+
+## 2026-08-16 — First trustworthy benchmark on clean footage: crossing-count alone cannot separate rallies from casual play
+
+**The first eval on genuinely clean fixed-mount footage, against complete hand labels, with both sides blind.** Ground truth: 33 rallies hand-marked on IMG_7743 (11 graded highlight-worthy, 22 ordinary) using the two-pass workflow — mark serve→ball-dead with no judgement, then grade with hindsight (`label_web.py`). The detector ran before labelling and never saw the labels; the labeller never saw the detector's segments.
+
+**Source footage had to be repaired first.** Both IMG_7743.MOV and IMG_7744.MOV carry localized HEVC damage that makes `cv2.VideoCapture` stop silently — a full-video run returned **930 of 121,013 frames with exit code 0**. Repaired with a CFR NVENC re-encode (`-fps_mode cfr -r 30` is load-bearing: passthrough drops frames and shifts every later timestamp). `scripts/pod_infer.py` now aborts when it decodes <98% of the expected frames.
+
+**Setup.** k14 pickleball weights, full 4037s / 121,110 frames (31% visible), real calibration (`IMG_7743_calib.json`, net_y=552 from hand-marked net tape, RMSE 0.85ft), court X-gate derived from the calibration. Scored at IoU≥0.3 against the 33 labels.
+
+| Config | precision | recall | segments proposed |
+|---|---|---|---|
+| **Shipped defaults** (gap 3.0, min_crossings 3, band 0) | **0.10** | 0.61 (20/33) | 201 |
+| Best of a 156-point sweep (min_crossings 9) | 0.25 | 0.45 (15/33) | 60 |
+| Best with an added min-duration filter (≥8s) | **0.26** | 0.48 (16/33) | 62 |
+
+**Pass 3 (gap review) is what makes these numbers trustworthy.** 24 of the 181 unmatched detector segments, sampled evenly across the video and stripped of their crossing counts, were hand-judged: **all were junk** — bad serves, idle time, ball-tapping with no exchange. So the labels are not merely sparse; the detector is genuinely over-firing at ~3 segments/minute against ~0.5 real rallies/minute.
+
+**The ceiling is in the signal, not the thresholds.** Tuning doubles F1 (0.17→0.34) and then stops, because the junk is *physically the same event* as a rally — a ball crossing a net. Discriminators that should have worked don't:
+
+| | real rallies | junk segments |
+|---|---|---|
+| duration (median) | 10.1 s | 4.2 s |
+| **crossings per second** | **1.09** | **1.29** |
+| ball-tracked frames | 37% | 43% |
+
+Junk has a *higher* crossing rate and *better* ball visibility than real play. Duration is the only separator, and filtering on it buys 0.01 F1. Practice serves and warm-up dinking produce exactly the crossing signature the rule looks for.
+
+**Recall is a second, smaller problem.** Of the 13 rallies missed: 5 had <3 raw crossings inside them (invisible to any threshold — the ball simply wasn't tracked across the net enough), 8 had ≥3 and were lost to clustering/boundary effects (recoverable by tuning).
+
+**Conclusion.** Net-crossing count is a good *play* detector and a poor *rally* detector. It answers "is a ball going over the net" — which is true during warm-up, practice serves, and idle knocking. Distinguishing a point being played needs context the ball alone does not carry: whether four players are present and in position, whether a serve occurred, whether players are rallying or standing around. **This is precisely the revisit condition named in ADR-047** ("revisit if the clean-footage benchmark shows ball recall is poor precisely where player geometry would have held"). The frozen v0 player signal (`src/players.py`, `src/events.py`) should return — as a gate on ball-derived candidates, not as a replacement.
+
+**Follow-up.**
+1. Un-freeze player geometry as a *filter*: require N players on court and plausible rally formation before accepting a crossing burst. Score the gate against these same 33 labels — the harness now makes that a seconds-long experiment.
+2. Raise `min_crossings` from 3 to ~7–9 as an interim (precision 0.10→0.25) and settle the long-standing min_crossings inconsistency at the same time.
+3. The 11 grade-1 labels are the first highlight-ranking data; crossing count does *not* obviously predict them (real-rally crossings median 13 vs 8 among found ones) — check before assuming ranking comes free.
+4. Repeat the benchmark on IMG_7744 (repaired, side-on angle) to see whether the conclusion is angle-dependent.

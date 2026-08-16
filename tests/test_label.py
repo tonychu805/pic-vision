@@ -14,6 +14,16 @@ def test_load_rallies_absent_is_empty(tmp_path):
     assert load_rallies(str(tmp_path / "nope.jsonl")) == []
 
 
+def test_quality_grade_round_trips_through_save(tmp_path):
+    # review-mode grades (quality 1/2) must survive save/load; ungraded stays bare
+    p = tmp_path / "labels.jsonl"
+    save_rallies([{"start": 1.0, "end": 2.0, "duration": 1.0, "quality": 1},
+                  {"start": 5.0, "end": 6.0, "duration": 1.0}], str(p))
+    rs = load_rallies(str(p))
+    assert rs[0]["quality"] == 1
+    assert "quality" not in rs[1]
+
+
 def test_dropping_then_saving_removes_and_renumbers(tmp_path):
     # the keep/drop review relies on: save the kept subset, which renumbers
     p = tmp_path / "labels.jsonl"

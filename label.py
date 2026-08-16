@@ -18,12 +18,20 @@ Controls (label):
     w        save now
     q        save and quit
 
-Controls (review) — play each labelled segment, keep or drop it:
-    k        keep this segment, advance
-    d        drop this segment, advance
+Controls (review) — play each labelled segment, grade it with hindsight:
+    1        grade: highlight-worthy rally, advance
+    2        grade: real play, but ordinary, advance
+    3 / d    drop: not a rally (courtesy return, warm-up, noise), advance
+    k        keep without (re)grading, advance
     n / p    next / previous segment
     SPACE    replay current segment
     q        save the kept set and quit
+
+Grades are written as a "quality" field (1 or 2) on each kept label. Detection
+metrics should score against all kept rallies (real play, grades 1-2);
+highlight-selection metrics against grade 1 only. Dropping ordinary-but-real
+play instead of grading it 2 re-creates the 2026-08-09 curated-label mismatch
+(real exchanges counted as detector false positives) — grade, don't drop.
 
 Timestamps come from CAP_PROP_POS_MSEC, which is PTS-based - correct even if
 the source is variable frame rate.
@@ -60,9 +68,11 @@ def save_rallies(rallies, path):
 
 
 def review(args):
-    """Play each labelled segment and keep or drop it; save the kept set.
+    """Play each labelled segment; grade it (1/2), drop it (3/d), or keep it.
 
-    Use to curate auto-generated (or any) labels: drop low-quality segments,
+    Judging happens with hindsight — after the whole exchange plays — which is
+    the thing a linear labelling pass can't do (at the serve you don't yet know
+    how good the rally will be). Use to curate auto-generated (or any) labels,
     then re-run without --review to add rallies the detector missed."""
     rallies = sorted(load_rallies(args.out), key=lambda r: r["start"])
     if not rallies:
@@ -71,8 +81,12 @@ def review(args):
     if not cap.isOpened():
         sys.exit(f"cannot open {args.video}")
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
-    help_line = "k keep  d drop  n/p next/prev  SPACE replay  q save+quit"
-    keep = [True] * len(rallies)
+    help_line = ("1 highlight  2 ordinary  3/d drop  k keep  n/p next/prev  "
+                 "SPACE replay  q save+quit")
+    # mark[i]: existing grade (or None) carried in from the file; "drop" to remove
+    mark = [r.get("quality") for r in rallies]
+    STATES = {None: ("KEEP", (0, 255, 0)), 1: ("Q1 HIGHLIGHT", (0, 255, 0)),
+              2: ("Q2 ORDINARY", (0, 220, 255)), "drop": ("DROP", (0, 0, 255))}
     i, seek = 0, True
     cv2.namedWindow("review", cv2.WINDOW_NORMAL)
     while True:
@@ -88,8 +102,7 @@ def review(args):
         img = frame.copy()
         w = img.shape[1]
         cv2.rectangle(img, (0, 0), (w, 64), (0, 0, 0), -1)
-        state = "KEEP" if keep[i] else "DROP"
-        colour = (0, 255, 0) if keep[i] else (0, 0, 255)
+        state, colour = STATES[mark[i]]
         cv2.putText(img, f"rally {i + 1}/{len(rallies)}  "
                     f"{fmt(r['start'])}-{fmt(r['end'])}  ({r['duration']:.1f}s)  [{state}]",
                     (10, 26), cv2.FONT_HERSHEY_SIMPLEX, 0.7, colour, 2)
@@ -97,8 +110,11 @@ def review(args):
                     (180, 180, 180), 1)
         cv2.imshow("review", img)
         k = cv2.waitKey(max(1, int(1000 / fps))) & 0xFF
-        if k in (ord("k"), ord("d")):
-            keep[i] = (k == ord("k"))
+        if k in (ord("1"), ord("2"), ord("3"), ord("d"), ord("k")):
+            if k in (ord("3"), ord("d")):
+                mark[i] = "drop"
+            elif k != ord("k"):          # k keeps the existing grade untouched
+                mark[i] = int(chr(k))
             i = min(i + 1, len(rallies) - 1)
             seek = True
         elif k == ord("n"):
@@ -113,9 +129,13 @@ def review(args):
             break
     cap.release()
     cv2.destroyAllWindows()
-    kept = [r for r, kp in zip(rallies, keep) if kp]
+    kept = [dict(r, quality=m) if m in (1, 2) else r
+            for r, m in zip(rallies, mark) if m != "drop"]
     save_rallies(kept, args.out)
-    print(f"kept {len(kept)} of {len(rallies)} intervals -> {args.out}")
+    n1 = sum(1 for r in kept if r.get("quality") == 1)
+    n2 = sum(1 for r in kept if r.get("quality") == 2)
+    print(f"kept {len(kept)} of {len(rallies)} intervals "
+          f"({n1} highlight, {n2} ordinary, {len(kept) - n1 - n2} ungraded) -> {args.out}")
 
 
 def main():
