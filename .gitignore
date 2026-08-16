@@ -45,6 +45,13 @@ debug_frames/
 
 # NOT ignored, on purpose — commit these:
 #   eval/labels/*.jsonl   hand-labeled ground truth (the whole basis for §5 metrics)
+#   eval/labels/*_gaps*.jsonl  intermediate pass-3 review files ARE ignored below
 #   calib/*.json          per-camera court calibrations (small, and re-clicking is manual work)
 #   .env.example          template for .env, which IS ignored
 #   sessions.jsonl, tallies/*.md   small config / notes
+
+# Pass-3 gap-review scratch files: detector proposals extracted for human
+# judging. Regenerable from labels + predictions via scripts/review_gaps.py,
+# and not ground truth themselves — unlike the real labels beside them.
+eval/labels/*_gaps.jsonl
+eval/labels/*_gaps_all.jsonl
