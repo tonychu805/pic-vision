@@ -78,10 +78,25 @@ def court_x_range(calib, margin_px=50.0):
     return (min(xs) - margin_px, max(xs) + margin_px)
 
 
-def court_wedge(calib, margin_px=80.0):
+def court_wedge(calib, margin_px=160.0, cap_court_heights=0.7, spread=0.5):
     """Perspective-aware replacement for court_x_range: the allowed image-x
     band as a function of image-y, following the court as it narrows with
     depth. Returns a function (x, y) -> bool.
+
+    Above the far baseline the band is a bounded trapezoid, not an unbounded
+    column: it widens by `spread` (as a fraction of the far-baseline width, so
+    a high ball hit from near the camera stays inside — such a ball is high in
+    the image but still horizontally wide, which a straight column wrongly
+    treats as "must be far away"), and it is hard-capped `cap_court_heights`
+    court-heights above the far baseline. Set cap_court_heights=None for no cap
+    and spread=0 for the plain column.
+
+    The cap earns its keep twice over (EXPERIMENTS.md 2026-08-16): it removes
+    ceiling/light-fixture detections that are false rallies in their own right,
+    *and* it raises recall, because those high spurious detections were
+    hijacking track_ball mid-rally and costing real crossings. Measured on the
+    33 IMG_7743 labels at min_crossings=6: precision 0.29 at recall 0.61,
+    versus 0.10 at the same recall for the shipped flat x-interval.
 
     court_x_range takes one flat interval from the *near* baseline corners,
     which on a behind-baseline view span nearly the whole frame — on
@@ -108,12 +123,20 @@ def court_wedge(calib, margin_px=80.0):
         (xl, yl), (xr, yr) = pts[0][0], pts[0][1]
         rows.append(((float(yl) + float(yr)) / 2.0, float(xl), float(xr)))
     rows.sort()        # ascending image-y: far baseline first, near baseline last
+    far_y, far_l, far_r = rows[0]
+    near_y = rows[-1][0]
+    cap_y = (far_y - cap_court_heights * (near_y - far_y)
+             if cap_court_heights is not None else None)
 
     def inside(x, y):
         if x is None or y is None:
             return False
-        if y <= rows[0][0]:
-            _, xl, xr = rows[0]
+        if cap_y is not None and y < cap_y:
+            return False              # above the plausible ball ceiling
+        if y <= far_y:
+            span = (far_y - y) / max(1.0, far_y - cap_y) if cap_y is not None else 1.0
+            grow = spread * (far_r - far_l) * min(1.0, span)
+            xl, xr = far_l - grow, far_r + grow
         elif y >= rows[-1][0]:
             _, xl, xr = rows[-1]
         else:

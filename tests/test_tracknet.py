@@ -151,7 +151,7 @@ def test_court_wedge_follows_the_court_taper():
     if not os.path.exists(path):
         return                      # calibration not present in this checkout
     calib = json.load(open(path))
-    inside = court_wedge(calib, margin_px=80.0)
+    inside = court_wedge(calib, margin_px=80.0, cap_court_heights=None, spread=0.0)
     xmin, xmax = court_x_range(calib, margin_px=80.0)
 
     # far end of the court sits around image-y 590 and spans x ~794..1132
@@ -169,6 +169,25 @@ def test_court_wedge_keeps_airspace_above_the_court():
                         "IMG_7743_calib.json")
     if not os.path.exists(path):
         return
-    inside = court_wedge(json.load(open(path)), margin_px=80.0)
+    inside = court_wedge(json.load(open(path)), margin_px=80.0,
+                         cap_court_heights=None, spread=0.0)
     assert inside(960, 200)                 # lob high over the court centre
     assert not inside(200, 200)             # same height, off to the side
+
+
+def test_court_wedge_caps_the_ceiling_and_widens_below_it():
+    """The default trapezoid rejects ceiling-height detections outright, and
+    just under the cap it is wider than the far baseline (so a high ball hit
+    from near the camera stays inside)."""
+    import json, os
+    from src.calib import court_wedge
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "IMG_7743_calib.json")
+    if not os.path.exists(path):
+        return
+    inside = court_wedge(json.load(open(path)))       # tuned defaults
+    assert not inside(960, 200)             # ceiling lights: above the cap
+    assert inside(960, 500)                 # over the court, below the cap
+    # the far baseline spans x~794..1132; just under the cap the band is wider
+    assert inside(600, 400)
+    assert not inside(150, 400)             # ...but not all the way to the wall
