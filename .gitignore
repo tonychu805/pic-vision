@@ -4,6 +4,10 @@
 *.mkv
 *.mov
 *.avi
+*.MP4
+*.MKV
+*.MOV
+*.AVI
 
 # Python
 __pycache__/
