@@ -138,3 +138,37 @@ def test_rally_segments_court_gate_survives_reset_after_gap():
         assert gated == []
     finally:
         os.unlink(path)
+
+
+def test_court_wedge_follows_the_court_taper():
+    """The wedge must reject a point that a flat x-interval would accept: one
+    beside the *far* half of the court, where the court is narrow but the near
+    baseline (which court_x_range is derived from) is wide."""
+    import json, os
+    from src.calib import court_wedge, court_x_range
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "IMG_7743_calib.json")
+    if not os.path.exists(path):
+        return                      # calibration not present in this checkout
+    calib = json.load(open(path))
+    inside = court_wedge(calib, margin_px=80.0)
+    xmin, xmax = court_x_range(calib, margin_px=80.0)
+
+    # far end of the court sits around image-y 590 and spans x ~794..1132
+    assert inside(960, 592)                 # centre of the far baseline: in
+    assert not inside(300, 592)             # far left at that depth: adjacent court
+    assert xmin <= 300 <= xmax              # ...which the flat x-gate would accept
+    # near baseline is wide, so the same x is legitimate down there
+    assert inside(300, 950)
+
+
+def test_court_wedge_keeps_airspace_above_the_court():
+    import json, os
+    from src.calib import court_wedge
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "IMG_7743_calib.json")
+    if not os.path.exists(path):
+        return
+    inside = court_wedge(json.load(open(path)), margin_px=80.0)
+    assert inside(960, 200)                 # lob high over the court centre
+    assert not inside(200, 200)             # same height, off to the side

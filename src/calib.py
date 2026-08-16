@@ -78,6 +78,56 @@ def court_x_range(calib, margin_px=50.0):
     return (min(xs) - margin_px, max(xs) + margin_px)
 
 
+def court_wedge(calib, margin_px=80.0):
+    """Perspective-aware replacement for court_x_range: the allowed image-x
+    band as a function of image-y, following the court as it narrows with
+    depth. Returns a function (x, y) -> bool.
+
+    court_x_range takes one flat interval from the *near* baseline corners,
+    which on a behind-baseline view span nearly the whole frame — on
+    IMG_7743 it derived [4, 1915] on a 1920px frame and excluded nothing,
+    leaving the adjacent court unfiltered (EXPERIMENTS.md 2026-08-16). The
+    court is a trapezoid in the image, not a rectangle, so gating needs the
+    x-extent *at each depth*.
+
+    Above the far baseline the far baseline's own width is held, keeping the
+    airspace over the court (lobs, high clears) while still excluding
+    adjacent courts and wall clutter to the sides. Below the near baseline
+    the near width is held likewise.
+    """
+    import numpy as np
+
+    h_inv = np.linalg.inv(np.array(calib["homography"], dtype=np.float64))
+    length_ft = calib.get("court_size_ft", [20.0, 44.0])[1]
+    width_ft = calib.get("court_size_ft", [20.0, 44.0])[0]
+
+    rows = []          # (image_y, x_left, x_right) sampled along the court
+    for ft in [i * length_ft / 40.0 for i in range(41)]:
+        pts = cv2.perspectiveTransform(
+            np.array([[[0.0, ft], [width_ft, ft]]], dtype=np.float32), h_inv)
+        (xl, yl), (xr, yr) = pts[0][0], pts[0][1]
+        rows.append(((float(yl) + float(yr)) / 2.0, float(xl), float(xr)))
+    rows.sort()        # ascending image-y: far baseline first, near baseline last
+
+    def inside(x, y):
+        if x is None or y is None:
+            return False
+        if y <= rows[0][0]:
+            _, xl, xr = rows[0]
+        elif y >= rows[-1][0]:
+            _, xl, xr = rows[-1]
+        else:
+            xl = xr = None
+            for (y0, l0, r0), (y1, l1, r1) in zip(rows, rows[1:]):
+                if y0 <= y <= y1:
+                    t = (y - y0) / max(1e-9, y1 - y0)
+                    xl, xr = l0 + t * (l1 - l0), r0 + t * (r1 - r0)
+                    break
+        return (xl - margin_px) <= x <= (xr + margin_px)
+
+    return inside
+
+
 def detect_net_y(video_path, n_frames=20):
     """Estimate net-line image-y from raw footage with no manual calibration.
 

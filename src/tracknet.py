@@ -60,7 +60,8 @@ def load_predictions(csv_path, fps):
 def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
                                     min_crossings=3, band=0.0,
                                     max_jump=150, reset_after=15,
-                                    court_x_min=None, court_x_max=None):
+                                    court_x_min=None, court_x_max=None,
+                                    in_court=None):
     """Parse a TrackNet predictions CSV and return rally segments.
 
     First applies the court X-gate (court_x_min/court_x_max, from
@@ -90,7 +91,11 @@ def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
             return False
         return True
 
-    frames = [[(x, y, 1.0)] if in_court_x(x) else [] for _, x, y in track]
+    # in_court (src/calib.py's court_wedge) supersedes the flat x-interval when
+    # given: it follows the court's taper with depth, which is what actually
+    # excludes an adjacent court on a behind-baseline view.
+    keep = in_court if in_court is not None else (lambda x, y: in_court_x(x))
+    frames = [[(x, y, 1.0)] if keep(x, y) else [] for _, x, y in track]
     if court_x_min is not None or court_x_max is not None:
         visible = sum(1 for _, x, _ in track if x is not None)
         in_range = sum(1 for f in frames if f)
