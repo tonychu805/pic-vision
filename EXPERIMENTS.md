@@ -408,3 +408,25 @@ Junk has a *higher* crossing rate and *better* ball visibility than real play. D
 2. Add a trajectory-smoothness constraint to `track_ball` and re-score.
 3. Raise `min_crossings` from 3 to ~7 and settle the long-standing inconsistency.
 4. Repeat the benchmark on IMG_7744 (repaired, side-on angle) to see whether the conclusion is angle-dependent.
+
+---
+
+## 2026-08-16 (later) — Capped trapezoid gate works; masking before inference does NOT
+
+Follow-on to the same 33-label IMG_7743 benchmark. All rows: k14 weights, hand-marked net (y=552), IoU≥0.3.
+
+| config | precision | recall | segments |
+|---|---|---|---|
+| shipped (flat x-interval, min_crossings 3) | 0.10 | 0.61 (20/33) | 201 |
+| **capped trapezoid, min_crossings 6** | **0.29** | **0.61 (20/33)** | **69** |
+| masked-at-inference + trapezoid, min_crossings 6 | 0.20 | 0.52 (17/33) | 83 |
+
+**The gate shape that works** follows the court's perspective taper (not a straight-sided trapezoid: the taper is strongly non-linear, and a straight shape is still ~half the frame wide at net-line height, exactly where the adjacent court sits — measured precision 0.18 vs 0.29), widens above the far baseline by ~0.5 of the far width (a ball hit high *near the camera* is high in the image but still horizontally wide), and is **hard-capped** ~0.7 court-heights above the far baseline.
+
+**The cap raises recall, which was not expected.** Spurious ceiling/light-fixture detections were hijacking `track_ball` *inside* real rallies — it would jump to a fixture, lose the ball, and the rally would lose crossings and fall under threshold. So the gate does double duty: it drops bad segments *and* protects the tracker during good ones. A fully-open cone recovers the cut detections, finds the same rallies, and only loses precision — width was never the constraint, height was.
+
+**Masking before inference is worse than filtering after** (tested because it should in principle stop hallucinations at the source). Detection rate fell 31%→22% of frames and three real rallies were lost. The hard mask edge is a high-contrast boundary the model never saw in training, and a half-blacked frame is out of distribution — consistent with the frame-edge false positives seen in the preprocessing experiment. **Conclusion: filter geometrically after inference; do not mask the input.**
+
+**Generalisation is unproven and one part is known to break.** The trapezoid outline derives from the calibration, so it adapts to any camera angle. The *cap* is expressed as a fraction of the court's image height, which scales with camera elevation: on IMG_7652 (higher mount, court 717px tall vs 385px) it lands 280px above the top of the frame, silently disabling itself and leaving 78% of the frame open. A cap defined in real ball height would transfer — the marked net tape is a free height ruler (0.86 m ≈ 86 px at the net's depth on 7743, so ~100 px/m). Untested elsewhere: IMG_7744 has a calibration but no labels; IMG_7655 has 36 labels but no calibration; IMG_7652 is zoom-compromised so one homography does not hold.
+
+**Found while checking generalisation: IMG_7652's net line is wrong**, ~130px too low. Its calibration has no `net_image_points`, so `net_line_y` fell back to the homography-derived line — which returns where the net's *base* meets the floor, never its tape. That is a bias, not noise, and it silently corrupts every crossing count from that calibration. `net_line_y` now warns.
