@@ -6,27 +6,29 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**Hardware:** RTX 2000 Ada workstation now available (2026-08-12) — use for PoC iteration and TrackNet fine-tuning instead of M2 Mac. 16GB VRAM, Ada Lovelace. Use TF 2.11 via Docker (`tensorflow/tensorflow:2.11.0-gpu`) to load the pickleball fine-tuned weights.
+**Status (2026-08-16): the clean-footage gate is CLEARED and the project has its first trustworthy numbers.** The old blocker ("capture one clean fixed-mount clip") is done — IMG_7743 is labelled, scored, and the detector has been measurably improved against those labels.
 
-**YOLO pipeline retired. TrackNet/RunPod is the active detection path (ADR-046). The blocker is unchanged: one clean fixed-mount clip to validate on.**
+**Where the numbers stand** (33 hand labels on IMG_7743, IoU≥0.3, k14 pickleball weights):
 
-**What's runnable now:**
-1. `python3 scripts/pod_infer.py --video game.MOV` — on RunPod GPU pod, produces `predictions.csv`
-2. Copy `predictions.csv` locally
-3. `make process VIDEO=game.MOV CSV=predictions.csv NET_Y=<click> OUT=clips/`
+| | precision | recall | segments |
+|---|---|---|---|
+| what shipped this morning | 0.10 | 0.61 (20/33) | 201 |
+| what ships now (capped trapezoid, `min_crossings=6`) | **0.29** | **0.61 (20/33)** | **69** |
 
-**Net_y:** pick once per camera angle with `python3 -c "from src.calib import pick_net_y; print(pick_net_y('game.MOV'))"`, then reuse with `--net-y`.
+**The one thing to work on next: recall is stuck at 20/33 under every gate shape, every threshold, masked or unmasked.** The 13 missed rallies are missed because the ball is barely detected during them at all — a detection failure, not a gating one. Nobody has looked at them yet. Do what cracked the false-positive question: render those windows with detections drawn on and *look*. Occlusion, motion blur, and ball-vs-floor contrast each imply a different fix.
 
-**What we proved (on IMG_7652/7655, both compromised):** the crossing logic is fine (tested), but (1) the **derived net line landed below the real net** (calibration on a zoomed frame), and (2) **nano tagged heads as "ball."** So the crossing counts were noise and the "9/9 recall" was hollow (watched clips weren't real rallies). yolov8x finds the real ball (0.91 mid-court) but only 0.2–0.3 at the net (small/far) — the crossing moment is the hardest detection from a behind-baseline camera.
+**Runnable now (all local — no RunPod needed; the RTX 2000 Ada does ~58 fps, faster than real time):**
+1. Inference env: `/mnt/fast_scratch/tf215_env/venv` (TF 2.15), weights at `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19`. Export `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs first.
+2. `python3 scripts/pod_infer.py --video game.mp4 --output predictions.csv` (do NOT pass `--calib`: masking before inference measured worse, see EXPERIMENTS)
+3. Score any change in seconds: `predictions.csv` → `rally_segments_from_predictions(..., in_court=court_wedge(calib), min_crossings=6)` → `eval/harness.py` vs `eval/labels/IMG_7743.jsonl`
 
-**The single gate — capture ONE clean clip:**
-1. Rigid mount, **NO zoom, NO pan**, whole court in frame, well-lit. Mount **higher / side-on** if possible so the net isn't the farthest, smallest point.
-2. Calibrate with the **new flow: 12 court points + 2 net-tape clicks** (net marking now in `calibrate.py`).
-3. Re-label to **competitive rallies only** (`LABELING.md` v2).
+**Two traps that cost time today, both now guarded:**
+- **Source `.MOV` files are corrupt.** IMG_7743/7744 have localized HEVC damage that makes OpenCV stop decoding *silently* — a full run returned 930 of 121,013 frames with exit code 0. Use the repaired `videos/*_fixed.mp4`; `pod_infer.py` now aborts below 98% of expected frames.
+- **A calibration without `net_image_points` gives a biased net line**, ~130px too low (it returns the net's base, not its tape). IMG_7652 has this; `net_line_y` now warns. Any past IMG_7652 crossing result is suspect.
 
-**Then run the shipped recipe and get the first real number:** `detect_ball` (yolov8x default) with `max_ball_px` set to the **measured** ball pixel size, marked net via `net_line_y`, → `crossing_times` → `cluster_crossings` (min_crossings ≈ 5) → segments → harness vs labels. **Measure the ball's pixel size first**.
+**Labelling is now browser-based** (`label_web.py`) because the workstation is driven over SSH — X11 forwarding ships raw frames and is unusable for video. Two passes: mark every rally with `s`/`e` (no judgement), then `g` to grade each one with hindsight (`1` highlight / `2` ordinary / `3` not a rally). Grade ordinary play as `2` rather than deleting it, or the detector gets charged for correctly finding real play.
 
-**The ball tracker is now BUILT, WIRED, and validated on real footage (2026-08-11, EXPERIMENTS).** Background: 2026-08-10 reprocessing showed that with a correct net line real rallies read clean, but dead time still produced phantom crossings — in a multi-court gym the detector locks onto **out-of-play balls** (adjacent courts, idle/warm-up) and "best ball anywhere per frame" hops between them, flipping sides. `src/pipeline.py` now chains `detect_candidates → track_ball → crossing_times → cluster_crossings`; the single-ball tracker rejects teleports. On IMG_7652: dead-time 659–666s dropped **22 → 0** tracked crossings while the 58–77.5s rally kept **16** — clean separation. Still on compromised footage: this validates the *mechanism*, not a benchmark number. Recipe note: use `gap_sec≈3s` (crossings are up to ~2s apart; 1.0s dissolves real rallies).
+**Known-unproven:** the trapezoid gate's shape adapts to any camera via calibration, but its height cap is a fraction of court *image* height and silently disables itself on a higher mount (lands off-frame on IMG_7652). Redefine it in real ball height — the marked net tape is a free ruler (~100 px/m on 7743). Cross-camera generalisation is untested: IMG_7744 has a calibration but no labels; IMG_7655 has 36 labels but no calibration (calibrating it is the cheapest real test).
 
 ## Benchmark cases (real-footage pass/fail targets)
 
