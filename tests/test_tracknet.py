@@ -146,7 +146,7 @@ def test_court_wedge_follows_the_court_taper():
     baseline (which court_x_range is derived from) is wide."""
     import json, os
     from src.calib import court_wedge, court_x_range
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "calib",
                         "IMG_7743_calib.json")
     if not os.path.exists(path):
         return                      # calibration not present in this checkout
@@ -165,7 +165,7 @@ def test_court_wedge_follows_the_court_taper():
 def test_court_wedge_keeps_airspace_above_the_court():
     import json, os
     from src.calib import court_wedge
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "calib",
                         "IMG_7743_calib.json")
     if not os.path.exists(path):
         return
@@ -181,7 +181,7 @@ def test_court_wedge_caps_the_ceiling_and_widens_below_it():
     from near the camera stays inside)."""
     import json, os
     from src.calib import court_wedge
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "calib",
                         "IMG_7743_calib.json")
     if not os.path.exists(path):
         return

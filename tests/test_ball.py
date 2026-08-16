@@ -78,7 +78,7 @@ def test_net_line_y_warns_when_no_net_marked(caplog):
     low. It must say so rather than silently producing biased crossings."""
     import json, os, logging
     from src.ball import net_line_y
-    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "calib",
                         "IMG_7652_calib.json")
     if not os.path.exists(path):
         return
