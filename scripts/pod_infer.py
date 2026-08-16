@@ -32,6 +32,47 @@ def custom_loss(y_true, y_pred):
     return K.mean(loss)
 
 
+def court_mask(calib, shape, margin_px=80.0):
+    """Binary mask of the tracked court plus the airspace above it.
+
+    Masking *before* inference stops TrackNet hallucinating a ball on an
+    adjacent court or on wall/netting clutter at all, rather than filtering
+    those detections afterwards — on IMG_7743 that clutter produced most of
+    the false-positive rallies (EXPERIMENTS.md 2026-08-16). The 3-frame input
+    means a blacked-out region is motionless and yields no candidates.
+
+    Mirrors src/calib.py's court_wedge geometry, inlined so this script stays
+    standalone on the pod (it imports nothing from src/).
+    """
+    h_inv = np.linalg.inv(np.array(calib["homography"], dtype=np.float64))
+    width_ft, length_ft = calib.get("court_size_ft", [20.0, 44.0])
+    rows = []
+    for i in range(41):
+        ft = i * length_ft / 40.0
+        pts = cv2.perspectiveTransform(
+            np.array([[[0.0, ft], [width_ft, ft]]], dtype=np.float32), h_inv)
+        (xl, yl), (xr, yr) = pts[0][0], pts[0][1]
+        rows.append(((float(yl) + float(yr)) / 2.0, float(xl), float(xr)))
+    rows.sort()
+    h, w = shape[:2]
+    left = np.empty(h)
+    right = np.empty(h)
+    for y in range(h):
+        if y <= rows[0][0]:
+            _, xl, xr = rows[0]
+        elif y >= rows[-1][0]:
+            _, xl, xr = rows[-1]
+        else:
+            for (y0, l0, r0), (y1, l1, r1) in zip(rows, rows[1:]):
+                if y0 <= y <= y1:
+                    t = (y - y0) / max(1e-9, y1 - y0)
+                    xl, xr = l0 + t * (l1 - l0), r0 + t * (r1 - r0)
+                    break
+        left[y], right[y] = xl - margin_px, xr + margin_px
+    xs = np.arange(w)[None, :]
+    return ((xs >= left[:, None]) & (xs <= right[:, None])).astype(np.uint8)
+
+
 def prep3(imgs, ratio):
     """Convert 3 BGR frames to (1,9,H,W) float32 numpy array."""
     channels = []
@@ -42,7 +83,7 @@ def prep3(imgs, ratio):
     return np.stack(channels).reshape(1, 9, HEIGHT, WIDTH).astype(np.float32)
 
 
-def run(video_path, model_path, output_csv):
+def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     print("Loading model...")
     model = tf.keras.models.load_model(
         model_path,
@@ -58,17 +99,29 @@ def run(video_path, model_path, output_csv):
     ok, img2 = cap.read()
     ok, img3 = cap.read()
     ratio = img1.shape[0] / HEIGHT
+    mask = court_mask(calib, img1.shape, margin_px) if calib else None
+    if mask is not None:
+        print(f"court mask: keeping {100 * mask.mean():.0f}% of the frame "
+              f"(margin {margin_px:.0f}px)")
     print(f"Video: {n_frames} frames @ {fps:.1f} fps = {n_frames / fps:.1f}s, ratio={ratio:.2f}")
 
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
-        writer.writerow(["Frame", "Visibility", "X", "Y"])
+        # W,H,Conf are new (2026-08-16): the blob's size and peak probability
+        # were computed and thrown away, discarding exactly the signals that
+        # separate a real ball from background clutter (a far-court ball is
+        # small; hallucinations score low). Readers must tolerate their
+        # absence in older CSVs.
+        writer.writerow(["Frame", "Visibility", "X", "Y", "W", "H", "Conf"])
 
         count = 0
         t0 = time.time()
 
         while ok:
-            unit = prep3([img1, img2, img3], ratio)
+            trio = [img1, img2, img3]
+            if mask is not None:
+                trio = [im * mask[:, :, None] for im in trio]
+            unit = prep3(trio, ratio)
             raw_pred = model.predict(unit, batch_size=1, verbose=0)
             mask_pred = (raw_pred > 0.5).astype(np.float32)
             h_pred = (mask_pred[0] * 255).astype(np.uint8)
@@ -76,7 +129,7 @@ def run(video_path, model_path, output_csv):
 
             for i in range(3):
                 if np.amax(h_pred[i]) <= 0:
-                    writer.writerow([count, 0, -1, -1])
+                    writer.writerow([count, 0, -1, -1, -1, -1, 0.0])
                 else:
                     cnts, _ = cv2.findContours(
                         h_pred[i].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
@@ -93,7 +146,10 @@ def run(video_path, model_path, output_csv):
                     best = cv2.boundingRect(best_c)
                     cx = int(ratio * (best[0] + best[2] / 2))
                     cy = int(ratio * (best[1] + best[3] / 2))
-                    writer.writerow([count, 1, cx, cy])
+                    writer.writerow([count, 1, cx, cy,
+                                     round(ratio * best[2], 1),
+                                     round(ratio * best[3], 1),
+                                     round(blob_confidence(best_c), 4)])
                 count += 1
 
             if count % 300 == 0:
@@ -131,8 +187,19 @@ def main():
                    help="path to TrackNet H5 weights (default: /workspace/TNV2_old_weights.h5)")
     p.add_argument("--output", default="/workspace/predictions.csv",
                    help="path for output CSV (default: /workspace/predictions.csv)")
+    p.add_argument("--calib", default=None,
+                   help="calibration JSON; masks everything outside the court "
+                        "(plus its airspace) before inference, so adjacent courts "
+                        "and wall clutter cannot produce detections at all")
+    p.add_argument("--court-margin", type=float, default=80.0,
+                   help="px padding on the court mask (default 80)")
     args = p.parse_args()
-    run(args.video, args.model, args.output)
+    calib = None
+    if args.calib:
+        import json
+        with open(args.calib) as f:
+            calib = json.load(f)
+    run(args.video, args.model, args.output, calib=calib, margin_px=args.court_margin)
 
 
 if __name__ == "__main__":
