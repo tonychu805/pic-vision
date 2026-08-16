@@ -9,8 +9,12 @@ These functions accept any ball track (YOLO, TrackNet, or synthetic) — they ar
 not detector-specific. The TrackNet inference path (src/tracknet.py) is the
 active detector; the retired YOLO path lives in archive/."""
 
+import logging
+
 import cv2
 import numpy as np
+
+log = logging.getLogger(__name__)
 
 
 def net_image_y(homography, x_ft=10.0, net_y_ft=22.0):
@@ -43,6 +47,18 @@ def net_line_y(calib):
     pts = calib.get("net_image_points")
     if pts:
         return sum(p[1] for p in pts) / len(pts)
+    # The fallback is not merely less accurate, it is biased: the homography
+    # maps the *ground plane*, so projecting court point (10, 22) returns where
+    # the net's base meets the floor, not its tape — always too low (larger
+    # image-y), by the net's height in pixels at that depth. On IMG_7652, whose
+    # calibration has no marked net, that is ~130 px, and it silently corrupts
+    # every crossing count computed from it (EXPERIMENTS.md 2026-08-16).
+    log.warning(
+        "calibration has no net_image_points — falling back to the "
+        "homography-derived line, which gives the net's BASE, not its tape, "
+        "and is systematically too low. Re-run calibrate.py (or "
+        "calibrate_web.py) and click the two net-tape points before trusting "
+        "any crossing count from this calibration.")
     return net_image_y(calib["homography"])
 
 

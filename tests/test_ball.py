@@ -71,3 +71,19 @@ def test_count_crossings_same_side_is_zero():
 
 def test_count_crossings_empty():
     assert count_crossings([], net_y=100, band=10) == 0
+
+
+def test_net_line_y_warns_when_no_net_marked(caplog):
+    """The derived fallback returns the net's base, not its tape — always too
+    low. It must say so rather than silently producing biased crossings."""
+    import json, os, logging
+    from src.ball import net_line_y
+    path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+                        "IMG_7652_calib.json")
+    if not os.path.exists(path):
+        return
+    calib = json.load(open(path))
+    assert "net_image_points" not in calib or not calib["net_image_points"]
+    with caplog.at_level(logging.WARNING):
+        net_line_y(calib)
+    assert any("net_image_points" in r.message for r in caplog.records)
