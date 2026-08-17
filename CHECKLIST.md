@@ -186,11 +186,11 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 
 **Cleared 2026-08-16.** IMG_7743 is a clean fixed-mount recording, repaired, calibrated (0.85ft RMSE), hand-labelled (33 rallies), and scored — the first trustworthy numbers the project has produced. The gate this section used to name is done.
 
-The new binding constraint, replacing it:
+**Diagnosed 2026-08-17 (`PIC-1`, `EXPERIMENTS.md`, ADR-049) — it was not a detection failure.** 11 of the 13 missed rallies are every single rally after t≈2859s, when the camera was physically bumped mid-recording; TrackNet kept finding the ball fine (~50% visibility, normal), but `net_y=552` silently went stale for the rest of the session. Patching `net_y` for the tail alone recovers recall 0.61→0.85 on the full 33 labels. The new binding constraint is a **capture-robustness** one, not a model/gating one:
 
-> **Recall is pinned at 20/33 under every gate shape and every threshold tried.** The 13 missed rallies are missed because the ball is barely detected during them at all — a detection failure, not a gating one. Nobody has diagnosed *why* yet (occlusion, motion blur, ball-vs-floor contrast each imply a different fix). Tracked as `PIC-1`.
+> **A single mid-session camera bump cost 11 of 33 rallies, and no threshold tuning could have recovered it.** The fix is to detect calibration drift (e.g. periodic net-line position check) and split/re-calibrate around it — not yet built. The other 2 misses (label#3/#19) are the separate, already-known `gap_sec` boundary tradeoff.
 
-Precision (0.29) is also well short of a usable product, but it responded strongly to gating/threshold work (0.10 → 0.29) — it is not obviously stuck the way recall is.
+Precision (0.29) is also well short of a usable product, but it responded strongly to gating/threshold work (0.10 → 0.29) — it is not obviously stuck the way recall was before this diagnosis.
 
 ---
 

@@ -26,7 +26,7 @@ import json
 import os
 import re
 import sys
-from http.server import BaseHTTPRequestHandler, HTTPServer
+from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
 from label import load_rallies, save_rallies
 
@@ -305,7 +305,8 @@ def main():
     if STATE["rallies"]:
         print(f"resuming — {len(STATE['rallies'])} rallies already labelled")
 
-    server = HTTPServer(("0.0.0.0", args.port), Handler)
+    server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
+    server.daemon_threads = True
     print(f"open http://<this-machine-ip>:{args.port}/  in a browser on your laptop "
           f"(works over Tailscale/LAN)")
     print("MARK pass: s = serve, e = ball dead. Press g for the GRADE pass. w saves.")

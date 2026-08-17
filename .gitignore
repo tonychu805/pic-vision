@@ -43,6 +43,9 @@ debug_frames/
 *.png
 *.jpg
 
+# Ad hoc reference material (chat exports, etc.) — not project docs, don't belong in history
+*.pdf
+
 # NOT ignored, on purpose — commit these:
 #   eval/labels/*.jsonl   hand-labeled ground truth (the whole basis for §5 metrics)
 #   eval/labels/*_gaps*.jsonl  intermediate pass-3 review files ARE ignored below

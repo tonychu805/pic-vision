@@ -430,3 +430,146 @@ Follow-on to the same 33-label IMG_7743 benchmark. All rows: k14 weights, hand-m
 **Generalisation is unproven and one part is known to break.** The trapezoid outline derives from the calibration, so it adapts to any camera angle. The *cap* is expressed as a fraction of the court's image height, which scales with camera elevation: on IMG_7652 (higher mount, court 717px tall vs 385px) it lands 280px above the top of the frame, silently disabling itself and leaving 78% of the frame open. A cap defined in real ball height would transfer — the marked net tape is a free height ruler (0.86 m ≈ 86 px at the net's depth on 7743, so ~100 px/m). Untested elsewhere: IMG_7744 has a calibration but no labels; IMG_7655 has 36 labels but no calibration; IMG_7652 is zoom-compromised so one homography does not hold.
 
 **Found while checking generalisation: IMG_7652's net line is wrong**, ~130px too low. Its calibration has no `net_image_points`, so `net_line_y` fell back to the homography-derived line — which returns where the net's *base* meets the floor, never its tape. That is a bias, not noise, and it silently corrupts every crossing count from that calibration. `net_line_y` now warns.
+
+---
+
+## 2026-08-17 — PIC-1: the recall ceiling is a mid-session camera bump, not a detection problem
+
+**Hypothesis (going in).** PIC-1's own framing (occlusion / motion blur / low contrast / ball too small) assumed the *detector* was failing during the 13 missed rallies. Checked this by categorizing the misses first, then rendering the actual footage with detections and the net line drawn on — the same method that cracked the earlier false-positive question.
+
+**Setup.** `IMG_7743_fixed.mp4`, `IMG_7743_predictions_k14.csv`, `IMG_7743_calib.json` (`net_y=552`), shipped config (`court_wedge`, `min_crossings=6`, `band=0`). Scored at IoU≥0.3 against the 33 labels.
+
+**Step 1 — categorize the 13 misses by time, not just by crossing count.** Listing all 33 labels as hit/miss in chronological order:
+
+| range | hits | misses |
+|---|---|---|
+| t=147–2841s (labels 0–21) | 20/22 | 2 (label#3 @475s, label#19 @2378s — isolated) |
+| t=2950–3993s (labels 22–32) | 0/11 | **11/11 — every single rally in the last ~18 minutes of the session** |
+
+This is not a scattered pattern. Something changes hard at a single point around t≈2850–2860s and nothing after it is ever detected again, regardless of gate/threshold.
+
+**Step 2 — ruled out band (net hysteresis) as the fix**, since several of the 11 had decent visibility (41–62%, in line with the rest of the video) but almost no registered net crossings (0–2) — the ADR-042 dink-hovering signature. Swept `band` 0→40px × `min_crossings` 3/4/6 (28 configs): **band recovers zero of the 13 misses at any setting, and actively destroys recall on the other 20** (0.61 → as low as 0.00 at band=40). Rejected.
+
+**Step 3 — rendered raw + tracked detections with the net line drawn on, inside label#22 (2949.8–2965.9s, quality-1/highlight).** The tracked `y` sequence shows a real, coherent ball bouncing repeatedly near the net (`y` oscillating 340↔530 many times over 16s — a genuine fast net exchange) but almost never reaching `net_y=552` — only one clean crossing registers. Pulling the actual frame at the one moment it *did* cross (t=2953.70) and zooming on the net: **the ball sits right on the visible net tape, but the calibrated `net_y=552` line is drawn ~50px below it** — visibly wrong. The same check on an early *hit* rally (t=597.9, t=672.1) shows `net_y=552` landing exactly on the net tape — correct there.
+
+**Step 4 — confirmed this is the camera, not the net sagging, and found the exact moment.** Compared clean (no-ball) crops of the net at the same x-position, early vs. late: at t=680 the net tape lines up with `net_y=552`; at t=2900/3500/3990 it sits visibly higher in the frame, a gap that doesn't change across the whole tail (rules out gradual net-tape sag, which would keep growing). Bisecting between the last hit (t=2841) and the first shifted check (t=2900) in ~10s steps: **the shift happens in a 2-second window, t=2858→2860** — a discrete event, not a drift. Far-wall signage (DÉFI logo, banner) sits in the same pixel position before and after, which rules out a camera *tilt* (that shifts near and far objects together); a near-field-only shift is the signature of a camera *translation* — i.e. **the camera was physically bumped or nudged around t≈2859s**, close enough to the net to shift its image position a lot while barely moving the distant back wall.
+
+**Step 5 — measured the new net position and validated the fix.** Sampled pixel brightness along vertical strips near the net post at t=3500 (post-shift): net tape sits at `y≈496–503`, call it 500. Re-scored each of the 11 tail labels' raw crossing count with `net_y=500` instead of 552: **9 of 11 immediately clear `min_crossings=6`** (crossings jump from 0–3 to 5–13 per window). Running the *full* 33-label scoring with a piecewise `net_y` (552 before t=2859, 500 after, everything else — gate, thresholds — unchanged):
+
+| config | precision | recall | segments |
+|---|---|---|---|
+| shipped (`net_y=552` throughout) | 0.29 | 0.61 (20/33) | 69 |
+| **piecewise `net_y` (552 / 500 at t=2859)** | 0.33 | **0.85 (28/33)** | 84 |
+
+Still missed: label#3, #19 (pre-shift, see below), #28, #30, #31 (post-shift, likely needs the full geometry re-derived, not just `net_y` — see Follow-up).
+
+**The two pre-shift misses (label#3 @475s, label#19 @2378s) are a different, smaller issue.** Both already have enough raw crossings (9 and 7, over `min_crossings=6`) but `cluster_crossings`' `gap_sec=3.0` boundary splits real play into fragments that don't line up with the label window (label#3: a real 7-crossing segment exists at 473.4–480.6s, overlapping only 4.8 of the label's 14.3s). This is the already-known `gap_sec` rally-boundary tradeoff (`[[project-tracknet-false-positive]]` 2026-08-16 entry, real-vs-fake serve-pause problem) — not new, and not the dominant cause.
+
+**Conclusion.** The 13-rally recall ceiling is **not** a detection failure (occlusion/blur/contrast/size, PIC-1's original hypothesis) for 11 of 13 cases. **The dominant, named cause: the camera was physically bumped at t≈2859s** (47 minutes into a 67-minute session), shifting the net's image position by ~50px and silently invalidating `net_y=552` for the rest of the recording. TrackNet kept detecting the ball fine throughout (visibility in the tail is 41–62%, normal for this footage) — the crossing *logic*, not the detector, broke. No amount of `min_crossings`/`band`/gate tuning downstream of a wrong `net_y` can recover this, which is exactly why PIC-1 observed "no amount of adjusting settings brings them back." This is a **capture-side** cause — filed as ADR-049.
+
+**Follow-up.**
+1. **Fix (recommended, not yet built):** detect the shift automatically (e.g. a periodic frame-diff or feature-match check against the calibration reference frame) and split the session at t≈2859s into two calibration regions; re-run `calibrate.py` on a post-shift frame for the second region rather than reusing a single rough `net_y=500` guess (this validation only patched `net_y`, not the full homography/`court_wedge`, which is why precision only moved 0.29→0.33 instead of further — the wedge gate is still geometrically stale for the tail, likely explaining most of the 84 vs. 69 segment growth).
+2. **Mount hardening (capture-side, ADR-049):** a bumped camera is now confirmed to happen mid-session and to be catastrophic for this pipeline (kills every subsequent rally) — worth a physically stiffer mount and/or a start/end-of-session calibration-frame check as a matter of course.
+3. label#3/#19's `gap_sec` boundary issue is separate and smaller-scale (2 of 33 labels) — worth revisiting alongside the existing open `gap_sec` finding, not urgent on its own.
+4. `label#28`, `#30`, `#31` still miss even under the rough piecewise fix — `#30` in particular has genuinely low visibility (22%, vs ~50% for the rest of the tail) and may have an additional real detection-difficulty cause; worth a second look once a proper post-shift calibration exists.
+
+---
+
+## 2026-08-17 (later) — Real split calibration for IMG_7743: recall 0.61 → 0.91; found and fixed a `calibrate_web.py` regression
+
+**Follow-up to PIC-1/PIC-29.** The rough `net_y≈500` patch above was a proof of concept, not a real calibration. Built the real thing: split `IMG_7743_fixed.mp4` at t=2900s (safely inside the gap between the last pre-bump rally and the first post-bump one) into `IMG_7743_prebump_0-2900s.mp4` and `IMG_7743_postbump_2900s-end.mp4`, split `IMG_7743.jsonl` the same way (postbump labels re-offset by −2900s), reused the existing calibration for the pre-bump half (same camera position, unchanged), and had the user click a fresh 12-point + 2-net calibration for the post-bump half via `calibrate_web.py`.
+
+**Found a real bug while doing this.** The first save came back at **30.3 ft RMSE** — wildly bad, resembling ADR-035's original "mis-ordered clicks" failure (28.2 ft). Investigated instead of re-clicking blind: `calibrate.py`'s interactive tool calls `solve_assignment()` (the ADR-035 order-independent solver) before `compute_calibration()`, but **`calibrate_web.py`'s `/save` handler skips straight to `compute_calibration()`** — the order-independent fix never made it into the browser tool when it was built. Re-ran the user's *exact same clicks* through `solve_assignment()` by hand: RMSE dropped to **0.69 ft**, in line with the original calibration's 0.85 ft. The clicks were fine; the tool was silently reintroducing a bug that was already fixed once, for a different entry point. Fixed `calibrate_web.py` to match `calibrate.py` (one line: call `solve_assignment` before `compute_calibration`), 73 tests still pass, no test previously covered this path (`calibrate_web.py` has no test file at all — untested code, which is how the regression shipped unnoticed).
+
+**Result, scoring each half independently against its own calibration and labels** (same shipped config: `court_wedge`, `min_crossings=6`, `band=0`, reusing the existing `IMG_7743_predictions_k14.csv` sliced by time — no re-inference needed):
+
+| | net_y | calib RMSE | segments | precision | recall |
+|---|---|---|---|---|---|
+| prebump (0–2900s, 22 labels) | 552.0 | 0.85 ft | 69 | 0.29 | **20/22 (0.91)** |
+| postbump (2900s–end, 11 labels) | 494.2 | 0.69 ft | 22 | 0.45 | **10/11 (0.91)** |
+| **combined (33 labels)** | — | — | 91 | **0.33** | **30/33 (0.91)** |
+
+Recall clears the PRD's ≥0.90 target for the first time. This is a real jump over the rough patch's 28/33 (0.85) — a proper post-bump calibration recovers `label#28` and `#31` that the single hand-patched `net_y` missed, leaving only `label#30` (22% visibility in-window, a genuinely harder detection case, unrelated to calibration) plus the two pre-bump `gap_sec` boundary misses (`label#3`, `#19`) already characterized above.
+
+**Conclusion.** Confirms PIC-1's diagnosis end to end: the 13-rally recall ceiling was ~entirely a stale-calibration problem, not a detection-quality problem. Per-segment recalibration is sufficient, no model or gating change was needed.
+
+**CORRECTION (same day): the "recall clears the PRD ≥0.90 target" claim above was wrong — it used the wrong IoU threshold.** `TECH_SPEC.md` §11 specifies matching at **IoU≥0.5**, but this entry (and every other IMG_7743 number in this file since the 2026-08-16 baseline) was scored at **IoU≥0.3**, a looser bar adopted informally and never reconciled with the spec. Re-scored the same segments/labels at the actual spec'd threshold:
+
+| IoU threshold | single stale calib (before) | split, real calib (after) |
+|---|---|---|
+| 0.3 (used above, and throughout this file) | 0.29 precision / 0.61 recall (20/33) | 0.33 / **0.91** (30/33) |
+| **0.5 (the actual TECH_SPEC §11 spec)** | 0.25 / 0.52 (17/33) | 0.29 / **0.79** (26/33) |
+| 0.7 | 0.09 / 0.18 (6/33) | 0.13 / 0.36 (12/33) |
+
+At the real threshold, recall is **0.79, not 0.91**, and does **not** clear the ≥0.90 target. The underlying finding is unchanged and still large (0.52→0.79 recall from calibration alone) — only the "target cleared" claim was wrong. **Every prior IMG_7743 number in this file (the 2026-08-16 baseline, the capped-trapezoid/min_crossings sweep, the band sweep) was also scored at IoU≥0.3**, so they're mutually consistent, just all looser than `TECH_SPEC.md`'s documented bar. Not yet reconciled project-wide — flag any future "recall/precision" number in this file as IoU≥0.3 unless stated otherwise, until someone re-scores the whole benchmark history at 0.5.
+
+**Follow-up (updates PIC-29).**
+1. Two of PIC-29's four checklist items are now done: per-segment calibration works (proven by hand, two calibration files + a manual time-sliced scoring script) and the real post-shift calibration beats the rough-patch baseline on both precision and recall. **Still not built:** automatic drift detection, and wiring per-segment calibration into `src/tracknet.py`/`src/cut.py` itself rather than a one-off script — today this requires manually splitting the video/labels and running two separate scoring passes.
+2. `calibrate_web.py` has no test coverage at all — worth a regression test asserting it calls `solve_assignment` before `compute_calibration`, so this specific bug can't silently reappear a third time.
+3. Precision (0.33 combined) is still well short of a usable product — this experiment only touched calibration/net_y; the background-clutter false-positive problem (`EXPERIMENTS.md` 2026-08-16) is untouched and still the binding precision constraint.
+
+---
+
+## 2026-08-17 (later) — First second-camera-angle scored benchmark: IMG_7744
+
+**PIC-11.** Every number this project has produced, including everything above, came from one single camera angle (IMG_7743). Built a real hand calibration for IMG_7744 (`calibrate_web.py`, 12 court + 2 net points — the order-independent-solver fix from earlier today applies here too) and a real two-pass hand-labelling session (`label_web.py`) from scratch, since neither existed before today.
+
+**Calibration: 1.60 ft RMSE**, worse than IMG_7743's 0.85 ft or the same day's `pb_draft_cup` calibration (0.34 ft, below). Broken down: 11 of 12 points fit to ~0.36 ft (as good as anything else calibrated this session), but the near-right corner alone is 5.42 ft off — **the camera's framing cuts that corner off the frame at every timestamp** (confirmed fixed-mount, not timestamp-dependent), so it had to be estimated outside the visible image. Accepted as the honest ceiling given the framing, same call as IMG_7743's lens-distortion floor (`[[project-camera-lens-distortion]]`).
+
+**Labelling: 10 rallies** (2 highlight-worthy, 8 ordinary), covering the first ~21 minutes of the 38.9-minute video — the labeller stopped there because the rest of the video only has play on the adjacent court, not ours.
+
+**Note found along the way: `label_web.py` had its own real bug**, unrelated to the `calibrate_web.py`/`solve_assignment` one from earlier today. It used a single-threaded `HTTPServer`; the `/video` streaming endpoint's blocking write loop over the multi-GB file could (and did, once, live) wedge the entire server so a later `/save` POST queued forever and never completed — labelled rallies were lost once already before this run. Fixed by switching to `ThreadingHTTPServer` (`daemon_threads = True`). No test coverage existed for this either.
+
+**Inference:** full-video TrackNet, local GPU, 70,002/70,004 frames (99.997%), 38.1 min at 30.6 fps — noticeably slower than IMG_7743's ~58 fps on the same hardware; not investigated (could be thermal, could be a colder cache, could be something about this video specifically).
+
+**Scored** (shipped config: `court_wedge`, `min_crossings=6`, `band=0`, `gap_sec=3.0`):
+
+| | segments | precision | recall |
+|---|---|---|---|
+| IoU≥0.3 | 24 | 0.29 | 0.70 (7/10) |
+| **IoU≥0.5 (the real spec)** | 24 | **0.25** | **0.60 (6/10)** |
+
+**Conclusion.** In the same ballpark as IMG_7743 (0.25–0.29 precision on both), which is a mildly reassuring sign the pipeline's precision problem isn't specific to one camera/venue. Recall is lower here (0.60 vs. IMG_7743's 0.79 post-calibration-fix) — plausibly explained by the worse calibration (1.60 ft vs 0.85 ft) feeding a less accurate `court_wedge`/`net_y`, plausibly just a smaller, noisier sample (10 labels vs 33). Not enough data yet to tell which.
+
+**Follow-up.**
+1. PIC-11 substantially done: real calibration + real labels + a real scored number now exist for a second camera angle. Not fully closed — the calibration's near-right-corner gap and the small label count (10, vs IMG_7743's 33) limit how much confidence to put in the cross-camera comparison above.
+2. `label_web.py`'s threading fix should get the same regression-test treatment as `calibrate_web.py`'s `solve_assignment` fix (both bugs shipped with zero test coverage on these tools).
+3. The 30.6 fps vs 58 fps inference speed gap is unexplained — worth a look if local-GPU throughput becomes a bottleneck later, not urgent now.
+
+---
+
+## 2026-08-17 (later still) — IMG_7744's false positives are real exchanges, not hallucinated clutter — a different failure mode than IMG_7743's
+
+**Watched all 14 of IMG_7744's within-labelled-region false positives at real playback speed** (cut to individual padded clips, `clips/IMG_7744_fp_review/`, watched end to end — not stills; this project already got burned once trusting stills for a rally-vs-not call, see the 2026-08-16 IMG_7743 correction). Still frames at each segment's midpoint had already hinted at this (real balls/players visible near the net, not empty background), but per house method that's a lead, not a verdict, until someone actually watches it.
+
+**Verdict (user, direct playback): most of the 14 are real ball exchanges, but almost none are real rallies — they're quick exchanges and failed return-of-serve attempts.**
+
+**This is a different root cause than IMG_7743's diagnosed false-positive problem.** IMG_7743 (2026-08-16) traced its false positives to TrackNet *hallucinating* ball-shaped detections in background clutter (adjacent court, wall, ceiling fixtures) — no real ball was there at all, and the fix was geometric (`court_wedge`). IMG_7744's false positives are the opposite: **the ball is real, the crossings are real, the court is right — the exchange itself just didn't develop into what a human would call a rally.** No geometric gate, size filter, or confidence threshold can tell "6 real crossings from a failed serve return" apart from "6 real crossings from a real rally," because both are literally the same signal (a ball legitimately going back and forth over the net) at the same location. `min_crossings=6` was tuned exactly to suppress this class of thing (ADR-028's original "courtesy-return" concern, ADR-048's tuning) and evidently isn't high enough here — these exchanges clear 6+ real crossings before dying.
+
+**This is the already-known, previously-unsolved "warmup/real-rally distinction" problem, now with a second confirmed instance.** `[[project-tracknet-false-positive]]`'s 2026-08-16 entries flagged this same gap on IMG_7743 (serve-pickup-vs-serve, `gap_sec` boundary ambiguity) and concluded it needs "a genuine serve-start signal... crossing-gap clustering fundamentally can't distinguish [this] from timing alone." IMG_7744 confirms the same ceiling on a second camera, with cleaner evidence (direct video confirmation of *what kind* of real exchange these are, not just a boundary-fragmentation guess).
+
+**Conclusion.** IMG_7744's precision problem (0.25) is not, or not only, IMG_7743's problem (background-clutter hallucination). It looks more like a rally-*completeness*/duration problem — real crossings from real but abortive exchanges. `min_crossings` and geometric gating (`court_wedge`, `PIC-2`'s blob filtering, `PIC-3`'s trajectory smoothness) target the hallucination failure mode and won't touch this one.
+
+**Follow-up.**
+1. Filed as a new issue (not folded into PIC-2/PIC-3, which target a different cause): distinguishing real rallies from quick/failed exchanges needs a different signal than crossing count or geometry — candidates: minimum sustained-exchange duration tuned specifically for this (distinct from `gap_sec`, which controls clustering gaps not minimum length), rally-length distribution modeling, or point-outcome signals (players resetting position, a clear dead-time pause after) rather than trying to classify the exchange itself.
+2. Worth checking whether IMG_7743's remaining (unexplained) false positives, post-`court_wedge`, are more of *this* failure mode rather than more hallucination — the two projects' precision ceilings might be the same problem wearing two different hats.
+
+---
+
+## 2026-08-17 (later still) — Third camera scored: pb_draft_cup, precision holds in the same 0.25–0.29 band
+
+**PIC-11 follow-on.** Calibrated (`calibrate_web.py`, 12 court + 2 net points — 0.34 ft RMSE, the best of the three videos scored so far), hand-labeled (`label_web.py`, 7 rallies over the first ~10.4 minutes), and TrackNet-inferred (local GPU, 18,735/18,736 frames). Scored against the shipped config (`court_wedge`, `min_crossings=6`, `gap_sec=3.0`, `band=0`) — same recipe as IMG_7743/IMG_7744, one-off script (not yet a committed CLI path — see the open follow-up in the 2026-08-17 IMG_7743 split-calibration entry above about wiring `court_wedge` into `src/cut.py` directly).
+
+**Expected:** something in the same ballpark as the other two videos, since neither showed camera-specific behavior so far.
+
+| | net_y | segments | labels | precision | recall |
+|---|---|---|---|---|---|
+| IoU≥0.3 | 457.7 | 22 | 7 | 0.32 | 1.00 (7/7) |
+| **IoU≥0.5 (spec)** | 457.7 | 22 | 7 | **0.27** | **0.86 (6/7)** |
+| IoU≥0.7 | 457.7 | 22 | 7 | 0.18 | 0.57 (4/7) |
+
+**Conclusion.** Confirms the cross-camera pattern already suspected from two data points: precision sits in a tight 0.25–0.29 band across three different cameras/venues (IMG_7743 0.29, IMG_7744 0.25, pb_draft_cup 0.27) regardless of recall, which swings much more (0.60–0.86). Precision looks like a property of the pipeline/gating logic itself, not something a specific camera's calibration or footage quality is driving. Recall here is the highest of the three, but the label count (7) is the smallest — treat it as a rough read, not a tight one.
+
+**Follow-up.**
+1. Not yet FP-reviewed at real playback speed the way IMG_7744 was — unknown whether pb_draft_cup's false positives are hallucinated clutter (IMG_7743's mode) or real abortive exchanges (IMG_7744's mode), or a third thing. Worth doing before drawing conclusions about which fix path (geometric gating vs. rally-completeness signal) has the bigger cross-camera payoff.
+2. Reinforces that the two already-open precision follow-ups (IMG_7743's post-`court_wedge` residual FPs, IMG_7744's rally-completeness problem) are worth prioritizing over further per-camera calibration work — three cameras in, calibration/recall keeps improving per-video but precision hasn't moved.

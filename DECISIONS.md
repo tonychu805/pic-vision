@@ -767,6 +767,21 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 
 ---
 
+## ADR-049 — A mid-session camera bump invalidates calibration for the rest of the recording; detect it, don't just tune around it
+
+**Date:** 2026-08-17 · **Status:** accepted
+
+**Context.** PIC-1 asked why 13 of 33 labelled rallies on IMG_7743 were missed under every gate shape and threshold tried. Diagnosis (`EXPERIMENTS.md` 2026-08-17) found that 11 of the 13 are not a detection problem at all: **the camera was physically bumped at t≈2859s** (47 minutes into a 67-minute single continuous recording), shifting the net's image position by ~50px. TrackNet kept finding the ball just as well after the bump (41–62% visibility, normal for this footage) — but `net_y=552`, measured once at calibration time, was wrong for the rest of the session, so real net crossings fell short of the threshold and produced almost no crossings. Confirmed by: (1) the miss pattern is a hard boundary in time, not scattered or correlated with rally style/quality; (2) zoomed frames show the net tape sitting ~50px off the calibrated line only after the bump, never before; (3) far-wall signage doesn't move between early and late frames (rules out a tilt, which would move everything), while the near-field net does (the signature of a translation); (4) patching `net_y` for the tail alone recovers recall 0.61→0.85 on the full 33-label set, with no other change.
+
+**Decision.** Treat mid-session camera movement as an expected failure mode to detect, not an edge case to discover after the fact:
+- A single calibration is only valid until something bumps the camera. For a ~1 hour continuous recording on a portable mount (not a permanently fixed installation), this is not a rare event.
+- Any future capture/processing tooling should include a **calibration-drift check**: periodically (e.g. every few minutes) compare a fixed reference region (the net line, a court corner) against its calibrated position, and flag or auto-split the session when it moves beyond a small tolerance. This is the same category of tooling as the existing frame-count/decode-integrity check in `pod_infer.py` (ADR from the HEVC-corruption fix) — a cheap sanity check that turns a silent, catastrophic failure into a loud, cheap one.
+- Until that tooling exists, treat **precision and recall numbers from any session as suspect if the camera might have been bumped** — check for a hard time-boundary in the miss pattern (as done here) before concluding a detection/gating parameter is the problem.
+
+**Consequences.** This reframes the current PIC-1 recall ceiling: it is mostly a **capture robustness problem**, not a model or gating problem — no amount of `min_crossings`/`band`/`court_wedge` tuning on the existing pipeline can fix a wrong `net_y`. The recommended fix (split the session at the detected bump and re-derive calibration for each piece) is not yet built — this ADR records the decision to pursue that direction rather than continuing to tune thresholds against a partially-invalid calibration. A physically stiffer/more secure mount is also worth it independent of software, since one bump silently cost 11 of 33 rallies on this session. Does not change anything about the two remaining pre-shift misses (label#3/#19), which are the unrelated, already-known `gap_sec` boundary tradeoff.
+
+---
+
 ## Template
 
 ```markdown

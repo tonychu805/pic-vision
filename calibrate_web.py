@@ -20,7 +20,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import cv2
 
-from calibrate import POINTS, NET_PROMPTS, compute_calibration
+from calibrate import POINTS, NET_PROMPTS, compute_calibration, solve_assignment
 
 STATE = {}
 
@@ -149,7 +149,8 @@ class Handler(BaseHTTPRequestHandler):
         net_points = [tuple(p) for p in points[n_court:]]
 
         try:
-            result = compute_calibration(court_points, POINTS)
+            ordered, _ = solve_assignment(court_points)
+            result = compute_calibration(ordered)
         except Exception as e:
             self._json({"error": str(e)})
             return
