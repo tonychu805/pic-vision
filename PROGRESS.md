@@ -1,55 +1,63 @@
 # Progress Log
 
-Plain-language record of what's been built and decided, newest first. Git history has the detail; this is the map. Metric-producing runs go in [`EXPERIMENTS.md`](./EXPERIMENTS.md); decisions in [`DECISIONS.md`](./DECISIONS.md).
+Plain-language record of what's been built and decided, newest first. Git history has the detail; this is the map. Metric-producing runs go in [`EXPERIMENTS.md`](./EXPERIMENTS.md); decisions in [`DECISIONS.md`](./DECISIONS.md). Doc-authority map (which file governs what) lives in [`CLAUDE.md`](./CLAUDE.md).
 
 ## Phase gate tracker → [`CHECKLIST.md`](./CHECKLIST.md)
 
 ## ▶ NEXT SESSION — start here
 
-**Status (2026-08-16): the clean-footage gate is CLEARED and the project has its first trustworthy numbers.** The old blocker ("capture one clean fixed-mount clip") is done — IMG_7743 is labelled, scored, and the detector has been measurably improved against those labels.
+**Status (2026-08-17): three cameras now have real, comparable numbers, and the binding constraint has flipped from recall to precision.**
 
-**Where the numbers stand** (33 hand labels on IMG_7743, IoU≥0.3, k14 pickleball weights):
+The old blocker (IMG_7743's 13-rally recall ceiling) turned out to be a mid-session camera bump silently invalidating `net_y` for the back half of the recording — not a detection problem (ADR-049). Per-segment recalibration recovered recall 0.52→0.79. Two more cameras (IMG_7744, `pb_draft_cup`) have since been independently calibrated, hand-labeled, and scored.
 
-| | precision | recall | segments |
+**Where the numbers stand** (IoU≥0.5 — the real `TECH_SPEC.md` §11 threshold; see the IoU trap below before trusting any number from before today):
+
+| video | precision | recall | labels |
 |---|---|---|---|
-| what shipped this morning | 0.10 | 0.61 (20/33) | 201 |
-| what ships now (capped trapezoid, `min_crossings=6`) | **0.29** | **0.61 (20/33)** | **69** |
+| IMG_7743 (post-bump-fix, split calibration) | 0.29 | 0.79 (26/33) | 33 |
+| IMG_7744 | 0.25 | 0.60 (6/10) | 10 |
+| `pb_draft_cup` | 0.27 | 0.86 (6/7) | 7 |
 
-**The one thing to work on next: recall is stuck at 20/33 under every gate shape, every threshold, masked or unmasked.** The 13 missed rallies are missed because the ball is barely detected during them at all — a detection failure, not a gating one. Nobody has looked at them yet. Do what cracked the false-positive question: render those windows with detections drawn on and *look*. Occlusion, motion blur, and ball-vs-floor contrast each imply a different fix.
+**The one thing to work on next: precision is pinned at 0.25–0.29 across all three cameras/venues, while recall varies a lot per video.** That pattern means precision is a property of the pipeline's gating logic itself, not a calibration or footage-quality problem — further per-camera calibration work has a shrinking payoff from here. Two *different*, already-diagnosed root causes are open, and neither is fully closed:
+- **IMG_7743:** false positives surviving `court_wedge` were traced (2026-08-16) to TrackNet *hallucinating* ball-shaped detections in background clutter (adjacent court, wall, ceiling fixtures) — no real ball there at all. Not re-characterized since the camera-bump fix changed the segment set.
+- **IMG_7744 (Linear PIC-31, open):** false positives are the opposite — real ball, real crossings, real court, but the exchange itself was a quick or failed point, not what a human calls a rally. No geometric gate or size/confidence filter can tell this apart from a real rally, because the signal is identical. Needs a new kind of signal (sustained-exchange duration tuned for this, or a point-outcome/dead-time-after signal) — not yet designed.
+- **`pb_draft_cup`:** not yet FP-reviewed at real playback speed — unknown which of the two failure modes above it belongs to, or a third one.
 
-**Runnable now (all local — no RunPod needed; the RTX 2000 Ada does ~58 fps, faster than real time):**
-1. Inference env: `/mnt/fast_scratch/tf215_env/venv` (TF 2.15), weights at `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19`. Export `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs first.
-2. `python3 scripts/pod_infer.py --video game.mp4 --output predictions.csv` (do NOT pass `--calib`: masking before inference measured worse, see EXPERIMENTS)
-3. Score any change in seconds: `predictions.csv` → `rally_segments_from_predictions(..., in_court=court_wedge(calib), min_crossings=6)` → `eval/harness.py` vs `eval/labels/IMG_7743.jsonl`
+**Tried and rejected today: PIC-2** — using the detector's own already-computed blob-size and confidence numbers to filter clutter. Checked the real distributions (real-rally vs. outside-rally detections look almost identical: size median 15.0px both, confidence median 0.642 vs 0.627) and ran a full threshold sweep against the 33 IMG_7743 labels. No combination beat geometry (`court_wedge`) alone — the best precision found cost recall dropping from 0.79 to 0.52. Full sweep table in `EXPERIMENTS.md`. Don't re-attempt this without new evidence the detector's confidence signal has changed.
 
-**Two traps that cost time today, both now guarded:**
-- **Source `.MOV` files are corrupt.** IMG_7743/7744 have localized HEVC damage that makes OpenCV stop decoding *silently* — a full run returned 930 of 121,013 frames with exit code 0. Use the repaired `videos/*_fixed.mp4`; `pod_infer.py` now aborts below 98% of expected frames.
-- **A calibration without `net_image_points` gives a biased net line**, ~130px too low (it returns the net's base, not its tape). IMG_7652 has this; `net_line_y` now warns. Any past IMG_7652 crossing result is suspect.
+**Runnable now (all local — no RunPod needed; the RTX 2000 Ada does ~57 fps):**
+1. Inference env: `/mnt/fast_scratch/tf215_env/venv` (TF 2.15), weights at `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19`. Export `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs first — the project's own `.venv` cannot run inference (no GPU-capable TF).
+2. `python3 scripts/pod_infer.py --video game.mp4 --output predictions.csv`
+3. Score: `predictions.csv` → `src.tracknet.rally_segments_from_predictions(..., in_court=court_wedge(calib), gap_sec=3.0, min_crossings=6)` → `eval/harness.py`'s `match_intervals(..., threshold=0.5)` vs the matching `eval/labels/*.jsonl`. `court_wedge` isn't wired into `src/cut.py`'s CLI yet (still `court_x_range`, the flatter/worse gate) — scoring with the real gate is a one-off script today.
 
-**Labelling is now browser-based** (`label_web.py`) because the workstation is driven over SSH — X11 forwarding ships raw frames and is unusable for video. Two passes: mark every rally with `s`/`e` (no judgement), then `g` to grade each one with hindsight (`1` highlight / `2` ordinary / `3` not a rally). Grade ordinary play as `2` rather than deleting it, or the detector gets charged for correctly finding real play.
+**Traps that have cost real time, all now guarded or at least documented:**
+- **Source `.MOV` files can be corrupt.** IMG_7743/7744 had localized HEVC damage that made OpenCV stop decoding *silently* (930 of 121k frames returned, exit code 0). Use the repaired `videos/*_fixed.mp4`; both inference paths now abort below 98% of expected frames.
+- **A calibration without `net_image_points` gives a biased net line** (~130px too low — the net's base, not its tape). `net_line_y` now warns.
+- **IoU≥0.3 vs IoU≥0.5.** Every IMG_7743 number logged between 2026-08-16 and the split-calibration fix used the looser, non-spec IoU≥0.3 informally. `TECH_SPEC.md` §11 specifies 0.5; the table above uses 0.5. Check which threshold produced any older number before trusting it.
+- **A mid-session camera bump silently invalidates calibration for everything after it** — no amount of threshold tuning recovers it (ADR-049). Automatic drift detection still isn't built (Linear PIC-29); per-segment recalibration today is a manual, one-off process (split the video/labels by hand, calibrate each half separately).
 
-**Known-unproven:** the trapezoid gate's shape adapts to any camera via calibration, but its height cap is a fraction of court *image* height and silently disables itself on a higher mount (lands off-frame on IMG_7652). Redefine it in real ball height — the marked net tape is a free ruler (~100 px/m on 7743). Cross-camera generalisation is untested: IMG_7744 has a calibration but no labels; IMG_7655 has 36 labels but no calibration (calibrating it is the cheapest real test).
-
-## Benchmark cases (real-footage pass/fail targets)
-
-Concrete windows from the compromised clips, human-verified, to check any detector change against. Net line was hand-measured per window (the camera zooms — no single line holds); a clean fixed clip will replace these with one calibration. Scores below are current v1 (yolov8x + size filter + correct net line).
-
-| Window | Type | Verified | Current crossings | Target |
-|---|---|---|---|---|
-| IMG_7652 58–77.5s (net y=260) | RALLY | yes (play dead at end) | 33 | high ✅ |
-| IMG_7652 620–638s (net y=170) | RALLY | yes | 12 | high ✅ |
-| IMG_7655 86–101s (net y=210) | RALLY | yes | 20 | high ✅ |
-| **IMG_7652 659–666s (net y=160)** | **DEAD** | **yes (not a rally)** | **0 (tracked) ✅** | **~0 ✅** |
-
-**The 659–666s dead-time regression now PASSES (2026-08-11, EXPERIMENTS).** With the tracker wired in (`src/pipeline.py`), tracked crossings drop to **0** on this window (naive best-per-frame was 22), while the 58–77.5s rally keeps **16** — the tracker suppresses phantom crossings without erasing the rally signal. Note the RALLY-row crossing counts above are from the pre-tracker naive path; tracked counts are lower (rally 58–77.5s: 36 naive → 16 tracked) but still cleanly separated from dead-time's 0.
+**Labelling is browser-based** (`label_web.py`) — the workstation is driven over SSH, so X11-forwarded video is unusable. Two passes: mark every rally with `s`/`e`, then `g` to grade with hindsight (`1` highlight / `2` ordinary / `3` not a rally — grade ordinary play `2`, don't delete it, or the detector gets charged for correctly finding real play). `calibrate_web.py` is the matching browser calibration tool (12 court + 2 net points, order-independent).
 
 ## Status at a glance
 
-- **Built + tested (57 tests):** eval harness · calibration (order-independent, **now marks the net**) · player detection front-end (`src/players.py`, `src/events.py`) · **v1 ball detector + net-crossing counter + auto-annotator** (`src/ball.py`: `detect_ball` yolov8x + size filter, `detect_candidates`, `net_line_y`, `crossing_times`, `cluster_crossings`) · gap-tolerant `segment.py` · **single-ball spatial tracker** (`src/track.py`: `track_ball`, teleport-rejection, auto-reset) · **v1 rally pipeline** (`src/pipeline.py`: `rally_segments_from_candidates`, `detect_rallies` — chains detect→track→crossing→cluster, validated on real footage) · **cut module** (`src/render.py`: `cut_clips`, H.264 + manifest) · **end-to-end orchestrator** (`src/cut.py`: `cut_rallies` + CLI — footage→clips in one pass, `gap_sec=3.0`/`max_jump=150` as validated defaults) · scoring against labels.
-- **Not built (Phase 1, after the gate):** selection/ranking (competitive vs casual). All detection→segment→cut wiring is now complete (`pipeline.py` + `cut.py`).
-- **Decided:** ADR-035 (order-independent calibration), ADR-036 (court coords; calibration absorbs pose not occlusion), ADR-037 (two-sided live/stopped markers), LABELING.md v2, prior art assessed (beat, don't adopt — EXPERIMENTS.md).
-- **Capture:** wifi/RTSP (tested, ~90–96% delivery, bursty drops; PTS handles drops). microSD skipped.
-- `main` pushed to `origin`. v1 pipeline work on branch `feat/rally-pipeline`.
+- **Active detection path: TrackNet** (`src/tracknet.py`, local GPU or RunPod via `scripts/pod_infer.py`). The YOLO path (`src/pipeline.py`, `archive/yolo_pipeline.py`) is retired — ADR-046.
+- **Pipeline:** `predictions.csv` → court gate (`src/calib.py`'s `court_wedge`, perspective-aware trapezoid — prefer over the flatter `court_x_range`) → `track_ball` (teleport/re-acquisition confirmation, `src/track.py`) → `crossing_times` → `cluster_crossings` (`src/ball.py`). Shipped default `gap_sec=3.0`, `min_crossings=6` (ADR-048).
+- **Built + tested (83 tests):** eval harness (IoU matching at 0.5, detection + selection tables) · calibration (order-independent, browser + CLI, marks the net) · TrackNet prediction parsing (including per-detection blob size/confidence) + court-wedge gating + tracker confirmation · scoring against hand labels on 3 independent camera angles.
+- **Not built:** automatic camera-bump/calibration-drift detection (PIC-29); a signal that tells a real rally apart from a quick failed exchange (PIC-31 — IMG_7744's open problem); selection/ranking (competitive vs. casual — Phase 1, still gated on precision).
+- **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, today) — doesn't separate real balls from junk on this footage.
+- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it).
+- `main` pushed to `origin`, no open branches.
+
+---
+
+## 2026-08-17 — Camera-bump root-cause fix, two more cameras scored, PIC-2 tried and rejected
+
+- **Diagnosed and fixed the real cause of IMG_7743's recall ceiling** (PIC-1): not a detection problem — the camera was physically bumped ~47 minutes into a 67-minute recording, shifting the net's image position and silently invalidating `net_y` for the rest of the session. Confirmed four independent ways (hard time boundary in the miss pattern, visible net-tape shift in frames, far-wall signage ruling out a tilt, and recall recovering when `net_y` is patched for the tail). Recorded as ADR-049. Built the real fix (split calibration, not a rough patch) and recovered recall 0.52→0.79 at the correct IoU≥0.5 threshold. Along the way, found and fixed a real regression in `calibrate_web.py` (the order-independent calibration solver had never been wired into the browser tool, only the CLI one).
+- **Scored a second full camera angle, IMG_7744, from scratch** (PIC-11): new calibration, new hand labels (10 rallies), full-video inference. 0.25 precision / 0.60 recall. Found and fixed a real bug in `label_web.py` along the way (a single-threaded server could hang on video streaming and silently lose a labeling session).
+- **Watched IMG_7744's false positives at real playback speed** (not stills — this project got burned once trusting stills for a rally-vs-not call) and found a second, different false-positive failure mode from IMG_7743's: real ball, real crossings, but a quick/failed exchange rather than a rally. Filed separately as PIC-31 — geometric gating can't fix this, because the signal it's built to catch (a real ball where none should be) isn't what's happening here.
+- **Scored a third camera, `pb_draft_cup`**: 0.27 precision / 0.86 recall. Confirms precision sitting in the same 0.25–0.29 band across all three cameras regardless of recall — a strong signal that precision is a pipeline property, not a per-camera issue.
+- **Ran the PIC-2 spike to completion and rejected it with real numbers**: blob size and detection confidence, now wired end-to-end (parsed, filterable, tested), don't separate real balls from background clutter on this footage. Full distribution comparison and threshold sweep in `EXPERIMENTS.md`.
+- **Removed OpenWiki entirely** (the generated `openwiki/` tree, its CI workflow, and the boilerplate it left in `CLAUDE.md`/`AGENTS.md`) — it wasn't being read and had gone stale after the TrackNet switch. Rewrote both files with real, doc-grounded project conventions instead.
 
 ---
 
