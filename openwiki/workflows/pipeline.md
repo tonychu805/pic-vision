@@ -7,8 +7,8 @@ resource: PROGRESS.md
 openwiki:
   roles: [workflow, operations]
   change_kinds: [detection-pipeline, operations]
-  source_paths: [scripts/pod_infer.py, src/cut.py, src/calib.py, calibrate.py, label.py]
-  symbols: [cut_rallies_from_predictions, pick_net_y, detect_net_y, court_x_range]
+  source_paths: [scripts/pod_infer.py, src/cut.py, src/calib.py, calibrate.py, label.py, label_web.py]
+  symbols: [cut_rallies_from_predictions, pick_net_y, detect_net_y, court_x_range, court_wedge]
   test_paths: [tests/test_cut.py, tests/test_calib.py]
   validation_commands: [python3 -m pytest tests/test_cut.py tests/test_calib.py -q]
 ---
@@ -17,7 +17,7 @@ openwiki:
 
 The pipeline runs batch, never live (ADR-013), and inference no longer runs on the local machine: ball detection happens on a RunPod GPU pod, everything else is local (ADR-046). The active end-to-end path is `pod_infer.py` (on pod) → `make process` (local) — see step 5. The spec's one-command local orchestrator with ranking (NFR7) is still unbuilt; see [Operations & Status](../operations/runbook.md).
 
-## 1. Capture a session (the current gate)
+## 1. Capture a session (the original gate — now cleared)
 
 Target rig: Tapo C200 V3, fixed 1080p/30 fps, behind the baseline, elevated ≥ 8 ft, rigid mount. **No zoom, no pan, whole court in frame, well-lit** — the two existing clips (IMG_7652/7655) failed exactly here and every metric on them is considered compromised.
 
@@ -41,9 +41,10 @@ Rules that exist because they bit someone (capture pitfalls: [Operations](../ope
 
 ```bash
 python calibrate.py session.mp4 --at 300 --out court_calibration.json
+python calibrate_web.py session.mp4 --at 300 --out court_calibration.json --port 8765   # browser UI, for SSH workstations
 ```
 
-Click order is free (ADR-035): the **12 court points** in any order, then the **2 net-tape points** (top of the net, left and right ends — the ball crosses over the tape). `u` undo, `r` reset, ENTER saves once all 14 are placed. Reprojection RMSE > 5 px fails and prompts a re-click. Output feeds both the player homography and the net line (`net_line_y` prefers the marked net; rationale in [Rally Detection Concepts](../concepts/rally-detection.md#court-calibration-calibratepy)).
+Click order is free (ADR-035): the **12 court points** in any order, then the **2 net-tape points** (top of the net, left and right ends — the ball crosses over the tape). `u` undo, `r` reset, ENTER saves once all 14 are placed. Reprojection RMSE > 5 px fails and prompts a re-click. Output feeds both the player homography and the net line (`net_line_y` prefers the marked net and **warns** if a calibration lacks `net_image_points` — the homography fallback returns the net's base, ~130 px too low; rationale in [Rally Detection Concepts](../concepts/rally-detection.md#court-calibration-calibratepy)). `calibrate_web.py` runs the same clicks in a browser for headless workstations.
 
 ## 3. Resolve the net line (ADR-041)
 
@@ -61,36 +62,37 @@ Pick once per camera angle, record the value, and reuse it with `--net-y`. Re-pi
 ```bash
 python label.py session.mp4 --out eval/labels/session-001.jsonl --from 600 --to 1800
 python label.py session.mp4 --out eval/labels/session-001.jsonl --review   # keep/drop pass
+python label_web.py session.mp4 --out eval/labels/session-001.jsonl        # browser UI, for SSH workstations
 ```
 
-Keys: `s`/`e` mark start/end, `j/l`/`J/L` seek 2 s/10 s, `u` undo, `q` save+quit. `--review` plays each labeled segment for keep (`k`) / drop (`d`) — built to curate the auto-annotator's output (it curated IMG_7652 from 32 auto-labels down to 9 competitive rallies). The labeling rules are frozen in LABELING.md v2 ([concepts page](../concepts/rally-detection.md#what-a-rally-is-labelingmd-v2)). Protocol rules that matter: label continuous blocks, never cherry-pick; **never split one session across dev and eval sets**; competitive rallies only.
+Keys: `s`/`e` mark start/end, `j/l`/`J/L` seek 2 s/10 s, `u` undo, `q` save+quit. `--review` plays each labeled segment for keep (`k`) / drop (`d`) — built to curate the auto-annotator's output (it curated IMG_7652 from 32 auto-labels down to 9 competitive rallies). The workflow is two passes: **MARK** every rally with no quality judgement, then **GRADE** each with hindsight — `g` enters grading, `1` highlight / `2` ordinary / `3` not a rally (drops it). Grade ordinary play as `2` rather than deleting it, or the detector gets charged for correctly finding real play; grades are written as a `quality` field (score detection metrics against everything kept; selection metrics against grade 1). `label_web.py` is the same two-pass workflow in a browser — for headless workstations driven over SSH, where X11 forwarding ships raw frames and is unusable for video (the 33 IMG_7743 labels were produced this way). The labeling rules are frozen in LABELING.md v2 ([concepts page](../concepts/rally-detection.md#what-a-rally-is-labelingmd-v2)). Protocol rules that matter: label continuous blocks, never cherry-pick; **never split one session across dev and eval sets**; competitive rallies only.
 
-## 5. Run detection (TrackNet + RunPod — the active path)
+## 5. Run detection (TrackNet on GPU — the active path)
 
-ADR-046 retired the YOLO detector (5 crossings vs TrackNet's 25 on the benchmark rally). The active recipe:
+ADR-046 retired the YOLO detector (5 crossings vs TrackNet's 25 on the benchmark rally). Inference needs an NVIDIA GPU — a RunPod pod **or the local RTX 2000 Ada workstation** (~58 fps, faster than realtime; EXPERIMENTS 2026-08-16). The active recipe:
 
-1. **Upload the video to a RunPod GPU pod** and run inference there (TrackNet is CUDA-only; old TrackNetV2 weights at `/workspace/TNV2_old_weights.h5`, loaded with `compile=False`):
+1. **Run inference on the GPU box** (TrackNet is CUDA-only; badminton weights at `/workspace/TNV2_old_weights.h5` on the pod, or the pickleball fine-tuned `weights_k14_epoch19` locally under TF 2.15.1 — loaded with `compile=False`):
 
    ```bash
    python3 scripts/pod_infer.py --video /workspace/game.MOV --output /workspace/predictions.csv
    ```
 
-   The script stacks 3 consecutive frames into a (1,9,288,512) tensor, thresholds the heatmap at 0.5, takes the largest blob per frame, and writes `Frame,Visibility,X,Y` rows at full frame rate (coordinates scaled back to source resolution).
+   The script stacks 3 consecutive frames into a (1,9,288,512) tensor, thresholds the heatmap at 0.5, takes the largest blob per frame, and writes `Frame,Visibility,X,Y` rows at full frame rate (coordinates scaled back to source resolution). It **aborts below 98% of expected frames** — corrupt HEVC in IMG_7743/7744 made OpenCV silently stop decoding (930 of 121,013 frames returned, exit code 0), so use the repaired `videos/*_fixed.mp4` sources. **Do not mask the input to the court** — masking before inference measured *worse* (recall 0.52 vs 0.61; the mask edge is out-of-distribution); filter geometrically after inference.
 
-2. **Copy `predictions.csv` back locally**, then cut clips:
+2. **Copy `predictions.csv` back locally** (skip when inferring locally), then cut clips:
 
    ```bash
    make process VIDEO=game.MOV CSV=predictions.csv OUT=clips/            # interactive net picker
    make process VIDEO=game.MOV CSV=predictions.csv NET_Y=210 OUT=clips/  # reuse known net_y
    ```
 
-   This runs `src/cut.py`: `load_predictions` (CSV → timed ball track, invisible frames → `None`) → **court X-gate** (drop detections outside `court_x_min/max`) → **`track_ball`** (reject within-court teleports) → `crossing_times` (side flips across `net_y ± band`) → `cluster_crossings` (bursts with ≥ `min_crossings` → segments) → score = crossing count → `cut_clips` (H.264, `pad_sec=3` context) → `manifest.json` + `concat_clips` → `highlight.mp4`.
+   This runs `src/cut.py`: `load_predictions` (CSV → timed ball track, invisible frames → `None`) → **court gate** (drop detections outside the tracked court) → **`track_ball`** (reject within-court teleports) → `crossing_times` (side flips across `net_y ± band`) → `cluster_crossings` (bursts with ≥ `min_crossings` → segments) → score = crossing count → `cut_clips` (H.264, `pad_sec=3` context) → `manifest.json` + `concat_clips` → `highlight.mp4`.
 
-   The X-gate + tracker exist because TrackNet's per-frame best-guess ball can land on an adjacent court's real ball (confirmed 2026-08-16 on IMG_7744), and `track_ball` alone re-acquires on it after real dead time exceeds `reset_after`. Passing `--calib` derives the bounds automatically; in a multi-court gym, prefer `--calib` (or explicit `--court-x-min/--court-x-max`) over `--net-y` alone, which gates nothing.
+   The gate + tracker exist because TrackNet's per-frame best-guess ball can land on an adjacent court's real ball (confirmed 2026-08-16 on IMG_7744), and `track_ball` alone re-acquires on it after real dead time exceeds `reset_after`. Passing `--calib` derives the flat X-gate bounds automatically; in a multi-court gym, prefer `--calib` (or explicit `--court-x-min/--court-x-max`) over `--net-y` alone, which gates nothing. The stronger **perspective `court_wedge` gate** (precision 0.10 → 0.29 on IMG_7743 at the same recall) is available as `in_court=` on `rally_segments_from_predictions` but is **not yet wired to a CLI flag** — call it from Python until it is.
 
-3. **Validated parameters** (IMG_7655 full-video run, EXPERIMENTS 2026-08-12): `gap_sec=3.0`, `min_crossings=3`. Use `band=15–30` for dink-heavy footage (ADR-042). `cut.py` flags: `--gap-sec --min-crossings --band --pad-sec --court-id --session-id --fps`, plus the tracker/gate knobs `--max-jump --reset-after --court-x-min --court-x-max --court-margin`.
+3. **Canonical parameters** (ADR-048, tuned on the 33-label IMG_7743 benchmark, EXPERIMENTS 2026-08-16): `gap_sec=3.0`, `min_crossings=6` (precision 0.29 vs 0.12 at the old 3, same 61% recall). Use `band=15–30` for dink-heavy footage (ADR-042). `cut.py` flags: `--gap-sec --min-crossings --band --pad-sec --court-id --session-id --fps`, plus the tracker/gate knobs `--max-jump --reset-after --court-x-min --court-x-max --court-margin`.
 
-4. Sanity-check against the benchmark windows before believing any change ([Testing](../testing/evaluation.md#benchmark-windows)). Standing gaps: TrackNet's FP rate on the 659–666 s dead window is **not yet measured**, and the pickleball fine-tuned weights are **not yet loaded** (TF 2.11 SavedModel vs Keras 3 format break — use a TF 2.13/Python 3.10 pod image or re-export to `.keras`).
+4. Sanity-check against the benchmark numbers before believing any change ([Testing](../testing/evaluation.md#benchmark-windows)). Standing gaps: TrackNet's FP rate on the 659–666 s dead window is **not yet measured**, and **PIC-1** — 13 of 33 IMG_7743 rallies are missed because the ball is barely detected during them — is the current blocker (a detection problem, not a gating one).
 
 ### Archived YOLO path (reference only)
 

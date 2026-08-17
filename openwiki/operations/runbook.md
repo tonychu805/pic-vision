@@ -1,7 +1,7 @@
 ---
 type: Runbook
 title: Operations & Status — camera pitfalls, config, compute, phase gates
-description: Operational knowledge for pic-vision — camera/capture pitfalls with their ADRs, config surface and invariants, compute reality (RunPod GPU for inference, CoreML/M2 and RTX 2000 Ada locally), and the current phase-gate status from CHECKLIST.md with what remains unbuilt.
+description: Operational knowledge for pic-vision — camera/capture pitfalls with their ADRs, config surface and invariants, compute reality (NVIDIA GPU for inference — RunPod pod or local RTX 2000 Ada; M2 laptop for the rest), and the current phase-gate status from CHECKLIST.md with what remains unbuilt.
 tags: [operations, runbook, camera, config, phase-status, runpod]
 resource: CHECKLIST.md
 openwiki:
@@ -22,15 +22,17 @@ openwiki:
 | 0.5 — Benchmark prior art | Baseline number exists | NOT DONE (qualitative only; deprioritized since v1 went direct to detection) |
 | 0.6 — Validate dead-time inversion | Markers near-zero during rallies | **FAILED → SKIPPED** (markers inverted on real footage → ADR-039 pivot to v1) |
 | 1 — Core pipeline, v0 path | Watchable ≤ 10-min reel, measured | NOT DONE — v0 frozen; superseded in the hot path by ADR-046/047 |
-| 1 — TrackNet path (primary) | Same, on clean footage | NOT DONE — **e2e wired and runnable** (`pod_infer.py` → `make process`); blocked on one clean clip for metrics |
+| 1 — TrackNet path (primary) | Same, on clean footage | **PARTIAL** — e2e wired, runnable, and measured on clean IMG_7743 footage (2026-08-16): recall 20/33 (61%), precision 0.29 — both miss PRD targets; blocked on **PIC-1** (13 rallies where the ball is barely detected — a detection failure, not gating) |
 | 1.5 — Boundary refinement | ≤ 1.0 s boundary error | NOT STARTED |
 | 2 — Ball presence | FP improves, recall holds | PARTIAL (absorbed into the ball-primary path; shoe filter missing) |
 | 2.5 — Audio (conditional) | Usability gate passes, then helps | NOT STARTED |
 | 3 / 3.5 / 4 — Trajectory / ranker / tidy | Gated | NOT STARTED (`select.py` not built; root one-command `cut.py` per NFR7 not built) |
 
-**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + 600 s budget enforce), root `cut.py` (NFR7 single command with capture→select→render), stage caching (NFR3), `run.log` (NFR9). **Built:** TrackNet path end-to-end (`scripts/pod_infer.py`, `src/tracknet.py` incl. the multi-court X-gate + `track_ball` wiring, `src/cut.py`, `src/render.py` incl. `concat_clips` + `pad_sec`), net-line tooling (`src/calib.py` picker + Hough + `court_x_range`), `calibrate.py` (12+2 clicks), `label.py`, `eval/harness.py`, frozen v0 (`players.py`, `events.py`), `track.py` (single-ball tracker, shared by both eras), 67 tests.
+**The one real gate (clean footage) is CLEARED (2026-08-16):** IMG_7743 is a clean fixed-mount recording — repaired (source HEVC was corrupt), calibrated (0.85 ft RMSE, hand-marked net tape), hand-labeled (33 rallies via `label_web.py`), and scored. The current blocker is the recall ceiling: **20/33 under every gate shape and threshold tried** (PIC-1 — nobody has diagnosed *why* the ball is barely detected during those 13 rallies; occlusion, motion blur, and ball-vs-floor contrast each imply a different fix).
 
-**Standing measurement debts** (CHECKLIST.md): TrackNet FP rate on the 659–666 s dead window; pickleball fine-tuned weights loading (TF 2.11 SavedModel vs Keras 3 — TF 2.13/Py3.10 pod or `.keras` re-export); recall/FP/boundary numbers on `eval-set-A` (all blocked on the same clean clip).
+**Not built:** `src/capture.py` (preflight), `src/motion.py` (T0′ pre-filter), `src/select.py` (ranker + 600 s budget enforce), root `cut.py` (NFR7 single command with capture→select→render), stage caching (NFR3), `run.log` (NFR9), CLI wiring for the `court_wedge` gate. **Built:** TrackNet path end-to-end (`scripts/pod_infer.py` incl. the 98%-frame-abort guard, `src/tracknet.py` incl. the multi-court gates + `track_ball` wiring, `src/cut.py`, `src/render.py` incl. `concat_clips` + `pad_sec`), net-line tooling (`src/calib.py` picker + Hough + `court_x_range` + perspective-aware `court_wedge`), `calibrate.py` (12+2 clicks) + `calibrate_web.py`/`label_web.py` browser variants, `label.py` (with grade pass), `eval/harness.py`, `src/verify.py` (Gemini clip verifier), frozen v0 (`players.py`, `events.py`), `track.py` (single-ball tracker, shared by both eras), 78 tests.
+
+**Standing measurement debts** (CHECKLIST.md): TrackNet FP rate on the 659–666 s dead window through the gated path; boundary error at the shipped IMG_7743 config; PIC-1 missed-rally diagnosis (render the 13 missed windows with detections drawn on and look); cross-camera generalisation of the `court_wedge` cap (IMG_7744 has calibration but no labels; IMG_7655 has labels but no calibration).
 
 ## Capture pitfalls
 
@@ -53,8 +55,8 @@ Privacy is a product constraint, not a feature (PRD §6): footage stays local by
 
 ## Compute reality (split: cloud GPU for detection, local for the rest)
 
-- **Detection runs on a RunPod GPU pod** (ADR-046) — TrackNet is CUDA-only (TF Conv2D NCHW is unsupported on macOS/Apple Silicon). Community RTX 3090 pod ≈ $0.22–0.28/hr; a full session's inference is minutes. Known pod-side gotchas: load weights with `compile=False` (Keras 3 chokes on the legacy Adadelta config); the pickleball fine-tuned SavedModel needs TF 2.13/Python 3.10 or a `.keras` re-export.
-- **An RTX 2000 Ada workstation is now available** (2026-08-12, 16 GB VRAM) — designated for PoC iteration and TrackNet fine-tuning instead of the M2; use the `tensorflow/tensorflow:2.11.0-gpu` Docker image for the legacy weights.
+- **Detection runs on an NVIDIA GPU** (ADR-046) — TrackNet is CUDA-only (TF Conv2D NCHW is unsupported on macOS/Apple Silicon). Two working options: a RunPod pod (community RTX 3090 ≈ $0.22–0.28/hr; a full session's inference is minutes) or the **local RTX 2000 Ada workstation** (below), which runs the same `scripts/pod_infer.py` at ~58 fps. Known pod-side gotchas: load weights with `compile=False` (Keras 3 chokes on the legacy Adadelta config); the script aborts below 98% of expected frames (silent HEVC decode-stop guard).
+- **An RTX 2000 Ada workstation is the iteration box** (available 2026-08-12, 16 GB VRAM) — runs TrackNet locally at ~58 fps (~2× realtime, EXPERIMENTS 2026-08-16), so most iteration no longer needs RunPod. The pickleball fine-tuned `weights_k14_epoch19` load under **TF 2.15.1** (last Keras-2 release) with `compile=False` — no Docker needed; the TF 2.21/Keras 3 path still fails. It's driven headless over SSH: use `calibrate_web.py`/`label_web.py` (browser UIs) instead of the X11 tools.
 - **Local machine (MacBook Air M2, fanless):** decode + ffmpeg cutting only — cheap. Estimates in TECH_SPEC §9 are FLOPs arithmetic, **not measurements**; fanless sustained loads throttle 20–40%; 8 GB RAM → stream frames, never hold frame arrays (all modules follow this).
 - **Production direction** (ADR-043, post-prototype): N100 edge box captures full-res → encodes a 720p/2 Mbps proxy (~90 MB/hr, ~8× smaller than full-res) → cloud GPU returns *timestamps only* → N100 cuts from local full-res. Raw footage never leaves the building (privacy); a 50 Mbps venue uplink supports ~25 courts.
 - **Archived local-inference notes** (if the YOLO path returns, ADR-040): CoreML `yolov8x.mlpackage` at imgsz=1280 measured 216 ms/frame ANE vs 365 CPU (1.7×, ADR-044); export imgsz must match inference imgsz.
