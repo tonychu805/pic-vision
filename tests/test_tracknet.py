@@ -6,9 +6,19 @@ from src.tracknet import load_predictions, rally_segments_from_predictions
 
 
 def _write_csv(rows, path):
+    """Old-format CSV: no W/H/Conf columns (pre-2026-08-16 predictions)."""
     with open(path, "w", newline="") as f:
         writer = csv.writer(f)
         writer.writerow(["Frame", "Visibility", "X", "Y"])
+        writer.writerows(rows)
+
+
+def _write_csv_full(rows, path):
+    """New-format CSV, with the blob size (W, H) and peak-probability (Conf)
+    columns scripts/pod_infer.py has written since 2026-08-16."""
+    with open(path, "w", newline="") as f:
+        writer = csv.writer(f)
+        writer.writerow(["Frame", "Visibility", "X", "Y", "W", "H", "Conf"])
         writer.writerows(rows)
 
 
@@ -19,9 +29,40 @@ def test_load_predictions_visible_frames():
         _write_csv([[0, 1, 100, 150], [1, 0, -1, -1], [2, 1, 100, 50]], path)
         track = load_predictions(path, fps=30.0)
         assert len(track) == 3
-        assert track[0] == (0.0, 100.0, 150.0)
+        assert track[0] == (0.0, 100.0, 150.0, None, None, None)
         assert track[1][1] is None and track[1][2] is None   # invisible frame -> None
-        assert track[2] == (2 / 30.0, 100.0, 50.0)
+        assert track[2] == (2 / 30.0, 100.0, 50.0, None, None, None)
+    finally:
+        os.unlink(path)
+
+
+def test_load_predictions_parses_size_and_confidence():
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv_full([
+            [0, 1, 100, 150, 12.5, 9.0, 0.87],
+            [1, 0, -1, -1, -1, -1, 0.0],
+        ], path)
+        track = load_predictions(path, fps=30.0)
+        assert track[0] == (0.0, 100.0, 150.0, 12.5, 9.0, 0.87)
+        # invisible frame: size/confidence are None too, not the -1/0.0 sentinel
+        # pod_infer.py writes on disk for "no detection".
+        assert track[1] == (1 / 30.0, None, None, None, None, None)
+    finally:
+        os.unlink(path)
+
+
+def test_load_predictions_tolerates_missing_size_confidence_columns():
+    # Older CSVs (pre-2026-08-16) have no W/H/Conf columns at all -- must not
+    # raise, and the missing fields must come back as None so callers can tell
+    # "no data" apart from a real low value.
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv([[0, 1, 100, 150]], path)
+        track = load_predictions(path, fps=30.0)
+        assert track[0] == (0.0, 100.0, 150.0, None, None, None)
     finally:
         os.unlink(path)
 
@@ -136,6 +177,90 @@ def test_rally_segments_court_gate_survives_reset_after_gap():
             court_x_min=0, court_x_max=800,
         )
         assert gated == []
+    finally:
+        os.unlink(path)
+
+
+def test_rally_segments_min_ball_px_drops_small_detections():
+    # Ticket PIC-2: a ball on an adjacent/far court renders smaller than one on
+    # our own court -- the blob size should be usable as a clutter filter,
+    # independent of the geometric court gate.
+    rows = [
+        [0, 1, 0, 150, 4.0, 3.0, 0.9],   # small blob: near, but crossing
+        [1, 1, 0, 50, 4.0, 3.0, 0.9],    # small blob: far -> crossing
+        [2, 1, 0, 150, 4.0, 3.0, 0.9],   # small blob: near -> crossing
+    ]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv_full(rows, path)
+        # Without a size floor: 2 crossings, clears min_crossings=2.
+        unfiltered = rally_segments_from_predictions(
+            path, fps=1.0, net_y=100, gap_sec=2.0, min_crossings=2,
+        )
+        assert len(unfiltered) == 1
+
+        # With a size floor above these blobs' 4.0px: every detection is
+        # dropped before it ever reaches crossing detection -> no segment.
+        filtered = rally_segments_from_predictions(
+            path, fps=1.0, net_y=100, gap_sec=2.0, min_crossings=2,
+            min_ball_px=8.0,
+        )
+        assert filtered == []
+    finally:
+        os.unlink(path)
+
+
+def test_rally_segments_min_conf_drops_low_confidence_detections():
+    rows = [
+        [0, 1, 0, 150, 12.0, 10.0, 0.20],   # low confidence
+        [1, 1, 0, 50, 12.0, 10.0, 0.20],    # low confidence -> crossing
+        [2, 1, 0, 150, 12.0, 10.0, 0.20],   # low confidence -> crossing
+    ]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv_full(rows, path)
+        filtered = rally_segments_from_predictions(
+            path, fps=1.0, net_y=100, gap_sec=2.0, min_crossings=2,
+            min_conf=0.5,
+        )
+        assert filtered == []
+    finally:
+        os.unlink(path)
+
+
+def test_rally_segments_quality_floors_default_off():
+    # min_ball_px/min_conf must default to None (no filtering) so every
+    # existing caller's behavior is unchanged unless it opts in.
+    rows = [[0, 1, 0, 150, 4.0, 3.0, 0.1], [1, 1, 0, 50, 4.0, 3.0, 0.1],
+            [2, 1, 0, 150, 4.0, 3.0, 0.1]]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv_full(rows, path)
+        segs = rally_segments_from_predictions(
+            path, fps=1.0, net_y=100, gap_sec=2.0, min_crossings=2,
+        )
+        assert len(segs) == 1
+    finally:
+        os.unlink(path)
+
+
+def test_rally_segments_quality_floors_tolerate_missing_columns():
+    # An older CSV with no W/H/Conf at all, plus a quality floor turned on,
+    # must not crash and must not silently drop everything -- missing size/
+    # confidence data means "unknown", not "fails the floor".
+    rows = [[0, 1, 0, 150], [1, 1, 0, 50], [2, 1, 0, 150]]
+    with tempfile.NamedTemporaryFile(mode="w", suffix=".csv", delete=False) as f:
+        path = f.name
+    try:
+        _write_csv(rows, path)
+        segs = rally_segments_from_predictions(
+            path, fps=1.0, net_y=100, gap_sec=2.0, min_crossings=2,
+            min_ball_px=8.0, min_conf=0.5,
+        )
+        assert len(segs) == 1
     finally:
         os.unlink(path)
 

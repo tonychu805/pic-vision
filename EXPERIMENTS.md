@@ -573,3 +573,44 @@ At the real threshold, recall is **0.79, not 0.91**, and does **not** clear the 
 **Follow-up.**
 1. Not yet FP-reviewed at real playback speed the way IMG_7744 was — unknown whether pb_draft_cup's false positives are hallucinated clutter (IMG_7743's mode) or real abortive exchanges (IMG_7744's mode), or a third thing. Worth doing before drawing conclusions about which fix path (geometric gating vs. rally-completeness signal) has the bigger cross-camera payoff.
 2. Reinforces that the two already-open precision follow-ups (IMG_7743's post-`court_wedge` residual FPs, IMG_7744's rally-completeness problem) are worth prioritizing over further per-camera calibration work — three cameras in, calibration/recall keeps improving per-video but precision hasn't moved.
+
+---
+
+## 2026-08-17 (later still) — PIC-2 spike: blob size and confidence do NOT separate real balls from clutter on IMG_7743 — rejected
+
+**PIC-2.** `scripts/pod_infer.py` has recorded each detection's blob size (`W`, `H`) and peak model confidence (`Conf`) since 2026-08-16, but nothing downstream read them — `src/tracknet.py` parsed only `X`/`Y` and hardcoded every candidate's confidence to `1.0`. Hypothesis: an adjacent/far-court ball renders smaller than one on our own court, and a background hallucination (wall texture, netting) should score lower confidence than a real ball — so these two already-computed, already-discarded numbers might cut false positives with no new model.
+
+**Built** (fail-then-pass evidence in `tests/test_tracknet.py`, 6 new/updated tests, full suite 83/83 green): `load_predictions` now parses `W`/`H`/`Conf`, returning `None` for older CSVs or invisible frames rather than crashing or inventing a value. `rally_segments_from_predictions` gained `min_ball_px`/`min_conf` (both default `None` — off, zero behavior change for existing callers) applied alongside `court_wedge`, and no longer hardcodes confidence to `1.0` downstream.
+
+**Regenerated** `IMG_7743_predictions_k14.csv` with the new columns (local GPU, 121,110/121,111 frames, 35.2 min at 57.3 fps — old file predated the code change that records them). Verified the rerun is faithful before trusting it: identical X/Y positions to the old file for every sampled row (same model, same video, deterministic), and the `(min_ball_px=None, min_conf=None)` row below exactly reproduces the already-documented baseline (0.29/0.79).
+
+**Expected:** some real separation — the whole premise of the spike.
+
+**Step 1 — do the two groups' distributions even look different?** Tagged every visible detection across the full video as "inside one of the 33 labeled rallies" or "outside" (absolute time, same 33 labels used throughout this project), split, and compared:
+
+| | size (max(w,h), px) — median | confidence — median |
+|---|---|---|
+| in-rally (n=5,160) | 15.0 | 0.642 |
+| outside (n=31,866) | 15.0 | 0.627 |
+
+Size: identical medians, heavily overlapping IQRs. Confidence: a 0.015 gap between medians, smaller than either group's own spread (IQR ≈0.10 wide). Bad sign before even trying thresholds.
+
+**Step 2 — sweep real thresholds against the 33 labels anyway** (split pre/post camera-bump, same recipe as the 2026-08-17 split-calibration entry, IoU≥0.5):
+
+| min_ball_px | min_conf | precision | recall | matched |
+|---|---|---|---|---|
+| – | – | 0.286 | 0.788 | 26/33 |
+| – | 0.55 | 0.303 | 0.606 | 20/33 |
+| – | 0.58 | 0.346 | 0.545 | 18/33 |
+| 8.0 | – | 0.307 | 0.697 | 23/33 |
+| 12.0 | – | 0.321 | 0.545 | 18/33 |
+| **12.0** | **0.58** | **0.347** | 0.515 | 17/33 |
+
+The best precision found anywhere in the sweep (0.347, `min_ball_px=12, min_conf=0.58`) costs 8 of the 26 currently-matched rallies to gain 6 points of precision — every combination trades recall away faster than it buys precision, and none beats the geometry-only baseline (0.286/0.788) on balance.
+
+**Conclusion — rejected.** Neither blob size nor peak-detection confidence, as this TrackNet checkpoint currently computes them, separates real ball detections from background clutter on IMG_7743. The two numbers cluster in nearly the same range whether or not a real rally is happening, so any floor on either one cuts real detections almost as fast as it cuts junk. `court_wedge` (geometry) remains the whole precision story so far — this spike doesn't add to it. Definition of done from the ticket is met: answer is no, with numbers, not a shrug.
+
+**Follow-up.**
+1. `min_ball_px`/`min_conf` are kept in `rally_segments_from_predictions` (tested, off by default) rather than reverted — the mechanism is sound and cheap to keep even though this footage doesn't benefit; a different camera/detector combination could still get value from it later.
+2. Doesn't touch the two open, higher-confidence precision leads: IMG_7743's post-`court_wedge` residual FPs (still uncharacterized) and IMG_7744's rally-completeness problem (PIC-31) — this result is a negative finding, not a redirect toward a specific fix.
+3. Worth a real cause for *why* confidence doesn't separate the groups, if this gets picked up again — one candidate: the confidence value is the peak pixel probability within the model's own thresholded blob mask, which is somewhat self-selecting (a weak blob might not pass the >0.5 threshold to become a detection at all), which could compress the range for anything that clears detection regardless of whether it's a real ball.
