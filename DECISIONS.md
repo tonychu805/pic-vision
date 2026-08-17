@@ -755,6 +755,18 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 
 ---
 
+## ADR-048 — `min_crossings=6` is the one canonical default
+
+**Date:** 2026-08-17 · **Status:** accepted
+
+**Context.** `min_crossings` (the number of net crossings required before a candidate cluster counts as a rally) had drifted to four different values with no single one canonical: `TECH_SPEC.md`/ADR-028 said ≥2 (courtesy-return suppression, a design-intent estimate from before any clean-footage measurement existed); `PROGRESS.md` said ~5; `src/cut.py`'s CLI default was 3; `src/tracknet.py`'s docstring claimed 3 was "validated" (true only for the IMG_7655 run under a different, since-superseded gate). A fresh session reading any one of these first would ship a different rally definition than the last.
+
+**Decision.** `min_crossings=6` is the one canonical default, set in both `src/cut.py` and `src/tracknet.py`. It is not a re-derivation of the ADR-028 courtesy-return estimate — it is the value the 2026-08-16 `court_wedge` sweep on the 33-label IMG_7743 benchmark actually found best: precision 0.29 at recall 20/33 (61%), versus 0.12 at the old default of 3 for the same recall (verified by direct re-run 2026-08-17). See `EXPERIMENTS.md` 2026-08-16 ("capped trapezoid gate works") for the full sweep.
+
+**Consequences.** ADR-028's ≥2 estimate is left as written (append-only) — it recorded the reasoning available at the time, before any clean footage existed to measure against. `TECH_SPEC.md` §5.3.1 now points here instead of restating a number that will drift again. Future re-tuning (e.g. once `PIC-1`'s missed-rally diagnosis or `PIC-2`'s blob-confidence filter lands) should update the default in code first and treat this ADR, not the docstrings, as the place a new value gets recorded.
+
+---
+
 ## Template
 
 ```markdown

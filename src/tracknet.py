@@ -6,8 +6,12 @@ output and feeds it into the existing backend-agnostic signal pipeline.
 
 Flow: predictions_csv -> court X-gate -> track_ball -> crossing_times -> cluster_crossings
 
-Validated parameters (IMG_7655 full-video run, EXPERIMENTS.md 2026-08-12):
-  gap_sec=3.0, min_crossings=3
+Canonical default: gap_sec=3.0, min_crossings=6 (tuned on the 33-label
+IMG_7743 benchmark with the court_wedge gate, EXPERIMENTS.md 2026-08-16 —
+precision 0.29 / recall 20/33 at 6, vs 0.12 at the old default of 3, same
+recall). The IMG_7655 full-video run (EXPERIMENTS.md 2026-08-12) validated
+min_crossings=3 on different footage/gate; 6 supersedes it as the shipped
+default. See DECISIONS.md ADR-048.
 
 Multi-court false positive (confirmed 2026-08-16 on IMG_7744): TrackNet's
 per-frame best-guess ball can land on an adjacent court (real ball, wrong
@@ -58,7 +62,7 @@ def load_predictions(csv_path, fps):
 
 
 def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
-                                    min_crossings=3, band=0.0,
+                                    min_crossings=6, band=0.0,
                                     max_jump=150, reset_after=15,
                                     court_x_min=None, court_x_max=None,
                                     in_court=None):
@@ -77,7 +81,8 @@ def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
     (same defaults as the validated YOLO path, ADR-039).
 
     Returns [{start, end, crossings}] — same schema as cluster_crossings.
-    Use gap_sec=3.0 and min_crossings=3 (validated on IMG_7655 full run).
+    Use gap_sec=3.0 and min_crossings=6 (tuned on IMG_7743, EXPERIMENTS.md
+    2026-08-16; see the module docstring for the number).
     """
     track = load_predictions(csv_path, fps)
     times = [t for t, _, _ in track]

@@ -26,7 +26,7 @@ from src.calib import detect_net_y, pick_net_y, court_x_range
 
 
 def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
-                                 gap_sec=3.0, min_crossings=3, band=0.0,
+                                 gap_sec=3.0, min_crossings=6, band=0.0,
                                  max_jump=150, reset_after=15,
                                  court_x_min=None, court_x_max=None,
                                  court_id=None, session_id=None, pad_sec=3.0):
@@ -62,8 +62,8 @@ def main(argv=None):
     p.add_argument("--out", required=True, help="output dir for clips + manifest")
     p.add_argument("--gap-sec", type=float, default=3.0,
                    help="max seconds between crossings in one rally (default 3.0)")
-    p.add_argument("--min-crossings", type=int, default=3,
-                   help="minimum crossings to count as a rally (default 3)")
+    p.add_argument("--min-crossings", type=int, default=6,
+                   help="minimum crossings to count as a rally (default 6)")
     p.add_argument("--band", type=float, default=0.0,
                    help="net hysteresis band, px (tune for dink rallies: 15-30px)")
     p.add_argument("--max-jump", type=float, default=150,

@@ -57,26 +57,9 @@ This is now lower priority because: (a) we already read the source and know it h
 
 ## Phase 1 — Core pipeline (v0 path: players → segmentation → selection → render)
 
-**Gate:** watchable ≤10-min reel; recall and FP measured on `eval-set-A`; subjective gate once.
+**Frozen, not the current effort** (ADR-039/ADR-047 — ball-first TrackNet, below, is primary). Components: `src/players.py` and `src/events.py` (✅, motion + kitchen signals) exist; `src/motion.py` and `src/select.py` were never built; there is **no v0-specific `cut.py`** — the only `cut.py` in the repo is the v1/TrackNet orchestrator in the next section, so don't read "cut.py not built" here as contradicting that. v0 was never run end-to-end on clean footage and has no measured numbers. Revisit per ADR-047's conditions (movement-analytics product, boundary-fusion, or a fallback if ball detection stays unreliable) rather than by default.
 
-| Item | Status | Notes |
-|---|---|---|
-| `src/motion.py` — T0′ motion pre-filter | ❌ | Not built |
-| `src/players.py` — player detection + court coords | ✅ | foot point → court coords, on-court filter |
-| `src/events.py` — motion + kitchen signals | ✅ | `mean_motion`, `motion_series`, `n_at_kitchen` |
-| Dead-time event list (§5.2.1: net crossing, court exit, ball held, all stationary, player shortfall) | ⚠️ | Only motion/kitchen built; net-crossing, court-exit, ball-held events not in `events.py` |
-| `src/segment.py` — gap-tolerant segmenter | ✅ | Signal-agnostic; used by both v0 and v1 |
-| `src/select.py` — ranker + budget selection | ❌ | Not built |
-| `src/render.py` — H.264 cut module | ✅ | `cut_clips`, manifest; 2 tests |
-| `cut.py` — end-to-end orchestrator | ❌ | Not built; must wire capture → detect → segment → select → render |
-| End-to-end run → `rallies.json` | ❌ | v0 produced timestamps on compromised footage (plumbing check); no valid run |
-| `highlights.mp4` produced | ❌ | — |
-| Recall measured on `eval-set-A` | ❌ | — |
-| FP/10min measured | ❌ | — |
-| Boundary error measured | ❌ | — |
-| Subjective gate (watch 3 sessions) | ❌ | — |
-
-**Gate status: NOT DONE** — pipeline components exist but not wired; no measured numbers; no reel.
+**Gate status: NOT STARTED** — frozen before reaching it, not failing it.
 
 ---
 
@@ -94,14 +77,17 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | `src/cut.py` — end-to-end orchestrator (TrackNet path) | ✅ | `cut_rallies_from_predictions` + CLI; 2 tests |
 | `scripts/pod_infer.py` — RunPod GPU inference script | ✅ | Produces predictions.csv; argparse CLI |
 | `scripts/process_footage.py` — local: CSV + video → clips | ✅ | `make process VIDEO=... CSV=... NET_Y=... OUT=...` |
-| TrackNet FP rate on dead-time window | ❌ | 659–666s window not yet run through TrackNet |
-| Pickleball fine-tuned weights loaded | ❌ | TF 2.11/Ada compatibility check pending on workstation |
-| `max_ball_px` calibrated to actual ball pixel size | ❌ | Requires clean fixed footage |
-| Recall measured on `eval-set-A` | ❌ | Requires clean footage |
-| FP/10min measured | ❌ | — |
-| Boundary error measured | ❌ | — |
+| `src/calib.py` — `court_wedge` (perspective-aware court gate) | ✅ | Replaces flat `court_x_range`; adds the height cap (EXPERIMENTS.md 2026-08-16) |
+| `label_web.py` — browser-based two-pass labeler | ✅ | Mark (`s`/`e`) then grade (`1`/`2`/`3`) with hindsight; used to produce the 33 IMG_7743 labels |
+| TrackNet FP rate on dead-time window | ❌ | 659–666s window (compromised footage) not run through TrackNet; superseded by the full clean-footage precision number below |
+| Pickleball fine-tuned weights loaded | ✅ | Loaded 2026-08-16 via TF 2.15 (Keras-2 load path, `compile=False`); beats badminton weights on strict-IoU recall (31% vs 14%) and boundary error (1.05s vs 1.34s) — EXPERIMENTS.md 2026-08-16, now the default |
+| `max_ball_px` calibrated to actual ball pixel size | ❌ | Not set for TrackNet path (TrackNet has no equivalent filter); size/confidence filtering is `PIC-2`, in progress |
+| **33-label IMG_7743 benchmark** (blind ground truth vs blind detector) | ✅ | First trustworthy clean-footage eval; see below |
+| Recall measured on `eval-set-A` | ✅ | 20/33 (61%) @ IoU≥0.3, `min_crossings=6`, `court_wedge` gate (EXPERIMENTS.md 2026-08-16) — **below the ≥0.90 target** |
+| FP/10min measured | ⚠️ | Not reported as FP/10min directly; derivable from the same run (69 segments − 20 matched = 49 FP over 67.3 min ≈ **7.3/10min**) — well above the ≤1.0 target |
+| Boundary error measured | ❌ | Not measured on IMG_7743 at `min_crossings=6`. A different run (IMG_7655, different gate) measured 1.05s median — see `EXPERIMENTS.md` 2026-08-16 A/B |
 
-**Benchmark results (compromised footage, not eval):**
+**Benchmark results (compromised footage, historical — superseded by the clean-footage numbers below):**
 
 | Window | Type | YOLO | TrackNet (badminton wts) | Target |
 |---|---|---|---|---|
@@ -109,7 +95,14 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | IMG_7655 full video (net y=210 fixed) | 36 rallies | — | 5/36 usable clips (14% recall) | — |
 | IMG_7652 659–666s (net y=160) | DEAD | 0 (tracked) ✅ | not yet run | ~0 |
 
-**Gate status: NOT DONE** — e2e pipeline wired and runnable; no harness numbers. Blocked on clean footage for meaningful metrics.
+**Benchmark results (clean fixed-mount footage, real eval — IMG_7743, 33 hand labels, IoU≥0.3):**
+
+| Config | precision | recall | segments |
+|---|---|---|---|
+| shipped that morning (flat x-interval, `min_crossings=3`) | 0.10 | 0.61 (20/33) | 201 |
+| **shipped now** (capped trapezoid `court_wedge`, `min_crossings=6`) | **0.29** | **0.61 (20/33)** | **69** |
+
+**Gate status: PARTIAL** — e2e pipeline wired, runnable, and measured on clean footage for the first time (2026-08-16). Numbers exist but miss the PRD targets by a wide margin on precision; recall is pinned at 20/33 regardless of gating/thresholds (`PIC-1` — the ball is barely detected during the 13 missed rallies, a detection problem, not a gating one). Clean footage is no longer the blocker; the recall ceiling is.
 
 ---
 
@@ -137,8 +130,8 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | Shoe filter (reject detections in bottom 45% of player box) | ❌ | Described in TECH_SPEC §5.3.1; not implemented |
 | Physics filter (reject >300 px/frame jumps) | ⚠️ | `track_ball` max_jump rejects teleports but is not explicitly 300 px |
 | Ball side-alternation feature | ⚠️ | `crossing_times` counts net-side flips, which is equivalent |
-| Courtesy-return suppression (≥2 crossings required) | ⚠️ | `cluster_crossings(min_crossings=2)` does this; threshold not yet tuned |
-| Measured FP improvement vs v0 | ❌ | No clean-footage run |
+| Courtesy-return suppression | ✅ | `cluster_crossings`'s own default is still 2, but the shipped pipeline default is **6**, tuned by direct measurement on the 33-label IMG_7743 benchmark (ADR-048, `EXPERIMENTS.md` 2026-08-16) — precision 0.29 vs 0.12 at the same 61% recall |
+| Measured FP improvement vs v0 | ❌ | v1 now has a clean-footage precision/recall number (above); v0 has never been run on clean footage, so there is still no fair v0-vs-v1 comparison |
 
 **Gate status: PARTIAL** — core detection and tracker built; shoe filter missing; no measured comparison.
 
@@ -191,23 +184,27 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 
 ## The one real gate
 
-Everything above is blocked on this:
+**Cleared 2026-08-16.** IMG_7743 is a clean fixed-mount recording, repaired, calibrated (0.85ft RMSE), hand-labelled (33 rallies), and scored — the first trustworthy numbers the project has produced. The gate this section used to name is done.
 
-> **Capture one clean clip** — rigid mount, no zoom, no pan, whole court in frame, well-lit, calibrated with the 12+2 flow.
+The new binding constraint, replacing it:
 
-Until then: no meaningful recall/FP/boundary numbers are possible, `max_ball_px` can't be set, and the subjective gate can't run. The pipeline is built. The footage is the blocker.
+> **Recall is pinned at 20/33 under every gate shape and every threshold tried.** The 13 missed rallies are missed because the ball is barely detected during them at all — a detection failure, not a gating one. Nobody has diagnosed *why* yet (occlusion, motion blur, ball-vs-floor contrast each imply a different fix). Tracked as `PIC-1`.
+
+Precision (0.29) is also well short of a usable product, but it responded strongly to gating/threshold work (0.10 → 0.29) — it is not obviously stuck the way recall is.
 
 ---
 
 ## PRD §5 metric targets vs current measured values
 
+Measured on the 33-label IMG_7743 benchmark, IoU≥0.3, shipped config (`court_wedge` gate, `min_crossings=6`) — `EXPERIMENTS.md` 2026-08-16.
+
 | Metric | Target | Measured | Source |
 |---|---|---|---|
-| Rally recall | ≥ 0.90 | — | No clean run |
-| False positives / 10 min | ≤ 1.0 | — | No clean run |
-| Boundary error (median) | ≤ 1.0 s | — | No clean run |
-| Wall clock | ≤ 0.5× source | — | Not measured |
-| Budget compliance | ≤ 600 s | — | No reel yet |
+| Rally recall | ≥ 0.90 | **0.61** (20/33) — misses target | `EXPERIMENTS.md` 2026-08-16 |
+| False positives / 10 min | ≤ 1.0 | **≈7.3** (49 FP / 67.3 min) — misses target | Derived from the same run (69 segments − 20 matched) |
+| Boundary error (median) | ≤ 1.0 s | Not measured at this config; 1.05s under a different gate/clip (IMG_7655 A/B) | `EXPERIMENTS.md` 2026-08-16 |
+| Wall clock | ≤ 0.5× source | ~58 fps local GPU inference (≈2× realtime) | `EXPERIMENTS.md` 2026-08-16 |
+| Budget compliance | ≤ 600 s | — | No reel yet (`select.py` not built) |
 | Budget utilization | ≥ 0.85 | — | No reel yet |
 | Rally count in reel | ≥ 12 | — | No reel yet |
 | Subjective gate | 2 of 3 sessions | — | No reel yet |

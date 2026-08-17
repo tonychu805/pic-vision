@@ -240,6 +240,8 @@ Both discriminate better than raw motion magnitude, which conflates "playing har
 
 ### 5.3 T2′ — ball detection (optional; daylight only)
 
+**Superseded 2026-08-17 (see [`DECISIONS.md`](./DECISIONS.md) ADR-046/047).** This section describes the original design — ball detection as an optional boundary-refinement layer (§5.3.2) on top of a player-primary detector (T0′/T1′), running only on short windows around already-found rallies, with TrackNet as a last-resort rung behind two YOLO tiers. That is not what got built. What actually ships: **TrackNet, on the full video, is the primary and only active detector** (`src/tracknet.py`, GPU inference via `scripts/pod_infer.py`); the YOLO ball path below is archived (`archive/yolo_pipeline.py`, `archive/yolo_detect.py`) and the player-primary path (`src/players.py`/`src/events.py`) is frozen, not the spine. Left in place as a historical record of the reasoning, not as current instructions — do not build against §5.3.1/5.3.2 as written.
+
 Entered only if T0′+T1′ miss the PRD targets (ADR-011). Daylight only — the camera has no manual shutter control, so in low light the ball smears past recovery (ADR-002).
 
 **Two distinct uses, with very different quality bars.** Conflating them is what made the original estimate wrong.
@@ -261,7 +263,7 @@ Derived features, none needing trajectory:
 - **Ball-to-nearest-player distance** — a held ball sits at ~0 px from a person box; a ball in play is far from everyone most of the time. Feeds the "ball held" dead-time event (§5.2.1).
 - **Ball visible fraction** over a sliding window.
 
-**Courtesy-return suppression.** After every point someone taps the ball back to the server, producing a net crossing, one side-alternation, and a motion burst. This is systematic, not rare — it happens after *every* rally. Require **≥ 2 side-alternations** plus minimum duration: a real rally has several crossings, a courtesy return exactly one (ADR-028).
+**Courtesy-return suppression.** After every point someone taps the ball back to the server, producing a net crossing, one side-alternation, and a motion burst. This is systematic, not rare — it happens after *every* rally. Require several side-alternations plus minimum duration: a real rally has several crossings, a courtesy return exactly one (ADR-028). *The **≥ 2** figure below is the original design intent, historical.* The shipped `min_crossings` default is tuned by direct measurement, not restated here — see `src/tracknet.py`'s docstring and DECISIONS.md ADR-048 for the current value and its evidence.
 
 #### 5.3.2 Ball *trajectory* — boundary refinement, expensive
 

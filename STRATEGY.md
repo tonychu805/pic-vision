@@ -31,7 +31,9 @@ Candidates for what is actually defensible:
 
 ## 3. Detection foundation
 
-**Direction:** player-tracking is the foundation; the ball is a *refinement*, not a dependency.
+**Superseded 2026-08-13 by [`DECISIONS.md`](./DECISIONS.md) ADR-047** — the direction below was overtaken by results: full-video TrackNet ball detection is now the primary and current segmentation signal, and player-tracking is deferred (frozen, not the foundation). ADR-047 exists specifically to reconcile this doc with the code; that reconciliation happened there, not here, so the paragraphs immediately below are kept as the historical rationale for the *original* direction, not the current one. See §8 for what player-tracking still unlocks once revisited.
+
+**Original direction (superseded):** player-tracking is the foundation; the ball is a *refinement*, not a dependency.
 
 - Rally *segmentation* runs on player signals (position relative to court, motion, and — where reliable — pose). The ball is untrackable in many conditions and expensive at scale.
 - The ball, when used, sharpens boundaries and cuts false positives, and it only needs to run on the **selected clips** (~10 min), never the full session. This removes ball tracking from the throughput-critical path.
