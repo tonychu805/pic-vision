@@ -614,3 +614,201 @@ The best precision found anywhere in the sweep (0.347, `min_ball_px=12, min_conf
 1. `min_ball_px`/`min_conf` are kept in `rally_segments_from_predictions` (tested, off by default) rather than reverted — the mechanism is sound and cheap to keep even though this footage doesn't benefit; a different camera/detector combination could still get value from it later.
 2. Doesn't touch the two open, higher-confidence precision leads: IMG_7743's post-`court_wedge` residual FPs (still uncharacterized) and IMG_7744's rally-completeness problem (PIC-31) — this result is a negative finding, not a redirect toward a specific fix.
 3. Worth a real cause for *why* confidence doesn't separate the groups, if this gets picked up again — one candidate: the confidence value is the peak pixel probability within the model's own thresholded blob mask, which is somewhat self-selecting (a weak blob might not pass the >0.5 threshold to become a detection at all), which could compress the range for anything that clears detection regardless of whether it's a real ball.
+
+---
+
+## 2026-08-18 — Fourth camera scored: brickwall. Highest raw precision yet (0.59), but rally density explains most of it
+
+**Setup.** `brickwall_pro_series_finals.mp4`, indoor tournament play, 25.2 min. Screened with the new `scripts/check_drift.py` before any manual work: 0.2 px total camera travel over the whole file — the most stable footage in the project. Converted 60→30 fps CFR (`videos/brickwall_30fps.mp4`, 45,397 frames, full decode verified). Calibrated with `calibrate_web.py`: **0.345 ft RMSE**, the best in the project alongside pb_draft_cup (0.341), both net-tape points marked. Hand-labeled with `label_web.py`: 33 rallies, graded. TrackNet inference on local GPU with `--calib` court masking (mask kept 53% of frame), 45,396/45,397 frames. Scored with the shipped config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`, `band=0`).
+
+**Expected:** precision in the 0.25–0.29 band the three previous cameras all landed in.
+
+| | segments | labels | precision | recall |
+|---|---|---|---|---|
+| IoU≥0.3 | 44 | 33 | 0.73 | 0.97 (32/33) |
+| **IoU≥0.5 (spec)** | 44 | 33 | **0.59** | **0.79 (26/33)** |
+| IoU≥0.7 | 44 | 33 | 0.50 | 0.67 (22/33) |
+
+Precision more than doubled against every previous camera. Recall (0.79) exactly ties IMG_7743's post-fix best.
+
+**Before treating that as the precision ceiling breaking, the obvious confound was checked — and it is large.** brickwall is a structurally different kind of footage from the other three:
+
+| video | rallies | mean rally | **% of video that is live rally** |
+|---|---|---|---|
+| IMG_7744 | 10 | 9.4s | 4.0% |
+| IMG_7743 | 33 | 10.8s | 8.8% |
+| pb_draft_cup | 7 | 11.0s | 12.3% |
+| **brickwall** | 33 | **21.8s** | **47.4%** |
+
+Nearly half of brickwall is live play, in rallies twice as long as anyone else's. Both facts inflate precision mechanically: a spuriously-emitted segment is far more likely to land on real play when real play is everywhere, and a long label is easier to cover at IoU≥0.5 than a short one.
+
+**Quantified with a null model.** For each video, the real predicted segments were re-placed uniformly at random (same count, same duration distribution, 400 trials) and scored the same way. That "chance precision" is what each video's density hands out for free:
+
+| video | precision | chance precision | lift over chance |
+|---|---|---|---|
+| IMG_7744 | 0.25 | 0.02 | 13.7× |
+| pb_draft_cup | 0.27 | 0.05 | 5.8× |
+| **brickwall** | **0.59** | **0.14** | **4.3×** |
+
+**Conclusion. The 0.59 is real but is not evidence that the precision problem is solved — measured against chance, brickwall is the *worst* of the three, not the best.** The pipeline is doing less discriminative work here than on footage where rallies are sparse; it simply gets more credit for it. The cross-camera "precision pinned at 0.25–0.29" reading from 2026-08-17 is not overturned. What this run does overturn is the assumption that raw precision is comparable across videos at all — it is not, unless rally density is held roughly constant, which it was for the first three (4–12%) and is not for this one (47%).
+
+**Caveat on the lift column:** IMG_7744's 13.7× rests on a chance estimate of 0.02 from only 10 labels, so the exact ordering of the lift figures is not tight. The direction — brickwall's raw precision is substantially density-inflated — does not depend on that ordering.
+
+**Method note.** The scoring script was validated by reproducing the already-published IMG_7744 (0.25 / 0.60, 6/10) and pb_draft_cup (0.27 / 0.86, 6/7) numbers exactly through the same code path, before brickwall's numbers were trusted.
+
+**Follow-up.**
+1. brickwall's 18 false positives at IoU≥0.5 have not been reviewed at playback speed — unknown whether they are IMG_7743's hallucinated clutter or IMG_7744's real-but-abortive exchanges (PIC-31). Same open question as pb_draft_cup.
+2. The 7 missed rallies are mostly graded 2 (ordinary): rallies 4, 12, 19, 20, 23, 25 are quality 2, rally 22 is quality 1. Worth checking whether ordinary/lower-intensity play is systematically harder, since that would be a different miss mode than the camera-bump one.
+3. **Past cross-camera precision comparisons should be re-read with density in mind**, including the 2026-08-17 conclusion that precision is a pipeline property. That conclusion happened to compare three videos of similar density (4–12%), so it is probably safe — but it was never checked, and this run shows the comparison is not automatically valid.
+
+---
+
+## 2026-08-18 (later) — brickwall's "false positives" are mostly fragments of real rallies: a third, distinct failure mode
+
+**Prompted by an operator observation** that brickwall's exchanges are the highest-quality of any footage supplied so far — almost all sustained, competitive points. That is objectively visible as rally *duration* (21.8s mean vs ~10s on all three earlier videos); it is not visible in the quality grades (brickwall 36% grade-1 vs IMG_7743 33%), because grading is relative within a session and cannot express cross-video quality. The observation reframed the question: on footage that is half live rally with long points, what actually *are* the 18 false positives?
+
+**Anatomy of the 18 false positives at IoU≥0.5** (each FP segment classified by how much of it falls inside any labeled rally):
+
+| kind | count |
+|---|---|
+| entirely inside a labeled rally (fragment) | **10** |
+| partial / boundary overlap | 2 |
+| genuine dead-time false positive | 6 |
+
+**And every one of the 7 "missed" rallies contains a fragment or partial segment.** Rallies 4, 19, 22, 23, 25 each have one or two segments sitting entirely inside them; 12 and 20 have partial ones. The detector found all 33 rallies. It split the long ones into pieces, so no single piece reached IoU≥0.5 — and each rally was then charged **twice**: once as a miss, and once (or twice) as a false positive.
+
+**Root cause: `gap_sec=3.0` is too tight for 21.8s rallies.** It was tuned on IMG_7743 (ADR-048), whose rallies average 10.8s. A long point contains lulls — lobs, slow dink exchanges, brief detection dropouts — that exceed 3.0s, so `cluster_crossings` cuts the rally in two.
+
+**Confirmed by sweeping `gap_sec`** (IoU≥0.5, everything else at shipped defaults):
+
+| gap_sec | brickwall prec / recall | pb_draft_cup | IMG_7744 |
+|---|---|---|---|
+| **3.0 (shipped)** | 0.59 / 0.79 (26/33) | 0.27 / 0.86 | 0.25 / 0.60 |
+| **4.0** | **0.68 / 0.91 (30/33)** | 0.22 / 0.71 | 0.21 / 0.60 |
+| 5.0 | 0.55 / 0.67 | 0.24 / 0.71 | 0.06 / 0.20 |
+| 6.0 | 0.54 / 0.58 | 0.11 / 0.29 | 0.09 / 0.30 |
+
+Precision and recall rise **together** on brickwall at 4.0 — the signature of merging fragments rather than trading one metric for the other. Mechanism verified directly: 4 segments at gap=4.0 swallow more than one gap=3.0 segment, total covered time grows 693s → 785s, and merging also lifts several clusters over the `min_crossings=6` bar (new segments at 6–7 crossings). Segment count coincidentally stays at 44 because merges and promotions cancel out.
+
+**Do NOT ship `gap_sec=4.0`.** It is a sharp, video-specific optimum: it degrades both other cameras (pb_draft_cup 0.27→0.22, IMG_7744 0.25→0.21), and brickwall itself collapses by 5.0. The narrow window is mechanically explainable — at 47% rally density the dead gaps *between* rallies are short, so there is only a thin band where the gap bridges within-rally lulls without bridging between-rally ones.
+
+**Conclusion — this is a third failure mode, distinct from the two already logged.** IMG_7743's is hallucinated clutter (geometric, fixed by `court_wedge`). IMG_7744's is real-but-abortive exchanges (PIC-31, needs a rally-completeness signal). This one is **long rallies fragmented by a clustering gap tuned on shorter ones** — a parameterization problem, not a detection problem. The real lesson is that a single global `gap_sec` cannot serve footage with different rally-length distributions; it wants to scale with observed rally length, or be set per venue.
+
+**The density caveat still stands after the fix.** Recomputed chance-adjusted: gap=3.0 gives 0.59 raw / 4.3× lift; gap=4.0 gives 0.68 raw / 4.5× lift. Even with fragmentation repaired, brickwall's lift over chance stays below pb_draft_cup (5.8×) and IMG_7744 (13.7×). Both things are true at once — fragmentation was really costing real accuracy, *and* brickwall's raw numbers still overstate the pipeline relative to sparser footage.
+
+**Follow-up.**
+1. The 6 genuine dead-time false positives are the ones worth watching at playback speed — notably a 40.0s segment at 1290–1330s carrying 66 crossings, which is far too sustained to be clutter and may be unlabeled real play rather than a true false positive.
+2. An adaptive or per-venue `gap_sec` is now a concrete, evidence-backed proposal rather than a guess. Not yet designed or filed.
+3. This result is unreviewed — it changes the read on brickwall and adds a failure mode, and has not been through adversarial review.
+
+---
+
+## 2026-08-18 (later still) — brickwall false positives reviewed at playback speed: only 2 of 44 segments are actually wrong
+
+**Method.** All 6 of brickwall's dead-time false positives were cut as clips and judged by the operator at real playback speed, per the project rule that a rally-vs-dead-time call is not a verdict until someone watches it. The operator supplied not just verdicts but *true crossing counts*, which is what made the diagnosis below possible.
+
+**Verdicts:**
+
+| clip | flagged span | counted | operator verdict |
+|---|---|---|---|
+| fp1 | 02:48–02:55 | 6 | **junk** — only 3 real crosses; player tossing the ball, its image-y swings across the net line without the ball crossing the net |
+| fp2 | 08:43–08:45 | 6 | borderline — 4 real crosses, "borderline ordinary play" |
+| fp3 | 10:56–11:03 | 12 | **real rally** (not yet added to labels) |
+| fp4 | 12:41–12:51 | 8 | **junk** — 4 real crosses, players tossing the ball back across the net between points (the *courtesy return*) |
+| fp5 | 20:48–20:59 | 15 | **real rally** — added as rally 31 |
+| — | 21:30–22:10 | 66 | **real rally** — added as rally 33 |
+
+**Full anatomy of all 44 emitted segments**, combining this with the fragmentation analysis above:
+
+| what the segment actually is | count |
+|---|---|
+| matched a labeled rally | 26 |
+| fragment sitting entirely inside a real rally | 10 |
+| partial/boundary overlap with a real rally | 2 |
+| real rally the labels didn't have | 3 |
+| borderline ordinary play | 1 |
+| **genuinely wrong** | **2** |
+
+**Only 2 of 44 segments (4.5%) are things the operator would call outright errors.** The measured precision of 0.59 was charging the detector twice for fragmenting long rallies, and again for correctly finding play that wasn't labeled.
+
+**Rescored after adding the 2 confirmed rallies** (35 labels; fp3 still unlabeled so it still scores as a false positive):
+
+| config | segments | precision | recall |
+|---|---|---|---|
+| shipped (`gap_sec=3.0`) | 44 | **0.64** | **0.80** (28/35) |
+| `gap_sec=4.0` | 44 | **0.73** | **0.91** (32/35) |
+
+FP anatomy at the shipped config is now 16 false positives = 10 fragments + 2 boundary + 4 dead-time (the 4 being fp1, fp2, fp3-unlabeled, fp4).
+
+**Hypothesis tested and REJECTED: the hysteresis band does not fix the toss artefact.** `count_crossings` has a `band` parameter built precisely to stop jitter near the net inflating the count, and it ships at `band=0.0` — off. Turning it on does not touch fp1 (stays 6 crossings) or fp4 (stays 8) at any value from 5 to 30 px, while real rallies start disappearing at 15. The reason: a tossed ball swings through a *large* image-y range, so it clears any sane band in both directions. The band suppresses jitter; this is not jitter. (Incidentally `band=10` does improve brickwall overall — 0.59→0.66 precision, 0.79→0.82 recall on the 33-label set — but by removing other segments, not these. Treat it like `gap_sec=4.0`: a single-video optimum, not a default to ship.)
+
+**Two distinct junk mechanisms, needing different fixes:**
+1. **Phantom crossings (fp1)** — the ball never crosses the net, but its image-y crosses `net_y`. This is a limitation of using image-y as a proxy for which side of the net the ball is on: a ball high in the air on the near court has a small image-y and reads as "far side". Neither geometry (`court_wedge`) nor the band addresses it.
+2. **Real crossings during dead time (fp4)** — the courtesy return. The ball genuinely crosses the net; it just isn't play. This is the *same shape* as IMG_7744's PIC-31 problem, and it was named as a confounder in `PRD.md` §0.6 and ADR-028 before any of this was built. Still unfixed.
+
+**A caution recorded deliberately.** An attempt to characterise these two windows from aggregate trajectory statistics (x/y spread, side-of-net frame counts) did **not** separate junk from real rallies — fp1 has the *largest* horizontal spread of the four windows examined, contradicting a simple "vertical toss in one spot" model. This mirrors the 2026-08-16 IMG_7743 finding, where an aggregate-stats read of false positives was wrong and only a per-frame scatter plot settled it. Any follow-up on mechanism 1 should go straight to per-frame trajectory plotting, not summary statistics.
+
+**Follow-up.**
+1. fp3 (10:56–11:03) was confirmed as a real rally at playback but is not in `eval/labels/brickwall_30fps.jsonl`. Adding it would raise precision further. Left as-is rather than inserting a label using the detector's own boundaries, which would be circular.
+2. **The other three cameras have never had this review done.** IMG_7743, IMG_7744 and pb_draft_cup precision figures may be understated for the same two reasons (fragmentation double-charging, unlabeled real play). The cross-camera "precision pinned at 0.25–0.29" conclusion rests on numbers that have not had this correction applied.
+3. Density caveat still stands: brickwall is now 51.1% live rally, still far denser than the others (4–12%), so raw precision remains not directly comparable.
+
+---
+
+## 2026-08-18 (addendum) — pb_draft_cup is a SINGLES match; format, not camera, drives rally length
+
+**Operator note, recorded because it changes the reading of everything above:** `pb_draft_cup` is a **singles** match. Every other scored video is doubles (brickwall is doubles tournament play; IMG_7743/7744 are casual drop-in doubles). Singles exchanges are inherently shorter — one player covering the whole court produces more winners and errors and far less dinking than four players at the kitchen line.
+
+**This gives rally length a cause, where previously it was just a per-video number:**
+
+| video | format | mean rally | % of video live |
+|---|---|---|---|
+| brickwall | doubles, tournament | 21.8s | 47–51% |
+| pb_draft_cup | **singles** | 11.0s | 12.3% |
+| IMG_7743 | casual doubles | 10.8s | 8.8% |
+| IMG_7744 | casual doubles | 9.4s | 4.0% |
+
+**Three earlier observations now have a single explanation.**
+1. **Why brickwall fragments and pb_draft_cup doesn't.** brickwall had 10 fragment-type false positives, pb_draft_cup exactly 1. `gap_sec=3.0` was tuned on ~10s rallies; it fits singles and casual doubles fine and is too tight only for long competitive doubles points. The fragmentation failure mode is a property of **rally length**, i.e. of format and skill level — not of the camera.
+2. **Why the density confound exists at all.** Rally density follows directly from rally length. brickwall's 47% is doubles tournament play; the others' 4–12% is singles or casual play.
+3. **Why a single global `gap_sec` cannot work.** The proposed adaptive `gap_sec` now has a real causal variable behind it rather than a hand-wave: it should track observed rally length, which varies by format (singles vs doubles) and standard of play, both of which change per venue and per session.
+
+**Caution on `min_crossings=6`.** It was tuned on IMG_7743 (casual doubles). A singles rally has fewer net crossings for the same duration, so the same threshold is effectively stricter on singles footage. This has not been measured and is not a claim — just a flag that the one tuned threshold in the pipeline may not transfer across formats either.
+
+**Does this weaken the "pb_draft_cup labels look incomplete" suspicion?** Somewhat, but not much. Singles points are shorter, not rarer — 7 labelled rallies across 10.4 minutes still means one point every 89 seconds, with observed gaps up to 160s. The 15 unlabelled detector segments (3–10s, 6–12 crossings) sit squarely inside the duration range of the 7 labelled singles rallies (6.7–18.3s). The suspicion stands, but it is still a suspicion: **only the playback verdicts settle it**, and they are still outstanding.
+
+---
+
+## 2026-08-18 (key result) — pb_draft_cup relabelled: precision 0.27 → 0.59. The cross-camera precision ceiling was a label artefact
+
+**What changed.** The 15 dead-time false positives from the anatomy above were cut into a single review reel and judged at real playback speed. The operator marked **11 additional rallies**, taking the label file from 7 to 18. Nothing else changed — same `predictions.csv`, same calibration, same shipped config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`, `band=0`), same scoring code.
+
+| | 7 labels (as scored 2026-08-17) | 18 labels (relabelled) |
+|---|---|---|
+| **precision @ IoU≥0.5** | **0.27** | **0.59** |
+| recall @ IoU≥0.5 | 0.86 (6/7) | 0.72 (13/18) |
+| IoU≥0.3 | 0.32 / 1.00 | 0.68 / 0.83 |
+
+**Precision more than doubled on ground-truth correction alone.** Of the 15 flagged segments, 8 were real rallies; 7 were confirmed junk. The operator additionally marked 3 rallies the detector never proposed.
+
+**Both properly-labelled videos now sit near 0.6, not 0.25–0.29:**
+
+| video | precision (as previously published) | precision (after playback review) |
+|---|---|---|
+| pb_draft_cup | 0.27 | **0.59** |
+| brickwall | 0.59 (first scoring) | **0.64** |
+| IMG_7743 | 0.29 | not re-reviewed |
+| IMG_7744 | 0.25 | not re-reviewed |
+
+**Conclusion — the 2026-08-17 finding that "precision is pinned at 0.25–0.29 across cameras, therefore precision is a property of the pipeline's gating logic" does not survive.** The band was an artefact of how the labels were made, not a property of the detector. Two of the three videos supporting it have now been re-measured against corrected ground truth and both roughly doubled. The remaining two (IMG_7743, IMG_7744) have never had this review and should not be cited as evidence of a precision ceiling until they have.
+
+**Why the labels were incomplete is worth understanding, not just fixing.** `EXPERIMENTS.md` (2026-08-09) records IMG_7652 being deliberately curated from 32 marked rallies down to 9 "competitive" ones. `LABELING.md` and `label_web.py`'s own docstring warn against exactly this — grade ordinary play 2, don't delete it, "or the detector gets charged for correctly finding real play." That is precisely what happened here: pb_draft_cup's original 7 labels behave like a competitive-only subset, and the detector was charged for every ordinary rally it correctly found.
+
+**What is genuinely still wrong on this video:**
+- **7 confirmed junk segments**, clustered early (00:48, 01:16, 01:30, 02:34, 03:02) plus 07:48 and 08:06 — the early cluster is consistent with warm-up hitting before the match settles.
+- **5 missed rallies** (1, 10, 11, 13, 16). Rally 1 (00:02–00:13, 11.3s) is a fragmentation miss — the detector emitted 00:06–00:11 inside it, too short to reach IoU≥0.5. The rest are short singles points of 4.5–7.9s.
+
+**Follow-up.**
+1. **Re-review IMG_7743 and IMG_7744 the same way.** Their precision figures are the last support for the ceiling claim and are measured against labels of unknown completeness. IMG_7743's 33 labels over 67 minutes (8.8% density) look sparse by the same standard that flagged pb_draft_cup.
+2. Recompute the chance-adjusted lift for pb_draft_cup — its density moved from 12.3% to 26.7%, so the earlier 5.8× figure is stale.
+3. **This result is unreviewed.** It overturns the project's stated direction on the basis of one operator's relabelling pass, and should go through adversarial review before it is treated as settled.

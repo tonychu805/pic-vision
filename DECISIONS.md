@@ -782,6 +782,27 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 
 ---
 
+## ADR-050 — A precision number is not admissible until its false positives have been reviewed at playback speed
+
+**Date:** 2026-08-18 · **Status:** accepted
+
+**Context.** As of 2026-08-17 the project's headline finding was that precision sat in a tight 0.25–0.29 band across three independent cameras and venues while recall varied widely (0.60–0.86), and the conclusion drawn was that precision must therefore be a property of the pipeline's gating logic rather than of any camera or calibration. That conclusion set the project's direction: stop calibrating, go fix gating.
+
+It does not survive review. On 2026-08-18 the false positives of two videos were cut into clips and judged at real playback speed (`EXPERIMENTS.md`, 2026-08-18 entries). On `pb_draft_cup`, 8 of 15 dead-time "false positives" were real rallies the labels never recorded; the operator marked 11 more, taking the file from 7 to 18 labels. With no change to the predictions, the calibration, the config, or the scoring code, **precision moved 0.27 → 0.59**. On `brickwall` the same review moved precision 0.59 → 0.64 and revealed that 10 of its 18 false positives were *fragments sitting inside real rallies* — the detector had found the rally and split it, so each such rally was charged twice, once as a miss and once as a false positive.
+
+Neither correction involved improving the detector. Both were corrections to how it was being measured.
+
+**Decision.**
+- **A precision figure may not be cited as evidence about the detector until the false positives behind it have been reviewed at playback speed.** Until then it is a measurement of the labels as much as of the pipeline. This extends the existing rule that a rally-vs-dead-time call requires playback (`EXPERIMENTS.md`, IMG_7744 review) from individual verdicts to aggregate metrics.
+- **Detection metrics are scored against all real play, never a curated subset.** `PRD.md` §5 already required this ("measured on the complete rally list"); the 2026-08-09 habit of curating labels down to "competitive" rallies violated it and is what produced the artefact. Grade ordinary play 2 — never delete it.
+- **Report false positives by kind, not as one number.** The three observed kinds have unrelated causes and unrelated fixes: *fragments* of a real rally (clustering parameter), *unlabelled real play* (labelling process), and *genuine junk* — itself two distinct things, phantom crossings from a tossed ball whose image-y crosses `net_y` without the ball crossing the net, and courtesy returns where the ball really does cross during dead time. Aggregating them hides which problem is actually being measured.
+- **Raw precision is not comparable across videos of different rally density.** Use the chance-adjusted lift (`EXPERIMENTS.md`, 2026-08-18) when comparing.
+
+**Consequences.** The "precision is pinned at 0.25–0.29" finding is withdrawn as evidence of a pipeline ceiling; both re-measured videos now sit near 0.6. IMG_7743 (0.29) and IMG_7744 (0.25) have **not** been re-reviewed and must not be cited as support for a ceiling until they have — that review is the top priority in `PROGRESS.md`. This does not claim the pipeline is good enough: 7 confirmed junk segments on pb_draft_cup and 2 on brickwall are real errors, and the two junk mechanisms above remain unfixed, with the courtesy return being the same problem named as a risk in `PRD.md` §0.6 and still open as PIC-31. **This ADR records a conclusion reached within a single session, from one operator's relabelling pass, and has not been through adversarial review** — the direction it reverses was itself held with confidence one day earlier.
+
+---
+
+
 ## Template
 
 ```markdown

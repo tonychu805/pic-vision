@@ -95,14 +95,25 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | IMG_7655 full video (net y=210 fixed) | 36 rallies | — | 5/36 usable clips (14% recall) | — |
 | IMG_7652 659–666s (net y=160) | DEAD | 0 (tracked) ✅ | not yet run | ~0 |
 
-**Benchmark results (clean fixed-mount footage, real eval — IMG_7743, 33 hand labels, IoU≥0.3):**
+**Benchmark results — four cameras, shipped config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`), scored at IoU≥0.5 (`TECH_SPEC.md` §11):**
 
-| Config | precision | recall | segments |
+| Video | format | precision | recall | FPs reviewed at playback? |
+|---|---|---|---|---|
+| brickwall | doubles, tournament | **0.64** | 0.80 (28/35) | ✅ yes |
+| pb_draft_cup | **singles** | **0.59** | 0.72 (13/18) | ✅ yes |
+| IMG_7743 | casual doubles | 0.29 | 0.79 (26/33) | ❌ **not reviewed** |
+| IMG_7744 | casual doubles | 0.25 | 0.60 (6/10) | ❌ **not reviewed** |
+
+**Read the two unreviewed rows with suspicion.** Reviewing false positives at playback speed and correcting the labels moved pb_draft_cup 0.27 → 0.59 and brickwall 0.59 → 0.64, with no change to predictions, calibration, config, or scoring code (ADR-050). The earlier "precision pinned at 0.25–0.29 across cameras" reading is withdrawn; it was measuring label completeness as much as the detector.
+
+**Recall split by grade** — the blended figure hides the metric that matters, since missing an ordinary rally is cheap and missing a highlight is the product failing:
+
+| Video | highlight recall | ordinary recall | blended |
 |---|---|---|---|
-| shipped that morning (flat x-interval, `min_crossings=3`) | 0.10 | 0.61 (20/33) | 201 |
-| **shipped now** (capped trapezoid `court_wedge`, `min_crossings=6`) | **0.29** | **0.61 (20/33)** | **69** |
+| brickwall | **0.92** (12/13) | 0.73 (16/22) | 0.80 |
+| pb_draft_cup | 1.00 (2/2, n too small) | 0.69 (11/16) | 0.72 |
 
-**Gate status: PARTIAL** — e2e pipeline wired, runnable, and measured on clean footage for the first time (2026-08-16). Numbers exist but miss the PRD targets by a wide margin on precision; recall is pinned at 20/33 regardless of gating/thresholds (`PIC-1` — the ball is barely detected during the 13 missed rallies, a detection problem, not a gating one). Clean footage is no longer the blocker; the recall ceiling is.
+**Gate status: PARTIAL** — e2e pipeline wired, runnable, and now measured on four cameras. brickwall's **highlight** recall (0.92) meets the PRD's ≥0.90 detection target; blended recall and precision do not. Three distinct failure modes are separated and none is fixed: rally fragmentation by a too-tight `gap_sec` on long doubles points, phantom crossings from a tossed ball, and courtesy returns (PIC-31). Neither clean footage nor the recall ceiling is the blocker any more — measurement hygiene was, and the remaining work is code.
 
 ---
 

@@ -6,37 +6,40 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**Status (2026-08-17): three cameras now have real, comparable numbers, and the binding constraint has flipped from recall to precision.**
+**Status (2026-08-18): the "precision ceiling" was a measurement artefact. Two videos re-measured against corrected labels both roughly doubled.**
 
-The old blocker (IMG_7743's 13-rally recall ceiling) turned out to be a mid-session camera bump silently invalidating `net_y` for the back half of the recording — not a detection problem (ADR-049). Per-segment recalibration recovered recall 0.52→0.79. Two more cameras (IMG_7744, `pb_draft_cup`) have since been independently calibrated, hand-labeled, and scored.
+Yesterday's headline — precision pinned at 0.25–0.29 across three cameras, therefore precision is a property of the pipeline's gating logic — **does not survive contact with playback review.** Reviewing false positives at real speed and correcting the labels moved both videos that were checked:
 
-**Where the numbers stand** (IoU≥0.5 — the real `TECH_SPEC.md` §11 threshold; see the IoU trap below before trusting any number from before today):
-
-| video | precision | recall | labels |
+| video | precision (published 2026-08-17) | precision (after review) | what changed |
 |---|---|---|---|
-| IMG_7743 (post-bump-fix, split calibration) | 0.29 | 0.79 (26/33) | 33 |
-| IMG_7744 | 0.25 | 0.60 (6/10) | 10 |
-| `pb_draft_cup` | 0.27 | 0.86 (6/7) | 7 |
+| pb_draft_cup | 0.27 | **0.59** | labels 7 → 18; 8 of 15 "false positives" were real rallies |
+| brickwall (new, 4th camera) | — (0.59 first pass) | **0.64** | labels 33 → 35 |
+| IMG_7743 | 0.29 | **not re-reviewed** | — |
+| IMG_7744 | 0.25 | **not re-reviewed** | — |
 
-**The one thing to work on next: precision is pinned at 0.25–0.29 across all three cameras/venues, while recall varies a lot per video.** That pattern means precision is a property of the pipeline's gating logic itself, not a calibration or footage-quality problem — further per-camera calibration work has a shrinking payoff from here. Two *different*, already-diagnosed root causes are open, and neither is fully closed:
-- **IMG_7743:** false positives surviving `court_wedge` were traced (2026-08-16) to TrackNet *hallucinating* ball-shaped detections in background clutter (adjacent court, wall, ceiling fixtures) — no real ball there at all. Not re-characterized since the camera-bump fix changed the segment set.
-- **IMG_7744 (Linear PIC-31, open):** false positives are the opposite — real ball, real crossings, real court, but the exchange itself was a quick or failed point, not what a human calls a rally. No geometric gate or size/confidence filter can tell this apart from a real rally, because the signal is identical. Needs a new kind of signal (sustained-exchange duration tuned for this, or a point-outcome/dead-time-after signal) — not yet designed.
-- **`pb_draft_cup`:** not yet FP-reviewed at real playback speed — unknown which of the two failure modes above it belongs to, or a third one.
+**Do this first: re-review IMG_7743 and IMG_7744 the same way.** Cut their false positives into a review reel, watch at real speed, correct the labels, rescore. They are the last two data points holding up the ceiling claim, and their labels have never been checked for completeness — IMG_7743's 33 labels over 67 minutes (8.8% density) look sparse by the same standard that flagged pb_draft_cup. The recipe is in `EXPERIMENTS.md` (2026-08-18 entries); the reel-building is a few lines of ffmpeg.
 
-**Tried and rejected today: PIC-2** — using the detector's own already-computed blob-size and confidence numbers to filter clutter. Checked the real distributions (real-rally vs. outside-rally detections look almost identical: size median 15.0px both, confidence median 0.642 vs 0.627) and ran a full threshold sweep against the 33 IMG_7743 labels. No combination beat geometry (`court_wedge`) alone — the best precision found cost recall dropping from 0.79 to 0.52. Full sweep table in `EXPERIMENTS.md`. Don't re-attempt this without new evidence the detector's confidence signal has changed.
+**Three failure modes are now distinguished — they need different fixes and should not be lumped together as "precision":**
+1. **Fragmentation.** `gap_sec=3.0` was tuned on ~10s rallies and splits long ones, which charges the detector *twice* (a miss plus a false positive). Cost brickwall 10 of its 18 false positives. `gap_sec=4.0` gives brickwall 0.73/0.91 but degrades the others — **do not ship it**; the real fix is a gap that tracks observed rally length.
+2. **Label incompleteness.** Real play that was never marked scores as a false positive. Cost pb_draft_cup 8 of 15. Root cause is the old "curate to competitive rallies" habit, which `LABELING.md` already warns against.
+3. **Genuine junk**, of two distinct kinds — *phantom crossings* (a tossed ball whose image-y crosses `net_y` without the ball crossing the net; the `band` parameter does **not** fix this, tested) and *courtesy returns* (ball really crosses, but it is dead time — the same problem as PIC-31, named as a risk in `PRD.md` §0.6 back in August and still open).
 
-**Runnable now (all local — no RunPod needed; the RTX 2000 Ada does ~57 fps):**
-1. Inference env: `/mnt/fast_scratch/tf215_env/venv` (TF 2.15), weights at `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19`. Export `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs first — the project's own `.venv` cannot run inference (no GPU-capable TF).
-2. `python3 scripts/pod_infer.py --video game.mp4 --output predictions.csv`
-3. Score: `predictions.csv` → `src.tracknet.rally_segments_from_predictions(..., in_court=court_wedge(calib), gap_sec=3.0, min_crossings=6)` → `eval/harness.py`'s `match_intervals(..., threshold=0.5)` vs the matching `eval/labels/*.jsonl`. `court_wedge` isn't wired into `src/cut.py`'s CLI yet (still `court_x_range`, the flatter/worse gate) — scoring with the real gate is a one-off script today.
+**Rally length is the hidden variable behind most of this**, and it is driven by format, not camera: brickwall is doubles tournament play (21.8s mean rally, ~50% of the video live); pb_draft_cup is a **singles** match (9.3s, 27%); IMG_7743/7744 are casual doubles (~10s, 4–9%). Raw precision is **not comparable across videos with different densities** — a spurious segment lands on real play far more easily when half the video is live. Use the chance-adjusted lift in `EXPERIMENTS.md` when comparing.
 
-**Traps that have cost real time, all now guarded or at least documented:**
-- **Source `.MOV` files can be corrupt.** IMG_7743/7744 had localized HEVC damage that made OpenCV stop decoding *silently* (930 of 121k frames returned, exit code 0). Use the repaired `videos/*_fixed.mp4`; both inference paths now abort below 98% of expected frames.
-- **A calibration without `net_image_points` gives a biased net line** (~130px too low — the net's base, not its tape). `net_line_y` now warns.
-- **IoU≥0.3 vs IoU≥0.5.** Every IMG_7743 number logged between 2026-08-16 and the split-calibration fix used the looser, non-spec IoU≥0.3 informally. `TECH_SPEC.md` §11 specifies 0.5; the table above uses 0.5. Check which threshold produced any older number before trusting it.
-- **A mid-session camera bump silently invalidates calibration for everything after it** — no amount of threshold tuning recovers it (ADR-049). Automatic drift detection still isn't built (Linear PIC-29); per-segment recalibration today is a manual, one-off process (split the video/labels by hand, calibrate each half separately).
+**New this session:** `scripts/check_drift.py` (camera-bump/creep detection, closes PIC-29 — run it on any new footage *before* calibrating or labelling) and a video picker in `label_web.py` (run it with no arguments to choose a video and auto-load its labels).
 
-**Labelling is browser-based** (`label_web.py`) — the workstation is driven over SSH, so X11-forwarded video is unusable. Two passes: mark every rally with `s`/`e`, then `g` to grade with hindsight (`1` highlight / `2` ordinary / `3` not a rally — grade ordinary play `2`, don't delete it, or the detector gets charged for correctly finding real play). `calibrate_web.py` is the matching browser calibration tool (12 court + 2 net points, order-independent).
+**Runnable now (all local — the RTX 2000 Ada does ~28 fps with court masking):**
+1. Inference env: `/mnt/fast_scratch/tf215_env/venv` (TF 2.15), weights at `/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19`. Export `LD_LIBRARY_PATH` to the venv's `nvidia/*/lib` dirs first.
+2. `python3 scripts/pod_infer.py --video game.mp4 --calib calib/<name>_calib.json --output cache/<name>_predictions_k14.csv` — pass `--calib`, it masks outside the court *before* inference.
+3. Score: `rally_segments_from_predictions(..., in_court=court_wedge(calib), gap_sec=3.0, min_crossings=6)` → `match_intervals(..., threshold=0.5)`. **Note `match_intervals` returns a dict** (`matches`/`missed`/`false_pos`) — unpacking it as a tuple silently yields string lengths as metrics, which looks plausible and is entirely wrong.
+4. **Tests run as `.venv/bin/python -m pytest -q tests/`** — system `python3` has neither pytest nor cv2, and `archive/tests/` fails collection.
+
+**Traps that have cost real time, all now guarded or documented:**
+- **Source `.MOV` files can be corrupt** — IMG_7743/7744 silently decoded 930 of 121k frames, exit 0. Both inference paths now abort below 98%.
+- **A calibration without `net_image_points` gives a net line ~130px too low.**
+- **A mid-session camera bump invalidates calibration from that instant on** (ADR-049) — now detectable with `scripts/check_drift.py`.
+- **IoU≥0.3 vs IoU≥0.5** — numbers logged before 2026-08-17 may use the looser threshold. `TECH_SPEC.md` §11 specifies 0.5.
+- **Judge rally-vs-dead-time from playback, never stills or aggregate statistics** — both have produced confidently wrong answers on this project.
 
 ## Status at a glance
 
