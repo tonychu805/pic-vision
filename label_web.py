@@ -19,16 +19,75 @@ grade 1 only. Grading down rather than deleting ordinary play is deliberate —
 see LABELING.md and the 2026-08-09 curated-label mismatch.
 
 Usage:
+    python label_web.py                     # pick a video in the browser
+    python label_web.py videos/game.mp4     # straight to one video (labels derived)
     python label_web.py videos/game.mp4 --out eval/labels/game.jsonl --port 8766
+
+With no video argument it lists the playable videos in --video-dir and shows how
+many rallies each already has, so a session can be resumed without remembering
+paths. Labels follow the project convention videos/<stem>.mp4 ->
+eval/labels/<stem>.jsonl; --out still overrides it for a one-off.
 """
 import argparse
 import json
 import os
 import re
 import sys
+from html import escape
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from urllib.parse import quote, urlparse, parse_qs
 
 from label import load_rallies, save_rallies
+
+# Browsers cannot decode HEVC .MOV (see module docstring), and videos/raw/ holds
+# exactly those originals -- offering them in the picker would just produce a
+# black player, so discovery is deliberately top-level and extension-filtered.
+PLAYABLE = (".mp4", ".m4v", ".webm")
+
+
+def labels_path_for(video_path, labels_dir):
+    """The project convention: videos/<stem>.mp4 -> <labels_dir>/<stem>.jsonl."""
+    stem = os.path.splitext(os.path.basename(video_path))[0]
+    return os.path.join(labels_dir, stem + ".jsonl")
+
+
+def discover_videos(video_dir, labels_dir):
+    """Playable videos in video_dir (not recursive), each with its label count.
+
+    A video with no label file reports 0 rather than being hidden -- starting a
+    fresh video is the normal case, not an error."""
+    try:
+        names = sorted(os.listdir(video_dir))
+    except FileNotFoundError:
+        return []
+    out = []
+    for name in names:
+        path = os.path.join(video_dir, name)
+        if not os.path.isfile(path) or not name.lower().endswith(PLAYABLE):
+            continue
+        lp = labels_path_for(path, labels_dir)
+        rallies = load_rallies(lp)
+        out.append({
+            "name": name,
+            "path": path,
+            "labels": lp,
+            "n_labels": len(rallies),
+            "n_graded": sum(1 for r in rallies if r.get("quality")),
+            "size_mb": os.path.getsize(path) / (1 << 20),
+        })
+    return out
+
+
+def resolve_selection(name, videos):
+    """Map a name sent by the browser back to a discovered video, or None.
+
+    The picker round-trips this name through the client, so matching only against
+    already-discovered entries is what stops '../../etc/passwd' being opened."""
+    for v in videos:
+        if v["name"] == name:
+            return v
+    return None
+
 
 STATE = {}
 
@@ -67,8 +126,9 @@ PAGE = r"""<!doctype html>
     <span class="pill" id="mode">MARK</span>
     <span class="pill" id="count">0 rallies</span>
     <button onclick="save()">Save</button>
+    NAV_LINK
   </div>
-  <div id="msg"></div>
+  <div id="msg">NOW_LABELLING</div>
   <div id="help">
     <div><b>MARK pass</b> &mdash; <kbd>space</kbd> play/pause &nbsp; <kbd>s</kbd> rally start (serve)
       &nbsp; <kbd>e</kbd> rally end (ball dead) &nbsp; <kbd>x</kbd> cancel start &nbsp; <kbd>u</kbd> undo last</div>
@@ -213,24 +273,112 @@ render();
 </script></body></html>"""
 
 
+PICKER = r"""<!doctype html>
+<html><head><meta charset="utf-8"><title>pick a video</title>
+<style>
+  :root { color-scheme: dark; }
+  body { background:#111; color:#eee; font:14px/1.6 system-ui,sans-serif; margin:0; padding:28px; }
+  h1 { font-size:18px; margin:0 0 4px; }
+  p.sub { color:#888; margin:0 0 22px; font-size:13px; }
+  table { border-collapse:collapse; width:100%; max-width:820px; font-variant-numeric:tabular-nums; }
+  th { text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.08em;
+       color:#888; border-bottom:1px solid #333; padding:6px 10px; font-weight:600; }
+  td { padding:10px; border-bottom:1px solid #222; }
+  tr.row:hover td { background:#1b1b1b; }
+  a.name { color:#7cf; text-decoration:none; font-weight:600; }
+  a.name:hover { text-decoration:underline; }
+  .badge { border-radius:99px; padding:2px 10px; font-size:12px; border:1px solid #444; background:#222; }
+  .resume { background:#093; border-color:#0b4; color:#fff; }
+  .fresh { color:#888; }
+  .dim { color:#777; font-size:12px; }
+  .empty { color:#c96; }
+</style></head><body>
+<h1>Rally labeller</h1>
+<p class="sub">VIDEO_DIR &rarr; labels in LABELS_DIR. Pick a video to start or resume.</p>
+<table>
+  <tr><th>video</th><th>size</th><th>labels</th><th>status</th></tr>
+  ROWS
+</table>
+</body></html>
+"""
+
+
+def render_picker(videos, video_dir, labels_dir):
+    if not videos:
+        rows = ('<tr><td colspan="4" class="empty">No playable videos in this folder. '
+                'Browsers cannot decode .MOV/HEVC — convert to .mp4 first.</td></tr>')
+    else:
+        rows = []
+        for v in videos:
+            if v["n_labels"]:
+                status = f'<span class="badge resume">resume &middot; {v["n_graded"]} graded</span>'
+                labels = f'{v["n_labels"]}'
+            else:
+                status = '<span class="badge fresh">not started</span>'
+                labels = '<span class="dim">&mdash;</span>'
+            rows.append(
+                f'<tr class="row"><td><a class="name" href="/label?v={quote(v["name"])}">'
+                f'{escape(v["name"])}</a><div class="dim">{escape(v["labels"])}</div></td>'
+                f'<td class="dim">{v["size_mb"]:.0f} MB</td>'
+                f'<td>{labels}</td><td>{status}</td></tr>')
+        rows = "\n  ".join(rows)
+    return (PICKER.replace("ROWS", rows)
+                  .replace("VIDEO_DIR", escape(video_dir))
+                  .replace("LABELS_DIR", escape(labels_dir)))
+
+
 class Handler(BaseHTTPRequestHandler):
     def log_message(self, fmt, *args):
         pass
 
     def do_GET(self):
-        if self.path == "/":
-            body = PAGE.replace("INITIAL_RALLIES",
-                                json.dumps(STATE["rallies"])).encode()
-            self.send_response(200)
-            self.send_header("Content-Type", "text/html; charset=utf-8")
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-        elif self.path == "/video":
+        route = urlparse(self.path)
+        if route.path == "/" and STATE.get("picker"):
+            self._send_html(render_picker(
+                discover_videos(STATE["video_dir"], STATE["labels_dir"]),
+                STATE["video_dir"], STATE["labels_dir"]))
+        elif route.path == "/label" and STATE.get("picker"):
+            want = (parse_qs(route.query).get("v") or [""])[0]
+            chosen = resolve_selection(
+                want, discover_videos(STATE["video_dir"], STATE["labels_dir"]))
+            if chosen is None:
+                self.send_response(404)
+                self.end_headers()
+                return
+            STATE["video"] = chosen["path"]
+            STATE["out"] = chosen["labels"]
+            STATE["rallies"] = load_rallies(chosen["labels"])
+            print(f"labelling {chosen['name']} -> {chosen['labels']} "
+                  f"({len(STATE['rallies'])} existing)")
+            self._send_html(self._labeller_page())
+        elif route.path == "/":
+            self._send_html(self._labeller_page())
+        elif route.path == "/video":
+            if not STATE.get("video"):
+                self.send_response(409)
+                self.end_headers()
+                return
             self._serve_video()
         else:
             self.send_response(404)
             self.end_headers()
+
+    def _send_html(self, html):
+        body = html.encode()
+        self.send_response(200)
+        self.send_header("Content-Type", "text/html; charset=utf-8")
+        self.send_header("Content-Length", str(len(body)))
+        self.end_headers()
+        self.wfile.write(body)
+
+    def _labeller_page(self):
+        nav = ('<button onclick="location.href=\'/\'">&larr; videos</button>'
+               if STATE.get("picker") else "")
+        return (PAGE.replace("INITIAL_RALLIES", json.dumps(STATE["rallies"]))
+                    .replace("NAV_LINK", nav)
+                    .replace("NOW_LABELLING",
+                             escape(os.path.basename(STATE["video"])) + " &rarr; "
+                             + escape(STATE["out"])))
 
     def _serve_video(self):
         """Serve the video with HTTP range support — browsers require it to seek."""
@@ -291,19 +439,40 @@ class Handler(BaseHTTPRequestHandler):
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument("video", help="mp4 the browser can play (H.264; .MOV/HEVC may not decode)")
-    ap.add_argument("--out", required=True, help="labels .jsonl (read on start, written on save)")
+    ap.add_argument("video", nargs="?",
+                    help="mp4 the browser can play (H.264; .MOV/HEVC may not decode). "
+                         "Omit to pick one in the browser.")
+    ap.add_argument("--out", help="labels .jsonl (read on start, written on save). "
+                                  "Defaults to <labels-dir>/<video stem>.jsonl")
+    ap.add_argument("--video-dir", default="videos",
+                    help="folder the picker lists (default: videos)")
+    ap.add_argument("--labels-dir", default="eval/labels",
+                    help="where labels live (default: eval/labels)")
     ap.add_argument("--port", type=int, default=8766)
     args = ap.parse_args()
 
-    if not os.path.exists(args.video):
-        sys.exit(f"no such video: {args.video}")
+    STATE["video_dir"] = args.video_dir
+    STATE["labels_dir"] = args.labels_dir
+    STATE["picker"] = args.video is None
 
-    STATE["video"] = args.video
-    STATE["out"] = args.out
-    STATE["rallies"] = load_rallies(args.out)
-    if STATE["rallies"]:
-        print(f"resuming — {len(STATE['rallies'])} rallies already labelled")
+    if args.video is None:
+        found = discover_videos(args.video_dir, args.labels_dir)
+        if not found:
+            sys.exit(f"no playable videos in {args.video_dir}/ "
+                     f"(browsers can't decode .MOV/HEVC — convert to .mp4 first)")
+        print(f"{len(found)} video(s) in {args.video_dir}/:")
+        for v in found:
+            state = f"{v['n_labels']} labels" if v["n_labels"] else "not started"
+            print(f"  {v['name']:<44} {state}")
+    else:
+        if not os.path.exists(args.video):
+            sys.exit(f"no such video: {args.video}")
+        STATE["video"] = args.video
+        STATE["out"] = args.out or labels_path_for(args.video, args.labels_dir)
+        STATE["rallies"] = load_rallies(STATE["out"])
+        print(f"labelling {args.video} -> {STATE['out']}")
+        if STATE["rallies"]:
+            print(f"resuming — {len(STATE['rallies'])} rallies already labelled")
 
     server = ThreadingHTTPServer(("0.0.0.0", args.port), Handler)
     server.daemon_threads = True
