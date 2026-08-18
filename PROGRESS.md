@@ -45,10 +45,11 @@ Yesterday's headline — precision pinned at 0.25–0.29 across three cameras, t
 
 - **Active detection path: TrackNet** (`src/tracknet.py`, local GPU or RunPod via `scripts/pod_infer.py`). The YOLO path (`src/pipeline.py`, `archive/yolo_pipeline.py`) is retired — ADR-046.
 - **Pipeline:** `predictions.csv` → court gate (`src/calib.py`'s `court_wedge`, perspective-aware trapezoid — prefer over the flatter `court_x_range`) → `track_ball` (teleport/re-acquisition confirmation, `src/track.py`) → `crossing_times` → `cluster_crossings` (`src/ball.py`). Shipped default `gap_sec=3.0`, `min_crossings=6` (ADR-048).
-- **Built + tested (83 tests):** eval harness (IoU matching at 0.5, detection + selection tables) · calibration (order-independent, browser + CLI, marks the net) · TrackNet prediction parsing (including per-detection blob size/confidence) + court-wedge gating + tracker confirmation · scoring against hand labels on 3 independent camera angles.
-- **Not built:** automatic camera-bump/calibration-drift detection (PIC-29); a signal that tells a real rally apart from a quick failed exchange (PIC-31 — IMG_7744's open problem); selection/ranking (competitive vs. casual — Phase 1, still gated on precision).
-- **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, today) — doesn't separate real balls from junk on this footage.
-- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it).
+- **Built + tested (94 tests):** eval harness (IoU matching at 0.5, detection + selection tables) · calibration (order-independent, browser + CLI, marks the net) · TrackNet prediction parsing (including per-detection blob size/confidence) + court-wedge gating + tracker confirmation · scoring against hand labels on 4 independent camera angles.
+- **Not built:** a signal that tells a real rally apart from a quick failed exchange (PIC-31 — IMG_7744's open problem); selection/ranking (competitive vs. casual — Phase 1, still gated on precision).
+- **Camera-drift detection built** (`src/drift.py`, `scripts/check_drift.py`, PIC-29 closed) — run `check_drift.py` on any new footage *before* calibrating or labelling it.
+- **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, 2026-08-17) — doesn't separate real balls from junk on this footage.
+- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed).
 - `main` pushed to `origin`, no open branches.
 
 ---
