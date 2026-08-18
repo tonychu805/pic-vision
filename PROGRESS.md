@@ -50,6 +50,16 @@ The old blocker (IMG_7743's 13-rally recall ceiling) turned out to be a mid-sess
 
 ---
 
+## 2026-08-18 — Camera-drift detection built; footage triage
+
+- **Built `scripts/check_drift.py` + `src/drift.py`** (6 tests, suite 83 → 89 green) — the "detect it, don't tune around it" half of ADR-049. It phase-correlates sampled frames against the first one and reports two things separately: **bumps** (a step between consecutive samples that then holds — splits the video, each half needs its own calibration) and **creep** (many small changes accumulating — no clean split point). Exits 1 on a bump so it can gate a run. **Run it on any new footage before calibrating or labeling it.**
+- **Validated against a known answer before being trusted**: on IMG_7743 it independently recovered the ADR-049 bump, bracketing it between t=2820s and t=2880s (hand-diagnosed at t≈2859s) — the thing that cost a session to find by hand. On brickwall it reads 0.2 px over 25 minutes, so a locked camera reads as locked.
+- **Archived the two broadcast videos** (`ppa_atlanta_2023_...`, `austin_open_...`) to `videos/raw/archive/`. They're edited multi-camera productions — 19 and 25 hard scene cuts per 3 minutes, versus 0 for a fixed camera. Calibration is invalid *within* a single rally, so no tuning makes them work. Details and measurements in that directory's README.
+- **Corrected a wrong all-clear in `videos/raw/archive/README.md`**: IMG_7655 was recorded as "no known defect found," but it takes a ~25 px vertical bump at t≈470s and creeps ~16 px horizontally. It is **not** the cheap fourth camera its 36 existing labels make it look like — those labels straddle the bump.
+- **`brickwall_pro_series_finals.mp4` is the strongest remaining candidate**: 25 min, fixed camera, 0.2 px total travel — measurably the most stable footage in the project, better than IMG_7743 which needed split calibration to be usable at all. Not yet calibrated, labeled, or scored.
+
+---
+
 ## 2026-08-17 — Camera-bump root-cause fix, two more cameras scored, PIC-2 tried and rejected
 
 - **Diagnosed and fixed the real cause of IMG_7743's recall ceiling** (PIC-1): not a detection problem — the camera was physically bumped ~47 minutes into a 67-minute recording, shifting the net's image position and silently invalidating `net_y` for the rest of the session. Confirmed four independent ways (hard time boundary in the miss pattern, visible net-tape shift in frames, far-wall signage ruling out a tilt, and recall recovering when `net_y` is patched for the tail). Recorded as ADR-049. Built the real fix (split calibration, not a rough patch) and recovered recall 0.52→0.79 at the correct IoU≥0.5 threshold. Along the way, found and fixed a real regression in `calibrate_web.py` (the order-independent calibration solver had never been wired into the browser tool, only the CLI one).
