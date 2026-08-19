@@ -6,31 +6,16 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**Status (2026-08-19): the "precision ceiling" is now confirmed as a measurement artefact on all four cameras, not just two. The relabelling recipe closed out; the anatomy of what's left has not.**
+**Status (2026-08-20): the precision-ceiling artefact is confirmed and closed out on all four cameras; process integrity (eval-set locking, labelling noise) is now measured too. Read every number below against the noise floor in the last bullet before trusting a fine-grained comparison.**
 
-The 2026-08-17 headline — precision pinned at 0.25–0.29 across three cameras, therefore precision is a property of the pipeline's gating logic — **does not survive playback review, on any of the four cameras it's now been checked on:**
+- **Precision-ceiling artefact (ADR-050/051): closed.** The 2026-08-17 "precision pinned at 0.25–0.29" reading does not survive playback review on any of the four cameras — pb_draft_cup 0.27→0.59, brickwall 0.59→0.64, IMG_7743 0.29→0.44, IMG_7744 0.25→0.54. Full detail in the 2026-08-19 entries below.
+- **FP anatomy (PIC-37): done.** Remaining false positives on IMG_7743/7744 are 26% fragment, 48% real dead-time crossing, 21% noise, 5% ambiguous — the dominant mechanism is real crossings during dead time (PIC-31's territory), not phantom crossings, reversing the working assumption from brickwall's framing. Two flagged long segments playback-confirmed as warm-up, not missed rallies.
+- **PIC-31 candidate #1 (duration/rate threshold): tested, rejected.** Real rallies and real dead-time crossings overlap too much to separate this way, on any video, two methods. Candidate #3 (a non-ball signal) is what's left — brainstormed, unscoped, in PIC-42.
+- **Eval-set roles locked (PIC-17/ADR-052).** `sessions.jsonl` now exists: `eval`=IMG_7743 (locked, never used to pick a parameter again), `dev`=brickwall/pb_draft_cup/IMG_7744. Was overdue three days before being caught.
+- **`min_crossings=6` re-derived dev-only (PIC-43, partial).** Of 16 combinations swept, `min_crossings=6` + adaptive `gap_sec` is the only one with zero regressions on any `dev` video, and holds flat on the untouched `eval` check. `court_wedge`'s cap/spread constants are the one piece still unchecked.
+- **Labelling self-consistency measured for the first time (PIC-6), and this is the one to actually internalize:** blind-relabelling the same 5 minutes found only **~1/3 agreement on whether a stretch is a rally at all** (boundary placement, by contrast, was fine — ~0.6s median). That noise floor is bigger than several of the fine precision/recall differences chased this week (e.g. `min_crossings=6` vs `7`). Nothing above is wrong because of this, but treat any comparison finer than roughly this margin as unproven until corroborated another way.
 
-| video | precision (before review) | precision (after review) | what changed |
-|---|---|---|---|
-| pb_draft_cup | 0.27 | **0.59** | labels 7 → 18; 8 of 15 "false positives" were real rallies |
-| brickwall (4th camera) | 0.59 (first pass) | **0.64** | labels 33 → 35 |
-| IMG_7743 (combined pre/post-bump) | 0.29 | **0.44** | labels 33 → 53 (pre-bump 22→42; post-bump unchanged, every candidate there was junk) |
-| IMG_7744 | 0.25 | **0.54** | labels 10 → 20 |
-
-This closes ADR-050's top follow-up. The fragment/boundary/junk anatomy is now done for IMG_7743/7744 too (`EXPERIMENTS.md`, 2026-08-19 later entry, PIC-37, via the new `scripts/fp_anatomy.py`): 26% fragment, 48% real dead-time crossing, 21% noise/hallucinated, 5% ambiguous, combined across both videos' remaining false positives. **This changes the read on what to fix next** — the dominant junk mechanism turned out to be real ball crossings during dead time (courtesy returns / between-point practice, PIC-31's territory), not phantom crossings (PIC-34) as the 2026-08-18 brickwall framing suggested. That read comes from per-frame trajectory plots, not full playback, so it's a strong lead, not a settled verdict — two long segments (24.4s/28 crossings and 17.9s/18 crossings, both pre-bump) are flagged for an actual playback check before trusting it further.
-
-Both flagged segments are now playback-confirmed (warm-up with a lot of exchanges, not missed rallies) — the trajectory-plot method held up on the two highest-stakes calls. PIC-37 closed.
-
-**PIC-6 (Urgent, Todo) is prepped and waiting — do this first once a day has passed since 2026-08-19.** It measures the thing every number above rests on: how much a human's own labelling disagrees with itself on the same footage. `videos/IMG_7743_consistency_0-300s.mp4` is cut and ready (first 5 minutes of IMG_7743 pre-bump, standalone clip). **Deliberately not done same-day as today's session** — we spent hours hand-correcting boundaries in this exact file today, so relabelling it right now would just reproduce fresh memory, not measure real noise. To run it once enough time has passed:
-1. `python label_web.py videos/IMG_7743_consistency_0-300s.mp4 --out eval/labels/IMG_7743_consistency_0-300s_blind.jsonl` — do a normal MARK+GRADE pass, **without looking at `eval/labels/IMG_7743_prebump_0-2900s.jsonl`'s 0–300s entries first.**
-2. Score one against the other with `eval/harness.py`'s `match_intervals` (treat either as "predictions") — report agreement count and start/end boundary spread on the matches.
-3. Record the number in `EXPERIMENTS.md`, referenced from `LABELING.md` if agreement is poor enough to tighten the rally-boundary definition.
-
-**Other still-open work:** the same fp-anatomy treatment on `pb_draft_cup` (PIC-36, tool now exists and is reusable), and the still-open ADR-050 follow-ups — chance-adjusted lift recompute for `pb_draft_cup` (PIC-38), adversarial review of the label-artefact conclusion (PIC-39, now higher-stakes since it covers four videos and a second layer of unreviewed pattern-reading).
-
-**PIC-17 closed 2026-08-19 (ADR-052) — eval-set roles are now locked.** `sessions.jsonl` now exists: `eval`=IMG_7743 (locked, never again used to pick a parameter), `dev`=brickwall/pb_draft_cup/IMG_7744. This was overdue before today — flagged 2026-08-16, ignored through a 156-setting sweep that day and ~100 more parameter combinations in this session's own `gap_sec`/duration-threshold work.
-
-**PIC-43 (partial): `min_crossings` re-derived dev-only, converges on the number already shipped.** A 16-combination sweep (`min_crossings` 3–10 × fixed/adaptive gap_sec), searched using only `dev`, found `min_crossings=6` + adaptive `gap_sec` is the *only* combination with zero regressions on any `dev` video — the same 6 originally picked on IMG_7743 alone, three days before `dev`/`eval` existed. Checked against `eval` (IMG_7743, untouched throughout the search): 0.44/0.75 (fixed) vs 0.44/0.74 (adaptive) — flat, no overfitting sign. Real evidence the number wasn't a fluke of one video. `court_wedge`'s cap/spread constants are the one piece of PIC-43's original scope still unchecked. Full table in `EXPERIMENTS.md`.
+**Open, unblocked work:** PIC-36 (fp anatomy on `pb_draft_cup`, tool exists), PIC-38 (chance-adjusted lift recompute for `pb_draft_cup`), PIC-39 (adversarial review of the label-artefact conclusion — now higher-stakes given the labelling-noise finding above, do this before trusting anything further), PIC-40 (wire `court_wedge` into `src/cut.py`'s CLI), PIC-43's remaining `court_wedge` piece. PIC-31 needs a steer on which PIC-42 candidate to pursue before more work can happen there.
 
 **Open decision, not yet made:** this is now the strongest evidence so far for promoting `adaptive_gap` from opt-in to the shipped default — a genuine dev-search/eval-check result, not just "tested on the 4 videos that happen to exist." Left as a call for whoever picks this up next.
 
@@ -72,6 +57,16 @@ Both flagged segments are now playback-confirmed (warm-up with a lot of exchange
 - **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, 2026-08-17) — doesn't separate real balls from junk on this footage.
 - **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed — now confirmed on all 4 scored cameras as of 2026-08-19, not just the 2 it was based on), ADR-051 (the pre-2026-08-18 precision ceiling is fully retracted, confirmed on all 4 cameras), ADR-052 (eval-set roles locked — IMG_7743 is `eval`, may never again be used to pick a parameter; PIC-43 open to re-derive the shipped constants honestly).
 - `main` pushed to `origin`, no open branches.
+
+---
+
+## 2026-08-20 — PIC-6: labelling self-consistency measured for the first time — presence, not boundaries, is the real noise floor
+
+- Blind-relabelled the prepped 5-minute clip (`videos/IMG_7743_consistency_0-300s.mp4`), a day after prep as planned. 5 rallies originally, 7 on the blind repeat, only **3 of 9 distinct rally-windows agreed on by both** (2 missed on repeat, 4 found that weren't marked the first time).
+- Boundary spread on the 3 agreed rallies is small (~0.6s median) — close to the project's own ±0.5s target, not the concern.
+- **The bigger, previously-unmeasured source of noise is whether a stretch counts as a rally at all** — roughly a third agreement, bigger than several of the fine precision/recall differences chased this week (e.g. PIC-43's `min_crossings=6` vs `7`, ~0.05 precision). Doesn't invalidate this week's conclusions, but any comparison finer than roughly this margin should be read with real skepticism.
+- One data point (one labeller, one 5-minute stretch) — not a precise constant. Feeds directly into PIC-39 (adversarial review, still open).
+- Recorded in `EXPERIMENTS.md`, `LABELING.md`. PIC-6 closed.
 
 ---
 

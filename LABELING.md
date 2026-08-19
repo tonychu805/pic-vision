@@ -41,6 +41,8 @@ Label the *observed* action, not what you think the detector will find. Labels d
 
 Record the result in `EXPERIMENTS.md`. **That number is the noise floor for every metric in the project** — a 1.0 s boundary target is meaningless if your own labels disagree with themselves by 1.5 s.
 
+**Run once, 2026-08-20 (PIC-6), `EXPERIMENTS.md` for the full breakdown.** Boundary spread on agreed-upon rallies is small (~0.6s median, close to the ±0.5s target above) — not the concern. **Whether a stretch counts as a rally at all is the real noise source**: only 3 of 9 distinct rally-windows identified across two blind passes over the same 5 minutes were agreed on by both (2 missed on repeat, 4 found that weren't marked the first time). Read any precision/recall comparison finer than roughly this margin with real skepticism — it may be labelling noise, not signal. One data point (one labeller, one 5-minute stretch) — not yet a precise constant.
+
 ## Which footage to label
 
 - **Take a continuous block**, not the interesting bits. Cherry-picking biases everything downstream.

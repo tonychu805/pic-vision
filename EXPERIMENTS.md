@@ -1031,3 +1031,38 @@ Duration alone gets 11 of 12 right on this one video-half — but one dead-time 
 1. `min_crossings=7`/adaptive is a real, documented alternative — higher precision, lower recall, not selected here because it regresses `pb_draft_cup`'s recall. Worth revisiting if the product ever wants to bias toward precision over recall (e.g. a fully-automated reel with no human review step).
 2. `court_wedge`'s `cap_court_heights`/`spread` constants remain unchecked against `dev` — the one piece of PIC-43's original scope not done here.
 3. This is the strongest evidence so far for promoting `adaptive_gap` from opt-in to the shipped default — it now has a genuine dev-search / eval-check result, not just "tested on the 4 videos that exist." Not promoted in this entry; left as a decision for whoever reads this next, given `PIC-41`'s dual-report tooling still doesn't exist and no video outside the original 4 has ever been run through either path.
+
+---
+
+## 2026-08-20 — PIC-6: labelling self-consistency measured for the first time — presence disagreement is the real noise floor, not boundary jitter
+
+**Method**, per `LABELING.md`'s own (previously unexecuted) consistency-check protocol: the same 5-minute stretch of IMG_7743 (0–300s, `videos/IMG_7743_consistency_0-300s.mp4`) was labelled a second time, in a separate file, without looking at the original labels first — deliberately done the day *after* PIC-32's boundary-correction work on this exact footage (2026-08-19), not same-day, to avoid the recency-bias risk `PIC-6`'s own description named.
+
+**Result.** 5 rallies in the original pass, 7 in the blind second pass. Matched at IoU≥0.5 (project standard):
+
+| | count |
+|---|---|
+| matched (both passes agree) | **3** |
+| original-only (blind pass missed) | 2 |
+| blind-only (not in original at all) | 4 |
+
+Only 3 of 9 total distinct rally-windows identified across the two passes were agreed on by both — roughly a third.
+
+**On the 3 matched rallies, boundary spread is small and in line with the project's stated target:**
+
+| original | blind | IoU | start diff | end diff |
+|---|---|---|---|---|
+| 86.88–95.97 | 85.84–95.72 | 0.87 | 1.04s | 0.25s |
+| 146.90–157.33 | 145.18–157.23 | 0.85 | 1.72s | 0.10s |
+| 166.80–175.03 | 166.98–173.53 | 0.80 | 0.18s | 1.50s |
+
+Median boundary diff (start and end combined): **0.64s** — close to `LABELING.md`'s ±0.5s aim, not alarming.
+
+**The headline finding is presence, not boundaries.** Whether a given stretch of footage counts as a rally at all disagreed far more than where its edges fall: 2 of 5 original rallies were missed entirely on the blind repeat (63.23–69.48s, 278.93–285.46s), and 4 more were found that the original pass never marked (23.69–32.09s, 115.52–123.05s, 130.81–137.53s, 254.35–260.47s). Given this project's established finding that original labelling passes tend to be incomplete (the whole reason PIC-32's gap-review process exists), some of the blind-only rallies are plausibly real rallies the first pass missed rather than errors in the second — but that can't be settled without a third opinion, and isn't the point. **The disagreement itself is the noise floor**, regardless of which pass is "more correct."
+
+**What this means for every precision/recall number this project has produced, including this week's:** boundary noise (~0.6s median) is small and was already roughly expected. Presence/absence noise — only ~1/3 agreement on whether a window is a rally at all — is a much larger, previously unmeasured source of disagreement, and it's bigger than several of the fine-grained comparisons made this week (e.g., `min_crossings=6` vs `7`'s ~0.05 precision gap, PIC-43). That doesn't invalidate this week's conclusions, but any comparison finer than roughly this noise floor should be read as possibly indistinguishable from labelling noise, not confirmed signal.
+
+**Follow-up.**
+1. This result should feed directly into PIC-39 (adversarial review of the label-artefact conclusion) — a labeller-consistency number this loose is exactly the kind of confound a skeptical review would ask about.
+2. Not repeated on a second video/labeller — this is one data point (one person, one 5-minute stretch, one video). Treat the ~1/3 presence-agreement figure as a first estimate, not a precise constant.
+3. `LABELING.md`'s rally-start/end definition may be tight enough (boundary noise is fine); the presence disagreement suggests the *edge cases table* (courtesy return, warm-up, interrupted rallies) is where the real ambiguity lives — worth revisiting which specific edge case each of the 6 disagreements falls into, rather than stopping at the aggregate number.
