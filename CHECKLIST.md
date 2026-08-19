@@ -95,7 +95,7 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | IMG_7655 full video (net y=210 fixed) | 36 rallies | — | 5/36 usable clips (14% recall) | — |
 | IMG_7652 659–666s (net y=160) | DEAD | 0 (tracked) ✅ | not yet run | ~0 |
 
-**Benchmark results — four cameras, shipped config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`), scored at IoU≥0.5 (`TECH_SPEC.md` §11):**
+**Benchmark results — four cameras, shipped config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`), scored at IoU≥0.5 (`TECH_SPEC.md` §11). ⚠️ PROVISIONAL as of ADR-053 (2026-08-20) — see note below the table:**
 
 | Video | format | precision | recall | FPs reviewed at playback? |
 |---|---|---|---|---|
@@ -103,6 +103,8 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | pb_draft_cup | **singles** | **0.59** | 0.72 (13/18) | ✅ yes |
 | IMG_7743 (combined pre/post-bump) | casual doubles | **0.44** | 0.75 (40/53) | ✅ yes (2026-08-19) |
 | IMG_7744 | casual doubles | **0.54** | 0.65 (13/20) | ✅ yes (2026-08-19) |
+
+**⚠️ PROVISIONAL — do not cite these numbers as settled (ADR-053, 2026-08-20).** The paragraph below was written 2026-08-19 and is kept for history, but a formal adversarial review (PIC-39) found the relabelling methodology behind it is structurally biased to always raise precision (it can only convert a detector false-positive into a true positive, never the reverse) and that boundaries drawn while watching the detector's own proposed clip drift toward the detector's own guess — measured directly as a 0.290→0.449→0.536 gradient on IMG_7743 pre-bump as ground truth moves from independent to detector-anchored. The one label set made without seeing detector output (PIC-6's blind pass) scored the detector *worse* (0.14) than the retracted band, not better. **Only the retraction survives** ("0.25–0.29 is not a hard detector ceiling" — independently supported by the 2026-08-09 curated-label habit and brickwall's fragment finding). The replacement figures below (0.44/0.54/0.59/0.64) do not. Full findings in `EXPERIMENTS.md` 2026-08-20, "PIC-39" entry.
 
 **All four cameras now reviewed — the label artefact is confirmed everywhere it's been checked, not withdrawn on any of them.** Reviewing false positives at playback speed and correcting the labels moved every video the same direction: pb_draft_cup 0.27 → 0.59, brickwall 0.59 → 0.64, IMG_7743 0.29 → 0.44, IMG_7744 0.25 → 0.54 — with no change to predictions, calibration, config, or scoring code in any case (ADR-050; IMG_7743/7744 in `EXPERIMENTS.md` 2026-08-19). The earlier "precision pinned at 0.25–0.29 across cameras" reading is fully withdrawn; it was measuring label completeness, not the detector. **What's still open:** IMG_7743/7744's anatomy is now done (`EXPERIMENTS.md`, 2026-08-19 later entry, PIC-37) — 26% fragment, 48% real dead-time crossing, 21% noise, 5% ambiguous, combined. The dominant remaining mechanism is real crossings during dead time (courtesy return / between-point practice, PIC-31), **not** phantom crossings as previously assumed — read from per-frame trajectory plots. The two longest/highest-stakes segments (24.4s and 17.9s, both looked like clean real rallies in the plot) were playback-confirmed 2026-08-19: both warm-up with a lot of exchanges, not missed rallies — supports trusting the plot-read method on the rest of the batch. `pb_draft_cup` has not had this treatment yet (PIC-36 still open).
 

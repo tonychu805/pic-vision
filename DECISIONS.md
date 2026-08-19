@@ -831,6 +831,26 @@ This does not mean precision is solved. ADR-050's three separated failure modes 
 
 ---
 
+## ADR-053 — ADR-051's replacement precision figures are provisional; the retraction stands, the numbers don't
+
+**Date:** 2026-08-20 · **Status:** accepted
+
+**Context.** PIC-39 ran a formal adversarial review (skeptic, red-team, simplifier — three independent agents, majority-survives rule) against ADR-050/051's conclusion that the 2026-08-17 "0.25–0.29 precision ceiling" was a label-completeness artefact, confirmed by relabelling passes moving precision to 0.44/0.54/0.59/0.64 across the four scored videos. **Result: 0/3 survived.** All three lenses independently converged on the same structural problem, verified against the actual repo and label files, not just argued abstractly:
+
+- `scripts/review_gaps.py`'s extract→grade→merge process seeds every candidate from the detector's own false positives and only ever *adds* labels. Precision under this process is mathematically guaranteed to rise regardless of whether the added labels are truly complete — it can convert a false positive into a true positive, never the reverse, and can never discover a rally the detector missed entirely.
+- Measured directly: precision on IMG_7743 pre-bump moves 0.290 (independent labels) → 0.449 (human boundary-corrected while watching the detector's own clip) → 0.536 (raw detector boundaries) — a clean anchoring gradient. Boundaries drawn while watching a looping clip the detector proposed drift toward the detector's own guess.
+- The project's own required chance-adjusted-lift check (ADR-050's fourth decision bullet, left undone until this review) goes the *wrong direction* on 2 of 3 videos when actually run — the detector's power relative to chance did not improve.
+- The one label set on this project made independently of detector output (PIC-6's blind pass, 2026-08-20) scores the shipped detector *worse* (0.14) on its window than the retracted 0.25–0.29 band it was meant to move past — the opposite of what ADR-051 predicts.
+- A label file is already silently corrupted (duplicate/nested ground truth on IMG_7744, `merge`'s IoU≥0.3 dedup missed a nested interval), and `review_gaps.py merge` writes over committed ground truth in place with no backup, temp file, or guard against an empty/mistyped `--gaps` argument.
+
+**What survives.** The *retraction* half of ADR-050 — "0.25–0.29 must not be cited as a hard property of the detector" — holds independently of any of the above: the 2026-08-09 curated-label habit is separately documented and violates `PRD.md` §5, and brickwall's fragment finding (false positives sitting inside already-labelled rallies) is provable from existing labels with zero relabelling. What does **not** survive is treating 0.44/0.54/0.59/0.64 as established detector-quality numbers, or treating four relabelled videos as four independent confirmations — all four passes were made by one labeller whose own standard for "what counts as a rally" was still settling during this exact window (PIC-6's correction), so they are closer to one observation counted four times than four independent checks.
+
+**Decision.** ADR-051's replacement precision figures are downgraded from confirmed to **provisional**. `CHECKLIST.md` and `PROGRESS.md` are annotated accordingly. Everything scored against these labels since — PIC-37's false-positive anatomy, PIC-33's `adaptive_gap` selection, PIC-43's `min_crossings` re-derivation — inherits this uncertainty; their *relative* comparisons (dev vs. eval, config A vs. config B) are on firmer ground than their absolute precision figures, since both sides of each comparison share the same contaminated labels, but none of it should be cited as settled.
+
+**Consequences.** Further detection-precision tuning (the remaining pieces of PIC-40, PIC-43, PIC-38) is deprioritized pending real revalidation — a blind relabel of a video *not* already contaminated by multiple review passes (brickwall or pb_draft_cup, not IMG_7743, which ADR-052 already locked and PIC-6/PIC-44 have since touched twice more), made without seeing any detector output, is the concrete next check named by the reviewers and not yet done. Separately, and more fundamentally: this reopens the question of what the project should actually be optimizing. Detection precision was never the product goal — a highlight reel is — and the project has no written definition of "highlight-worthy" at all, only a `quality` grade assigned by feel. That gap (PIC-7, and a new consistency check on quality grading itself, mirroring PIC-6) is now higher priority than further detection-precision cleanup.
+
+---
+
 ## Template
 
 ```markdown
