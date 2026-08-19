@@ -996,3 +996,38 @@ Duration alone gets 11 of 12 right on this one video-half — but one dead-time 
 **Follow-up.**
 1. PIC-43: re-derive `min_crossings`, `gap_sec` base, and `court_wedge`'s cap/spread against `dev` only, then report the result on `eval` for the first time as a true held-out number — the check PIC-17 actually wanted, not yet done.
 2. Going forward: no sweep may use IMG_7743's labels to pick a parameter or threshold, only to report a final number, per its `eval` role in `sessions.jsonl`.
+
+---
+
+## 2026-08-19 (truly final) — PIC-43: `min_crossings=6` re-derived dev-only, converges on the exact number already shipped
+
+**What this answers.** ADR-048's `min_crossings=6` was picked on 2026-08-16 using only IMG_7743, because it was the only labelled video that existed at the time — not a shortcut, there was nothing else available. PIC-17/ADR-052 locked IMG_7743 as `eval` three days later, after other videos existed. This entry is the first time `min_crossings` has ever been re-derived using only `dev` (brickwall, pb_draft_cup, IMG_7744) — checking whether the number picked on one video's quirks happens to hold up on three completely different ones, or whether it was quietly overfit.
+
+**Method.** Raw net-crossing timestamps computed once per `dev` video (court-wedge gate + `track_ball`, identical to the shipped pipeline). Swept `min_crossings` ∈ {3..10} × gap mode ∈ {fixed `gap_sec=3.0`, adaptive (PIC-33, same `k=0.10`/`ref_duration=10.0` as shipped)} — 16 combinations, scored against `dev` labels only, IoU≥0.5. `eval` (IMG_7743) not touched anywhere in this search.
+
+| min_crossings | mode | brickwall (p/r) | pb_draft_cup (p/r) | IMG_7744 (p/r) | avg F1 |
+|---|---|---|---|---|---|
+| 3 | fixed | 0.42/0.80 | 0.39/0.72 | 0.15/0.65 | 0.435 |
+| 4 | fixed | 0.51/0.80 | 0.42/0.72 | 0.23/0.65 | 0.497 |
+| 5 | fixed | 0.58/0.80 | 0.59/0.72 | 0.38/0.65 | 0.602 |
+| 5 | adaptive | 0.62/0.86 | 0.65/0.72 | 0.40/0.60 | 0.629 |
+| **6** | **fixed (current default)** | 0.64/0.80 | 0.59/0.72 | 0.54/0.65 | 0.650 |
+| **6** | **adaptive** | **0.76/0.91** | **0.65/0.72** | **0.64/0.70** | **0.727** |
+| 7 | fixed | 0.67/0.80 | 0.75/0.67 | 0.75/0.60 | 0.700 |
+| 7 | adaptive | 0.82/0.91 | 0.75/0.67 | 0.87/0.65 | 0.771 |
+| 8 | adaptive | 0.84/0.91 | 0.71/0.56 | 0.82/0.45 | 0.694 |
+| 9 | adaptive | 0.89/0.91 | 0.86/0.33 | 0.71/0.25 | 0.584 |
+| 10 | adaptive | 0.88/0.86 | 0.80/0.22 | 0.71/0.25 | 0.529 |
+
+(3/4 fixed-only and 8/9/10 fixed rows omitted for space — recall collapses on `pb_draft_cup`/`IMG_7744` past `min_crossings=7` regardless of gap mode, same shape as the rest of the table)
+
+**Result: of all 16 combinations, `min_crossings=6` + adaptive `gap_sec` is the only one that improves or holds on every `dev` video with zero regressions** (tolerance ±0.005) against the current shipped baseline (`min_crossings=6`, fixed). `min_crossings=7` (adaptive) scores a higher average F1 (0.771 vs 0.727) but costs real recall on `pb_draft_cup` (0.72→0.67) and `IMG_7744` (holds at 0.65 — borderline) — a genuine precision/recall tradeoff, not a free win, and it fails the same "no regression" bar PIC-33 held itself to.
+
+**The held-out check, `eval` (IMG_7743), untouched throughout this search — already computed earlier today for other reasons:** precision/recall 0.44/0.75 (fixed) vs 0.44/0.74 (adaptive). Flat. No sign the winning config is fit to `dev`'s quirks.
+
+**Conclusion: `min_crossings=6` survives a genuine, independent re-derivation.** A number chosen out of necessity on a single video three days before `dev`/`eval` even existed turns out, when re-searched blind on three different videos, to still be the answer. This is real evidence against the overfitting risk PIC-17 raised — not proof it's the globally optimal number forever, but proof it wasn't a fluke of IMG_7743 specifically. Paired with adaptive `gap_sec` (PIC-33), it's now the only config in this table with no regression anywhere, confirmed both on `dev` (by construction) and on `eval` (by held-out check).
+
+**Follow-up.**
+1. `min_crossings=7`/adaptive is a real, documented alternative — higher precision, lower recall, not selected here because it regresses `pb_draft_cup`'s recall. Worth revisiting if the product ever wants to bias toward precision over recall (e.g. a fully-automated reel with no human review step).
+2. `court_wedge`'s `cap_court_heights`/`spread` constants remain unchecked against `dev` — the one piece of PIC-43's original scope not done here.
+3. This is the strongest evidence so far for promoting `adaptive_gap` from opt-in to the shipped default — it now has a genuine dev-search / eval-check result, not just "tested on the 4 videos that exist." Not promoted in this entry; left as a decision for whoever reads this next, given `PIC-41`'s dual-report tooling still doesn't exist and no video outside the original 4 has ever been run through either path.

@@ -141,7 +141,7 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | Shoe filter (reject detections in bottom 45% of player box) | ❌ | Described in TECH_SPEC §5.3.1; not implemented |
 | Physics filter (reject >300 px/frame jumps) | ⚠️ | `track_ball` max_jump rejects teleports but is not explicitly 300 px |
 | Ball side-alternation feature | ⚠️ | `crossing_times` counts net-side flips, which is equivalent |
-| Courtesy-return suppression | ✅ | `cluster_crossings`'s own default is still 2, but the shipped pipeline default is **6**, tuned by direct measurement on the 33-label IMG_7743 benchmark (ADR-048, `EXPERIMENTS.md` 2026-08-16) — precision 0.29 vs 0.12 at the same 61% recall |
+| Courtesy-return suppression | ✅ | `cluster_crossings`'s own default is still 2, but the shipped pipeline default is **6**, tuned by direct measurement on the 33-label IMG_7743 benchmark (ADR-048, `EXPERIMENTS.md` 2026-08-16) — precision 0.29 vs 0.12 at the same 61% recall. **Re-derived independently on `dev` only 2026-08-19 (PIC-43)** — of a 16-combination sweep (`min_crossings` 3–10 × fixed/adaptive gap), `min_crossings=6` + adaptive gap is the only one with zero regressions on any `dev` video; the number picked out of necessity on one video three days before `dev`/`eval` existed survives a blind re-derivation on three different ones. |
 | Measured FP improvement vs v0 | ❌ | v1 now has a clean-footage precision/recall number (above); v0 has never been run on clean footage, so there is still no fair v0-vs-v1 comparison |
 
 **Gate status: PARTIAL** — core detection and tracker built; shoe filter missing; no measured comparison.

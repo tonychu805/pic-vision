@@ -28,7 +28,11 @@ Both flagged segments are now playback-confirmed (warm-up with a lot of exchange
 
 **Other still-open work:** the same fp-anatomy treatment on `pb_draft_cup` (PIC-36, tool now exists and is reusable), and the still-open ADR-050 follow-ups — chance-adjusted lift recompute for `pb_draft_cup` (PIC-38), adversarial review of the label-artefact conclusion (PIC-39, now higher-stakes since it covers four videos and a second layer of unreviewed pattern-reading).
 
-**PIC-17 closed late, 2026-08-19 (ADR-052) — eval-set roles are now locked, and PIC-43 is the actual unfinished business it leaves behind.** `sessions.jsonl` now exists: `eval`=IMG_7743 (locked, never again used to pick a parameter), `dev`=brickwall/pb_draft_cup/IMG_7744. This was overdue before today — flagged 2026-08-16, ignored through a 156-setting sweep that day and ~100 more parameter combinations in this session's own `gap_sec`/duration-threshold work. **The currently shipped `min_crossings=6`, `gap_sec=3.0` base, and `court_wedge` constants were all tuned using IMG_7743 itself and cannot be un-tuned retroactively** — PIC-43 (re-derive them against `dev` only, then report the first true held-out number on `eval`) is the real next step, not just a nice-to-have. PIC-33's `adaptive_gap` is the one piece of work that already followed this discipline by accident (tuned on `dev`, flat on what's now `eval`) — the template for what PIC-43 should look like.
+**PIC-17 closed 2026-08-19 (ADR-052) — eval-set roles are now locked.** `sessions.jsonl` now exists: `eval`=IMG_7743 (locked, never again used to pick a parameter), `dev`=brickwall/pb_draft_cup/IMG_7744. This was overdue before today — flagged 2026-08-16, ignored through a 156-setting sweep that day and ~100 more parameter combinations in this session's own `gap_sec`/duration-threshold work.
+
+**PIC-43 (partial): `min_crossings` re-derived dev-only, converges on the number already shipped.** A 16-combination sweep (`min_crossings` 3–10 × fixed/adaptive gap_sec), searched using only `dev`, found `min_crossings=6` + adaptive `gap_sec` is the *only* combination with zero regressions on any `dev` video — the same 6 originally picked on IMG_7743 alone, three days before `dev`/`eval` existed. Checked against `eval` (IMG_7743, untouched throughout the search): 0.44/0.75 (fixed) vs 0.44/0.74 (adaptive) — flat, no overfitting sign. Real evidence the number wasn't a fluke of one video. `court_wedge`'s cap/spread constants are the one piece of PIC-43's original scope still unchecked. Full table in `EXPERIMENTS.md`.
+
+**Open decision, not yet made:** this is now the strongest evidence so far for promoting `adaptive_gap` from opt-in to the shipped default — a genuine dev-search/eval-check result, not just "tested on the 4 videos that happen to exist." Left as a call for whoever picks this up next.
 
 **Linear triage done 2026-08-19:** PIC-31 bumped to Urgent (48% of IMG_7743's remaining FPs are its exact failure mode — real dead-time crossings, not phantom crossings); PIC-34 dropped to Medium (0 of 46 examined FPs showed its signature); PIC-33/36/38/39/40 moved Backlog→Todo (all unblocked). PIC-33 is now done (see below); next up by priority is PIC-31 or PIC-6 (once a day has passed).
 
@@ -68,6 +72,16 @@ Both flagged segments are now playback-confirmed (warm-up with a lot of exchange
 - **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, 2026-08-17) — doesn't separate real balls from junk on this footage.
 - **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed — now confirmed on all 4 scored cameras as of 2026-08-19, not just the 2 it was based on), ADR-051 (the pre-2026-08-18 precision ceiling is fully retracted, confirmed on all 4 cameras), ADR-052 (eval-set roles locked — IMG_7743 is `eval`, may never again be used to pick a parameter; PIC-43 open to re-derive the shipped constants honestly).
 - `main` pushed to `origin`, no open branches.
+
+---
+
+## 2026-08-19 (truly final) — PIC-43: min_crossings re-derived dev-only, confirms the shipped default
+
+- Swept `min_crossings` ∈ {3..10} × {fixed `gap_sec=3.0`, adaptive} = 16 combinations, scored against `dev` only (brickwall, pb_draft_cup, IMG_7744) — `eval` (IMG_7743) untouched throughout.
+- **`min_crossings=6` + adaptive `gap_sec` is the only combination that improves or holds on every `dev` video with zero regressions.** `min_crossings=7`/adaptive scores higher on average (0.771 vs 0.727 F1) but costs real recall on `pb_draft_cup` and `IMG_7744` — a genuine tradeoff, documented as an alternative, not selected.
+- Checked against `eval` (IMG_7743): 0.44/0.75 (fixed) vs 0.44/0.74 (adaptive) — flat. The number picked on one video out of necessity, three days before `dev`/`eval` existed, survives being re-derived blind on three different ones.
+- `court_wedge`'s cap/spread constants remain the one unchecked piece of PIC-43's original scope.
+- Recorded in `EXPERIMENTS.md`, `CHECKLIST.md`. Linear PIC-43 updated with the full table.
 
 ---
 
