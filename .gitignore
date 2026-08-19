@@ -58,3 +58,5 @@ debug_frames/
 # and not ground truth themselves — unlike the real labels beside them.
 eval/labels/*_gaps.jsonl
 eval/labels/*_gaps_all.jsonl
+._*
+.DS_Store
