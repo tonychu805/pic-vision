@@ -29,7 +29,8 @@ def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
                                  gap_sec=3.0, min_crossings=6, band=0.0,
                                  max_jump=150, reset_after=15,
                                  court_x_min=None, court_x_max=None,
-                                 court_id=None, session_id=None, pad_sec=3.0):
+                                 court_id=None, session_id=None, pad_sec=3.0,
+                                 adaptive_gap=False):
     """TrackNet CSV -> rally clips in one pass: parse predictions, score by
     crossing count (ADR-039), cut H.264 clips + manifest.json into out_dir."""
     segments = rally_segments_from_predictions(
@@ -37,6 +38,7 @@ def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
         gap_sec=gap_sec, min_crossings=min_crossings, band=band,
         max_jump=max_jump, reset_after=reset_after,
         court_x_min=court_x_min, court_x_max=court_x_max,
+        adaptive_gap=adaptive_gap,
     )
     scored = [{**s, "score": s["crossings"]} for s in segments]
     manifest = cut_clips(video, scored, out_dir,
@@ -64,6 +66,11 @@ def main(argv=None):
                    help="max seconds between crossings in one rally (default 3.0)")
     p.add_argument("--min-crossings", type=int, default=6,
                    help="minimum crossings to count as a rally (default 6)")
+    p.add_argument("--adaptive-gap", action="store_true",
+                   help="derive gap_sec from this video's own observed rally length "
+                        "(PIC-33) instead of applying --gap-sec as a fixed constant; "
+                        "--gap-sec becomes the starting point. Opt-in, validated on 4 "
+                        "videos to match or beat the fixed default -- see EXPERIMENTS.md")
     p.add_argument("--band", type=float, default=0.0,
                    help="net hysteresis band, px (tune for dink rallies: 15-30px)")
     p.add_argument("--max-jump", type=float, default=150,
@@ -123,7 +130,7 @@ def main(argv=None):
         band=args.band, max_jump=args.max_jump, reset_after=args.reset_after,
         court_x_min=court_x_min, court_x_max=court_x_max,
         court_id=args.court_id, session_id=args.session_id,
-        pad_sec=args.pad_sec,
+        pad_sec=args.pad_sec, adaptive_gap=args.adaptive_gap,
     )
     print(f"cut {len(manifest)} rallies -> {args.out}/manifest.json")
     if manifest:

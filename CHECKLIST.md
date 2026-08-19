@@ -113,7 +113,7 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 | brickwall | **0.92** (12/13) | 0.73 (16/22) | 0.80 |
 | pb_draft_cup | 1.00 (2/2, n too small) | 0.69 (11/16) | 0.72 |
 
-**Gate status: PARTIAL** — e2e pipeline wired, runnable, and now measured on four cameras. brickwall's **highlight** recall (0.92) meets the PRD's ≥0.90 detection target; blended recall and precision do not. Three distinct failure modes are separated and none is fixed: rally fragmentation by a too-tight `gap_sec` on long doubles points, phantom crossings from a tossed ball, and courtesy returns (PIC-31). Neither clean footage nor the recall ceiling is the blocker any more — measurement hygiene was, and the remaining work is code.
+**Gate status: PARTIAL** — e2e pipeline wired, runnable, and now measured on four cameras. brickwall's **highlight** recall (0.92) meets the PRD's ≥0.90 detection target; blended recall and precision do not. Three distinct failure modes are separated: rally fragmentation by a too-tight `gap_sec` on long doubles points (PIC-33, **fix built 2026-08-19** — `src.ball.adaptive_gap_sec`, opt-in via `adaptive_gap=True` / `--adaptive-gap`, not yet the shipped default; brickwall 0.64/0.80→0.76/0.91, pb_draft_cup/IMG_7744 improve or hold, brickwall's fragment-type FPs more than halve 12→5 — `EXPERIMENTS.md` 2026-08-19), phantom crossings from a tossed ball (PIC-34, deprioritized — see below), and courtesy returns (PIC-31, **now the leading measured mechanism** on IMG_7743, re-prioritized Urgent). Neither clean footage nor the recall ceiling is the blocker any more — measurement hygiene was, and the remaining work is code.
 
 ---
 

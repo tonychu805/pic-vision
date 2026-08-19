@@ -28,6 +28,8 @@ Both flagged segments are now playback-confirmed (warm-up with a lot of exchange
 
 **Other still-open work:** the same fp-anatomy treatment on `pb_draft_cup` (PIC-36, tool now exists and is reusable), and the still-open ADR-050 follow-ups — chance-adjusted lift recompute for `pb_draft_cup` (PIC-38), adversarial review of the label-artefact conclusion (PIC-39, now higher-stakes since it covers four videos and a second layer of unreviewed pattern-reading).
 
+**Linear triage done 2026-08-19:** PIC-31 bumped to Urgent (48% of IMG_7743's remaining FPs are its exact failure mode — real dead-time crossings, not phantom crossings); PIC-34 dropped to Medium (0 of 46 examined FPs showed its signature); PIC-33/36/38/39/40 moved Backlog→Todo (all unblocked). PIC-33 is now done (see below); next up by priority is PIC-31 or PIC-6 (once a day has passed).
+
 **Tool built this session, useful for any future gap-review pass:** `label_web.py`'s GRADE mode can now re-mark a candidate's boundary in place (`s`/`e` while grading) instead of only keep/drop — the original detector timestamp is preserved as `detector_start`/`detector_end` alongside the corrected one, never silently lost. Needed because a detector segment spans only first-to-last net crossing, so real rallies are routinely truncated at both ends, not just missing entirely.
 
 **Also flagged, not yet fixed:** `src/cut.py`'s CLI still derives the older flat `court_x_range` from `--calib`, not the preferred `court_wedge` — a real `python3 -m src.cut` run today would score worse than the numbers above unless `in_court=court_wedge(calib)` is wired in by hand (the 2026-08-19 rescore did this via a scratch script, not through `cut.py` itself).
@@ -58,12 +60,22 @@ Both flagged segments are now playback-confirmed (warm-up with a lot of exchange
 
 - **Active detection path: TrackNet** (`src/tracknet.py`, local GPU or RunPod via `scripts/pod_infer.py`). The YOLO path (`src/pipeline.py`, `archive/yolo_pipeline.py`) is retired — ADR-046.
 - **Pipeline:** `predictions.csv` → court gate (`src/calib.py`'s `court_wedge`, perspective-aware trapezoid — prefer over the flatter `court_x_range`) → `track_ball` (teleport/re-acquisition confirmation, `src/track.py`) → `crossing_times` → `cluster_crossings` (`src/ball.py`). Shipped default `gap_sec=3.0`, `min_crossings=6` (ADR-048).
-- **Built + tested (94 tests):** eval harness (IoU matching at 0.5, detection + selection tables) · calibration (order-independent, browser + CLI, marks the net) · TrackNet prediction parsing (including per-detection blob size/confidence) + court-wedge gating + tracker confirmation · scoring against hand labels on 4 independent camera angles.
+- **Built + tested (98 tests):** eval harness (IoU matching at 0.5, detection + selection tables) · calibration (order-independent, browser + CLI, marks the net) · TrackNet prediction parsing (including per-detection blob size/confidence) + court-wedge gating + tracker confirmation · scoring against hand labels on 4 independent camera angles · adaptive per-video `gap_sec` (PIC-33, opt-in).
 - **Not built:** a signal that tells a real rally apart from a quick failed exchange (PIC-31 — IMG_7744's open problem); selection/ranking (competitive vs. casual — Phase 1, still gated on precision).
 - **Camera-drift detection built** (`src/drift.py`, `scripts/check_drift.py`, PIC-29 closed) — run `check_drift.py` on any new footage *before* calibrating or labelling it.
 - **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, 2026-08-17) — doesn't separate real balls from junk on this footage.
 - **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed — now confirmed on all 4 scored cameras as of 2026-08-19, not just the 2 it was based on).
 - `main` pushed to `origin`, no open branches.
+
+---
+
+## 2026-08-19 (later still) — Adaptive gap_sec (PIC-33): self-calibrating design beats the fixed constant on all 4 videos
+
+- **First idea (per-crossing local adaptivity — scale the allowed gap by the median interval already seen within the current cluster) tested and rejected**: every one of 60 parameter combinations scored worse than the fixed `gap_sec=3.0` baseline on all three videos checked. Root cause: most in-rally gaps are short, so a multiple of the local median ends up *tighter* than 3.0s most of the time — the opposite of what's needed.
+- **Second design, validated**: `src.ball.adaptive_gap_sec` — two passes. Pass 1 clusters at the existing constant to get a coarse (still partly fragmented) estimate of the video's own typical rally span; pass 2 nudges the gap toward that estimate, scaled by `k=0.10` relative to a `ref_duration=10.0` reference, clamped to `[2.0, 5.0]`, and re-clusters.
+- **All four scored videos improve or hold** — the property the earlier, rejected `gap_sec=4.0` proposal never had: brickwall 0.64/0.80→**0.76/0.91**, pb_draft_cup 0.59/0.72→**0.65/0.72**, IMG_7744 0.54/0.65→**0.64/0.70**, IMG_7743 (sanity check, not a formal criterion) ~unchanged. Brickwall's fragment-type false positives more than halve, 12→5 — the actual mechanism moved, not just the aggregate number.
+- **Shipped as opt-in** (`rally_segments_from_predictions(..., adaptive_gap=True)`, `python3 -m src.cut --adaptive-gap`, both default off) rather than the new shipped default — `k`/`ref_duration`/etc. were fit against the same four videos being validated against, and a fifth, held-out video would make the promotion decision solid rather than a repeat of the `gap_sec=4.0` overfit risk. 4 new tests, suite 94→98 green.
+- Linear: PIC-33 closed with these results.
 
 ---
 

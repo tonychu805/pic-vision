@@ -1,5 +1,5 @@
 from src.ball import (count_crossings, net_image_y, crossing_times,
-                      cluster_crossings, ball_box_ok, net_line_y)
+                      cluster_crossings, adaptive_gap_sec, ball_box_ok, net_line_y)
 
 
 def test_net_line_y_prefers_marked_net():
@@ -47,6 +47,51 @@ def test_cluster_crossings_two_separate_rallies():
 
 def test_cluster_crossings_empty():
     assert cluster_crossings([], gap_sec=2.0, min_crossings=2) == []
+
+
+def test_adaptive_gap_sec_keeps_a_long_rally_whole_that_fixed_gap_splits():
+    # Three long "informant" rallies elsewhere in the video (each a single
+    # cluster under gap_sec=3.0, since their own internal gaps are only 2.5s)
+    # establish that this video runs long. A fourth, target rally has one
+    # 3.4s lull -- longer than the fixed 3.0s default, so a fixed gap_sec
+    # splits it into two, charging it as both a miss and a false positive
+    # (PIC-33). Adaptive gap_sec, informed by the other three rallies,
+    # widens enough to keep it whole.
+    informants = []
+    for start in (0, 100, 200):
+        informants += [start + i * 2.5 for i in range(6)]  # 0,2.5,...,12.5
+    target = [300, 301, 302, 305.4, 306.4, 307.4]           # one 3.4s lull
+    times = sorted(informants + target)
+
+    fixed = cluster_crossings(target, gap_sec=3.0, min_crossings=2)
+    assert len(fixed) == 2, "fixed gap_sec=3.0 should split the target rally"
+
+    gap, segments = adaptive_gap_sec(times, min_crossings=2, base_gap=3.0,
+                                      k=1.0, gap_min=2.0, gap_max=10.0,
+                                      ref_duration=5.0)
+    assert gap > 3.4, f"derived gap ({gap}) should widen past the 3.4s lull"
+    target_segments = [s for s in segments if s["start"] >= 300]
+    assert len(target_segments) == 1
+    assert target_segments[0]["start"] == 300 and target_segments[0]["end"] == 307.4
+    assert target_segments[0]["crossings"] == 6
+
+
+def test_adaptive_gap_sec_tightens_for_a_short_rally_video():
+    # All rallies here are short (2s span each) -- well below ref_duration --
+    # so the derived gap should shrink toward gap_min, not balloon and risk
+    # merging separate short points together.
+    times = []
+    for start in (0, 10, 20, 30):
+        times += [start, start + 1, start + 2]
+    gap, segments = adaptive_gap_sec(times, min_crossings=2, base_gap=3.0,
+                                      k=1.0, gap_min=1.0, gap_max=10.0,
+                                      ref_duration=10.0)
+    assert gap == 1.0            # clamped at gap_min
+    assert len(segments) == 4    # stays four separate rallies, not merged
+
+
+def test_adaptive_gap_sec_empty():
+    assert adaptive_gap_sec([], min_crossings=2, base_gap=3.0) == (3.0, [])
 
 
 def test_net_image_y_identity_homography():

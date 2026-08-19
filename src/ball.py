@@ -10,6 +10,7 @@ not detector-specific. The TrackNet inference path (src/tracknet.py) is the
 active detector; the retired YOLO path lives in archive/."""
 
 import logging
+import statistics
 
 import cv2
 import numpy as np
@@ -98,6 +99,42 @@ def cluster_crossings(times, gap_sec, min_crossings=2):
             clusters.append([t])
     return [{"start": c[0], "end": c[-1], "crossings": len(c)}
             for c in clusters if len(c) >= min_crossings]
+
+
+def adaptive_gap_sec(times, min_crossings=2, *, base_gap=3.0, k=0.10,
+                      gap_min=2.0, gap_max=5.0, ref_duration=10.0):
+    """Derive a per-video gap_sec from the video's own observed rally length,
+    instead of one global constant tuned on a single video (PIC-33).
+
+    `gap_sec=3.0` (ADR-048) was tuned on IMG_7743, whose rallies average
+    ~10.8s. A longer-rally video (competitive doubles, ~22s) contains lulls
+    -- lobs, slow dink exchanges -- longer than 3.0s, so a fixed gap splits
+    real rallies into fragments that get charged twice: once as a miss, once
+    as a false positive. A shorter-rally video (singles, casual) needs the
+    opposite: too loose a gap merges separate points. Neither a single fixed
+    constant nor scaling gap_sec linearly with rally length works (both were
+    tried and rejected -- see EXPERIMENTS.md, PIC-33): a `gap_sec=4.0` global
+    bump wins on long-rally footage and loses badly on short-rally footage.
+
+    This runs two passes instead. The first, at `base_gap`, is a coarse
+    estimate of this video's own typical rally span (its cluster median
+    duration) -- not a final answer, since long rallies are still fragmented
+    at `base_gap`, but suggestive of whether this video runs long or short
+    relative to `ref_duration` (~IMG_7743's own average, what `base_gap` was
+    itself tuned against). The second pass nudges `base_gap` toward that
+    estimate, scaled down by `k` so a single long rally doesn't overcorrect
+    the whole video, and clamped to [gap_min, gap_max] so a pathological
+    estimate can't blow the gap out to where dead time gets merged into rallies.
+
+    Returns (gap_sec, segments) -- segments already clustered with the
+    derived gap_sec, same schema as cluster_crossings.
+    """
+    pass1 = cluster_crossings(times, gap_sec=base_gap, min_crossings=min_crossings)
+    if not pass1:
+        return base_gap, pass1
+    med_dur = statistics.median(c["end"] - c["start"] for c in pass1)
+    gap_sec = min(gap_max, max(gap_min, base_gap + k * (med_dur - ref_duration)))
+    return gap_sec, cluster_crossings(times, gap_sec=gap_sec, min_crossings=min_crossings)
 
 
 def count_crossings(ball_ys, net_y, band=0.0):

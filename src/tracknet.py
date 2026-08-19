@@ -31,7 +31,7 @@ from calibrate.py's court corners.
 import csv
 import logging
 
-from src.ball import crossing_times, cluster_crossings
+from src.ball import crossing_times, cluster_crossings, adaptive_gap_sec
 from src.track import track_ball
 
 log = logging.getLogger(__name__)
@@ -75,7 +75,7 @@ def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
                                     max_jump=150, reset_after=15,
                                     court_x_min=None, court_x_max=None,
                                     in_court=None, min_ball_px=None,
-                                    min_conf=None):
+                                    min_conf=None, adaptive_gap=False):
     """Parse a TrackNet predictions CSV and return rally segments.
 
     First applies the court X-gate (court_x_min/court_x_max, from
@@ -103,6 +103,15 @@ def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
     Returns [{start, end, crossings}] — same schema as cluster_crossings.
     Use gap_sec=3.0 and min_crossings=6 (tuned on IMG_7743, EXPERIMENTS.md
     2026-08-16; see the module docstring for the number).
+
+    adaptive_gap (PIC-33, opt-in, default off): if True, `gap_sec` is used
+    only as the starting point for `src.ball.adaptive_gap_sec`, which derives
+    the actual clustering gap from this video's own observed rally length
+    instead of applying `gap_sec` as a fixed constant. Validated on 4 videos
+    (EXPERIMENTS.md, PIC-33) to match or beat the fixed default everywhere
+    tried, unlike a flat `gap_sec=4.0` bump, which wins on long-rally footage
+    and loses on short-rally footage. Off by default pending a wider
+    validation set before it replaces the shipped default outright.
     """
     track = load_predictions(csv_path, fps)
     times = [t for t, *_ in track]
@@ -153,7 +162,13 @@ def rally_segments_from_predictions(csv_path, fps, net_y, *, gap_sec,
              max_jump, reset_after, dropped, sum(1 for f in frames if f))
     times_crossed = crossing_times(tracked, net_y=net_y, band=band)
     log.info("net_y=%.1f band=%.1f → %d raw crossings", net_y, band, len(times_crossed))
-    segments = cluster_crossings(times_crossed, gap_sec=gap_sec, min_crossings=min_crossings)
-    log.info("%d clusters pass min_crossings=%d (gap_sec=%.1f)",
-             len(segments), min_crossings, gap_sec)
+    if adaptive_gap:
+        derived_gap, segments = adaptive_gap_sec(times_crossed, min_crossings=min_crossings,
+                                                  base_gap=gap_sec)
+        log.info("%d clusters pass min_crossings=%d (adaptive gap_sec=%.2f, base=%.1f)",
+                 len(segments), min_crossings, derived_gap, gap_sec)
+    else:
+        segments = cluster_crossings(times_crossed, gap_sec=gap_sec, min_crossings=min_crossings)
+        log.info("%d clusters pass min_crossings=%d (gap_sec=%.1f)",
+                 len(segments), min_crossings, gap_sec)
     return segments

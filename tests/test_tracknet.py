@@ -114,6 +114,47 @@ def test_rally_segments_from_predictions_sparse_crossings_dropped():
         os.unlink(path)
 
 
+def _alternating_block(start_frame, n_frames):
+    """n_frames of alternating near(150)/far(50) -> a dense crossing burst."""
+    return [[start_frame + i, 1, 0, 150 if i % 2 == 0 else 50] for i in range(n_frames)]
+
+
+def test_rally_segments_from_predictions_adaptive_gap_merges_long_rally(tmp_path):
+    # PIC-33 wiring: with adaptive_gap=False, gap_sec=3.0 is applied as a
+    # fixed constant and a rally with a 3.5s lull fragments into two. With
+    # adaptive_gap=True, three long "informant" rallies elsewhere in the
+    # video (~19.5s each, well above the ~10s this default was tuned on)
+    # widen the derived gap past 3.5s, so the same lull is bridged and the
+    # rally stays whole -- same production defaults used by scripts/cut.py.
+    fps = 2.0
+    rows = []
+    for offset_sec in (0, 100, 200):
+        rows += _alternating_block(int(offset_sec * fps), 40)   # ~19.5s span each
+    target_start = 300.0
+    rows += [
+        [int(target_start * fps), 1, 0, 150],
+        [int((target_start + 0.5) * fps), 1, 0, 50],    # crossing
+        [int((target_start + 1.0) * fps), 1, 0, 150],   # crossing
+        [int((target_start + 4.5) * fps), 1, 0, 50],    # crossing, 3.5s later
+        [int((target_start + 5.0) * fps), 1, 0, 150],   # crossing
+    ]
+    path = tmp_path / "predictions.csv"
+    _write_csv(rows, str(path))
+
+    fixed = rally_segments_from_predictions(
+        str(path), fps=fps, net_y=100, gap_sec=3.0, min_crossings=2, adaptive_gap=False)
+    target_fixed = [s for s in fixed if s["start"] >= target_start]
+    assert len(target_fixed) == 2, "fixed gap_sec=3.0 should split the target rally"
+
+    adaptive = rally_segments_from_predictions(
+        str(path), fps=fps, net_y=100, gap_sec=3.0, min_crossings=2, adaptive_gap=True)
+    target_adaptive = [s for s in adaptive if s["start"] >= target_start]
+    assert len(target_adaptive) == 1, "adaptive_gap should keep it whole"
+    # 5, not 4: the side flip continues from the preceding informant block's
+    # last frame, so the target's very first sample also counts as a crossing.
+    assert target_adaptive[0]["crossings"] == 5
+
+
 def test_rally_segments_rejects_adjacent_court_teleport():
     # Confirmed 2026-08-16 on IMG_7744: an empty tracked court still produced
     # a "rally" because TrackNet's best-guess ball jumped onto a real ball on

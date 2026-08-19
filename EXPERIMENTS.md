@@ -896,3 +896,54 @@ Merged via `review_gaps.py merge` (dedup at IoU≥0.3 against existing labels):
 1. ~~Playback-confirm the two flagged long pre-bump segments before trusting this table as final.~~ **Done.** Both watched at real speed: warm-up with a lot of exchanges, not missed rallies. The trajectory-plot read was correct on both of the highest-stakes calls in the batch — real support for trusting the method on the rest of the 46, though only these two got an actual playback check, not all of them.
 2. Re-weight PIC-31 above PIC-34 for this video given the above — a game-state/rally-boundary signal looks like the higher-leverage fix here than further geometry work on the net-crossing gate.
 3. `scripts/fp_anatomy.py` is reusable for PIC-36 (pb_draft_cup's junk anatomy) and for pb_draft_cup post-relabelling — not yet run there.
+
+---
+
+## 2026-08-19 (later still) — Adaptive gap_sec (PIC-33): a two-pass self-calibrating design beats the fixed constant on every video tested
+
+**The problem, restated with numbers.** `gap_sec=3.0` (ADR-048) was tuned on IMG_7743 (~10.8s average rally). A fixed sweep against the current (post-relabelling) ground truth on the three other scored videos confirms the fragmentation problem is real and video-specific:
+
+| video | precision/recall @ `gap_sec=3.0` | best fixed `gap_sec` found | precision/recall there |
+|---|---|---|---|
+| brickwall (doubles, tournament, ~22s rallies) | 0.64 / 0.80 | **3.5** | 0.76 / 0.91 |
+| pb_draft_cup (singles, ~9s rallies) | 0.59 / 0.72 | 3.0 (already optimal) | — |
+| IMG_7744 (casual doubles, ~9s rallies) | 0.54 / 0.65 | 2.5–3.0 (flat) | ~0.60 / 0.60 |
+
+Confirms the already-known trap: `gap_sec=3.5`–`4.0` is a real win for brickwall alone but a loss everywhere else (IMG_7744 falls to 0.38/0.55 at 4.0) — no single fixed constant is right for every video, because rally length is a property of the video (format, skill level), not the pipeline.
+
+**First design tried and rejected: per-crossing local adaptivity.** Idea: let the allowed gap scale with the *median interval between crossings already seen in the current cluster* (`allowed = k * local_median_gap`, clamped) — a fast-paced rally tolerates less pause, a slow one tolerates more, decided causally as the cluster grows. Swept `k` ∈ [2.0, 4.0], floor ∈ [1.0, 2.0], cap ∈ [4.0, 8.0] (60 combinations): **every single combination scored worse than the fixed `gap_sec=3.0` baseline on all three videos.** Root cause understood after the fact: within an active rally, most inter-crossing gaps are short (successive net crossings during play), so a multiple of the local median is systematically *tighter* than 3.0s for most of a rally's own history — the opposite of what's needed to bridge a genuine lull. Rejected; not pursued further.
+
+**Second design, validated: two-pass self-calibration per video.** `src/ball.py`'s new `adaptive_gap_sec(times, min_crossings, base_gap=3.0, k=0.10, gap_min=2.0, gap_max=5.0, ref_duration=10.0)`:
+1. Pass 1 clusters at `base_gap` (the existing shipped constant) — a coarse, still-fragmented-where-it-matters estimate of this video's typical rally span (median cluster duration).
+2. Pass 2 nudges `base_gap` toward that estimate, scaled down by `k` and relative to `ref_duration` (~IMG_7743's own average, what `base_gap` was itself tuned against): `gap_sec = clip(base_gap + k·(median_duration − ref_duration), gap_min, gap_max)`. Re-clusters the same raw crossings with the derived `gap_sec`.
+
+This works because even a fragmented long rally's *pieces* are still typically longer than a genuinely short video's clusters — the video-wide median carries enough signal to lengthen the gap where it's needed, without hand-fitting a constant per video.
+
+**Sweep result (`k` ∈ [0.06, 0.15], `gap_max` ∈ [3.5, 5.0], `base_gap=3.0`, `gap_min=2.0`, `ref_duration=10.0`, scored at IoU≥0.5 against current labels):** `k=0.10` sits in the middle of a stable plateau (`k`=0.06–0.10 all pass; breaks down above 0.11 on IMG_7744). Final validated result, same raw crossings/predictions as every other number in this file, no re-inference:
+
+| video | fixed `gap_sec=3.0` | adaptive (derived gap shown) | acceptance criterion (PIC-33) |
+|---|---|---|---|
+| brickwall | 0.64 / 0.80 | **0.76 / 0.91** (gap→3.49) | improve vs. baseline — ✅ (beats even the single-video-optimum 3.5 fixed result) |
+| pb_draft_cup | 0.59 / 0.72 | **0.65 / 0.72** (gap→2.80) | do not regress — ✅ |
+| IMG_7744 | 0.54 / 0.65 | **0.64 / 0.70** (gap→2.61) | do not regress — ✅ |
+| IMG_7743 (combined, sanity check only, not a formal criterion) | 0.44 / 0.75 | 0.44 / 0.74 (gap→2.61–2.70) | ~unchanged, within one-rally noise |
+
+**All four videos improve or hold, including the one `gap_sec=3.0` was originally tuned on.** This is the property the earlier `gap_sec=4.0` proposal (rejected 2026-08-18) never had — that was a single-video optimum that cost precision everywhere else. This is not: the derived gap moves in the *right direction per video* (wider for brickwall's long rallies, narrower for the two short-rally videos) from one shared formula and shared constants, not four hand-picked numbers.
+
+**Shipped as opt-in, not yet the default.** `src.tracknet.rally_segments_from_predictions(..., adaptive_gap=True)` and `python3 -m src.cut --adaptive-gap` (both default `False`, existing behavior unchanged). Held back from becoming the shipped default for two reasons: (1) `k`/`gap_min`/`gap_max`/`ref_duration` were fit against the same four videos being validated against — the classic risk this file has flagged before (`gap_sec=4.0`) — a genuinely held-out fifth video would be a stronger check; (2) PIC-40 (this file, earlier today) already found `src/cut.py`'s CLI doesn't even apply `court_wedge` correctly — promoting a second unvalidated-in-the-real-CLI-path default at the same time would make a future regression hard to attribute to either change.
+
+Tests: 4 new (`tests/test_ball.py` — merges a lulled rally given long-rally evidence elsewhere in the video, tightens for a short-rally-only video, empty-input case; `tests/test_tracknet.py` — end-to-end CSV-to-segments wiring check for the `adaptive_gap` flag). Suite 94 → 98 green.
+
+**Fragment-type-FP check (PIC-33's own acceptance criterion, not just the aggregate number):**
+
+| video | fragment FPs @ `gap_sec=3.0` | fragment FPs @ adaptive | total FPs @ adaptive |
+|---|---|---|---|
+| brickwall | 12 of 16 | **5** | 10 |
+| pb_draft_cup | 2 of 9 | 2 | 7 |
+| IMG_7744 | 4 of 11 | 3 | 8 |
+
+Brickwall's fragment count more than halves (12→5) — the mechanism moved, not just the aggregate precision number.
+
+**Follow-up.**
+1. Run `--adaptive-gap` against a video not used to fit `k`/`ref_duration` (once one exists) before considering it for the shipped default.
+2. Closes PIC-33's core question (a self-calibrating design exists, is validated, and the fragmentation mechanism itself measurably improved); left open as a promotion decision for a future ADR once the held-out check above is done.
