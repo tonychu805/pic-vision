@@ -856,3 +856,43 @@ Merged via `review_gaps.py merge` (dedup at IoU≥0.3 against existing labels):
 1. Run the fragment/boundary/junk anatomy (as done for brickwall) on IMG_7743 and IMG_7744's remaining false positives, now that labels are trustworthy — needed before citing these precision numbers as a ceiling on the detector itself.
 2. This closes ADR-050 follow-up #1. Follow-up #2 (chance-adjusted lift recompute for pb_draft_cup) is still open. Follow-up #3 (adversarial review of the label-artefact conclusion) has still not been done, and now covers four videos instead of two.
 3. Consider wiring `court_wedge`-based, per-segment scoring (used ad hoc here via a scratch script calling `rally_segments_from_predictions` directly) into `src/cut.py` proper — today `src/cut.py`'s CLI still only derives the older flat `court_x_range` from `--calib`, not `court_wedge`, so a real re-run of `python3 -m src.cut` would silently score worse than this entry's numbers unless `in_court` is wired in by hand.
+
+---
+
+## 2026-08-19 (later) — FP anatomy on IMG_7743/7744 (PIC-37): the dominant mechanism is real dead-time crossings, not phantom crossings
+
+**Method.** Built `scripts/fp_anatomy.py`, a reusable version of follow-up #1 above. For each of the 62 false positives left after PIC-32's relabelling (38 pre-bump + 13 post-bump + 11 IMG_7744), it first checks the cheap, fully mechanical case — does the false positive overlap or sit within `gap_sec` of a real label? That's a **fragment**: the same burst as an already-labelled rally, just clustered into a separate piece, not a detector error. For everything left, it plots each candidate's raw image-y (vs. `net_y`) and image-x over time from the predictions CSV and reads the shape — per the 2026-08-18 finding that aggregate x/y-spread statistics do **not** reliably separate these cases (the toss artefact there had the *largest* horizontal spread of the windows examined), only a per-frame plot did.
+
+**Fragment count (mechanical, high confidence):**
+
+| video | false positives | fragments |
+|---|---|---|
+| IMG_7743 pre-bump | 38 | 11 |
+| IMG_7743 post-bump | 13 | 1 |
+| IMG_7744 | 11 | 4 |
+| **total** | **62** | **16 (26%)** |
+
+**Non-fragment classification (visual read of 46 trajectory plots, lower confidence — see caveat below):**
+
+| pattern | what it looks like | likely mechanism |
+|---|---|---|
+| smooth, repeated arcs crossing `net_y`, correlated x motion | a real ball being hit back and forth | genuine crossing during dead time — courtesy return / between-point practice (PIC-31) |
+| short, high-frequency, erratic jumps inconsistent with ball physics (e.g. IMG_7744 1203.3–1204.9s: 6 "crossings" in 1.6s) | tracking noise | hallucinated detection |
+
+| video | non-fragment | real dead-time crossing | noise/hallucinated | ambiguous |
+|---|---|---|---|---|
+| IMG_7743 pre-bump | 27 | 14 | 10 | 3 |
+| IMG_7743 post-bump | 12 | **12** | 0 | 0 |
+| IMG_7744 | 7 | 4 | 3 | 0 |
+| **total** | **46** | **30 (65%)** | **13 (28%)** | **3 (7%)** |
+
+**Combined across all 62 false positives: fragment 26%, real dead-time crossing 48%, noise/hallucinated 21%, ambiguous 5%.** No candidate read as a clean example of the previously-known *phantom crossing* signature (large vertical range with no genuine net-side change) — every "real motion" plot showed a genuine, physically coherent crossing, not a toss/bounce artefact. The far-side-bounce trigger noted during PIC-32's review (PIC-34 comment) may still be real; it just didn't show up in this batch's non-fragment population.
+
+**This overturns the working assumption behind PIC-34's priority.** Going in, phantom crossings (a contained geometry fix) looked like the leading junk mechanism on IMG_7743, per the 2026-08-18 brickwall entry's two-mechanism framing. On this video the leading mechanism among genuine junk is **real dead-time play** — courtesy returns, between-point warm-up, dinking while resetting — which is PIC-31's territory (needs a game-state signal, not a geometry fix) and was previously thought to be a smaller, `PRD.md` §0.6-named risk rather than the dominant one. Post-bump in particular is *entirely* real dead-time crossings (12/12) — nothing there is a detector flaw at all.
+
+**Caveat, stated plainly: this is a plot read, not a playback verdict**, and the project's own rule (`CLAUDE.md`, `EXPERIMENTS.md` IMG_7744 review) is that rally-vs-dead-time calls need real playback, not stills or derived statistics — a trajectory plot is closer to the former than the latter but is still not the same thing. Two segments are long/high-value enough that being wrong would matter and deserve an actual playback check before trusting this table further: **IMG_7743 pre-bump 863.5–887.9s (24.4s, 28 crossings)** and **2484.3–2502.2s (17.9s, 18 crossings)** — both plotted as clean, sustained, repeated-arc trajectories indistinguishable in shape from a real labelled rally. If either turns out to be a genuine missed rally rather than dead-time practice, it would be a recall finding on top of everything above, not just a mechanism label.
+
+**Follow-up.**
+1. Playback-confirm the two flagged long pre-bump segments before trusting this table as final.
+2. Re-weight PIC-31 above PIC-34 for this video given the above — a game-state/rally-boundary signal looks like the higher-leverage fix here than further geometry work on the net-crossing gate.
+3. `scripts/fp_anatomy.py` is reusable for PIC-36 (pb_draft_cup's junk anatomy) and for pb_draft_cup post-relabelling — not yet run there.
