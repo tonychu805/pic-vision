@@ -947,3 +947,29 @@ Brickwall's fragment count more than halves (12→5) — the mechanism moved, no
 **Follow-up.**
 1. Run `--adaptive-gap` against a video not used to fit `k`/`ref_duration` (once one exists) before considering it for the shipped default.
 2. Closes PIC-33's core question (a self-calibrating design exists, is validated, and the fragmentation mechanism itself measurably improved); left open as a promotion decision for a future ADR once the held-out check above is done.
+
+---
+
+## 2026-08-19 (yet later) — PIC-31: a self-calibrated duration/rate threshold does not separate real rallies from real dead-time crossings — tested and rejected
+
+**Motivation.** PIC-37's anatomy found real dead-time crossings (courtesy returns, between-point practice) are the dominant remaining false-positive mechanism on IMG_7743 (48%, 100% on post-bump). PIC-31's candidate #1 — a minimum-duration or crossing-rate threshold — is the cheapest thing to try. It cannot be a fixed constant (the same trap `gap_sec` fell into: rally length is a property of format/skill level, e.g. `pb_draft_cup` singles has real rallies as short as 4.5s), so it would need to be self-calibrated per session, with no ground-truth labels available at inference time in real deployment.
+
+**Sanity check first (IMG_7743 post-bump, where all 12 remaining false positives are confirmed real dead-time crossings — no ambiguity):**
+
+| | duration | crossing rate |
+|---|---|---|
+| real rallies (n=11) | median 11.8s, all ≥7.3s | median 0.80/s |
+| dead-time junk (n=12) | median 5.6s, 11 of 12 <7s | median 1.14/s |
+
+Duration alone gets 11 of 12 right on this one video-half — but one dead-time segment (141.10–152.70s, 11.6s, rate 0.60/s) is indistinguishable from a real rally by either measure, and a fixed "≥7s" cutoff would wrongly kill `pb_draft_cup`'s real short singles points.
+
+**Unsupervised check across all 4 videos (5 video-halves), two methods, labels used only to score afterward, never to pick the threshold:**
+
+1. Largest-gap (sort by duration/rate, split at the single biggest jump): found nothing but a lone extreme outlier every time — e.g. brickwall's "split" isolated 1 segment out of 44, telling us nothing about the other 43.
+2. 2-means clustering (proper bimodal split): a real but weak signal on crossing rate — e.g. brickwall below-threshold segments were 73% real (vs. a 64% base rate) but above-threshold were still 50% real; pb_draft_cup 69% vs. 59% base, still 33% real above; IMG_7743 pre-bump 52% vs. 45% base, still 24% real above. IMG_7744 showed no signal at all either way.
+
+**Conclusion: rejected.** No video showed a clean separation with either method. The faint tendency (lower crossing rate leans slightly toward "real") is real but far too weak to use as a filter — deployed as a hard cutoff it would misclassify 24–50% of real rallies as junk, depending on the video. This is not a "wrong threshold" problem; the two populations genuinely overlap in duration and pace. Candidate #2 (statistical rally-length modeling) was not separately tested — it's the same signal shape and would be expected to hit the same overlap.
+
+**Follow-up.**
+1. Candidate #3 (a signal beyond ball crossings — player positioning, serve-shape, audio) is the one left standing. Brainstormed candidates filed as PIC-42 (backlog, not scoped or prioritized): serve-shaped ball arc, double-bounce at rally end, reviving the frozen player-position/kitchen-formation signal (`src/players.py`/`src/events.py`, ADR-039/047), audio score-calling, audio hit rhythm.
+2. PIC-31 stays open — this closes out candidate #1, not the issue.
