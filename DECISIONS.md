@@ -803,6 +803,22 @@ Neither correction involved improving the detector. Both were corrections to how
 ---
 
 
+## ADR-051 — ADR-050's label-artefact finding is confirmed on all four scored cameras; treat the pre-2026-08-18 precision ceiling as fully retracted
+
+**Date:** 2026-08-19 · **Status:** accepted
+
+**Context.** ADR-050 (2026-08-18) withdrew the "precision pinned at 0.25–0.29 across cameras" finding after playback review moved `pb_draft_cup` 0.27→0.59 and `brickwall` 0.59→0.64, but explicitly left `IMG_7743` (0.29) and `IMG_7744` (0.25) unreviewed — "the last two data points holding up the ceiling claim" — and named re-reviewing them the top priority in `PROGRESS.md`.
+
+That review is now done (`EXPERIMENTS.md`, 2026-08-19). All 78 outstanding detector-only candidates across IMG_7743 pre-bump, IMG_7743 post-bump, and IMG_7744 were graded at playback speed; labels grew from 33→53 (IMG_7743) and 10→20 (IMG_7744). Rescoring at the shipped config moved precision 0.29→0.44 (IMG_7743 combined) and 0.25→0.54 (IMG_7744) — same direction, same order of magnitude, as the two videos ADR-050 already covered. No exception showed up on a fourth camera the way it might have if the earlier finding had been specific to `pb_draft_cup`/`brickwall`'s rally density or format.
+
+**Decision.** The pre-2026-08-18 "precision ceiling" reading is fully retracted, not just withdrawn pending more evidence — it has now been checked on every camera this project has scored, and failed to hold on every one of them. Future work should not treat 0.25–0.29 as any kind of floor or reference point for this pipeline's precision; the actual, still-open precision numbers are the post-review ones in `CHECKLIST.md`'s four-camera table (0.44–0.64 as of this ADR).
+
+This does not mean precision is solved. ADR-050's three separated failure modes (fragmentation, label incompleteness, genuine junk) still apply, and only `brickwall` has had its false positives broken down by kind. Citing today's 0.44/0.54 figures as clean detector-quality numbers would repeat the same mistake ADR-050 corrected, one level down — a fraction of the remaining false positives on IMG_7743/7744/pb_draft_cup are very likely fragments of rallies the same review pass just recovered, not new junk. That anatomy is unbuilt and is the next thing to do before treating these numbers as a ceiling either.
+
+**Consequences.** ADR-050's follow-up #1 (re-review IMG_7743/IMG_7744) is closed. Follow-up #2 (chance-adjusted lift recompute for `pb_draft_cup`) and follow-up #3 (adversarial review of the label-artefact conclusion) remain open, and #3 now covers a conclusion reached across four videos and two sessions rather than one. `label_web.py` gained a reusable capability from this work — in-place boundary correction in GRADE mode, preserving the original detector timestamp as `detector_start`/`detector_end` — that should be the default tool for any future gap-review pass, not just this one.
+
+---
+
 ## Template
 
 ```markdown

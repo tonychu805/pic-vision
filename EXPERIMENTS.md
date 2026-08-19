@@ -812,3 +812,47 @@ FP anatomy at the shipped config is now 16 false positives = 10 fragments + 2 bo
 1. **Re-review IMG_7743 and IMG_7744 the same way.** Their precision figures are the last support for the ceiling claim and are measured against labels of unknown completeness. IMG_7743's 33 labels over 67 minutes (8.8% density) look sparse by the same standard that flagged pb_draft_cup.
 2. Recompute the chance-adjusted lift for pb_draft_cup — its density moved from 12.3% to 26.7%, so the earlier 5.8× figure is stale.
 3. **This result is unreviewed.** It overturns the project's stated direction on the basis of one operator's relabelling pass, and should go through adversarial review before it is treated as settled.
+
+---
+
+## 2026-08-19 — IMG_7743 and IMG_7744 re-reviewed at playback speed: label artefact confirmed on the last two videos, closing ADR-050 follow-up #1
+
+**What was done.** `scripts/review_gaps.py extract` (already run 2026-08-18) had produced detector-only candidate lists for IMG_7743 pre-bump (49), IMG_7743 post-bump (12), and IMG_7744 (17) — every detector segment with no matching label. All 78 were graded at real playback speed in `label_web.py`'s GRADE pass (1/2 = real rally, 3 = drop).
+
+**New capability built for this pass:** `label_web.py` GRADE mode originally only played back a candidate's exact `start`/`end` and looped there — enough to judge real-vs-junk, but not enough to fix a *boundary*, since a detector segment spans only first-to-last net crossing, not serve-to-dead (see 2026-08-18 entries above on the two junk mechanisms; the same crossing-envelope logic also truncates real rallies at both ends). Added in-place boundary correction: `s`/`e` in GRADE mode re-mark the current candidate's true start/end, with the original pipeline value preserved alongside it as `detector_start`/`detector_end` rather than discarded or left as a second, detached entry. This mattered in practice — a large fraction of the real rallies recovered below needed a boundary correction, not just a keep/drop verdict.
+
+**Grading outcome:**
+
+| video | candidates reviewed | kept (real rally) | dropped (junk) |
+|---|---|---|---|
+| IMG_7743 pre-bump | 49 | 21 | 28 |
+| IMG_7743 post-bump | 12 | 0 | 12 |
+| IMG_7744 | 17 | 10 | 7 |
+
+Merged via `review_gaps.py merge` (dedup at IoU≥0.3 against existing labels):
+
+| video | labels before | labels after |
+|---|---|---|
+| IMG_7743 pre-bump | 22 | **42** |
+| IMG_7743 post-bump | 11 | 11 (no-op — every post-bump candidate was junk) |
+| IMG_7744 | 10 | **20** |
+
+**Rescored** (`src/tracknet.rally_segments_from_predictions`, shipped config — `court_wedge`, `gap_sec=3.0`, `min_crossings=6`, `band=0` — called directly against the cached `*_predictions_k14.csv`, no re-inference; pre/post-bump each scored against their own per-half calibration, matching the 2026-08-17 split-calibration method):
+
+| video | IoU | precision (before) | precision (after) | recall (before) | recall (after) |
+|---|---|---|---|---|---|
+| IMG_7743 pre-bump | ≥0.5 | — | **0.45** | — | 0.74 (31/42) |
+| IMG_7743 post-bump | ≥0.5 | — | **0.41** | — | 0.82 (9/11) |
+| IMG_7743 combined | ≥0.5 | 0.29 (26/33) | **0.44** (40/53) | 0.79 | 0.75 |
+| IMG_7744 | ≥0.5 | 0.25 | **0.54** | 0.60 | 0.65 (13/20) |
+
+**Conclusion — the label artefact from ADR-050 is now confirmed on all four scored videos, not two.** Precision on IMG_7743 and IMG_7744 moves the same direction and by a similar margin as `pb_draft_cup` (0.27→0.59) and `brickwall` (0.59→0.64) did on 2026-08-18. The "precision pinned at 0.25–0.29" reading was a labelling artefact everywhere it was checked, not a property of any one camera. ADR-050's follow-up #1 ("re-review IMG_7743 and IMG_7744 the same way") is done.
+
+**Two things keep this from reading as a clean win, both expected, neither new:**
+1. **Recall dipped slightly on IMG_7743 combined (0.79→0.75)** despite every recovered label coming from a detector-proposed candidate. This is the boundary-truncation mechanism made visible in the score itself: correcting a candidate's boundary to the true serve-to-dead span makes it *larger* than the original detector segment, which lowers IoU against that same (unchanged) detector segment — a previously-passing match can now fall under 0.5. Not a regression in the detector; a side effect of measuring against a wider, more honest ground truth.
+2. **Precision is still well under 1.0, and the false-positive mix hasn't been anatomized the way brickwall's was** (fragment vs. boundary vs. dead-time junk, EXPERIMENTS.md 2026-08-18). Some of the 38 pre-bump / 13 post-bump / 11 IMG_7744 false positives are likely fragments of rallies that were just correctly recovered above (same rally, different detector-proposed piece, still short of IoU≥0.5 against the now-correct full span) rather than genuine junk. Not broken out here — would need the same reel-and-grade treatment applied to the *false positives*, not just the gaps.
+
+**Follow-up.**
+1. Run the fragment/boundary/junk anatomy (as done for brickwall) on IMG_7743 and IMG_7744's remaining false positives, now that labels are trustworthy — needed before citing these precision numbers as a ceiling on the detector itself.
+2. This closes ADR-050 follow-up #1. Follow-up #2 (chance-adjusted lift recompute for pb_draft_cup) is still open. Follow-up #3 (adversarial review of the label-artefact conclusion) has still not been done, and now covers four videos instead of two.
+3. Consider wiring `court_wedge`-based, per-segment scoring (used ad hoc here via a scratch script calling `rally_segments_from_predictions` directly) into `src/cut.py` proper — today `src/cut.py`'s CLI still only derives the older flat `court_x_range` from `--calib`, not `court_wedge`, so a real re-run of `python3 -m src.cut` would silently score worse than this entry's numbers unless `in_court` is wired in by hand.

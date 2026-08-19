@@ -3,8 +3,18 @@
 {"start": 316.69, "end": 327.1, "duration": 10.41, "quality": 2, "rally_id": 3}
 {"start": 390.41, "end": 401.01, "duration": 10.6, "quality": 1, "rally_id": 4}
 {"start": 407.45, "end": 418.84, "duration": 11.4, "quality": 1, "rally_id": 5}
-{"start": 558.98, "end": 568.54, "duration": 9.56, "quality": 2, "rally_id": 6}
-{"start": 691.35, "end": 700.1, "duration": 8.76, "quality": 2, "rally_id": 7}
-{"start": 839.22, "end": 845.87, "duration": 6.65, "quality": 2, "rally_id": 8}
-{"start": 1208.8, "end": 1216.52, "duration": 7.72, "quality": 2, "rally_id": 9}
-{"start": 1246.12, "end": 1256.45, "duration": 10.33, "quality": 2, "rally_id": 10}
+{"start": 446.63, "end": 453.6, "duration": 6.97, "rally_id": 6, "quality": 2}
+{"start": 558.98, "end": 568.54, "duration": 9.56, "quality": 2, "rally_id": 7}
+{"start": 636.23, "end": 645.76, "duration": 9.53, "rally_id": 8, "quality": 2, "detector_start": 635.7, "detector_end": 641.83}
+{"start": 691.35, "end": 700.1, "duration": 8.76, "quality": 2, "rally_id": 9}
+{"start": 817.67, "end": 846.29, "duration": 28.62, "rally_id": 10, "quality": 2, "detector_start": 818.17, "detector_end": 822.8}
+{"start": 839.22, "end": 845.87, "duration": 6.65, "quality": 2, "rally_id": 11}
+{"start": 881.84, "end": 890.89, "duration": 9.05, "rally_id": 12, "quality": 2, "detector_start": 883.8, "detector_end": 888.43}
+{"start": 928.41, "end": 937.09, "duration": 8.68, "rally_id": 13, "quality": 2, "detector_start": 929.83, "detector_end": 933.6}
+{"start": 953.65, "end": 963.67, "duration": 10.02, "rally_id": 14, "quality": 2, "detector_start": 956, "detector_end": 961.77}
+{"start": 1069.67, "end": 1078.18, "duration": 8.51, "rally_id": 15, "quality": 2, "detector_start": 1070.63, "detector_end": 1076.17}
+{"start": 1170.28, "end": 1175.87, "duration": 5.59, "rally_id": 16, "quality": 2, "detector_start": 1166.83, "detector_end": 1176.6}
+{"start": 1208.8, "end": 1216.52, "duration": 7.72, "quality": 2, "rally_id": 17}
+{"start": 1246.12, "end": 1256.45, "duration": 10.33, "quality": 2, "rally_id": 18}
+{"start": 1295, "end": 1302.02, "duration": 7.02, "rally_id": 19, "quality": 2, "detector_start": 1286.23, "detector_end": 1303.6}
+{"start": 1415.47, "end": 1425.47, "duration": 10, "rally_id": 20, "quality": 2}

@@ -1,22 +1,42 @@
-{"start": 146.9, "end": 157.33, "duration": 10.43, "quality": 2, "rally_id": 1}
-{"start": 308.51, "end": 322.8, "duration": 14.29, "quality": 2, "rally_id": 2}
-{"start": 349.02, "end": 359.16, "duration": 10.14, "quality": 2, "rally_id": 3}
-{"start": 475.88, "end": 490.2, "duration": 14.33, "quality": 1, "rally_id": 4}
-{"start": 513.58, "end": 522.35, "duration": 8.77, "quality": 1, "rally_id": 5}
-{"start": 533.11, "end": 545.17, "duration": 12.07, "quality": 2, "rally_id": 6}
-{"start": 596.84, "end": 607.12, "duration": 10.28, "quality": 1, "rally_id": 7}
-{"start": 670.63, "end": 682.99, "duration": 12.36, "quality": 1, "rally_id": 8}
-{"start": 1150, "end": 1162.46, "duration": 12.46, "quality": 1, "rally_id": 9}
-{"start": 1257.19, "end": 1266.14, "duration": 8.94, "quality": 2, "rally_id": 10}
-{"start": 1691.23, "end": 1699.84, "duration": 8.61, "quality": 2, "rally_id": 11}
-{"start": 1769.6, "end": 1784.26, "duration": 14.67, "quality": 2, "rally_id": 12}
-{"start": 1957.19, "end": 1964.79, "duration": 7.6, "quality": 2, "rally_id": 13}
-{"start": 1983.03, "end": 1988.75, "duration": 5.72, "quality": 2, "rally_id": 14}
-{"start": 2085, "end": 2096.66, "duration": 11.66, "quality": 2, "rally_id": 15}
-{"start": 2135.9, "end": 2145.03, "duration": 9.12, "quality": 2, "rally_id": 16}
-{"start": 2204.19, "end": 2211.74, "duration": 7.54, "quality": 1, "rally_id": 17}
-{"start": 2234.99, "end": 2245.63, "duration": 10.64, "quality": 1, "rally_id": 18}
-{"start": 2301.39, "end": 2311.09, "duration": 9.7, "quality": 2, "rally_id": 19}
-{"start": 2378.3, "end": 2389.36, "duration": 11.06, "quality": 1, "rally_id": 20}
-{"start": 2549.83, "end": 2562.52, "duration": 12.69, "quality": 2, "rally_id": 21}
-{"start": 2831.94, "end": 2840.71, "duration": 8.77, "quality": 2, "rally_id": 22}
+{"start": 63.23, "end": 69.48, "duration": 6.25, "rally_id": 1, "quality": 2, "detector_start": 58.1, "detector_end": 66.33}
+{"start": 86.88, "end": 95.97, "duration": 9.09, "rally_id": 2, "quality": 2, "detector_start": 88.3, "detector_end": 93.9}
+{"start": 146.9, "end": 157.33, "duration": 10.43, "quality": 2, "rally_id": 3}
+{"start": 166.8, "end": 175.03, "duration": 8.23, "rally_id": 4, "quality": 2, "detector_start": 163.07, "detector_end": 171.9}
+{"start": 278.93, "end": 285.46, "duration": 6.53, "rally_id": 5, "quality": 2, "detector_start": 274.23, "detector_end": 283.43}
+{"start": 308.51, "end": 322.8, "duration": 14.29, "quality": 2, "rally_id": 6}
+{"start": 332.44, "end": 341.01, "duration": 8.57, "rally_id": 7, "quality": 2, "detector_start": 333.47, "detector_end": 338}
+{"start": 349.02, "end": 359.16, "duration": 10.14, "quality": 2, "rally_id": 8}
+{"start": 382.69, "end": 388.9, "duration": 6.21, "rally_id": 9, "quality": 2, "detector_start": 378.03, "detector_end": 390.5}
+{"start": 475.88, "end": 490.2, "duration": 14.33, "quality": 1, "rally_id": 10}
+{"start": 513.58, "end": 522.35, "duration": 8.77, "quality": 1, "rally_id": 11}
+{"start": 533.11, "end": 545.17, "duration": 12.07, "quality": 2, "rally_id": 12}
+{"start": 566.45, "end": 573.96, "duration": 7.51, "rally_id": 13, "quality": 2, "detector_start": 567.2, "detector_end": 571.3}
+{"start": 579.48, "end": 588.24, "duration": 8.76, "rally_id": 14, "quality": 2, "detector_start": 581.07, "detector_end": 585.33}
+{"start": 596.84, "end": 607.12, "duration": 10.28, "quality": 1, "rally_id": 15}
+{"start": 670.63, "end": 682.99, "duration": 12.36, "quality": 1, "rally_id": 16}
+{"start": 781.73, "end": 786.77, "duration": 5.03, "rally_id": 17, "quality": 2}
+{"start": 816.1, "end": 832.93, "duration": 16.83, "rally_id": 18, "quality": 2}
+{"start": 1077.67, "end": 1085.13, "duration": 7.46, "rally_id": 19, "quality": 2, "detector_start": 1066.73, "detector_end": 1075.07}
+{"start": 1124.89, "end": 1131.91, "duration": 7.02, "rally_id": 20, "quality": 2, "detector_start": 1125.2, "detector_end": 1130.73}
+{"start": 1150, "end": 1162.46, "duration": 12.46, "quality": 1, "rally_id": 21}
+{"start": 1216.5, "end": 1227, "duration": 10.5, "rally_id": 22, "quality": 1}
+{"start": 1257.19, "end": 1266.14, "duration": 8.94, "quality": 2, "rally_id": 23}
+{"start": 1610.72, "end": 1619.8, "duration": 9.08, "rally_id": 24, "quality": 2, "detector_start": 1610.83, "detector_end": 1619.43}
+{"start": 1658.65, "end": 1667.4, "duration": 8.75, "rally_id": 25, "quality": 2, "detector_start": 1659.63, "detector_end": 1665.13}
+{"start": 1691.23, "end": 1699.84, "duration": 8.61, "quality": 2, "rally_id": 26}
+{"start": 1748.08, "end": 1760.57, "duration": 12.49, "rally_id": 27, "quality": 1, "detector_start": 1748.8, "detector_end": 1764.77}
+{"start": 1769.6, "end": 1784.26, "duration": 14.67, "quality": 2, "rally_id": 28}
+{"start": 1921.16, "end": 1931.87, "duration": 10.71, "rally_id": 29, "quality": 2, "detector_start": 1923.03, "detector_end": 1933.2}
+{"start": 1957.19, "end": 1964.79, "duration": 7.6, "quality": 2, "rally_id": 30}
+{"start": 1983.03, "end": 1988.75, "duration": 5.72, "quality": 2, "rally_id": 31}
+{"start": 2085, "end": 2096.66, "duration": 11.66, "quality": 2, "rally_id": 32}
+{"start": 2135.9, "end": 2145.03, "duration": 9.12, "quality": 2, "rally_id": 33}
+{"start": 2159.58, "end": 2171.99, "duration": 12.41, "rally_id": 34, "quality": 2, "detector_start": 2156.5, "detector_end": 2168.47}
+{"start": 2204.19, "end": 2211.74, "duration": 7.54, "quality": 1, "rally_id": 35}
+{"start": 2234.99, "end": 2245.63, "duration": 10.64, "quality": 1, "rally_id": 36}
+{"start": 2253.82, "end": 2267.85, "duration": 14.03, "rally_id": 37, "quality": 2, "detector_start": 2254.6, "detector_end": 2262.23}
+{"start": 2301.39, "end": 2311.09, "duration": 9.7, "quality": 2, "rally_id": 38}
+{"start": 2378.3, "end": 2389.36, "duration": 11.06, "quality": 1, "rally_id": 39}
+{"start": 2549.83, "end": 2562.52, "duration": 12.69, "quality": 2, "rally_id": 40}
+{"start": 2733.97, "end": 2741.55, "duration": 7.58, "rally_id": 41, "quality": 2, "detector_start": 2734.53, "detector_end": 2738.67}
+{"start": 2831.94, "end": 2840.71, "duration": 8.77, "quality": 2, "rally_id": 42}

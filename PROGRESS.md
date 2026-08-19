@@ -6,18 +6,22 @@ Plain-language record of what's been built and decided, newest first. Git histor
 
 ## ▶ NEXT SESSION — start here
 
-**Status (2026-08-18): the "precision ceiling" was a measurement artefact. Two videos re-measured against corrected labels both roughly doubled.**
+**Status (2026-08-19): the "precision ceiling" is now confirmed as a measurement artefact on all four cameras, not just two. The relabelling recipe closed out; the anatomy of what's left has not.**
 
-Yesterday's headline — precision pinned at 0.25–0.29 across three cameras, therefore precision is a property of the pipeline's gating logic — **does not survive contact with playback review.** Reviewing false positives at real speed and correcting the labels moved both videos that were checked:
+The 2026-08-17 headline — precision pinned at 0.25–0.29 across three cameras, therefore precision is a property of the pipeline's gating logic — **does not survive playback review, on any of the four cameras it's now been checked on:**
 
-| video | precision (published 2026-08-17) | precision (after review) | what changed |
+| video | precision (before review) | precision (after review) | what changed |
 |---|---|---|---|
 | pb_draft_cup | 0.27 | **0.59** | labels 7 → 18; 8 of 15 "false positives" were real rallies |
-| brickwall (new, 4th camera) | — (0.59 first pass) | **0.64** | labels 33 → 35 |
-| IMG_7743 | 0.29 | **not re-reviewed** | — |
-| IMG_7744 | 0.25 | **not re-reviewed** | — |
+| brickwall (4th camera) | 0.59 (first pass) | **0.64** | labels 33 → 35 |
+| IMG_7743 (combined pre/post-bump) | 0.29 | **0.44** | labels 33 → 53 (pre-bump 22→42; post-bump unchanged, every candidate there was junk) |
+| IMG_7744 | 0.25 | **0.54** | labels 10 → 20 |
 
-**Do this first: re-review IMG_7743 and IMG_7744 the same way.** Cut their false positives into a review reel, watch at real speed, correct the labels, rescore. They are the last two data points holding up the ceiling claim, and their labels have never been checked for completeness — IMG_7743's 33 labels over 67 minutes (8.8% density) look sparse by the same standard that flagged pb_draft_cup. The recipe is in `EXPERIMENTS.md` (2026-08-18 entries); the reel-building is a few lines of ffmpeg.
+This closes ADR-050's top follow-up. **Do this first, next session: the fragment/boundary/junk anatomy** (the breakdown done for brickwall on 2026-08-18 — how many false positives are fragments of an already-recovered rally vs. phantom crossings vs. courtesy returns) still hasn't been done for IMG_7743, IMG_7744, or pb_draft_cup. Precision on those three is still an aggregate number hiding at least three different problems with different fixes — see `EXPERIMENTS.md` 2026-08-19 for the full recipe and open items (chance-adjusted lift recompute for pb_draft_cup, adversarial review of the label-artefact conclusion — still not done on any of this, and now covers four videos instead of two).
+
+**Tool built this session, useful for any future gap-review pass:** `label_web.py`'s GRADE mode can now re-mark a candidate's boundary in place (`s`/`e` while grading) instead of only keep/drop — the original detector timestamp is preserved as `detector_start`/`detector_end` alongside the corrected one, never silently lost. Needed because a detector segment spans only first-to-last net crossing, so real rallies are routinely truncated at both ends, not just missing entirely.
+
+**Also flagged, not yet fixed:** `src/cut.py`'s CLI still derives the older flat `court_x_range` from `--calib`, not the preferred `court_wedge` — a real `python3 -m src.cut` run today would score worse than the numbers above unless `in_court=court_wedge(calib)` is wired in by hand (the 2026-08-19 rescore did this via a scratch script, not through `cut.py` itself).
 
 **Three failure modes are now distinguished — they need different fixes and should not be lumped together as "precision":**
 1. **Fragmentation.** `gap_sec=3.0` was tuned on ~10s rallies and splits long ones, which charges the detector *twice* (a miss plus a false positive). Cost brickwall 10 of its 18 false positives. `gap_sec=4.0` gives brickwall 0.73/0.91 but degrades the others — **do not ship it**; the real fix is a gap that tracks observed rally length.
@@ -49,8 +53,18 @@ Yesterday's headline — precision pinned at 0.25–0.29 across three cameras, t
 - **Not built:** a signal that tells a real rally apart from a quick failed exchange (PIC-31 — IMG_7744's open problem); selection/ranking (competitive vs. casual — Phase 1, still gated on precision).
 - **Camera-drift detection built** (`src/drift.py`, `scripts/check_drift.py`, PIC-29 closed) — run `check_drift.py` on any new footage *before* calibrating or labelling it.
 - **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2, 2026-08-17) — doesn't separate real balls from junk on this footage.
-- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed).
+- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default, reconciled across code+docs), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-050 (a precision number is not admissible until its false positives have been reviewed at playback speed — now confirmed on all 4 scored cameras as of 2026-08-19, not just the 2 it was based on).
 - `main` pushed to `origin`, no open branches.
+
+---
+
+## 2026-08-19 — IMG_7743/7744 re-reviewed; precision-ceiling artefact confirmed on all 4 cameras
+
+- **Reviewed all 78 outstanding gap candidates** (IMG_7743 pre-bump 49, post-bump 12, IMG_7744 17) at playback speed via `label_web.py`, per ADR-050's top follow-up. Kept 21 + 0 + 10; merged into labels via `review_gaps.py merge`: IMG_7743 pre-bump 22→42, post-bump unchanged at 11 (every candidate there was junk), IMG_7744 10→20.
+- **Built boundary-correction into `label_web.py`'s GRADE mode** (`s`/`e` re-marks the current candidate's true start/end in place; original detector timestamp preserved as `detector_start`/`detector_end`, never discarded or duplicated into a second entry) — needed because a detector segment only spans first-to-last net crossing, so real rallies are often truncated at both ends, not just missing outright.
+- **Rescored** both (shipped config, `court_wedge` gate, called directly via `src.tracknet.rally_segments_from_predictions` against the cached `predictions_k14.csv` — no re-inference): IMG_7743 combined precision 0.29→**0.44** (recall 0.79→0.75, a boundary-widening side effect, not a regression), IMG_7744 precision 0.25→**0.54** (recall 0.60→0.65). Full numbers and mechanism notes in `EXPERIMENTS.md`.
+- **Closes ADR-050 follow-up #1** — the label-completeness artefact first found on pb_draft_cup/brickwall (2026-08-18) is now confirmed on all four scored cameras, none is an exception.
+- **Still open:** the fragment/boundary/junk false-positive anatomy (done for brickwall) hasn't been run on IMG_7743/7744/pb_draft_cup; the label-artefact conclusion still hasn't been through adversarial review; `src/cut.py`'s CLI still doesn't wire up `court_wedge` (only the older flat `court_x_range`), so a plain `python3 -m src.cut` run would underperform these numbers today.
 
 ---
 

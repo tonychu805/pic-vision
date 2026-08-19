@@ -12,6 +12,14 @@ Two passes, as in label.py:
           quality judgement (you can't judge at the serve).
   GRADE — replay each marked rally in isolation and grade it with hindsight:
           1 highlight-worthy, 2 real but ordinary, 3 not a rally (drops it).
+          A candidate's start/end can also be wrong without the candidate
+          itself being wrong (e.g. pass-3 gap review: a detector segment
+          spans only first-to-last net crossing, not serve-to-dead). Press
+          s/e in GRADE to re-mark the true boundary in place -- the original
+          pipeline timestamp is kept alongside it as detector_start/
+          detector_end, not discarded, so this never needs a second,
+          detached hand-marked entry for the same candidate. 0 reverts to
+          the pipeline boundary.
 
 Grades are written as a "quality" field (1 or 2). Detection metrics should
 score against everything kept (real play); highlight-selection metrics against
@@ -109,6 +117,7 @@ PAGE = r"""<!doctype html>
   tr:hover td { background:#1c1c1c; }
   tr.cur td { background:#093; color:#fff; }
   .q1 { color:#5f5; } .q2 { color:#fc5; } .none { color:#888; }
+  .dim { color:#888; font-size:11px; }
   button { background:#333; color:#eee; border:1px solid #555; border-radius:5px;
            padding:6px 12px; cursor:pointer; font-size:13px; }
   button:hover { background:#444; }
@@ -137,6 +146,9 @@ PAGE = r"""<!doctype html>
     <div><b>GRADE pass</b> (<kbd>g</kbd> toggles) &mdash; replays each rally; <kbd>1</kbd> highlight
       &nbsp; <kbd>2</kbd> ordinary &nbsp; <kbd>3</kbd> not a rally &nbsp; <kbd>n</kbd>/<kbd>p</kbd> next/prev
       &nbsp; <kbd>space</kbd> replay</div>
+    <div><b>Boundary correction</b> (in GRADE) &mdash; <kbd>s</kbd> re-mark start here &nbsp;
+      <kbd>e</kbd> re-mark end here (unlocks looping to seek past the old edges) &nbsp;
+      <kbd>0</kbd> revert to pipeline boundary &nbsp; <kbd>x</kbd> cancel pending</div>
   </div>
 </div>
 <div id="side">
@@ -169,8 +181,11 @@ function render() {
             : r.quality === 2 ? '<span class="q2">2 ordinary</span>'
             : '<span class="none">&mdash;</span>';
     const cls = (mode === 'GRADE' && i === cur) ? ' class="cur"' : '';
+    const corrected = r.detector_start !== undefined
+      ? ' <span class="dim" title="pipeline: ' + fmt(r.detector_start) + ' -> ' + fmt(r.detector_end) + '">*corrected</span>'
+      : '';
     return `<tr${cls} onclick="jump(${i})"><td>${i+1}</td><td>${fmt(r.start)}</td>` +
-           `<td>${(r.end-r.start).toFixed(1)}s</td><td>${q}</td></tr>`;
+           `<td>${(r.end-r.start).toFixed(1)}s${corrected}</td><td>${q}</td></tr>`;
   }).join('');
   document.getElementById('list').innerHTML = rows;
   const el = document.querySelector('tr.cur');
@@ -184,9 +199,11 @@ function jump(i) {
 }
 
 // GRADE pass: loop playback inside the current rally so it can be judged whole.
+// Suspended while a boundary correction is pending (pending !== null) so the
+// old edge doesn't snap playback back before the true edge can be found.
 v.addEventListener('timeupdate', () => {
   document.getElementById('clock').textContent = fmt(v.currentTime);
-  if (mode === 'GRADE' && rallies[cur] && v.currentTime >= rallies[cur].end) {
+  if (mode === 'GRADE' && rallies[cur] && pending === null && v.currentTime >= rallies[cur].end) {
     v.currentTime = rallies[cur].start;
   }
 });
@@ -217,7 +234,7 @@ document.addEventListener('keydown', ev => {
   const k = ev.key;
   if (k === ' ') {
     ev.preventDefault();
-    if (mode === 'GRADE' && rallies[cur]) v.currentTime = rallies[cur].start;
+    if (mode === 'GRADE' && rallies[cur] && pending === null) v.currentTime = rallies[cur].start;
     v.paused ? v.play() : v.pause();
     return;
   }
@@ -232,6 +249,39 @@ document.addEventListener('keydown', ev => {
     if (k === '1' || k === '2' || k === '3') { grade(+k); return; }
     if (k === 'n') { cur = Math.min(cur+1, rallies.length-1); v.currentTime = rallies[cur].start; render(); return; }
     if (k === 'p') { cur = Math.max(cur-1, 0); v.currentTime = rallies[cur].start; render(); return; }
+    // Re-mark this candidate's boundary in place. The pipeline's original
+    // start/end is snapshotted once into detector_start/detector_end (never
+    // overwritten again) so both timestamps survive -- correcting a boundary
+    // never requires a second, detached hand-marked entry for the same rally.
+    if (k === 's') {
+      if (!rallies[cur]) return;
+      pending = v.currentTime;
+      msg('corrected start @ ' + fmt(pending) + ' -- seek to the true end, then press e');
+      render(); return;
+    }
+    if (k === 'e') {
+      if (!rallies[cur]) return;
+      if (pending === null) { msg('! no pending corrected start -- press s first'); return; }
+      if (v.currentTime <= pending) { msg('! end before start, ignored'); return; }
+      const r = rallies[cur];
+      if (r.detector_start === undefined) { r.detector_start = r.start; r.detector_end = r.end; }
+      r.start = +pending.toFixed(2);
+      r.end = +v.currentTime.toFixed(2);
+      r.duration = +(r.end - r.start).toFixed(2);
+      pending = null;
+      msg('rally ' + (cur+1) + ' boundary corrected: ' + fmt(r.start) + ' -> ' + fmt(r.end) +
+          '  (pipeline was ' + fmt(r.detector_start) + ' -> ' + fmt(r.detector_end) + ')');
+      render(); return;
+    }
+    if (k === '0') {
+      const r = rallies[cur];
+      if (!r || r.detector_start === undefined) { msg('no correction to revert'); return; }
+      r.start = r.detector_start; r.end = r.detector_end;
+      r.duration = +(r.end - r.start).toFixed(2);
+      msg('rally ' + (cur+1) + ' reverted to pipeline boundary');
+      render(); return;
+    }
+    if (k === 'x') { pending = null; msg('cancelled pending correction'); render(); return; }
   } else {
     if (k === 's') { pending = v.currentTime; msg('start ' + fmt(pending)); render(); return; }
     if (k === 'e') {

@@ -101,10 +101,10 @@ This runs in parallel with Phase 1 v0 (ADR-039). v1 is the current focus; v0 rem
 |---|---|---|---|---|
 | brickwall | doubles, tournament | **0.64** | 0.80 (28/35) | ✅ yes |
 | pb_draft_cup | **singles** | **0.59** | 0.72 (13/18) | ✅ yes |
-| IMG_7743 | casual doubles | 0.29 | 0.79 (26/33) | ❌ **not reviewed** |
-| IMG_7744 | casual doubles | 0.25 | 0.60 (6/10) | ❌ **not reviewed** |
+| IMG_7743 (combined pre/post-bump) | casual doubles | **0.44** | 0.75 (40/53) | ✅ yes (2026-08-19) |
+| IMG_7744 | casual doubles | **0.54** | 0.65 (13/20) | ✅ yes (2026-08-19) |
 
-**Read the two unreviewed rows with suspicion.** Reviewing false positives at playback speed and correcting the labels moved pb_draft_cup 0.27 → 0.59 and brickwall 0.59 → 0.64, with no change to predictions, calibration, config, or scoring code (ADR-050). The earlier "precision pinned at 0.25–0.29 across cameras" reading is withdrawn; it was measuring label completeness as much as the detector.
+**All four cameras now reviewed — the label artefact is confirmed everywhere it's been checked, not withdrawn on any of them.** Reviewing false positives at playback speed and correcting the labels moved every video the same direction: pb_draft_cup 0.27 → 0.59, brickwall 0.59 → 0.64, IMG_7743 0.29 → 0.44, IMG_7744 0.25 → 0.54 — with no change to predictions, calibration, config, or scoring code in any case (ADR-050; IMG_7743/7744 in `EXPERIMENTS.md` 2026-08-19). The earlier "precision pinned at 0.25–0.29 across cameras" reading is fully withdrawn; it was measuring label completeness, not the detector. **What's still open:** none of these false-positive sets has had the fragment/boundary/junk anatomy done except brickwall — some of the remaining false positives on IMG_7743/7744/pb_draft_cup are likely fragments of rallies already correctly recovered, not genuine junk, and that hasn't been broken out.
 
 **Recall split by grade** — the blended figure hides the metric that matters, since missing an ordinary rally is cheap and missing a highlight is the product failing:
 
