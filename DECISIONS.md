@@ -819,6 +819,18 @@ This does not mean precision is solved. ADR-050's three separated failure modes 
 
 ---
 
+## ADR-052 — Eval-set roles are locked; IMG_7743 is `eval` and may never again be used to pick a parameter
+
+**Date:** 2026-08-19 · **Status:** accepted
+
+**Context.** `LABELING.md` has documented a `dev`/`eval` session-role system since early in the project, and `TECH_SPEC.md`'s repo layout has referenced a `sessions.jsonl` file to hold the assignments — but `sessions.jsonl` was never actually created, and no session ever received a role. PIC-17 (filed 2026-08-16) named the consequence directly: every parameter this project has tuned — `min_crossings=6`, `gap_sec=3.0`, `court_wedge`'s cap/spread constants, and, before this ADR, PIC-33's adaptive-`gap_sec` search — was tuned and evaluated on the same labelled footage. The Phase 0 gate flagged this as a prerequisite before any tuning run; tuning happened anyway, including a 156-parameter sweep the day the issue was filed, and roughly 100 more parameter combinations in this session's own `gap_sec`/duration-threshold work before this was caught.
+
+**Decision.** `sessions.jsonl` now exists and is populated. `IMG_7743` is `eval` — locked. No future sweep, threshold search, or parameter fit may use its labels to choose a value; it may only be used to report a final number, at most once per phase, per the rule already written (but unenforced) in `LABELING.md`. `brickwall`, `pb_draft_cup`, and `IMG_7744` are `dev` — each is the only labelled example of its rally-length/format regime (tournament doubles, singles, casual doubles-with-adjacent-court-noise), so none of them can be spared for `eval` without losing coverage of that regime entirely; `IMG_7743`'s regime (casual doubles) is the one already duplicated by `IMG_7744`, which is why it is the video that can be locked.
+
+**Consequences.** This is enforced by convention, not by code — there is no technical barrier stopping a future session from scoring against IMG_7743 mid-sweep, only the rule now written in `LABELING.md` and `sessions.jsonl`. The currently shipped `min_crossings`, `gap_sec`, and `court_wedge` constants were tuned against IMG_7743 before this lock existed and cannot be retroactively cleaned; they carry a real, unquantified amount of overfitting to the video that just became `eval`. Re-deriving them against `dev` only is tracked as PIC-43 and is the actual test of whether this project's headline numbers survive honest validation — this ADR fixes the process, not the numbers. The one existing example of a parameter search already following this discipline by construction (PIC-33's `adaptive_gap`, tuned on `dev`, checked flat on what is now `eval`) is recorded in `EXPERIMENTS.md` as the template for what PIC-43 and any future tuning work should look like.
+
+---
+
 ## Template
 
 ```markdown

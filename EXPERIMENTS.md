@@ -973,3 +973,26 @@ Duration alone gets 11 of 12 right on this one video-half — but one dead-time 
 **Follow-up.**
 1. Candidate #3 (a signal beyond ball crossings — player positioning, serve-shape, audio) is the one left standing. Brainstormed candidates filed as PIC-42 (backlog, not scoped or prioritized): serve-shaped ball arc, double-bounce at rally end, reviving the frozen player-position/kitchen-formation signal (`src/players.py`/`src/events.py`, ADR-039/047), audio score-calling, audio hit rhythm.
 2. PIC-31 stays open — this closes out candidate #1, not the issue.
+
+---
+
+## 2026-08-19 (final) — Eval-set-A locked (PIC-17): overdue, and today's own tuning work is why
+
+**Why this got picked up.** PIC-17 was filed 2026-08-16, flagging that this project had one set of labels doing two jobs — tuning parameters *and* judging how well they worked — and that a 156-setting sweep had already happened despite the Phase 0 gate naming this as a prerequisite. It sat untouched for three days. Today's session made the problem worse before catching it: PIC-33's `gap_sec` search ran ~100 parameter combinations, and PIC-31's threshold check ran two more sweeps, both against the same four videos this project has always used for both tuning and reporting.
+
+**What changed.** `sessions.jsonl` (referenced in `TECH_SPEC.md`'s repo layout, never actually created) now exists, and `LABELING.md`'s pre-existing `dev`/`eval` role table (also written but never populated) is now populated:
+
+| session | role | reason |
+|---|---|---|
+| IMG_7743 | **eval** (locked) | most-labelled video (53); PIC-33's adaptive-gap search and PIC-31's threshold check already happened to leave it untouched, by construction, not by policy |
+| brickwall | dev | only labelled example of tournament-doubles/long-rally play — locking it out of tuning would remove a whole regime |
+| pb_draft_cup | dev | only labelled example of singles play — same reason |
+| IMG_7744 | dev | casual doubles, same regime as IMG_7743 — the one video that *can* be spared from `eval` without losing a regime |
+
+**The one clean before/after this project actually has:** PIC-33's `adaptive_gap` was tuned only against `dev` (brickwall, pb_draft_cup, IMG_7744) and checked against `eval` (IMG_7743) afterward, without knowing this lock would later formalize that exact split. Re-stated under the new roles: precision/recall on `eval`, fixed vs. adaptive — **0.44/0.75 → 0.44/0.74**. Flat. That's the result this whole lock exists to produce, and it's reassuring that the one piece of recent parameter-search work already behaved this way by accident.
+
+**What this lock does *not* fix — recorded honestly, not swept under it.** The *currently shipped* `min_crossings=6`, `gap_sec=3.0` base, and `court_wedge`'s cap/spread constants were all originally tuned using IMG_7743 itself (2026-08-16 entries, before any lock existed). That history is real and can't be retroactively undone by locking the video now — the shipped defaults carry a genuine, unquantified amount of overfitting to the video that's now `eval`. Re-deriving them against `dev` only, to see whether the current headline numbers survive, is the actual outstanding risk this issue named and is not resolved by writing the roles down — filed as PIC-43.
+
+**Follow-up.**
+1. PIC-43: re-derive `min_crossings`, `gap_sec` base, and `court_wedge`'s cap/spread against `dev` only, then report the result on `eval` for the first time as a true held-out number — the check PIC-17 actually wanted, not yet done.
+2. Going forward: no sweep may use IMG_7743's labels to pick a parameter or threshold, only to report a final number, per its `eval` role in `sessions.jsonl`.

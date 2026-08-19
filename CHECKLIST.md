@@ -19,10 +19,10 @@ Updated as phases complete. Measurement runs go in `EXPERIMENTS.md`; decisions i
 | `label.py` — rally interval labeler | ✅ | `--review` mode tested |
 | Eval harness (`eval/harness.py`) | ✅ | IoU matching, detection + selection tables, 12 tests |
 | Labels exist for at least one clip | ✅ | `IMG_7652.jsonl` (9 competitive), `IMG_7655.jsonl`, `austin_rally2.jsonl` |
-| Eval sets assigned (A locked / B tuning / C low-light) | ❌ | Labels exist but roles not formally assigned; eval-set-A not locked |
+| Eval sets assigned (A locked / B tuning / C low-light) | ✅ | **2026-08-19 (PIC-17).** `sessions.jsonl` + `LABELING.md`. `eval`=IMG_7743 (locked), `dev`=brickwall/pb_draft_cup/IMG_7744, `eval-lowlight`=none captured. Locked *late* — every sweep before today (`min_crossings`, `gap_sec`, `court_wedge`'s cap/spread, PIC-33's adaptive-gap search) tuned and evaluated on overlapping data; PIC-43 tracks re-deriving the shipped constants dev-only now that the discipline exists. |
 | Harness runs on hand-written stub | ✅ | Proven in Phase 0 session |
 
-**Gate status: PASSED** (harness works; eval-set-A not formally locked yet — do this before any tuning run)
+**Gate status: PASSED**
 
 ---
 
