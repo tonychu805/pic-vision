@@ -1208,3 +1208,103 @@ Method: per active signal, z-score within session (raw scales don't transfer acr
 **Conclusion.** Unlike `min_crossings` (PIC-43, 2026-08-19), which had one clear winning combination well above the rest, `margin_px` has no real maximum in this range — the best avg F1 in the zero-regression band (110px, 0.661) beats the shipped default (160px, 0.650) by 0.011, which is inside noise already measured on this project (PIC-6: ~1/3 presence disagreement, ~0.6s boundary noise). **The shipped default survives a genuine dev-only re-derivation** — not because it's provably optimal, but because it already sits inside the flat, safe interior of a wide non-regressing range. No change made. The one-time `eval` (IMG_7743) held-out check was deliberately not spent here — there's no new config to confirm, and burning it only makes sense when a decision actually changes.
 
 **Follow-up.** `cap_court_heights`/`spread` — PIC-43's actual remaining scope — are still untouched; `scripts/search_margin_px.py`'s pattern (grid sweep, zero-regression check against the shipped baseline, dev-only) is directly reusable for them, just swept over `court_wedge`'s other two parameters instead. If a future need (e.g. a specific camera's adjacent-court framing) pushes toward the edges of `margin_px`'s tested range, re-run with a finer grid around that edge rather than assuming the flat interior still holds everywhere.
+
+---
+
+## 2026-08-20 — PIC-43 (final piece): `cap_court_heights`/`spread` re-derived dev-only; the dev-favored candidate does NOT hold on held-out `eval` — the exact failure mode PIC-43 exists to catch
+
+**What this answers.** `cap_court_heights=0.7`/`spread=0.5` (`court_wedge`'s own function defaults, never explicitly chosen) are the last unchecked constants from PIC-43's original three-item scope. `min_crossings` was re-derived 2026-08-19; `gap_sec` base was effectively answered by PIC-33's adaptive-gap template; `margin_px` was a separate, adjacent question closed earlier today. This entry does the actual thing PIC-43 asked for: a dev-only grid search, then — for the first time in this project — a genuine, one-time `eval` (IMG_7743) confirmation of whatever dev picks.
+
+**Dev-only search.** `scripts/search_wedge_shape.py`: grid over `cap_court_heights` ∈ {0.4..1.0, None} × `spread` ∈ {0.0..1.0}, 64 combinations, `margin_px` held at its confirmed value (160), scored against `dev` only at IoU≥0.5. **53 of 64 combinations hold with zero regression against the shipped baseline** (another wide, mostly-flat band, same shape as `margin_px`) — but unlike `margin_px`, one region stands out: `cap_court_heights=0.4` (spread 0.5–0.6) reaches avg F1 0.670 vs shipped's 0.650, driven entirely by IMG_7744 improving on *both* precision and recall (0.54/0.65 → 0.61/0.70) with brickwall/pb_draft_cup completely unchanged. This looked like a clean win, not noise — the kind of candidate that's earned a held-out check, unlike `margin_px`'s genuinely flat result.
+
+**Mechanism check, done initially from a still calibration frame, then corrected against the actual detection data, then confirmed by direct human review of real footage (CLAUDE.md's own rule — verify from playback, not a still frame or assumption).** The first-pass explanation offered here was "a tighter ceiling filters more of IMG_7744's spurious high-frame detections" — plausible-sounding, matching `court_wedge`'s own docstring, and **wrong**. Checked in two steps:
+
+1. Pulled every detection in `cache/IMG_7744_predictions_k14.csv` falling in the band the two caps disagree on (image-y between the cap=0.4 and cap=0.7 lines, 2141 detections). If this were mostly static ceiling-light hallucinations, they'd cluster at a handful of fixed positions. `x` instead spans 586 to 1918, nearly the full 1920px frame width — not the signature of a small number of static false-positive sources.
+2. Pulled 12 real frames at actual detection timestamps in that band (4 from the one mildly concentrated spot ~150–180px above the net line, 8 spread across the rest of the band) and marked exactly where TrackNet reported the ball. Operator reviewed all 12 against the real footage: **all 12 are the ball, correctly detected, in real play** — not lights, not clutter, not a tracking artefact.
+
+**The band is genuine signal, confirmed, not junk of any kind.** So the tighter cap's dev-search win came from discarding real ball detections — high, but real, moments of play (plausibly overhead/attacking shots near the net, given the concentration point sits ~150–180px above net height) — not from filtering anything spurious. That doesn't fully explain *why* discarding real data happened to improve `IMG_7744`'s dev-measured precision and recall (a real detection removed mid-rally still leaves `track_ball` able to re-acquire the same ball once it drops back below the cap, so the mechanism for how this nets out at the rally-segment level isn't traced end-to-end here) — but it removes the false explanation cleanly, and it makes the held-out `eval` result make much more sense: discarding genuine ball data is inherently video-dependent and risky, which is exactly consistent with it costing precision on `eval` while happening to help two specific dev metrics on one video.
+
+**Held-out `eval` check (IMG_7743, first genuine use this project has made of this discipline) — same pre/post-bump split-calibration method as 2026-08-17:**
+
+| config | eval precision | eval recall | eval F1 | dev avg F1 |
+|---|---|---|---|---|
+| shipped (cap=0.7, spread=0.5) | 0.440 | 0.755 | **0.556** | 0.650 |
+| candidate (cap=0.4, spread=0.5) | 0.423 | 0.774 | **0.547** | 0.670 |
+
+**The candidate does not hold.** On `eval`, it isn't a clean win at all — it trades precision for recall (0.440→0.423, 0.755→0.774) rather than improving both the way it appeared to on `dev`, and comes out slightly *behind* the shipped default on F1 (0.547 vs 0.556). A config that looked unambiguously better on three dev videos turns out to be a wash — arguably a net loss — on the one video never touched during selection.
+
+**Conclusion.** `cap_court_heights=0.7`/`spread=0.5` are kept, unchanged. This is exactly the outcome PIC-43's own issue text anticipated as a live possibility ("if the eval number is materially worse... that is the real finding this exercise exists to surface, not a failure to hide") — and it's the first time this project has actually run the dev-search → eval-confirm loop all the way through and found the dev winner *doesn't* survive. `min_crossings=6`+adaptive (2026-08-19) and `margin_px=160` (earlier today) both survived this same kind of check when it was available; this is the first constant that didn't, and it's informative precisely because the other two didn't fail the same way — it's evidence the held-out check is doing real work, not passing everything through.
+
+**This closes PIC-43.** All three original constants (`min_crossings`, `gap_sec`, `court_wedge`'s shape parameters) have now been re-derived dev-only and reported against `eval` at least once, per the issue's own checklist. `margin_px`, not part of the original scope, was closed alongside it.
+
+**Follow-up.**
+1. The mechanism hypothesis (tighter cap filters IMG_7744-specific spurious high detections) is now weaker evidence than it looked — worth remembering if IMG_7744-specific tuning comes up again, since the same reasoning was used to justify a change that didn't survive held-out validation.
+2. `eval` has now been touched once this phase, per `LABELING.md`'s rule — no further `eval` scoring should happen until the next phase boundary, regardless of how promising a future dev candidate looks.
+
+---
+
+## 2026-08-20 — PIC-42 candidate check: zero-shot paddle detection (YOLO-World) works on real footage, untrained
+
+**Context.** PIC-42 (signals beyond ball-crossing for telling a real rally from a casual exchange) is a parking spot for untested candidates; its own rule is to check a signal separates real signal from noise *before* building anything. Paddle tracking wasn't one of the five listed candidates — came up in conversation as an alternative to reviving `src/players.py`'s foot-point data (which is the wrong height for hit detection — it's a ground-contact point, not a hand/paddle position). Plain COCO-pretrained YOLO (`yolov8n.pt`, already used for player detection) has no "paddle" class and won't detect one. Checked whether a zero-shot open-vocabulary detector could, with no training at all, before considering a real custom-training effort.
+
+**Method.** `ultralytics.YOLOWorld` (`yolov8s-world.pt`), prompted with `["paddle", "table tennis paddle", "racket", "tennis racket"]` — no pickleball-specific class exists in its vocabulary, closest concept is "tennis racket." Tested against `cache/IMG_7744_calib_frame.png` (a real, unmodified calibration frame, 4 players visible, 3 holding paddles near the net) two ways: a zoomed-in crop, and the full frame at native resolution with no cropping.
+
+**Result.**
+- Zoomed crop: all 3 visible paddles correctly boxed, labeled "tennis racket" (conf 0.10–0.39).
+- **Full frame, no cropping, `imgsz=1920`**: correctly detected the paddle at the nearest player's hand (conf=0.50) plus 3 lower-confidence hits on the other players' paddles — all real, all correctly positioned, no manual help.
+- At the default `imgsz=640`, this same full frame produced **0 detections** — paddles are too small in a wide establishing shot at that resolution. Needed full resolution to register at all, which costs more per-frame compute than the 640-default inference this project already runs for players/ball.
+- One environment side effect: `ultralytics` auto-installed `git+https://github.com/ultralytics/CLIP.git` into `.venv` on first `YOLOWorld` import (needed for its text-prompt encoding) — not requested, flagged rather than left silent.
+
+**Conclusion.** Zero-shot paddle detection is viable on this project's real footage without any custom training or labeled data — genuinely promising as a cheap first move on PIC-42's paddle-tracking idea. Not proven yet: this is one still frame, not a video — fast swing motion and motion blur during an actual hit are the real test, and haven't been checked. Also unresolved (flagged when this idea first came up): even with working paddle detections, naively combining paddle position with ball trajectory isn't guaranteed to help — a 2026 racket-sports benchmark (RacketVision, tennis/table-tennis/badminton) found naive concatenation of racket-pose features *hurt* trajectory prediction; a real fusion mechanism was needed to see any gain. Getting detections is step one, not the whole answer.
+
+**Follow-up.**
+1. Run this against a short real clip (not a single frame) to check whether detection holds up through actual swing motion and blur, before investing further.
+2. If it holds up on video, the actual product question (does paddle-contact timing help separate real rallies from dead-time, PIC-31's original problem) is still untested — detection working is a prerequisite, not the answer itself.
+3. `imgsz=1920`'s compute cost needs to be weighed against just detecting paddles in a lower-res proxy stream if this goes further, similar to the proxy-video idea already on record for the cloud-hybrid architecture (PROGRESS.md, 2026-08-12).
+
+---
+
+## 2026-08-20 — PIC-42 paddle-tracking candidate, follow-up #1: fails on real video — the single-frame test was misleading
+
+**What this checks.** Follow-up #1 from the entry above: does `YOLOWorld` hold up across an actual rally, not one lucky still frame. Ran it at every frame (30fps, `imgsz=1920`) across a full real rally (`IMG_7744` rally 4, grade 1, 390.4–401.0s, 320 frames), `conf>=0.05`.
+
+**Result: it does not hold up. Two distinct, real failure modes, not just occasional noise.**
+
+1. **A systematic false positive.** The blue net-post roller equipment (visible at both net posts in every frame) gets confidently misdetected as "tennis racket" — 0.47 confidence in one frame, 0.06 in another. Same wrong object, not a one-off.
+2. **Real paddles frequently missed entirely, even outside fast motion.** In one representative mid-rally frame, all 3–4 paddles visible in normal ready-position (players just standing, not mid-swing) produced **zero detections** — the only box present was, again, the net-post roller. This isn't a motion-blur problem specifically; the detector is unreliable on paddles held plainly in view.
+3. **Duplicate/overlapping boxes on the same real paddle** at low confidence thresholds (one frame produced 15 boxes clustered around what's realistically 4 real paddles) — `YOLOWorld`'s NMS isn't cleanly collapsing near-duplicate detections at this threshold.
+
+**No confidence threshold resolves this cleanly.** Swept `conf` from 0.05 to 0.3 across all 320 frames: low thresholds keep the false-positive/duplicate-box noise (many frames with 5–16 "paddles"); raising the threshold to clean that up produces 50–62% of frames with **zero** detections at all. There's no middle value that gives reliable, clean per-frame paddle counts.
+
+**Conclusion.** The earlier single-frame test (this file, entry above) was real but misleading as a signal of readiness — it happened to land on a frame where the zero-shot vocabulary ("tennis racket," the closest concept to a pickleball paddle) worked. Across real play, it doesn't generalize: a systematic false-positive source (net-post equipment) and frequent misses of clearly-visible real paddles make the raw output unusable as-is for anything downstream (contact detection, or even just "how many paddles are in this frame"). This is exactly the caution flagged in the prior entry's follow-up #1, now confirmed.
+
+**Follow-up.**
+1. Plain zero-shot `YOLOWorld` is not viable for paddle tracking as tested. Before spending more effort here: try a heavier zero-shot detector (Grounding DINO) to see if the false-positive/miss pattern is `YOLOWorld`-specific or general to zero-shot detection on this footage; or reconsider whether this whole direction is worth a real custom-trained detector instead (RF-DETR, per the earlier model-landscape check) given zero-shot didn't hold up cheaply.
+2. The net-post-roller false positive is worth remembering independent of paddle tracking — any future object-detection work on this footage (player detection, paddle detection, anything YOLO-family) should be aware that blue net-post equipment is a recurring confusable object.
+3. This does not touch PIC-31's actual question (does *any* non-ball signal separate real rallies from dead-time) — paddle tracking was one candidate way to get at ball-contact timing, and it's now the second candidate (after the duration/rate threshold, PIC-31) to come back negative on this project.
+
+---
+
+## 2026-08-20 — PIC-42 paddle-tracking candidate, follow-up #2: Grounding DINO recovers cleanly where YOLO-World failed
+
+**What this checks.** Follow-up #1's own recommendation: is the zero-shot failure `YOLOWorld`-specific, or general to zero-shot detection on this footage. Installed `transformers` (HuggingFace's `IDEA-Research/grounding-dino-tiny`, the standard way to run Grounding DINO now) and re-ran the identical test — same rally, same frames, prompted `"a paddle. a tennis racket."`.
+
+**Result: meaningfully better, not just different.**
+- **99% of frames (316/320)** have at least one plausible paddle-scale detection (`area<15000px²`), versus `YOLOWorld`'s pattern of alternating between noise-heavy and empty. Count distribution peaks at **4** (67 frames) — matching the real number of paddles in view — not scattered 0–16 the way `YOLOWorld`'s was.
+- Checked the *exact* frame (t=395.4s) where `YOLOWorld` completely failed — zero real detections, false-positived on the net-post roller instead. Grounding DINO gets **3 of the 4 real paddles correctly, tightly boxed** on that same frame.
+- A second spot-check frame (t=390.4s, near serve) again: all 3 visible paddles correctly boxed.
+
+**Two known, filterable failure modes remain — not a clean solve, but a tractable one:**
+1. **Whole-body boxes** (a large box spanning an entire player, ~0.15–0.26 confidence — overlapping the real paddle boxes' confidence range, so threshold alone won't separate them). Filterable by size: real paddle boxes are consistently small (tens to low hundreds of px²), whole-body boxes are an order of magnitude larger. The `area<15000px²` filter already used above catches this.
+2. **The net-post roller — the same confusable object `YOLOWorld` also misfired on** — persists as a secondary detection in both spot-checked frames, small enough to survive the size filter. Unlike the whole-body case, this needs a different fix: the net-post rollers sit at a roughly fixed position relative to the calibrated net line, so a position-based exclusion (similar in spirit to `court_wedge` excluding off-court regions) is the natural next filter, not a confidence or size threshold.
+
+**Cost.** ~0.4s/frame on GPU (`grounding-dino-tiny`) — about 10x slower than `YOLOWorld`'s ~0.034s/frame, but still under 2 minutes for a full 320-frame, 10.6s rally. Real cost at full-video scale, not free, but not prohibitive for testing.
+
+**Conclusion.** The `YOLOWorld` failure was largely model-specific, not a fundamental limit of zero-shot detection on this footage. Grounding DINO is a real candidate to build on — genuinely usable paddle localization once the two known false-positive sources are filtered (one already solved by size, one with a clear, cheap fix available). This reopens the paddle-tracking direction that follow-up #1 had mostly closed.
+
+**Environment note.** `transformers` (HuggingFace) installed into `.venv` for this test — not previously a project dependency.
+
+**Follow-up.**
+1. Build the position-based net-post exclusion (reuse existing calibration data, same pattern as `court_wedge`) and re-run the full-rally check with both filters applied together — the real bar is "clean paddle count per frame across a whole rally," not spot-checked frames.
+2. Still unproven end-to-end: even clean paddle positions need to be combined with ball trajectory to detect an actual contact event (the original ask) — detection quality was the blocker being tested here, not the full pipeline.
+3. Revisit PIC-31's actual question once contact detection exists: does paddle-contact timing distinguish real rallies from dead-time exchanges any better than the duration/rate threshold already ruled out.
