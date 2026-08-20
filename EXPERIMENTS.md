@@ -1308,3 +1308,76 @@ Method: per active signal, z-score within session (raw scales don't transfer acr
 1. Build the position-based net-post exclusion (reuse existing calibration data, same pattern as `court_wedge`) and re-run the full-rally check with both filters applied together — the real bar is "clean paddle count per frame across a whole rally," not spot-checked frames.
 2. Still unproven end-to-end: even clean paddle positions need to be combined with ball trajectory to detect an actual contact event (the original ask) — detection quality was the blocker being tested here, not the full pipeline.
 3. Revisit PIC-31's actual question once contact detection exists: does paddle-contact timing distinguish real rallies from dead-time exchanges any better than the duration/rate threshold already ruled out.
+
+---
+
+## 2026-08-20 — PIC-42 paddle-tracking candidate, follow-up #3: tried a second camera (brickwall) instead of the net-post filter — found different clutter, `court_wedge` solves it only partially
+
+**What this checks.** Follow-up #1/#2 only ever tested one camera (IMG_7744). Before building a filter anchored to IMG_7744's specific false-positive object (the net-post roller), ran the identical Grounding DINO pass against a `brickwall` rally (10s, 300 frames at 30fps, `t=2.55-12.55s`, the session's first labelled rally) — a different camera, different court, different venue entirely. Watched the result as an actual annotated video (all 300 frames re-encoded to mp4 with detection boxes + calibrated net-post markers drawn on, opened in VLC), not stills — this project's own rule for judging real-vs-noise calls.
+
+**Result: brickwall has no net-post roller (checked by eye first — plain black net stand, no equipment) and no false positives near the net posts at all. But it has two different recurring false-positive hot spots, neither related to the net:**
+
+1. **A maintenance pole/squeegee leaning against the wall on the upstairs spectator balcony** (image region ~x=280±60, y=130±60) — 307 detections there across the 300-frame clip. Its rounded white head is genuinely paddle-shaped in silhouette, a real static object, same *category* of mistake as IMG_7744's roller (a fixed off-court object with a paddle-like shape) but a completely different object.
+2. **An item near the front check-in desk** (~x=600±60, y=245±60) — 591 detections, persistent across the clip. Possibly a real paddle held by someone off-court, not confirmed a hallucination the way the pole is.
+
+Real paddles were still detected correctly in the same frames (both players' paddles boxed in frame 99, e.g.) — the detector itself keeps working; what it hallucinates is different per venue.
+
+**This ruled out a net-post-specific filter as the next build and motivated trying `court_wedge` (the off-court gate already shipped and validated for ball detections) instead** — the reasoning being that every false-positive source found so far, across two cameras, is a real, static, *off-court* object.
+
+**Built:** `src/paddles.py`'s `filter_paddle_boxes(boxes, calib, area_max=15000.0, **wedge_kwargs)` — area filter for whole-body boxes, then `court_wedge(calib)` applied to each box's center. 5 new tests (`tests/test_paddles.py`), full suite 112/112 (`tests/`; the pre-existing `archive/` collection error is unrelated, retired YOLO path).
+
+**Validated against all 2,289 raw brickwall detections from the video above, not just the spot-checked frames:**
+
+| region | raw count | `court_wedge` @ shipped margin_px=160 | @ margin_px=100 |
+|---|---|---|---|
+| balcony pole | 307 | 307 survive (untouched) | **0 survive — fully removed** |
+| front-desk item | 591 | 591 survive | **591 survive — untouched at any margin, including 0** |
+| everything else (likely real) | 1,122 | 1,118 survive | 1,079 survive (~3.5% collateral loss) |
+
+**Mechanism, checked directly rather than assumed:** the balcony pole is only excluded once `margin_px` is tightened well below the shipped 160 (tuned for ball detections, not this) — at 160 the pad is simply wide enough to still include it at that image depth. The front-desk item can't be excluded by `court_wedge` at *any* margin, because at that image height its x-position falls **inside** the court's own reprojected corridor — `court_wedge` only reasons about the court's x-extent at each image depth, with no notion of "behind the baseline fence." A real ball or paddle at that same image position would be geometrically indistinguishable to this gate.
+
+**Conclusion.** `court_wedge` is a real, partial win — it fully solves the balcony-pole-shaped problem (an object off to the side of the court's projected column) once its margin is re-derived for this purpose, but it structurally cannot solve the front-desk-shaped problem (an object that happens to sit inside the column). Reusing the ball-detection gate as-is (shipped margin) does nothing for either case tested here — it must be re-tuned specifically for paddle filtering, not inherited.
+
+**Open question raised by this (not yet answered): there is no single static geometric mask that will generalize across venues.** Two cameras in, already two different confusable objects (net-post roller, balcony pole) plus one filter-proof case (front-desk item) — a real venue will keep introducing new off-court objects a hand-tuned position mask can't anticipate. This argues for a filter based on something that stays true across every venue, not the specific geometry of any one of them — e.g. proximity to an actually-detected player (a real paddle is attached to a person's hand; none of today's three false-positive sources are).
+
+**Same-day addendum: distance-to-nearest-player checked, and it only solves one of the two cases.** Ran `src/players.py`'s existing YOLO person detector (`sample_fps=5.0`, COCO 'person' class, no new training) over the same clip and measured each false-positive/real detection's distance to the nearest detected person box:
+
+| region | n | median dist-to-player |
+|---|---|---|
+| balcony pole | 307 | 189px |
+| front-desk item | 591 | **0px** |
+| everything else (likely real) | 1,122 | 0px (p90 = 2px) |
+
+The balcony pole separates cleanly (189px vs. a real-detection band that never exceeds 2px at p90) — a clean binary split, no threshold-picking needed. **The front-desk item does not separate at all** — it sits at the same near-zero distance as genuine paddle detections, because YOLO correctly detects the person standing at the desk holding it; proximity-to-*any*-person can't tell a playing player from a bystander. This is itself informative: it isn't just this instance of the case that fails, it points at *why* the case is hard in a way that generalizes — the missing distinction is "on-court player" vs. "any detected person," which position-based reasoning alone (court_wedge or a simple distance-to-person check) can't supply without also knowing which people are inside the court.
+
+**Follow-up.**
+1. Re-derive `margin_px` specifically for paddle filtering (dev-only, same discipline as PIC-43) — the shipped ball-tuned 160 was shown here to do nothing for the one case it can solve.
+2. Distance-to-player is a genuine partial win (balcony pole, cleanly), but the front-desk case needs the *on-court* distinction specifically — e.g. gate on distance to a player that itself passes `src/players.py`'s existing `on_court` check, not any detected person. Not yet checked whether that combination actually clears the front-desk case; the desk person may well be standing close enough to the court boundary to pass a loose `on_court` margin too.
+3. Both hot spots' `dist_to_post`-style measurements (this file, follow-up #2's net-post radius check) and this margin-based one point the same direction: a purely static, position-based mask is inherently a per-venue patch, not a general solution. Distance-to-player generalizes better (no venue-specific geometry needed) but isn't sufficient alone either — the emerging pattern across `PIC-31`/`PIC-42`'s candidates so far is that no single signal cleanly separates real from spurious; combining weak signals is the likely shape of an eventual answer, not finding the one filter that works.
+
+---
+
+## 2026-08-20 — PIC-42 paddle-tracking candidate, follow-up #4: compound-phrase prompting doesn't fuse concepts (documented, confirmed); explicit on-court-player pairing does, partially — same ceiling as court_wedge, for a confirmed real-world reason
+
+**What this checks.** Two follow-ups on the same open question: does anything cleanly separate a real on-court paddle from the front-desk/balcony false positives without a per-venue geometric mask.
+
+**Attempt 1: prompt Grounding DINO with the compound concept directly** (`"a person holding a paddle."` instead of `"a paddle. a tennis racket."`), on the theory that requiring the joint concept might exclude a real object held by a non-playing person, or a real person standing near a non-paddle object. **Does not work, and the reason is documented, not a quirk of this prompt's wording:** Grounding DINO uses "sub-sentence level text features" specifically to let one query return multiple independently-grounded phrases. Confirmed on the same 300-frame brickwall clip — the compound prompt just adds standalone `"person"`/`"a person"` detections on top of the existing `"paddle"` ones (balcony: 86× "a person", 12× "person", 0 fused detections; desk: 97× "a person", 19× "paddle", 17× "person"). Checked the actual boxes: at the balcony, it now tightly boxes the *real spectator* standing there — a real person, correctly labeled, just not a playing one. The joint concept has to be enforced by code, not by prompt phrasing.
+
+**Attempt 2: explicit fusion in code.** Built `src/paddles.py`'s `filter_paddle_boxes_by_on_court_player(paddle_boxes, player_boxes, calib, max_dist_px=150.0, **on_court_kwargs)` — pairs each paddle box to its nearest detected player box (`src/players.py`'s existing YOLO person detector, already used for `mean_motion`/`n_at_kitchen`), then requires that specific player to pass the existing `on_court` check (via `foot_point` + homography projection), not just any nearby person. 4 new tests added to `tests/test_paddles.py` (9 total in that file, on top of follow-up #3's 5), full suite 116/116 (`tests/`).
+
+**Validated against the same 300-frame brickwall clip and the same three groups (balcony pole, front-desk item, everything else), with real player detections (`detect_players`, `sample_fps=5.0`), not synthetic data:**
+
+| region | raw (paddle-scale) | default (`y_margin=10`) | `y_margin=2.0` |
+|---|---|---|---|
+| balcony pole | 130 | **1 survives** | 1 survives (unchanged) |
+| front-desk item | 591 | 557 survive (barely touched) | **274 survive (54% reduction)** |
+| everything else (likely real) | 1,122 | 1,031 survive | 1,031 survive (no extra cost) |
+
+**Balcony: fully and robustly solved** — not near any player, on-court or off, at any margin tested. **Front desk: only partially solved, and the reason was measured directly rather than assumed.** Projected the desk bystander's actual foot point through the calibration: **court coordinates (5.9ft, 53.8ft)** — inside the court's 20ft width, only 9.8ft behind the 44ft baseline. The default `y_margin=10` (deliberately generous — built to keep real players who lunge deep for lobs) lets them through because they are, in real-world feet, that close to the court. Tightening `y_margin` to 2.0 roughly halves the desk survivors with *zero* additional cost to real detections (`rest` holds flat from `y_margin=10` down to `2.0`, then craters past `0.5` — over half of real detections lost below ~1ft margin, a sharp cliff not worth crossing). The remaining 274 desk-area survivors pair with a *different*, genuinely on-court player nearby (plausibly someone near the baseline corner) — not fixable by this lever at all, because the pairing itself is correct; the ambiguity is real.
+
+**Conclusion.** Two independent filters (`court_wedge`'s off-court gate, this on-court-player fusion), tested on two different cameras, hit the *same shape* of ceiling: each fully solves the case that's geometrically/spatially distant, and only partially solves the case that's genuinely close to the court in the real world. This sharpens the open question from the previous entry: it isn't just "every venue has new clutter a hand-tuned mask can't anticipate" — some off-court objects/people are close enough to real play, in actual feet, that position-based reasoning of any kind (geometric mask or player-proximity) structurally cannot separate them from legitimate deep-court play. That's not a bug to keep tuning around; it's a ceiling on what a purely spatial signal can do here.
+
+**Follow-up.**
+1. Neither `court_wedge`'s `margin_px` nor this filter's `y_margin` is re-derived/chosen yet — both were spot-checked on one clip. If either direction is pursued further, needs the PIC-43-style dev-only sweep before being called a real default.
+2. The next lever that isn't purely spatial: gate on whether the frame falls inside an actual detected rally window (`cluster_crossings`'s own output) — a bystander at the desk has no reason to be active specifically during live points, whereas a real deep-court player does. Untested; would need per-frame rally-window membership, which the pipeline already computes for other purposes.
+3. Confirms `PIC-31`/`PIC-42`'s recurring pattern one more time: no single signal (duration/rate, zero-shot detection choice, prompt phrasing, geometric mask, player-proximity) cleanly separates real from spurious on its own.
