@@ -1183,3 +1183,28 @@ Method: per active signal, z-score within session (raw scales don't transfer acr
 1. PIC-45's consistency check is now the load-bearing next step for all of PIC-7's work, not just a nice-to-have — flagged, not yet started.
 2. `motion_max`'s showing after the fix is worth re-checking once a second large-n session exists; one video isn't enough to act on.
 3. `scripts/compute_quality_signals.py` needs re-running (cheap, cached) whenever a new dev session is labelled/graded, or if the shipped `gap_sec`/`min_crossings`/`margin_px` defaults change.
+
+---
+
+## 2026-08-20 — `court_wedge`'s `margin_px` re-derived dev-only, shipped default (160) holds — flat, not a fluke
+
+**What this answers.** The `court_wedge` fix (this file, earlier today) shipped with `margin_px=160` inherited unexamined from `court_wedge`'s own function default — flagged explicitly as an open question, not a validated choice. `margin_px` only became a shipped, CLI-reachable parameter today (`court_wedge` was never wired into `src/cut.py` before this session), so it was never part of PIC-43's original three checklist items — those are `min_crossings` (re-derived 2026-08-19), `gap_sec` base (effectively answered via PIC-33's adaptive-gap template), and `court_wedge`'s `cap_court_heights=0.7`/`spread=0.5`, which remain **fully unchecked, not addressed by this entry**. This entry closes the `margin_px` question specifically, using the same dev-only discipline as PIC-43 — it is not a closure of PIC-43 itself.
+
+**Method.** `scripts/search_margin_px.py` — same chain as the shipped pipeline (`court_wedge` gate → `track_ball` → `crossing_times` → `cluster_crossings`, `gap_sec=3.0`, `min_crossings=6`), swept `margin_px` ∈ {30, 50, 80, 110, 140, 160, 200, 250} against `dev` only (`brickwall`, `pb_draft_cup`, `IMG_7744`), IoU≥0.5. `eval` (IMG_7743) not touched.
+
+| margin | brickwall (p/r) | pb_draft_cup (p/r) | IMG_7744 (p/r) | avg F1 |
+|---|---|---|---|---|
+| 30 | 0.60/0.80 | 0.67/0.67 | 0.61/0.55 | 0.643 |
+| 50 | 0.62/0.80 | 0.60/0.67 | 0.62/0.65 | 0.655 |
+| 80 | 0.64/0.80 | 0.62/0.72 | 0.57/0.65 | 0.660 |
+| 110 | 0.64/0.80 | 0.65/0.72 | 0.54/0.65 | 0.661 |
+| 140 | 0.64/0.80 | 0.59/0.72 | 0.54/0.65 | 0.650 |
+| **160 (shipped)** | 0.64/0.80 | 0.59/0.72 | 0.54/0.65 | 0.650 |
+| 200 | 0.64/0.80 | 0.59/0.72 | 0.56/0.70 | 0.660 |
+| 250 | 0.64/0.80 | 0.59/0.72 | 0.52/0.70 | 0.652 |
+
+**Zero-regression check against the shipped baseline (160), tolerance ±0.005:** 30 and 50 regress recall or precision on 2+ dev videos; 250 regresses IMG_7744's precision (0.542→0.519). **80, 110, 140, 160, and 200 all hold with zero regression anywhere** — a wide, flat band, not a single sharp optimum.
+
+**Conclusion.** Unlike `min_crossings` (PIC-43, 2026-08-19), which had one clear winning combination well above the rest, `margin_px` has no real maximum in this range — the best avg F1 in the zero-regression band (110px, 0.661) beats the shipped default (160px, 0.650) by 0.011, which is inside noise already measured on this project (PIC-6: ~1/3 presence disagreement, ~0.6s boundary noise). **The shipped default survives a genuine dev-only re-derivation** — not because it's provably optimal, but because it already sits inside the flat, safe interior of a wide non-regressing range. No change made. The one-time `eval` (IMG_7743) held-out check was deliberately not spent here — there's no new config to confirm, and burning it only makes sense when a decision actually changes.
+
+**Follow-up.** `cap_court_heights`/`spread` — PIC-43's actual remaining scope — are still untouched; `scripts/search_margin_px.py`'s pattern (grid sweep, zero-regression check against the shipped baseline, dev-only) is directly reusable for them, just swept over `court_wedge`'s other two parameters instead. If a future need (e.g. a specific camera's adjacent-court framing) pushes toward the edges of `margin_px`'s tested range, re-run with a finer grid around that edge rather than assuming the flat interior still holds everywhere.
