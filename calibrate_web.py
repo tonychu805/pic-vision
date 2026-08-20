@@ -15,7 +15,6 @@ import argparse
 import base64
 import json
 import sys
-import threading
 from http.server import BaseHTTPRequestHandler, HTTPServer
 
 import cv2
@@ -174,7 +173,6 @@ class Handler(BaseHTTPRequestHandler):
             "worst": POINTS[worst][0],
         })
         print(f"\nsaved {STATE['out']}  RMSE={result['reprojection_rmse_ft']:.3f}ft")
-        STATE["saved"] = True
 
     def _json(self, obj):
         body = json.dumps(obj).encode()
@@ -208,7 +206,6 @@ def main():
     STATE["video"] = args.video
     STATE["at"] = args.at
     STATE["out"] = args.out
-    STATE["saved"] = False
 
     server = HTTPServer(("0.0.0.0", args.port), Handler)
     print(f"open http://<this-machine-ip>:{args.port}/  in a browser (e.g. your laptop, over Tailscale/LAN)")

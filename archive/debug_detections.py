@@ -1,7 +1,7 @@
 """Dump annotated frames around a time window so we can see what YOLO detects.
 
 Usage:
-    python scripts/debug_detections.py --video <path> --net-y <y> \
+    python archive/debug_detections.py --video <path> --net-y <y> \
         --start <sec> --end <sec> --out <dir> [--sample-every <n>]
 
 Saves one JPEG per sampled frame with:

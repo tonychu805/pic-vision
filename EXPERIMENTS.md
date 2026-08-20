@@ -1110,3 +1110,76 @@ This matters for the number above because **the "original" pass and the "blind" 
 1. PIC-40/43/38's remaining pieces (court_wedge wiring, court_wedge dev-only re-derivation, pb_draft_cup lift recompute) are deprioritized, not cancelled — they're real but lower-stakes than the above.
 2. `scripts/review_gaps.py` and `label.py`'s `save_rallies` need the data-integrity fixes named in finding 6 (safe write, dedup floor, ID stability) before being trusted for further label work, independent of the bigger methodology question.
 3. `CHECKLIST.md`/`PROGRESS.md` annotated provisional per ADR-053.
+
+---
+
+## 2026-08-20 — court_wedge wired into src/cut.py (closes the PIC-40 wiring piece); shape validated on dev, margin_px left open
+
+**Found by.** `/committee-review` (new: a third reviewer, Kimi K3, added alongside Gemini and Claude) run against the full codebase, not a diff. Kimi's pass timed out mid-format but the reasoning transcript survived; two claims in it were concrete enough to verify directly rather than trust: `scripts/scan_crossings.py` imports a function (`detect_candidates`) that no longer exists in `src/ball.py` (confirmed by grep — broken YOLO-era leftover, not touched here), and `src/cut.py` wires the flat `court_x_range` gate, not `court_wedge`. Both confirmed true by reading the code directly.
+
+**The bug.** `src/cut.py:25,115` (before this fix) imported and called only `court_x_range`. `court_wedge` was never reachable through `make process` — the actual, documented CLI entry point — despite being cited as "shipped config" in every scoring entry in this file since ADR-048. This is exactly what the 2026-08-19 entry above (line ~840) already flagged in its own follow-up #3 and never acted on.
+
+**Fix.** `cut_rallies_from_predictions` gained an `in_court` passthrough to `rally_segments_from_predictions` (which already supported it — only `cut.py`'s CLI layer was missing the wiring). `main()` now builds `in_court = court_wedge(calib)` by default whenever `--calib` is given and no explicit `--court-x-min`/`--court-x-max` is set; a new `--flat-court-gate` flag opts back into the old flat behavior. 3 new regression tests cover all three paths. Full suite: 101/101 (`tests/`; the pre-existing `archive/` collection error is unrelated, retired YOLO path).
+
+**Validation.** Scored via `rally_segments_from_predictions` directly against cached predictions (no re-inference), shipped defaults (`gap_sec=3.0`, `min_crossings=6`, `band=0`), IoU≥0.5, **dev sessions only** (`brickwall_30fps`, `pb_draft_cup_30fps`, `IMG_7744` — `IMG_7743` is locked `eval` per ADR-052 and untouched here). First pass compared flat@margin=50 (the actual old CLI default) against wedge@margin=160 (`court_wedge`'s own function default) and looked like a clean win everywhere. That comparison silently changed two variables at once (shape *and* margin), so it was redone as a shape × margin 2×2 to isolate them:
+
+| session | flat@50 | wedge@50 | flat@160 | wedge@160 (shipped) |
+|---|---|---|---|---|
+| brickwall_30fps | 0.636 / 0.800 | 0.622 / 0.800 | 0.636 / 0.800 | 0.636 / 0.800 |
+| pb_draft_cup_30fps | 0.500 / 0.611 | 0.600 / 0.667 | 0.478 / 0.611 | 0.591 / 0.722 |
+| IMG_7744 | 0.197 / 0.600 | **0.619** / 0.650 | 0.197 / 0.600 | **0.542** / 0.650 |
+
+(precision / recall, `n=44/22/61→24` segments respectively — see follow-up #1 for raw counts)
+
+**Conclusion.** Shape is real, isolated from margin, and validated: zero cost on brickwall (no adjacent-court noise for either gate to catch there), a consistent ~+0.10 precision gain on pb_draft_cup at fixed margin, and the big one on IMG_7744 — the video documented as having adjacent-court noise — where recall is identical at both margins and only false-positive count moves with shape (61 flat vs 21–24 wedge segments). `court_wedge` is doing the job it was built for.
+
+`margin_px` is a separate, smaller, still-open question. The shipped fix inherits `court_wedge`'s own function default (160px) unexamined — same category of gap as the wiring bug, just lower-stakes. The 2×2 shows a real tradeoff, not noise: IMG_7744 prefers margin=50 (0.619 vs 0.542, same recall), pb_draft_cup prefers margin=160 (better recall, 0.722 vs 0.667, at a small precision cost). Two dev videos disagreeing isn't enough to pick a value, and doing so now would repeat the ad hoc-tuning mistake ADR-053 just spent an adversarial review correcting. Left at 160 (unchanged) by decision, not oversight — recorded here so it isn't silently re-discovered later.
+
+**Methodology note.** The single-column first-pass comparison would have attributed all of IMG_7744's gain to shape (0.542) when margin alone was actually costing ~0.08 of it (0.619→0.542 at fixed shape). Decomposing "does gate/parameter X help" into a small factorial (change one thing at a time) caught this before it became a false conclusion. Worth using this pattern for the next parameter-search-shaped question, including the margin_px one above.
+
+**Follow-up.**
+1. `margin_px` needs a proper dev-only search (PIC-43-style — multiple dev videos, no eval) before any value is treated as chosen rather than inherited.
+2. Raw segment counts for the table above: brickwall 44/45/44/44, pb_draft_cup 22/20/23/22, IMG_7744 61/21/61/24 (flat@50 / wedge@50 / flat@160 / wedge@160, left out of the table for width).
+3. `scripts/scan_crossings.py`'s broken import and `scripts/debug_detections.py`'s live YOLO code outside `archive/` (both flagged by the same committee-review pass) — done same day: both moved to `archive/`, `archive/README.md` updated. `calibrate_web.py`'s unused `threading` import and write-only `STATE["saved"]` (same review pass) also removed.
+
+---
+
+## 2026-08-20 — PIC-7 follow-up: testing the built-but-unwired quality signals (`events.py`), and a hand-label leakage bug caught mid-run
+
+**Context.** PIC-7 (2026-08-18) found crossing count alone separates quality grade 1 (highlight) from grade 2 (ordinary) at 73% balanced accuracy on IMG_7743, and named player movement as an untested candidate ("if the frozen v0 player signals are cheap to run on these windows"). Two signals already exist in `src/events.py` (ADR-026/036/037) but were never wired into any pipeline: `mean_motion` (per-frame player displacement, tracking-free) and `n_at_kitchen` (players within 4ft of the NVZ line). Built a local dashboard (`quality_dashboard.py` + `scripts/compute_quality_signals.py`) to test these, plus rally duration, against quality grades on dev sessions (`brickwall_30fps`, `pb_draft_cup_30fps`, `IMG_7744`; `IMG_7743` untouched, locked `eval`).
+
+**Bug caught before trusting the first result.** The first pass windowed every signal — including `duration` — using the *hand label's* `[start, end]`. Flagged during review: at inference time on new footage there is no hand label, only whatever segment the detector itself proposes. `duration` computed as the label's own `end - start` isn't a signal the deployed pipeline could ever produce; it's the label's own field re-measured. This is a milder version of the same shape of mistake `review_gaps.py` made (ADR-053) — using something adjacent to the ground truth as if it were an independent measurement.
+
+**Fix.** Every graded rally is now matched to its actual shipped-config detector segment (`cluster_crossings`, `court_wedge`, `gap_sec=3.0`, `min_crossings=6` — same chain as `src/cut.py`'s new default) at IoU≥0.5, via `eval.harness.iou`/greedy matching. All signals — `duration`, `crossing_count`, `motion_mean`, `motion_max`, `kitchen_mean`, `kitchen_both_up_frac` — are computed from *that* detector segment's own boundaries, never the label's. A rally with no matching detector segment is dropped from the signal set entirely (nothing to rank), not backfilled from the label.
+
+**Side effect: this directly answers a question PIC-7 flagged and never checked.** Match rate by grade, all three dev sessions:
+
+| session | grade 1 matched | grade 2 matched |
+|---|---|---|
+| brickwall_30fps | 12/13 (92%) | 16/22 (73%) |
+| pb_draft_cup_30fps | 2/2 (100%) | 11/16 (69%) |
+| IMG_7744 | 2/2 (100%) | 11/18 (61%) |
+
+Opposite of what PIC-7 worried about (quoting IMG_7743's earlier, differently-measured "6 of 11" figure) — here the detector matches grade-1 rallies *more* reliably than grade-2 on all three dev videos. Plausible mechanism, not yet confirmed: `min_crossings=6` is effectively a length gate, and grade-1 rallies tend to be longer (see below), so they clear it more easily; short grade-2 rallies are the ones most likely to fall under the threshold and never produce a segment at all.
+
+**Result, brickwall only (the sole session with enough grade-1 examples, n=12, to trust — pb_draft_cup/IMG_7744 have n=2 each and are excluded from this table; see dashboard's `low_confidence` flag):**
+
+| signal(s) | balanced acc |
+|---|---|
+| duration | 0.698 |
+| crossing_count | 0.688 |
+| motion_max | 0.688 |
+| duration + crossing_count | 0.688 |
+| duration + crossing_count + motion_max | 0.667 |
+| all six signals | ~0.62 (worse than any single length signal) |
+
+Method: per active signal, z-score within session (raw scales don't transfer across format — PIC-7), sum z-scores, single global threshold maximizing balanced accuracy (same method PIC-7 used for crossing count alone). Swept all 63 non-empty signal subsets via the dashboard's `/score` endpoint; reported the top ones by brickwall balanced accuracy.
+
+**Conclusion.** Fixing the leakage bug changed the numbers only slightly (0.708→0.698 for duration, 13→12 usable grade-1 examples) — the original finding wasn't an artifact of it, which is reassuring, but the fixed version is the one that's actually meaningful, since it's now built only from information the deployed pipeline could produce for new, unlabelled footage. `duration` and `crossing_count` remain redundant with each other (both proxy "how much play happened") and dominate: no combination of the built player-motion/kitchen signals beats either one alone, and combining everything is worse than either alone. `motion_max` is a new, mildly interesting entrant (tied at 0.688) that wasn't competitive before the fix — plausibly because it's now measured over the detector's own crossing-defined window rather than the human's padded one — but it's one session's data and shouldn't be trusted further without PIC-45.
+
+**Caveat, the one that matters most.** None of this — PIC-7's original 0.73, this entry's 0.70, or anything the dashboard will produce on a future toggle — has been checked against a `quality` grade that's itself been consistency-checked. PIC-45 (grade the same rallies twice, blind, a day apart, same method as PIC-6) is still not done. Until it is, "length weakly predicts a human's highlight grade" is the right-sized claim; "length predicts highlight-worthiness" is not yet earned.
+
+**Follow-up.**
+1. PIC-45's consistency check is now the load-bearing next step for all of PIC-7's work, not just a nice-to-have — flagged, not yet started.
+2. `motion_max`'s showing after the fix is worth re-checking once a second large-n session exists; one video isn't enough to act on.
+3. `scripts/compute_quality_signals.py` needs re-running (cheap, cached) whenever a new dev session is labelled/graded, or if the shipped `gap_sec`/`min_crossings`/`margin_px` defaults change.

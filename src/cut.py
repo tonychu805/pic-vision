@@ -22,13 +22,14 @@ import cv2
 from src.tracknet import rally_segments_from_predictions
 from src.render import cut_clips, concat_clips
 from src.ball import net_line_y
-from src.calib import detect_net_y, pick_net_y, court_x_range
+from src.calib import detect_net_y, pick_net_y, court_x_range, court_wedge
 
 
 def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
                                  gap_sec=3.0, min_crossings=6, band=0.0,
                                  max_jump=150, reset_after=15,
                                  court_x_min=None, court_x_max=None,
+                                 in_court=None,
                                  court_id=None, session_id=None, pad_sec=3.0,
                                  adaptive_gap=False):
     """TrackNet CSV -> rally clips in one pass: parse predictions, score by
@@ -37,7 +38,7 @@ def cut_rallies_from_predictions(video, csv_path, fps, net_y, out_dir, *,
         csv_path, fps, net_y,
         gap_sec=gap_sec, min_crossings=min_crossings, band=band,
         max_jump=max_jump, reset_after=reset_after,
-        court_x_min=court_x_min, court_x_max=court_x_max,
+        court_x_min=court_x_min, court_x_max=court_x_max, in_court=in_court,
         adaptive_gap=adaptive_gap,
     )
     scored = [{**s, "score": s["crossings"]} for s in segments]
@@ -78,11 +79,16 @@ def main(argv=None):
     p.add_argument("--reset-after", type=int, default=15,
                    help="frames of no detection before track_ball allows re-acquiring elsewhere (default 15)")
     p.add_argument("--court-x-min", type=float, default=None,
-                   help="reject detections left of this image-x (multi-court gate, gap-independent; default: derive from --calib)")
+                   help="reject detections left of this image-x (flat gate, explicit; overrides --calib's court_wedge)")
     p.add_argument("--court-x-max", type=float, default=None,
-                   help="reject detections right of this image-x (multi-court gate, gap-independent; default: derive from --calib)")
+                   help="reject detections right of this image-x (flat gate, explicit; overrides --calib's court_wedge)")
     p.add_argument("--court-margin", type=float, default=50.0,
-                   help="px padding applied to --calib-derived court X-range (default 50)")
+                   help="px padding applied to --calib-derived flat court X-range when --flat-court-gate is set (default 50)")
+    p.add_argument("--flat-court-gate", action="store_true",
+                   help="opt out of the default court_wedge gate and use the older flat "
+                        "court_x_range gate, derived from --calib, instead. court_wedge is used "
+                        "by default whenever --calib is given and no explicit "
+                        "--court-x-min/--court-x-max is set (see CLAUDE.md)")
     p.add_argument("--pad-sec", type=float, default=3.0,
                    help="seconds of context added before/after each rally burst (default 3)")
     p.add_argument("--court-id", default=None)
@@ -111,10 +117,17 @@ def main(argv=None):
         print(f"net_y = {net_y:.1f} (picked interactively)")
 
     court_x_min, court_x_max = args.court_x_min, args.court_x_max
-    if court_x_min is None and court_x_max is None and calib:
+    in_court = None
+    if court_x_min is not None or court_x_max is not None:
+        print(f"court X-range = [{court_x_min}, {court_x_max}] (explicit flat gate)")
+    elif calib and args.flat_court_gate:
         court_x_min, court_x_max = court_x_range(calib, margin_px=args.court_margin)
         print(f"court X-range = [{court_x_min:.0f}, {court_x_max:.0f}] "
-              f"(from calibration, margin={args.court_margin:.0f}px)")
+              f"(from calibration, margin={args.court_margin:.0f}px, flat gate)")
+    elif calib:
+        in_court = court_wedge(calib)
+        print("court gate = court_wedge (perspective-aware, from calibration; "
+              "pass --flat-court-gate for the older flat range)")
 
     if args.fps:
         fps = args.fps
@@ -128,7 +141,7 @@ def main(argv=None):
         args.video, args.predictions, fps, net_y, args.out,
         gap_sec=args.gap_sec, min_crossings=args.min_crossings,
         band=args.band, max_jump=args.max_jump, reset_after=args.reset_after,
-        court_x_min=court_x_min, court_x_max=court_x_max,
+        court_x_min=court_x_min, court_x_max=court_x_max, in_court=in_court,
         court_id=args.court_id, session_id=args.session_id,
         pad_sec=args.pad_sec, adaptive_gap=args.adaptive_gap,
     )

@@ -3,7 +3,7 @@
 Does NOT cut clips. Just shows where the pipeline would find rallies under given params.
 
 Usage:
-    python scripts/scan_crossings.py --video <path> --net-y <y> [options]
+    python archive/scan_crossings.py --video <path> --net-y <y> [options]
 """
 
 import argparse

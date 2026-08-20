@@ -2,7 +2,7 @@
 
 **Fill in the bracketed decisions after watching your first session (step 3), then don't change them.** Consistency matters more than which choice you make — an inconsistent labeler puts a ceiling on every metric the project will ever produce.
 
-Version: 2 · Last changed: 2026-08-06
+Version: 3 · Last changed: 2026-08-20
 
 ---
 
@@ -13,6 +13,28 @@ A rally runs from **serve contact** to **the moment the ball next touches the gr
 **Decided (v2):** ball-dead. This is deliberately *later* than the original "last ball contact"; PRD §5 has been updated to match, so the two agree.
 
 The difference is up to a second on any point that ends with the ball sailing long, which is a large fraction of your 1.0 s boundary target.
+
+## What makes a rally highlight-worthy (quality grade)
+
+**First draft, decided 2026-08-20 (PIC-45) — not yet consistency-checked.** Everything else in this file has been through at least one round of "does this hold up," this hasn't; read it as a starting point to test, not a settled rule the way "what is a rally" above is.
+
+During the GRADE pass (`label_web.py`), a real rally gets `quality`: **1 = highlight-worthy, 2 = ordinary** (a rally that isn't a rally at all — dead time, courtesy return, etc. — is dropped per the rules above, not graded).
+
+Grade **1** if the rally clearly shows **at least one** of:
+
+| Factor | What to look for |
+|---|---|
+| **Length/intensity** | Unusually long for its format — more exchanges than a typical rally on this court, this session |
+| **Momentum swing** | A side is scrambling or out of position and still wins the point, or the rally clearly turns mid-point |
+| **Skill display** | A dive, a sprint recovery, an around-the-post shot, a well-executed drop/reset under pressure |
+| **Sustained tension** | An extended dinking/kitchen-line battle before the point breaks open |
+| **Clean finish** | A decisive, well-earned put-away — not an unforced error ending the point |
+
+Grade **2** otherwise — a real rally, nothing above stood out.
+
+This is a **checklist, not a formula**: one clear factor is enough, and "clearly shows" is the same kind of judgment call "ball dead" is for the boundary above — consistent application matters more than precision on any single borderline case.
+
+**Consistency check — do this once (PIC-45), same method as the rally-presence check below.** Grade a set of already-labelled rallies against this checklist, wait at least a day, re-grade blind, compare agreement. Record the result in `EXPERIMENTS.md` regardless of outcome — if agreement is as loose as the ~1/3 rally-presence figure below, "highlight-worthy" isn't a stable target yet either, and that's a real finding, not a failure.
 
 ## Edge cases — decide once
 
