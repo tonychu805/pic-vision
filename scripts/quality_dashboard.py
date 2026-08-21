@@ -11,8 +11,8 @@ Data comes from cache/quality_signals.json (scripts/compute_quality_signals.py
 -- rerun that first, or after labelling/grading a new session). Dev sessions
 only; IMG_7743 is locked eval (LABELING.md) and is not in the signals cache.
 
-Usage:
-    python quality_dashboard.py --port 8766
+Usage (run from repo root):
+    python scripts/quality_dashboard.py --port 8766
 """
 import argparse
 import json

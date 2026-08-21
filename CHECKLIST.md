@@ -1,6 +1,13 @@
 # Phase Checklist
 
-Tracks build status and gate measurements against the PRD §7 / TECH_SPEC §13 milestones.
+Tracks build status and gate measurements against the PRD §7 / TECH_SPEC §13 milestones,
+**through Phase 1 only.** Everything since (detection-quality tuning, the "highlight-worthy"
+redirect, PIC-31/42/45/46/47) is tracked in Linear (`pic-vision` team, `Rally Detection
+Accuracy` project) instead — this file was never extended past the original phase gates,
+and re-purposing it to also carry live priorities would just recreate the two-trackers
+problem this note exists to head off. For current status and what to pick up next, start
+at `PROGRESS.md`, not here.
+
 Updated as phases complete. Measurement runs go in `EXPERIMENTS.md`; decisions in `DECISIONS.md`.
 
 **Legend:** ✅ done · ⚠️ partial / known gap · ❌ not built · — not applicable

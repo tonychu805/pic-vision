@@ -564,39 +564,70 @@ Stand this up in Phase 0 against a hand-written `rallies.json` so the harness is
 
 ## 12. Repository layout
 
-Target layout. Files appear as phases land — only the three documents and `EXPERIMENTS.md` exist today.
+Actual layout as of 2026-08-21 — this section had drifted badly behind the
+real repo (it still described the pre-pivot, player-signal design from
+before ADR-046). Keep it in sync going forward: when a new top-level tool or
+directory lands, update the tree below in the same change, not later.
 
 ```
 pic-vision/
 ├── PRD.md                    # what and why
 ├── TECH_SPEC.md              # this file
-├── DECISIONS.md              # decision log
+├── DECISIONS.md              # decision log (ADRs, append-only)
 ├── STRATEGY.md               # post-prototype direction (exploratory)
 ├── EXPERIMENTS.md            # append-only run log
-├── LABELING.md               # rally-labeling protocol
-├── TALLY.md                  # per-session watch-through template
+├── PROGRESS.md               # pointer to progress/ + standing reference material
+├── progress/                 # plain-language status, one file per day (MM.DD progress overview.md)
+├── CHECKLIST.md              # phase-gate tracker for Phase 0-1 only; Linear is
+│                              # authoritative for anything after (see CLAUDE.md)
+├── LABELING.md               # rally-labeling + highlight-worthy grading protocol
 ├── README.md                 # how to run
+├── AGENTS.md                 # agent-facing pointers
 ├── requirements.txt          # Python dependencies
-├── config.yaml               # all thresholds and weights
-├── cut.py                    # entry point
-├── calibrate.py              # 12-point court calibration
-├── label.py                  # rally interval labeller
-├── src/
-│   ├── capture.py            # preflight + RTSP recording
-│   ├── motion.py             # T0′ pre-filter
-│   ├── players.py            # T1′ — primary detector
-│   ├── events.py             # §5.2.1 dead-time events
-│   ├── ball.py               # T2′ presence
-│   ├── audio.py              # §5.1b optional, gated
-│   ├── segment.py            # §6.1 mask inversion (+ §6.2 fallback)
-│   ├── select.py             # §7.2–7.3
-│   └── render.py             # §8
+├── config.yaml               # thresholds and weights
+├── Makefile                  # `make test` / `make eval` / `make process`
+├── sessions.jsonl            # eval/dev session-role assignments (ADR-052)
+│
+├── calibrate.py               # 12-point court calibration, local X11 click UI
+├── calibrate_web.py           # same, browser-click UI (for SSH/no-display)
+├── label.py                   # rally interval labeller, local X11
+├── label_web.py                # same, browser UI + GRADE mode (highlight-worthy pass)
+│
+├── src/                        # the production pipeline
+│   ├── cut.py                    # entry point: `python3 -m src.cut` (see Makefile)
+│   ├── tracknet.py                # TrackNet prediction parsing (RunPod GPU inference)
+│   ├── calib.py                    # calibration geometry incl. court_wedge
+│   ├── track.py                     # ball tracker (teleport/re-acquisition confirmation)
+│   ├── ball.py                       # crossing_times / cluster_crossings / adaptive_gap_sec
+│   ├── drift.py                       # camera-bump/creep detection
+│   ├── players.py                      # player/court-position helpers
+│   ├── events.py                        # motion_series / kitchen_series signals
+│   └── render.py                         # clip rendering
+│
+├── scripts/                    # one-off analysis, diagnostics, parameter sweeps --
+│                                # not part of the operator's core run-a-session flow
+│   ├── pod_infer.py               # RunPod TrackNet inference driver
+│   ├── check_drift.py              # camera-drift CLI -- run before calibrating new footage
+│   ├── fp_anatomy.py                # false-positive mechanism classifier + plots
+│   ├── review_gaps.py                # gap-candidate review/merge tool
+│   ├── make_review_reel.py            # cut a reel of flagged candidates for playback review
+│   ├── compute_quality_signals.py      # feature extraction, feeds quality_dashboard.py
+│   ├── quality_dashboard.py             # highlight-worthy signal-exploration dashboard
+│   ├── search_margin_px.py               # dev-only margin_px sweep
+│   └── search_wedge_shape.py              # dev-only court_wedge shape sweep
+│
 ├── eval/
-│   ├── harness.py            # §11.3
-│   └── labels/               # eval-set-A / dev-set-B / eval-set-C
-├── sessions.jsonl            # session role assignments (LABELING.md)
-├── tallies/                  # per-session watch notes
-└── cache/                    # stage artifacts (NFR3), gitignored
+│   ├── harness.py               # IoU matching, detection + selection metrics (§11.3)
+│   └── labels/                   # hand labels -- ground truth, committed
+├── calib/                       # per-camera calibration JSON, committed (expensive to redo)
+├── archive/                     # retired code and process, kept for reference, not maintained
+├── docs/                        # misc planning docs
+├── tests/                       # pytest suite
+│
+├── videos/                      # source/derived footage -- gitignored
+├── clips/                       # cut rally clips + review reels -- gitignored
+├── cache/                       # pipeline stage artifacts -- gitignored, regenerable
+└── weights/                     # model weights not covered by the *.pt/*.h5 gitignore rules
 ```
 
 ---
