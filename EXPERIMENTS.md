@@ -1435,3 +1435,32 @@ The balcony pole separates cleanly (189px vs. a real-detection band that never e
 2. Resolve the pretrained-weight licensing gap (contact the badminton repo authors, most direct path) before treating fine-tuning as a cleared option, independent of whether it turns out to help.
 3. If pursuing the near-term option (2), build the summary-feature classifier described above — it's buildable today, no new data collection required, and provides a real baseline to compare any bigger investment against before committing to it.
 4. None of this is committed to Linear as a new tracked issue yet — this entry is the record until that happens.
+
+---
+
+## 2026-08-21 (later) — Kitchen dinks double-count net crossings: a structural defect of the crossing-count signal itself, not a detector artifact
+
+**What prompted this.** Building a 2-clip highlight reel from the TrackNetV3 brickwall segments (ranked by raw crossing count, the only proxy score `src/cut.py` has), the operator flagged the mechanism directly: near the kitchen, a single return can cross `net_y` twice — once going up and over the net, once again as it drops into the kitchen — before the opponent's return. `crossing_times` (`src/ball.py`) is a 1D signal (image-y vs. one pixel row), blind to court depth, so it has no way to tell "two shots" from "one shot's rise-then-fall through the same row."
+
+**Checked against real tracked-ball data**, not asserted. Pulled `crossing_times` for the two rallies in the reel (TrackNetV3 predictions, same court gate/tracker as shipped) and bucketed the gaps between consecutive crossings:
+
+| gap | count | % |
+|---|---|---|
+| 0.00–0.15s | 26 | 13% |
+| 0.15–0.30s | 34 | 18% |
+| 0.30–0.50s | 48 | 25% |
+| 0.50–1.00s | 69 | 36% |
+| 1.00s+ | 16 | 8% |
+
+193 gaps total, rally 1 (92 "crossings," 41.5s) and rally 2 (106 "crossings," 59.0s). 13% of gaps are under 150ms — not achievable as two independently hit shots — and another 18% sit in a band a fast dink exchange could plausibly explain but a same-shot double-crossing explains just as well. This is exactly the kitchen mechanism described, confirmed on real data rather than assumed from the theory alone.
+
+**This is a property of the crossing-count primitive, not of TrackNetV3 or k14 specifically** — any detector feeding the same `crossing_times`/`cluster_crossings` pipeline inherits it, since it depends only on how the 1D image-y-vs-net_y signal is defined, not on detection quality. **Not a reason to distrust crossing bursts as an activity signal** — a dense burst of crossings still reliably means "something real is happening at the net" — but the raw *count* is not a reliable proxy for shot count, rally intensity, or duration, because the inflation scales with how much kitchen play happened, which varies rally to rally. This is likely why both reel clips (this session) landed on extended dink exchanges rather than a spread of different rally types: ranking by raw crossing count structurally favors kitchen-heavy rallies.
+
+**Considered and rejected a fixed-time debounce (merge crossings within some short window into one) as a fix, per the operator: a real fast exchange with a bounce off the floor before the return can legitimately produce genuine crossings faster than any safe debounce window would allow** — a fixed-gap merge would just trade one systematic miscount for another (now undercounting genuinely fast real exchanges). No time-gap-only fix is safe here; distinguishing the two needs something that looks at trajectory shape (e.g. whether the ball's arc actually goes back over net height, vs. stays low the second time), not just inter-crossing timing.
+
+**Conclusion.** A confirmed, data-backed third failure mode for the crossing-count signal, distinct from `PIC-34`'s phantom crossings (no real rally, ball never crosses) and `PIC-31`'s dead-time crossings (real crossing, wrong context) — this one happens *during* genuine, correctly-detected rally play and just inflates the count. Affects anything treating crossing count as a literal shot-count/intensity proxy: `PIC-46`'s classifier `crossing_rate` feature, `PIC-14`'s stalled ranking-signal question (shot count was supposed to be a ranking input and was never available — this explains why crossing count isn't a clean substitute either), and any future crossing-count-based ranking, including the ad hoc one used for this session's reel.
+
+**Follow-up.**
+1. Filed as Linear `PIC-48` — cross-referenced from `PIC-42` (signals beyond ball-crossing), `PIC-46` (classifier features), `PIC-14` (ranking signals).
+2. No fix attempted or recommended yet. A trajectory-shape check (real net-height re-crossing vs. a low second dip) is the plausible direction, not a timing threshold — untested.
+3. Single-video, two-rally sample (both brickwall, both TrackNetV3). Worth checking whether the same gap-clustering shows up on a non-kitchen-heavy rally, and on k14 predictions for the same clips, before treating the magnitude (not just the mechanism) as general.
