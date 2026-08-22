@@ -851,6 +851,20 @@ This does not mean precision is solved. ADR-050's three separated failure modes 
 
 ---
 
+## ADR-054 — Raw net-crossing count is not a valid shot-count/intensity/ranking proxy; only crossing *bursts* remain trustworthy
+
+**Date:** 2026-08-21 · **Status:** accepted
+
+**Context.** `EXPERIMENTS.md`'s "Kitchen dinks double-count net crossings" entry (2026-08-21) found that `crossing_times` (`src/ball.py`) — a 1D signal comparing the ball's image-y to one pixel row, `net_y` — cannot distinguish two separately hit shots from one shot's rise over the net and fall into the kitchen on the same pass. Checked against real TrackNetV3-tracked data from two brickwall rallies: 13% of the 193 consecutive-crossing gaps were under 150ms, not achievable as two independently hit shots, with another 18% in a band a fast dink exchange could equally explain. This surfaced while building a highlight reel that ranked candidate segments by raw crossing count (`src/cut.py`'s only existing proxy score) — the reel's top picks turned out to be two extended kitchen-dink exchanges rather than a spread of rally types, consistent with the count being structurally inflated by kitchen-heavy play.
+
+A fixed-time debounce (merging crossings within some short window into one) was considered and rejected: a real fast exchange with a floor bounce before the return can legitimately produce genuine crossings faster than any safe debounce window allows, so a timing-only merge would just trade one systematic miscount (kitchen double-counting) for another (undercounting genuinely fast real exchanges).
+
+**Decision.** Raw net-crossing count is not to be used, on its own, as a proxy for shot count, rally intensity/duration, or a ranking signal — this affects `PIC-46`'s classifier (`crossing_rate` feature), `PIC-14`'s stalled ranking-signal question, and any future crossing-count-based selection, including the ad hoc ranking used in the 2026-08-21 TrackNetV3 highlight reel. Crossing **bursts** (a dense cluster of crossings) remain a valid real-activity signal — `cluster_crossings`'s existing role as a rally-presence detector is unaffected — the count *within* a burst is what's unreliable.
+
+**Consequences.** This is a property of the `crossing_times`/`cluster_crossings` pipeline's definition itself — any detector feeding it (k14, TrackNetV3, or a future replacement) inherits the same defect, so switching detectors cannot fix it. No fix has been attempted; the plausible direction is a trajectory-shape check (does the ball's arc actually go back over net height on the second crossing, vs. stay low — a same-shot double-crossing signature) rather than any timing threshold. Filed as Linear PIC-48, cross-referenced from PIC-42 (signals beyond ball-crossing), PIC-46 (classifier features), PIC-14 (ranking signals), and PIC-31/PIC-34 (the two other, previously-documented crossing-signal failure modes this one is distinct from — dead-time crossings and phantom crossings, respectively). Sample is single-video, two-rally (both brickwall, both TrackNetV3) — worth confirming the same gap-clustering shows up on a non-kitchen-heavy rally and on k14 predictions before treating the *magnitude* (not just the mechanism) as general.
+
+---
+
 ## Template
 
 ```markdown

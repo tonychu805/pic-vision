@@ -3,6 +3,10 @@ videos the 2026-08-21 brickwall result (PIC-47) still needed before it means
 anything conclusively. Mirrors scripts/tv3_bench_k14_baseline.py's method.
 """
 import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from eval.harness import load_labels, detection_metrics
 from src.calib import court_wedge

@@ -3,6 +3,10 @@ labels, IMG_7744 20 labels), for a fair comparison once the TrackNetV3
 zero-shot benchmark (2026-08-21) has a number to compare against.
 """
 import json
+import os
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from eval.harness import load_labels, detection_metrics
 from src.calib import court_wedge

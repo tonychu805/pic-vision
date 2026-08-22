@@ -1438,6 +1438,31 @@ The balcony pole separates cleanly (189px vs. a real-detection band that never e
 
 ---
 
+## 2026-08-21 — PIC-47: TrackNetV3 (`qaz812345/TrackNetV3`) first real benchmark, on `brickwall_30fps`
+
+**Hypothesis.** TrackNetV3 is a newer-generation pretrained shuttlecock/ball tracker than the badminton-derived TrackNet weights (k14) this project currently ships. Worth benchmarking as a possible detector replacement, contingent on resolving its weight-licensing gap (2026-08-20 entry above) before shipping — this run is purely a detection-quality data point, not a decision to switch.
+
+**Setup.** `brickwall_30fps` (`dev`), `--eval_mode nonoverlap`, full 25.2-minute video (~15.5 min inference). Scored through the identical shipped pipeline — `court_wedge → track_ball → crossing_times → cluster_crossings → match_intervals`, same `gap_sec=3.0`/`min_crossings=6`, same labels, IoU≥0.5 — as the existing k14 baseline, so the comparison isolates the detector swap.
+
+**Result.**
+
+| Detector | Precision | Recall |
+|---|---|---|
+| k14 (shipped, fixed `gap_sec`) | 0.64 | 0.80 |
+| k14 (adaptive `gap_sec`, PIC-33) | 0.76 | 0.91 |
+| **TrackNetV3** | **0.694** | **0.971** |
+
+TrackNetV3 beats the shipped config on both metrics, and beats even the adaptive-gap k14 config on recall (missed only 1 of 35 real rallies) — but trails adaptive-gap k14 on precision.
+
+**Conclusion.** A genuinely promising first data point, not a decision — this is one video, the cleanest one in the project, picked for exactly that reason. It is also a *detector* result, not a downstream one: it cannot touch `PIC-31`'s dominant remaining failure mode (the ball genuinely, correctly crossing the net during dead time), since that's downstream pipeline logic no detector improvement can fix in principle.
+
+**Follow-up.**
+1. Run the same benchmark on `pb_draft_cup` and `IMG_7744` before this means anything conclusively — one video is not enough to call it a general win.
+2. Before shipping (not before further benchmarking): resolve the weight-license gap flagged in the 2026-08-20 entry above — the checkpoints are pretrained on badminton data, code is MIT, but the weights' own redistribution/usage terms are undisclosed.
+3. Filed as Linear PIC-47, with this result as a comment.
+
+---
+
 ## 2026-08-21 (later) — Kitchen dinks double-count net crossings: a structural defect of the crossing-count signal itself, not a detector artifact
 
 **What prompted this.** Building a 2-clip highlight reel from the TrackNetV3 brickwall segments (ranked by raw crossing count, the only proxy score `src/cut.py` has), the operator flagged the mechanism directly: near the kitchen, a single return can cross `net_y` twice — once going up and over the net, once again as it drops into the kitchen — before the opponent's return. `crossing_times` (`src/ball.py`) is a 1D signal (image-y vs. one pixel row), blind to court depth, so it has no way to tell "two shots" from "one shot's rise-then-fall through the same row."
@@ -1464,3 +1489,112 @@ The balcony pole separates cleanly (189px vs. a real-detection band that never e
 1. Filed as Linear `PIC-48` — cross-referenced from `PIC-42` (signals beyond ball-crossing), `PIC-46` (classifier features), `PIC-14` (ranking signals).
 2. No fix attempted or recommended yet. A trajectory-shape check (real net-height re-crossing vs. a low second dip) is the plausible direction, not a timing threshold — untested.
 3. Single-video, two-rally sample (both brickwall, both TrackNetV3). Worth checking whether the same gap-clustering shows up on a non-kitchen-heavy rally, and on k14 predictions for the same clips, before treating the magnitude (not just the mechanism) as general.
+
+---
+
+## 2026-08-22 — Pose-detection sanity check: off-the-shelf YOLO-pose on real footage, before investing in anything trained
+
+**Hypothesis.** Revisiting player-geometry as a rally-boundary signal (superseded direction, `ADR-028`/`ADR-047`, reopened in the 2026-08-20 direction-setting entry above) — specifically whether *pose* (vs. plain bounding-box motion) could separate ready-stance/active-play from relaxed/dead-time posture, addressing the two confounders `STRATEGY.md` §3 names as unsolved (dinks: players barely move but assume a distinct stance; courtesy returns: post-point body language differs from active play). Before investing in anything trained, check the cheap thing first: can an off-the-shelf pose estimator even get usable keypoints at this camera's distance and angle. `STRATEGY.md` §10 (open question 7) already flags far-court pose reliability as an unresolved prototype risk.
+
+**Setup.** `ultralytics` (already installed in `.venv`, no new dependency) — `yolov8n-pose` and `yolov8x-pose`, both pretrained COCO checkpoints, zero-shot, no fine-tuning. Four frames pulled from `brickwall_30fps.mp4` (`dev`, the cleanest footage in the project) via `eval/labels/brickwall_30fps.jsonl` timestamps: two mid-rally (t=15s, t=85s, different rallies), one at a rally's kitchen-line moment (t=20s), and one deliberately picked at a rally *boundary* (t=36s, ~1.5s after rally 1's labeled end) rather than an arbitrary dead-time timestamp, specifically to land on the actually-confounding case (players still on/near the court, not walked off) rather than a trivially-easy one.
+
+**Result.**
+
+| Frame | People detected | Near-player pose quality |
+|---|---|---|
+| Mid-rally (t=15s, t=85s) | 2 of 4 (near team only) | 12–14/17 keypoints, conf 0.69–0.79 |
+| Kitchen-line rally (t=20s) | 2 of 4 (near team only) | 13/17 keypoints, conf ~0.74–0.75 |
+| Post-point (t=36s) | 2 of 4 (near team only) | **17/17 and 16/17 keypoints, conf 0.92–0.95** — full clean skeletons |
+
+The t=36s frame landed, unplanned, on a genuinely sharp test case: both near players walking toward each other for a post-point fist-bump, arms flung wide, standing tall — visually and geometrically nothing like the symmetric crouched paddle-up stance in the mid-rally frames. A stance-angle/arm-position feature over these keypoints would very plausibly separate the two classes; this isn't a subtle distinction requiring a trained model to notice.
+
+**The far-court team was never detected, at either model size.** Re-ran the t=15s frame through `yolov8x-pose` (largest variant) with the confidence threshold lowered to 0.15 specifically to surface marginal detections — still only 2 of 4 people found. Cropped and visually inspected the far players directly: they are not badly occluded or too small to make out by eye, which argues this is a net-proximity/occlusion artifact specific to the behind-baseline doubles framing (the net and its signage board partially cut the far team's lower body), not the general "too far, too small" resolution ceiling `STRATEGY.md`'s open question assumed. A model-capacity increase (nano → largest variant) did not fix it, which is itself informative — this needs either a fine-tuned/net-aware detector or a different camera angle for the far team specifically, not just a bigger off-the-shelf model.
+
+**Conclusion.** Pose is a real, cheap, promising signal for the near-court player(s) specifically — reliable keypoints, no fine-tuning, and a visually obvious ready-stance-vs-relaxed contrast at exactly the boundary this project needs to detect. The far-team detection gap is real but matters less for rally-boundary detection than it first appears: both partners on a team transition ready-stance/relaxed together, so even one reliably-detected player's stance is plausibly sufficient for a boundary signal, even though it would matter more for a future all-4-players use case (movement analytics, `STRATEGY.md` §7).
+
+**Follow-up.**
+1. Compute an actual stance-angle/geometric feature (e.g. wrist-shoulder angle, knee bend, stance width) across a longer stretch of frames spanning several real rally boundaries, and check whether it tracks the labeled start/end times — this entry only established that keypoints are detectable and visually different, not that a derived feature actually separates the classes at scale.
+2. If that holds, investigate the far-team occlusion mechanism properly (net-line geometry vs. camera angle) before ruling out a full-4-player signal.
+3. Single-video, four-frame, zero-shot sanity check — not a scored result. No conclusion here should be treated as validated until the above is run.
+
+---
+
+## 2026-08-22 (later) — Near-team pre-serve stillness: a real, sharp, corroborable signal for rally *start* — plus an untested fusion idea for PIC-31
+
+**What prompted this.** Direct follow-up to the pose sanity check above. The operator proposed a specific hypothesis before any measurement was taken: **all 4 players going static (planted, ready) is a signal for rally start** — a sharper, more specific idea than the general "pose looks different during rallies" direction the sanity check above was testing. Scoped down to what's actually measurable today: the far-court team isn't reliably detected by any pose model size (see sanity check above), so this entry tests the **near-team-only proxy** — do the two reliably-tracked players go still right before a serve, even without observing the far team directly.
+
+**Setup.** `yolov8n-pose` run via `ultralytics`' built-in `model.track(..., tracker="bytetrack.yaml")` (not raw per-frame detection — needed actual frame-to-frame identity to compute motion, not just presence) over `brickwall_30fps.mp4`, first 135s, `vid_stride=2` (15fps effective). Per sampled frame, computed each active track's ankle-midpoint position; frame-to-frame Euclidean displacement ("speed") averaged across whichever near-team tracks were active that frame. Track IDs churned every ~30–40s (ByteTrack losing/reacquiring lock, likely during crouches/brief occlusion) — not a problem here since only short-range frame-to-frame continuity was needed, not identity across the whole clip.
+
+**First pass was measured wrong, caught before trusting it.** Initial comparison was "speed in the 1.5s before each labeled rally start" vs. "mean speed during that same rally's middle." Numbers came back inconsistent (rally 2/3 showed the expected dip, rally 1/4 didn't) — looked like a failed hypothesis until the actual time-series plot was inspected. The plot showed why the comparison was wrong: mid-rally speed is *not* uniformly high — during a kitchen-dink exchange, feet stay planted (only arms move), so ankle-speed drops low *during* real play too, for reasons unrelated to the pre-serve moment. "Mid-rally" was the wrong baseline.
+
+**Corrected comparison: immediate pre-serve (last 1s) vs. the general dead-time noise floor right before it (the preceding 4.5s, not mid-rally).**
+
+| Rally | Immediate pre-serve speed (1s) | Preceding dead-time baseline (4.5s) | Ratio |
+|---|---|---|---|
+| 2 | 0.85 | 10.14 | **0.08** |
+| 3 | 1.90 | 11.30 | **0.17** |
+| 4 | 0.75 | 10.08 | **0.07** |
+| 1 | 5.91 | n/a (video starts at t=0, no prior dead time to baseline against) | — |
+
+For all 3 checkable boundaries, near-team ankle speed drops to **7–17% of the surrounding dead-time activity level** in the final second before serve — a sharp, consistent, visually unmistakable dip in the plotted time series, not a subtle statistical trend.
+
+**Two things the same plot surfaced that the operator's original framing didn't anticipate:**
+1. **Dead time is not generally quiet — it's the noisiest part of the signal** (players walking, resetting, ~10 px/frame-step baseline). The pre-serve dip is distinctive precisely because everything around it is loud, not because dead time in general is calm.
+2. **Rally *end* shows the opposite pattern**: a sharp motion *spike* right after the labeled end time (post-point ball retrieval, resetting, celebration — the fist-bump frame found in the earlier sanity check entry sits inside the first of these spikes). A second, independently-usable, opposite-polarity signal for the other boundary.
+
+**Conclusion.** The operator's stillness hypothesis holds on the near-team proxy — cleanly and by a wide margin, not marginally. This is meaningfully different from what the earlier player-geometry-era architecture already knew: `DECISIONS.md` ADR-037 ("Two-sided live/stopped evidence; no marker decides alone") already identified that a *dink's* mid-rally stillness is a hard case needing ball-crossing corroboration to correctly read as "live." That's a different physical moment (mid-rally) from what's measured here (pre-serve, before any point activity) — this entry's finding is new, not a rediscovery of ADR-037's case, though it's the same *shape* of idea (pair a motion signal with a ball signal to resolve an ambiguous case).
+
+**Fusion idea raised by the operator, not yet tested: stillness-dip as a rally-start trigger, corroborated by a following net-crossing burst, as a combined "real rally start" detector.** The direct motivation is `PIC-31` — the project's current highest-priority open problem, where crossing-count-alone cannot separate a real rally from a courtesy tap-back/warm-up exchange, because both produce crossing bursts. Every candidate tried against `PIC-31` so far (duration/rate thresholds, geometric masks, player-proximity) failed for the same underlying reason: all of them are still derived from the crossing signal itself. Pre-serve stillness is a genuinely independent signal (player motion, not ball trajectory) — in principle, *stillness-dip → arm a candidate → require a crossing burst within some window after → confirm* could filter out exactly the false positives a crossing-only detector can't, because a real serve requires a formal both-teams-ready pause that a spontaneous courtesy tap generally doesn't have.
+
+**This fusion idea is not yet tested against real false positives — that's the actual next step, not a conclusion.** `PIC-37`'s FP anatomy work already found that 48% of `IMG_7743`/`IMG_7744`'s remaining false positives are confirmed real dead-time crossings (courtesy returns), not phantom ones — those specific, already-known false-positive timestamps are the direct test: do they lack the pre-serve stillness dip this idea predicts they should lack? That would be real evidence the fusion fixes the actual problem, not just a plausible story.
+
+**Follow-up, in the order they'd need to happen.**
+1. Not yet run: check the near-team stillness signal at `PIC-31`/`PIC-37`'s known dead-time-crossing false-positive timestamps on `IMG_7743`/`IMG_7744` — do they lack the pre-serve dip, as the fusion hypothesis predicts?
+2. Not yet run: confirm the pre-serve dip generalizes past brickwall's 3 boundaries — different rally-length/format regime (singles `pb_draft_cup`, casual doubles `IMG_7743`/`IMG_7744`), and more boundaries within brickwall itself.
+3. If both hold, design the actual combined detector (window length between dip and required crossing burst is unpicked; needs a real dev-only sweep, same discipline as `PIC-43`'s parameter work — not eyeballed).
+4. Small sample throughout this entry: 3 checkable boundaries, one video, one detector (near-team pose only). Treat the ratio magnitude (0.07–0.17) as a promising first read, not a validated threshold.
+5. Not committed to Linear yet — recommend filing under `PIC-31` (it's the problem this is aimed at) or as a new linked issue, whichever the operator prefers next session.
+
+---
+
+## 2026-08-22 (later still) — Near-team court depth at serve splits baseline vs. kitchen line; post-serve transition timing gives a second, corroborating signal for who's serving
+
+**What prompted this.** Direct follow-up to the pre-serve stillness entry above. The operator proposed a second, more specific hypothesis before measurement: **at rally start, the offense (serving) team stands close to the baseline, still; the defense (receiving) team has either both players at baseline or one at the kitchen line** — a positional refinement of the stillness signal, aimed at the same `PIC-31` problem (separating real rallies from courtesy exchanges) but using *where* players stand, not just whether they're moving.
+
+**Setup.** Reused the same near-team ankle tracks from the stillness entry above (`yolov8n-pose` + ByteTrack, `brickwall_30fps.mp4`, first 135s) — no new inference run. Converted ankle pixel positions to real court feet via the video's actual calibration (`calib/brickwall_30fps_calib.json`'s homography: near baseline at y=0ft, near kitchen/NVZ line at y=15ft, net at y=22ft). Checked in three passes of increasing window width, each testing what the previous one couldn't answer.
+
+**Pass 1 — tight window (last 0.7s before each labeled rally start).** Averaged each active track's court depth in this window, for all 4 checkable rally starts (rallies 1–4, the only ones inside the first 135s).
+
+| Rally | Court depth | Court width | Zone |
+|---|---|---|---|
+| 1 | −1.8 ft | 7.6 ft | baseline |
+| 2 | 14.8 ft | 4.8 ft | kitchen line |
+| 3 | 14.6 ft | 15.8 ft | kitchen line |
+| 4 | −1.8 ft | 6.7 ft | baseline |
+
+A clean binary split, not a gradient — exactly the two positions the hypothesis named. Rally 1 was independently confirmed from the raw frame at t=1.8s: two near-team players at the baseline, one with the ball raised, clearly about to serve. Only one near-team track was found per rally in this tight window, not two — the immediate open question.
+
+**Pass 2 — widened window (6s before serve).** Re-ran the same query over a much wider pre-serve window to check whether the "missing" second player was a tight-window artifact. It wasn't a second player that appeared — the *same single track* turned out to be in transit: in rallies 2 and 3, the one near-team player found was walking the full length from the baseline to the kitchen line over the ~4–5s before serve, arriving right as the point started. In rallies 1 and 4, near-team players were already static at the baseline for the whole window (rally 4 showed two separate tracks, both converging to two different baseline spots — left and right service positions — matching rally 1's confirmed pattern). Cropped and visually inspected the entire near-baseline area at rally 2's exact start: empty, corroborating the tracking result rather than contradicting it.
+
+This directly tested the operator's specific read (that in rallies 2/3 the opposing/far team was serving, so the near-side player *not* at the kitchen line should be a returner planted at the baseline) — and didn't confirm it: no baseline presence, near or far, was found anywhere in the 6s before either rally 2 or 3 started. Three explanations were left open, undistinguished by this data: the labeled "start" timestamp lands after the actual serve (returner already moved before the window begins), the returner is outside this camera's frame entirely (the same camera already can't see the far team at all, per the pose sanity check above), or the near team was serving in rallies 2/3 too and the tracked player is the server's own partner already up at net.
+
+**Pass 3 — post-serve window (13s after serve).** Extended tracking *forward* from each rally's start instead of backward, to see whether a second near-team player would show up running toward the net once the point was live, and whether the timing of that appearance said anything about server identity.
+
+| Rally | Reading | 2nd/other player first seen | Reaches kitchen line | Baseline hold, post-serve |
+|---|---|---|---|---|
+| 1 | near team serving (confirmed) | t = −2.5s (pre-serve) | +9.7s | ~6.9s |
+| 2 | near team receiving (inferred) | t = +1.9s | +3.8s | ~0s (already moving) |
+| 3 | near team receiving (inferred) | t = +2.5s | +4.4s | ~0s (already moving) |
+| 4 | near team serving (matches R1 pattern) | t = −5.6s (pre-serve) | +5.3 to +6.1s | ~3.4–5.2s |
+
+In rallies 1 and 4, both near-team players are in place before serve and hold the baseline for 3.4–6.9s *after* the point starts before advancing — consistent with a team that just served and has no reason to rush. In rallies 2 and 3, the second near-team player is never seen before the point starts at all; they first appear already near the baseline 1.9–2.5s after serve and reach the kitchen line in under 2s — consistent with a returner who just hit their return and is racing to close the net, the standard aggressive move for a receiving team.
+
+**Conclusion.** Two real, distinct, independently-measured signals came out of this, beyond the original position hypothesis: (1) player court depth at serve is a genuine binary baseline-vs-kitchen-line split, matching real pickleball positioning, not a fuzzy trend; (2) the *tempo* of the post-serve transition to net — hold-then-advance vs. late-arrival-then-sprint — is a second, independent signal that corroborates the operator's serve-direction read for rallies 2/3 without fully proving it. Neither signal identifies a server with certainty on its own; only rally 1 was confirmed by an actual serve-motion frame. Both signals are candidate inputs for the `PIC-31` fusion idea (stillness-dip → armed candidate → crossing-burst confirmation) from the entry above, alongside or instead of the pure stillness ratio.
+
+**Follow-up.**
+1. Not yet run: confirm server identity for rallies 2–4 via real playback around the serve moment (motion, not stills) — the project's own established standard for rally/dead-time calls applies equally to a role question like this one.
+2. Not yet run: check whether the post-serve transition-timing asymmetry (baseline-hold duration, time-to-kitchen) generalizes past these 4 rally starts and past `brickwall_30fps`.
+3. If it holds, fold court-depth-at-serve and transition tempo into the `PIC-31` fusion idea's feature set alongside pre-serve stillness, rather than treating them as a separate signal.
+4. Small sample throughout (4 rally starts, one video, near-team pose only, far team never observed). Treat the baseline/kitchen-line split and the timing asymmetry as promising first reads, not validated thresholds.
+5. Not committed to Linear yet — same recommendation as the stillness entry: file under `PIC-31`, or as a new issue linked from it, whichever the operator prefers.
+6. No new analysis code was written into the repo for any of the three passes above (or for the stillness entry before it) — everything ran from an interactive session against ad hoc scripts in a scratch directory outside the repo, flagged in this session's committee review as a reproducibility gap. Before this direction gets picked up again, the position/timing analysis should be turned into a real `scripts/` entry, not re-derived from scratch.

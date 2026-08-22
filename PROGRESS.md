@@ -4,7 +4,7 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.21 progress overview.md`](./progress/08.21%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.22 progress overview.md`](./progress/08.22%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
 
 ## Phase gate tracker → [`CHECKLIST.md`](./CHECKLIST.md)
 
