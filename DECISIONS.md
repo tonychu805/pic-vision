@@ -865,6 +865,18 @@ A fixed-time debounce (merging crossings within some short window into one) was 
 
 ---
 
+## ADR-055 — Near-team pre-serve stillness (brickwall-derived) does not transfer to IMG_7743; not adopted as a `PIC-31` signal in its current fixed-threshold form
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** `EXPERIMENTS.md`'s 2026-08-22 stillness entry found near-team ankle speed drops to 7–19% of the surrounding dead-time baseline in the last second before serve, on all 3 checkable `brickwall_30fps.mp4` boundaries — proposed as a `PIC-31` fusion signal (stillness-dip gates a crossing burst) precisely because it's independent of the ball-crossing signal every prior `PIC-31` candidate was derived from. The entry's own stated next step — check this ratio at `PIC-37`'s already-known, unambiguous real dead-time-crossing false positives (`IMG_7743` post-bump, all 12 confirmed by trajectory-plot read) — was run today (`EXPERIMENTS.md`, 2026-08-23) using a new reusable script, `scripts/pose_stillness.py`.
+
+**Decision.** The raw stillness ratio, with a brickwall-derived threshold (real serves <0.2), is **not adopted** as a `PIC-31` signal in that form. Two results, together, are why this is a rejection and not just an inconclusive data point: (1) IMG_7743's *own real rally starts* (n=6) don't show the dip either — mean ratio 1.36, none under 0.2 — so a brickwall-calibrated cutoff would reject 100% of real rallies on this video before precision is even measured; (2) IMG_7743's 12 confirmed dead-time false positives (n=11 valid) don't separate from IMG_7743's real rallies either — mean 0.94 vs. 1.36, medians 0.67 vs. 1.42, same range, wrong direction if anything. The brickwall dip is real (script reimplementation reproduced it: 0.10/0.19/0.15 vs. the original 0.08/0.17/0.07) but is evidently a property of that footage or format — long-rally tournament doubles with a formal serve pause — not a general pre-serve behavior.
+
+**Consequences.** `PIC-31` stays open; this closes out the simplest form of candidate #3 (raw near-team stillness, fixed threshold) the same way ADR from 2026-08-19 closed out candidate #1 (duration/rate threshold) — a real, promising-looking signal that did not survive its first real test against known false positives, rather than something to keep assuming true in later work. Two things are explicitly *not* ruled out by this: a self-calibrated per-video version of the same ratio (the `adaptive_gap_sec` playbook — untested), and the sibling position/timing signals from the 2026-08-22 "baseline vs. kitchen-line" entry, which have not yet been checked against these same false positives. Whether IMG_7743's rallies genuinely lack a ritual pre-serve pause, or the label `start` timestamp lands after it, is unresolved — needs real playback of 2–3 IMG_7743 serves, not more tracking data, to settle (`CLAUDE.md`'s video-review-method rule). Recommend recording this against Linear `PIC-31`.
+
+---
+
 ## Template
 
 ```markdown

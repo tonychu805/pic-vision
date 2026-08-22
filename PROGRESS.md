@@ -4,7 +4,7 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.22 progress overview.md`](./progress/08.22%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.23 progress overview.md`](./progress/08.23%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
 
 ## Phase gate tracker → [`CHECKLIST.md`](./CHECKLIST.md)
 
@@ -18,7 +18,7 @@ Covers Phase 0–1 only; Linear (`pic-vision` team, `Rally Detection Accuracy` p
 - **Not built:** a signal that tells a real rally apart from a quick failed exchange (PIC-31 — the project's highest-priority open issue); selection/ranking (competitive vs. casual — Phase 1, still gated on precision); paddle-contact detection (PIC-42, prototyping only).
 - **Camera-drift detection built** (`src/drift.py`, `scripts/check_drift.py`, PIC-29 closed) — run `check_drift.py` on any new footage *before* calibrating or labelling it.
 - **Tried and rejected:** blob size/confidence as a clutter filter (PIC-2) — doesn't separate real balls from junk on this footage; a self-calibrated duration/rate threshold (PIC-31 candidate #1) — doesn't cleanly separate real rallies from dead-time crossings either.
-- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-052 (eval-set roles locked — IMG_7743 is `eval`, may never again be used to pick a parameter), ADR-053 (the label-artefact replacement precision numbers, 0.44/0.54/0.59/0.64, are blocked by adversarial review — only the original ceiling *retraction* survives).
+- **Decided recently:** ADR-046 (TrackNet is the active detection path), ADR-048 (`min_crossings=6` is the one canonical default), ADR-049 (a camera bump invalidates calibration going forward — detect it, don't tune around it), ADR-052 (eval-set roles locked — IMG_7743 is `eval`, may never again be used to pick a parameter), ADR-053 (the label-artefact replacement precision numbers, 0.44/0.54/0.59/0.64, are blocked by adversarial review — only the original ceiling *retraction* survives), ADR-054 (raw net-crossing count isn't a valid shot-count/ranking proxy — only crossing bursts are), ADR-055 (near-team pre-serve stillness, brickwall-derived, does not generalize to IMG_7743 — not adopted as a `PIC-31` signal in its fixed-threshold form).
 - `main` pushed to `origin`, no open branches as of the last `progress/` entry.
 
 ## Three failure modes — distinguish these, don't lump them together as "precision"

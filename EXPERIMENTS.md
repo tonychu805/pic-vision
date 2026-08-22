@@ -1598,3 +1598,54 @@ In rallies 1 and 4, both near-team players are in place before serve and hold th
 4. Small sample throughout (4 rally starts, one video, near-team pose only, far team never observed). Treat the baseline/kitchen-line split and the timing asymmetry as promising first reads, not validated thresholds.
 5. Not committed to Linear yet — same recommendation as the stillness entry: file under `PIC-31`, or as a new issue linked from it, whichever the operator prefers.
 6. No new analysis code was written into the repo for any of the three passes above (or for the stillness entry before it) — everything ran from an interactive session against ad hoc scripts in a scratch directory outside the repo, flagged in this session's committee review as a reproducibility gap. Before this direction gets picked up again, the position/timing analysis should be turned into a real `scripts/` entry, not re-derived from scratch.
+
+---
+
+## 2026-08-23 — Pre-serve stillness signal does NOT generalize to IMG_7743: fails the direct PIC-37 test it was proposed to pass
+
+**What this tests.** The 2026-08-22 stillness entry's own next step, run for the first time: check the near-team pre-serve stillness ratio (immediate 1s speed / preceding 4.5s dead-time-baseline speed) at `PIC-37`'s already-known, high-confidence false-positive timestamps — `IMG_7743` post-bump's 12 remaining false positives, all independently confirmed by trajectory-plot read as real dead-time crossings (courtesy returns / between-point practice), none ambiguous. The fusion idea predicted these should *lack* the sharp dip real serves showed on `brickwall_30fps.mp4` (ratio 0.07–0.19, all three checkable boundaries).
+
+**New reusable code.** `scripts/pose_stillness.py` — same method as the 2026-08-22 scratch analysis (`yolov8n-pose` + `model.track(tracker="bytetrack.yaml")`, `vid_stride=2`, ankle-midpoint frame-to-frame displacement in raw pixels, no homography projection), but as a real script instead of interactive scratch code, closing the reproducibility gap the committee review flagged. Re-ran brickwall's 3 known boundaries first as a reimplementation sanity check before trusting it on new data: 0.10 / 0.19 / 0.15 vs. the originally reported 0.08 / 0.17 / 0.07 — same sharp-dip pattern, close enough (different tracker-state history: this run's tracker initializes fresh per window instead of running continuously from t=0) to trust the script measures the same thing.
+
+**IMG_7743 post-bump false positives (n=12, boundary = FP segment start, taken as the candidate "serve" moment):**
+
+| FP start (s) | ratio |
+|---|---|
+| 11.60 | 1.36 |
+| 107.73 | 2.88 |
+| 141.10 | 0.58 |
+| 199.40 | **0.03** |
+| 534.83 | 1.34 |
+| 561.33 | 0.80 |
+| 587.73 | 1.05 |
+| 682.17 | 0.55 |
+| 797.10 | 0.67 |
+| 885.03 | 0.56 |
+| 952.90 | 0.51 |
+| 1034.13 | n/a (no pose detected in the pre-window) |
+
+n=11 valid. Mean 0.94, median 0.67 — mostly nowhere near brickwall's <0.2 real-serve range. Only one (199.40s, ratio 0.03) shows a dip as sharp as a real brickwall serve.
+
+**Control: IMG_7743 post-bump's own real rally starts (n=6, first 6 labels), same script, same window:**
+
+| Rally start (s) | ratio |
+|---|---|
+| 49.75 | 1.36 |
+| 88.09 | 1.83 |
+| 215.33 | 0.61 |
+| 259.53 | 1.47 |
+| 340.52 | 2.03 |
+| 694.06 | 0.88 |
+
+Mean 1.36, median 1.42 — no dip either. Inspecting the raw per-frame speed series at rally-start 49.75s (the first control point) directly: speed is *rising* through the second before serve (20–35 px/frame-step, vs. brickwall's near-zero), the opposite of the brickwall pattern, not just a weaker version of it.
+
+**Conclusion: this falsifies the fusion idea as originally scoped, not just "needs more data."** Two things distinguish this from an inconclusive result: (1) IMG_7743's real rally starts (mean 1.36) don't show the dip at all — brickwall's <0.2 threshold applied here would reject **6 of 6** real rallies as "not a real serve," a 100% false-negative rate before precision is even measured; (2) IMG_7743's dead-time false positives (mean 0.94, median 0.67) sit in the same range as, if anything slightly *below*, IMG_7743's own real rallies — on this video there is no separation between the two classes on this signal, small-sample caveats aside (n=11 and n=6). The brickwall dip is real (reimplementation confirms it) but appears to be a property of that specific footage/format — likely long-rally tournament doubles with a formal serve pause — not a general pickleball-serve behavior. IMG_7743's casual doubles rallies (per `PROGRESS.md`'s rally-length table, ~10s mean, much shorter than brickwall's ~22s) may simply not have the same ritual pause before serve, or the label `start` timestamp may land at a different point in the serve motion on this video's labels than on brickwall's — undistinguished by this data, would need real playback around 2–3 IMG_7743 serves to settle which.
+
+**This closes out candidate #3's simplest form (raw near-team stillness ratio, brickwall-derived threshold) as a `PIC-31` fix.** It does not close `PIC-31` itself, and does not rule out a per-video-calibrated version of the same signal (the way `gap_sec` and the rate/duration threshold both needed self-calibration, not a fixed constant) — that has not been tried.
+
+**Follow-up.**
+1. Not yet run: real playback of 2–3 IMG_7743 serves to check whether the ritual pre-serve pause brickwall shows is genuinely absent on this footage, or whether the label `start` timestamp is landing after it.
+2. Not yet run: the same check on `IMG_7744` (this video's dead-time-crossing false positives are less thoroughly anatomized than post-bump's, per the 2026-08-19 FP-anatomy entry — post-bump was chosen here specifically because all 12 were unambiguous).
+3. A self-calibrated version (e.g. ratio relative to a per-video baseline distribution rather than a fixed brickwall-derived cutoff) is untested and is the next cheapest thing to try before abandoning the stillness signal entirely — same shape as the `adaptive_gap_sec` fix that rescued `gap_sec` from being a single-video constant.
+4. The baseline/kitchen-line position signal and post-serve transition-timing signal (2026-08-22, later still) have not been tested against these same false positives yet — today's result is specific to the stillness-ratio signal, not the whole `PIC-31` fusion direction.
+5. Recommend updating `PIC-31` in Linear with this result — the stillness signal is a promising-looking lead that did not survive its first real test, which is exactly the kind of finding that should stop it from being assumed in later work.
