@@ -41,6 +41,13 @@ LEFT_ANKLE, RIGHT_ANKLE = 15, 16
 KP_CONF_MIN = 0.3
 
 
+def load_model(weights="yolov8n-pose.pt"):
+    """Load the pose model once, to be passed into `track_speeds`/
+    `stillness_ratio`/`stillness_ratios_batch` for reuse across many calls."""
+    from ultralytics import YOLO
+    return YOLO(weights)
+
+
 def _ankle_midpoint(kpts_xy, kpts_conf):
     pts = []
     for idx in (LEFT_ANKLE, RIGHT_ANKLE):
@@ -52,14 +59,17 @@ def _ankle_midpoint(kpts_xy, kpts_conf):
     return tuple(pts.mean(axis=0))
 
 
-def track_speeds(video_path, t_start, t_end, vid_stride=2, weights="yolov8n-pose.pt"):
+def track_speeds(video_path, t_start, t_end, vid_stride=2, weights="yolov8n-pose.pt", model=None):
     """Per-sampled-frame average ankle speed (px per frame-step) across active
     tracks, for frames in [t_start, t_end). Returns (times, speeds) — times
     are frame timestamps at which a speed was computable (i.e. not the first
-    sampled frame). Tracker state is local to this window only."""
-    from ultralytics import YOLO
+    sampled frame). Tracker state is local to this window only.
 
-    model = YOLO(weights)
+    Pass a pre-loaded `model` (from `load_model`) to reuse it across many
+    windows in the same process — loading yolov8n-pose fresh per call is
+    fine for a handful of boundaries but wasteful for a batch of them."""
+    if model is None:
+        model = load_model(weights)
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS) or 30.0
     cap.set(cv2.CAP_PROP_POS_MSEC, t_start * 1000.0)
@@ -100,7 +110,7 @@ def track_speeds(video_path, t_start, t_end, vid_stride=2, weights="yolov8n-pose
 
 
 def stillness_ratio(video_path, boundary_time, pre_window=1.0, baseline_window=4.5,
-                     vid_stride=2, weights="yolov8n-pose.pt"):
+                     vid_stride=2, weights="yolov8n-pose.pt", model=None):
     """Ratio of immediate pre-boundary speed to the preceding dead-time
     baseline. Returns (immediate, baseline, ratio) — baseline is None if the
     window would start before t=0 (no prior dead time to measure)."""
@@ -108,12 +118,12 @@ def stillness_ratio(video_path, boundary_time, pre_window=1.0, baseline_window=4
     if t_lo < 0:
         immediate_times, immediate_speeds = track_speeds(
             video_path, max(0.0, boundary_time - pre_window), boundary_time,
-            vid_stride=vid_stride, weights=weights)
+            vid_stride=vid_stride, weights=weights, model=model)
         immediate = float(np.mean(immediate_speeds)) if immediate_speeds else None
         return immediate, None, None
 
     times, speeds = track_speeds(video_path, t_lo, boundary_time,
-                                  vid_stride=vid_stride, weights=weights)
+                                  vid_stride=vid_stride, weights=weights, model=model)
     cut = boundary_time - pre_window
     immediate_speeds = [s for t, s in zip(times, speeds) if t >= cut]
     baseline_speeds = [s for t, s in zip(times, speeds) if t < cut]
@@ -121,6 +131,35 @@ def stillness_ratio(video_path, boundary_time, pre_window=1.0, baseline_window=4
     baseline = float(np.mean(baseline_speeds)) if baseline_speeds else None
     ratio = (immediate / baseline) if (immediate is not None and baseline) else None
     return immediate, baseline, ratio
+
+
+def stillness_ratios_batch(video_path, boundary_times, pre_window=1.0, baseline_window=4.5,
+                            vid_stride=2, weights="yolov8n-pose.pt"):
+    """Compute `stillness_ratio` for many boundary times against one video,
+    loading the pose model once and reusing it — the per-call version in
+    `main()` below reloads yolov8n-pose fresh every time, fine for a
+    handful of boundaries but wasteful for a batch (e.g. scoring every
+    candidate rally the detector proposes for a session).
+
+    Returns a list of dicts, one per boundary time, in the same order as
+    `boundary_times`: {"boundary_time", "immediate", "baseline", "ratio"}.
+    Informational only — this does not filter or re-rank anything on its
+    own. As of 2026-08-23 (PIC-53/ADR-055-057) the ratio is validated as a
+    leading indicator for real rally starts, not as a real-vs-dead-time
+    discriminator (no confirmed dead-time material exists to test that
+    against) or a precise boundary marker (see EXPERIMENTS.md's
+    stillness-localization entry)."""
+    model = load_model(weights)
+    results = []
+    for t in boundary_times:
+        immediate, baseline, ratio = stillness_ratio(
+            video_path, t, pre_window=pre_window, baseline_window=baseline_window,
+            vid_stride=vid_stride, weights=weights, model=model)
+        results.append({
+            "boundary_time": t, "immediate": immediate,
+            "baseline": baseline, "ratio": ratio,
+        })
+    return results
 
 
 def main():
@@ -141,15 +180,13 @@ def main():
             times += [float(line.strip()) for line in f if line.strip()]
 
     print(f"{'time':>10} {'immediate':>10} {'baseline':>10} {'ratio':>8}")
-    for t in times:
-        immediate, baseline, ratio = stillness_ratio(
-            args.video, t, pre_window=args.pre_window,
-            baseline_window=args.baseline_window, vid_stride=args.vid_stride,
-            weights=args.weights)
-        imm_s = f"{immediate:.2f}" if immediate is not None else "n/a"
-        base_s = f"{baseline:.2f}" if baseline is not None else "n/a"
-        ratio_s = f"{ratio:.2f}" if ratio is not None else "n/a"
-        print(f"{t:10.2f} {imm_s:>10} {base_s:>10} {ratio_s:>8}")
+    for r in stillness_ratios_batch(args.video, times, pre_window=args.pre_window,
+                                     baseline_window=args.baseline_window,
+                                     vid_stride=args.vid_stride, weights=args.weights):
+        imm_s = f"{r['immediate']:.2f}" if r["immediate"] is not None else "n/a"
+        base_s = f"{r['baseline']:.2f}" if r["baseline"] is not None else "n/a"
+        ratio_s = f"{r['ratio']:.2f}" if r["ratio"] is not None else "n/a"
+        print(f"{r['boundary_time']:10.2f} {imm_s:>10} {base_s:>10} {ratio_s:>8}")
 
 
 if __name__ == "__main__":
