@@ -6,6 +6,8 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 **[`progress/08.23 progress overview.md`](./progress/08.23%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
 
+**Immediate next step:** `brickwall_semi_30fps.mp4` (`videos/raw/brickwall-SEMI.mp4`, 0–900s, camera-bump-trimmed) is calibrated, inferred, and has 31 detector candidates with signals computed (duration, crossing rate, top-5 velocity, stillness ratio) — but **has no human labels yet**. Operator paused before labeling, deliberately planning to label it *after* reviewing the detector's own output this time (reversed order vs. every other video today). Two review artifacts (session-published, not in the repo) cover the 31 candidates but only check precision — a full independent scan of the timeline is still needed for recall. See `EXPERIMENTS.md`'s "held-out check" entry for the full setup, including a clean fragmentation example (candidate 0) worth reading before touching `gap_sec` again.
+
 ## Phase gate tracker → [`CHECKLIST.md`](./CHECKLIST.md)
 
 Covers Phase 0–1 only; Linear (`pic-vision` team, `Rally Detection Accuracy` project) is authoritative for current priorities.
