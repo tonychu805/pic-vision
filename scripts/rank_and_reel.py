@@ -1,10 +1,16 @@
-"""Build a highlight reel from brickwall-SEMI's detector candidates, ranked
-by src/select.py's rank_segments (ADR-063).
+"""Rank a video's detector candidates (src/select.py's rank_segments, ADR-063)
+and cut a highlight reel from the top-ranked ones.
 
-Writes two versions to OUT_DIR: highlight.mp4 (chronological, cut_clips'
+Writes two versions to --out-dir: highlight.mp4 (chronological, cut_clips'
 default -- the browse-ready venue-console format) and highlight_by_rank.mp4
 (best-scored clip first, for reviewing the ranking itself).
+
+Usage:
+    python3 scripts/rank_and_reel.py --video videos/x_30fps.mp4 \
+        --csv cache/x_predictions_k14.csv --calib calib/x_calib.json \
+        --out-dir clips/x_reel --target-sec 300 --session-id x_reel
 """
+import argparse
 import json
 import os
 import subprocess
@@ -17,24 +23,28 @@ from src.calib import court_wedge
 from src.track import track_ball
 from src.ball import net_line_y, crossing_times, cluster_crossings
 from src.select import frame_speeds, spike_threshold, rank_segments
-from src.render import cut_clips
+from src.render import cut_clips, concat_clips
 
-CSV = "cache/brickwall_semi_predictions_k14.csv"
-CALIB = "calib/brickwall_semi_calib.json"
-VIDEO = "videos/brickwall_semi_30fps.mp4"
-OUT_DIR = "clips/brickwall_semi_reel_5min"
 FPS = 30.0
 GAP_SEC = 3.0
 MIN_CROSSINGS = 6
 PAD_SEC = 3.0
-TARGET_SEC = 300.0  # 5 minutes
 WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # (duration, peak_crossing_rate, n_spikes) -- config.yaml
 
 
 def main():
-    with open(CALIB) as f:
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--video", required=True)
+    ap.add_argument("--csv", required=True, help="TrackNet predictions CSV")
+    ap.add_argument("--calib", required=True)
+    ap.add_argument("--out-dir", required=True)
+    ap.add_argument("--target-sec", type=float, default=300.0)
+    ap.add_argument("--session-id", default="reel")
+    args = ap.parse_args()
+
+    with open(args.calib) as f:
         calib = json.load(f)
-    track = load_predictions(CSV, FPS)
+    track = load_predictions(args.csv, FPS)
     in_court = court_wedge(calib)
     net_y = net_line_y(calib)
 
@@ -63,30 +73,31 @@ def main():
     chosen, total = [], 0.0
     for r in ranked:
         padded_dur = r["duration"] + 2 * PAD_SEC
-        if total + padded_dur > TARGET_SEC and chosen:
+        if total + padded_dur > args.target_sec and chosen:
             continue
         chosen.append(r)
         total += padded_dur
-        if total >= TARGET_SEC:
+        if total >= args.target_sec:
             break
     print(f"\nchose {len(chosen)}/{len(ranked)} candidates, ~{total:.1f}s padded "
-          f"(target {TARGET_SEC:.0f}s)", file=sys.stderr)
+          f"(target {args.target_sec:.0f}s)", file=sys.stderr)
 
     scored = [{**r, "score": r["score"]} for r in chosen]
-    manifest = cut_clips(VIDEO, scored, OUT_DIR, court_id="brickwall_semi",
-                          session_id="reel_5min", pad_sec=PAD_SEC)
+    manifest = cut_clips(args.video, scored, args.out_dir, court_id=args.session_id,
+                          session_id=args.session_id, pad_sec=PAD_SEC)
+    concat_clips(manifest, args.out_dir)  # chronological -> out_dir/highlight.mp4
 
-    # second concat, same clips, best-score-first (chronological is cut_clips' default)
+    # second concat, same clips, best-score-first
     clips_by_rank = sorted(manifest, key=lambda c: -c["score"])
-    filelist = os.path.join(OUT_DIR, "_filelist_ranked.txt")
+    filelist = os.path.join(args.out_dir, "_filelist_ranked.txt")
     with open(filelist, "w") as f:
         for c in clips_by_rank:
             f.write(f"file '{c['file']}'\n")
-    ranked_out = os.path.join(OUT_DIR, "highlight_by_rank.mp4")
+    ranked_out = os.path.join(args.out_dir, "highlight_by_rank.mp4")
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
                      "-i", filelist, "-c", "copy", ranked_out], check=True)
     os.remove(filelist)
-    print(f"chronological -> {os.path.join(OUT_DIR, 'highlight.mp4')}", file=sys.stderr)
+    print(f"chronological -> {os.path.join(args.out_dir, 'highlight.mp4')}", file=sys.stderr)
     print(f"ranked        -> {ranked_out}", file=sys.stderr)
 
 

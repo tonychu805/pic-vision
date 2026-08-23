@@ -68,6 +68,8 @@ So "universal" is honest for court-plane player *positions* and a fiction for ap
 
 **Open questions:** does player-only segmentation survive non-baseline angles at all? How much labeled data does a new angle category need before it works?
 
+**Side-on/courtside note (2026-08-24, business interest flagged, no footage yet):** a courtside-at-midcourt mount is plausibly *easier* to sell into venues than the current behind-baseline one (no equipment behind the baseline in the ball's path, more of a "watching the match" viewer perspective for the eventual product) and, encouragingly, looks like the cheaper of the two non-baseline angles to actually support. The current ball-crossing signal (`src/ball.py`) is hard-coded to a behind-baseline assumption (net-crossing is a comparison against a roughly constant image-*y*); a side-on view rotates that 90° — net-crossing becomes an image-*x* comparison instead, the same math with an axis swap, not the full court-space rewrite an elevated-corner angle would need. Calibration should be unaffected (a courtside view sees the full court outline at least as well as behind-baseline). The real unknown is ball *occlusion*: a side-on view looks at players edge-on rather than face-on, so a player's body sits between the camera and the ball far more often during net exchanges — untested, needs real footage to check before this angle can be trusted, same as any other new angle category above.
+
 ---
 
 ## 5. Deployment (directional)
