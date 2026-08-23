@@ -2,7 +2,7 @@
 
 **Fill in the bracketed decisions after watching your first session (step 3), then don't change them.** Consistency matters more than which choice you make — an inconsistent labeler puts a ceiling on every metric the project will ever produce.
 
-Version: 3 · Last changed: 2026-08-20
+Version: 4 · Last changed: 2026-08-23
 
 ---
 
@@ -13,6 +13,8 @@ A rally runs from **serve contact** to **the moment the ball next touches the gr
 **Decided (v2):** ball-dead. This is deliberately *later* than the original "last ball contact"; PRD §5 has been updated to match, so the two agree.
 
 The difference is up to a second on any point that ends with the ball sailing long, which is a large fraction of your 1.0 s boundary target.
+
+**Decided (v4, 2026-08-23):** the recorded `start` timestamp is **not** literally serve contact — it's a viewer-appropriate lead-in point a few seconds before contact (observed range roughly 0–3s, not a fixed offset, judged by feel per rally, not consciously tracked for consistency across videos). `end` is unaffected — still the ball-dead moment, no lead-out padding. This was already the de facto practice during the 2026-08-23 exhaustive relabel (`PIC-49`/`PIC-51`) before being written down here; codifying it rather than re-tightening to literal contact, since a few seconds of context before the point starts is arguably the right behavior for the actual product (a highlight reel for viewers), not a labeling error to correct. **Consequence, not yet resolved:** any tool comparing a predicted segment's boundary to label `start` via IoU (`eval/harness.py`) is now comparing against a moving, per-rally-variable target rather than a fixed physical event — this needs the matching logic to account for it, not just the label rule to note it. See `DECISIONS.md` ADR-062.
 
 ## What makes a rally highlight-worthy (quality grade)
 

@@ -873,7 +873,119 @@ A fixed-time debounce (merging crossings within some short window into one) was 
 
 **Decision.** The raw stillness ratio, with a brickwall-derived threshold (real serves <0.2), is **not adopted** as a `PIC-31` signal in that form. Two results, together, are why this is a rejection and not just an inconclusive data point: (1) IMG_7743's *own real rally starts* (n=6) don't show the dip either — mean ratio 1.36, none under 0.2 — so a brickwall-calibrated cutoff would reject 100% of real rallies on this video before precision is even measured; (2) IMG_7743's 12 confirmed dead-time false positives (n=11 valid) don't separate from IMG_7743's real rallies either — mean 0.94 vs. 1.36, medians 0.67 vs. 1.42, same range, wrong direction if anything. The brickwall dip is real (script reimplementation reproduced it: 0.10/0.19/0.15 vs. the original 0.08/0.17/0.07) but is evidently a property of that footage or format — long-rally tournament doubles with a formal serve pause — not a general pre-serve behavior.
 
-**Consequences.** `PIC-31` stays open; this closes out the simplest form of candidate #3 (raw near-team stillness, fixed threshold) the same way ADR from 2026-08-19 closed out candidate #1 (duration/rate threshold) — a real, promising-looking signal that did not survive its first real test against known false positives, rather than something to keep assuming true in later work. Two things are explicitly *not* ruled out by this: a self-calibrated per-video version of the same ratio (the `adaptive_gap_sec` playbook — untested), and the sibling position/timing signals from the 2026-08-22 "baseline vs. kitchen-line" entry, which have not yet been checked against these same false positives. Whether IMG_7743's rallies genuinely lack a ritual pre-serve pause, or the label `start` timestamp lands after it, is unresolved — needs real playback of 2–3 IMG_7743 serves, not more tracking data, to settle (`CLAUDE.md`'s video-review-method rule). Recommend recording this against Linear `PIC-31`.
+**Consequences.** `PIC-31` stays open; this closes out the simplest form of candidate #3 (raw near-team stillness, fixed threshold) the same way ADR from 2026-08-19 closed out candidate #1 (duration/rate threshold) — a real, promising-looking signal that did not survive its first real test against known false positives, rather than something to keep assuming true in later work. Two things are explicitly *not* ruled out by this: a self-calibrated per-video version of the same ratio (the `adaptive_gap_sec` playbook — untested), and the sibling position/timing signals from the 2026-08-22 "baseline vs. kitchen-line" entry, which have not yet been checked against these same false positives. Whether IMG_7743's rallies genuinely lack a ritual pre-serve pause, or the label `start` timestamp lands after it, is unresolved — needs real playback of 2–3 IMG_7743 serves, not more tracking data, to settle (`CLAUDE.md`'s video-review-method rule). Recommend recording this against Linear `PIC-31`. **Superseded in part by ADR-056** — two of the false positives this ADR's negative-class sample rests on turned out, on real playback, not to be dead time at all.
+
+---
+
+## ADR-056 — PIC-37's "confirmed by trajectory-plot read" false-positive list is not verified ground truth; ADR-055's confidence is downgraded pending playback re-check
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** While setting up real playback of IMG_7743 real-rally starts (ADR-055's own unresolved follow-up), two of PIC-37's 12 "confirmed by trajectory-plot read, no ambiguity" `IMG_7743` post-bump dead-time false positives (107.73s, 199.40s) were also watched directly. Both are real plays, not dead time (`EXPERIMENTS.md`, 2026-08-23 later entry) — 2 of 2 checked so far have flipped. `CLAUDE.md`'s video-review-method rule already retired stills-based verdicts for this project after one went wrong (the IMG_7744 false-positive review); a trajectory-plot read is a different still/aggregate proxy for the same underlying question and has now failed the same way.
+
+**Decision.** PIC-37's 12-item "confirmed" FP list is downgraded from ground truth to **unverified pending playback re-check** — none of it should be cited as settled until re-watched. ADR-055's "no separation" conclusion, which used that list (n=11) as its negative-class sample, is downgraded from accepted to **provisional**: a contaminated negative class (real plays counted as dead time) would suppress any real separation regardless of whether the underlying stillness signal works, so ADR-055's rejection of the signal cannot yet be trusted at face value. Notably, the two reclassified points point toward the signal working better than ADR-055 found, not worse (199.40s — the one "FP" with a real-serve-like dip — turns out to be a real play), which is exactly the kind of directional hint that would be lost by not re-checking.
+
+**Consequences.** `PIC-31` stays open. Before any further conclusion is drawn from PIC-37's FP list (including re-testing the stillness signal, the two untested sibling signals from 2026-08-22, or citing the 48%-real-dead-time-crossings figure from the 2026-08-19 FP-anatomy entry), the remaining 10 of 12 post-bump FPs need the same playback check. This is the same failure mode CLAUDE.md already documents once (stills-based verdicts) recurring in a different guise (trajectory-plot-based verdicts) — worth generalizing the rule: no aggregate or single-frame proxy for motion is trustworthy for a rally/dead-time call on this project without playback confirmation, full stop. **Superseded by ADR-057** — the remaining 10 were checked; all are real plays too.
+
+---
+
+## ADR-057 — PIC-37's "IMG_7743 post-bump is 12/12 real dead-time crossings" finding is retracted; it's 12/12 unlabeled real plays. This is a labeling-completeness bug, not a `PIC-31` finding.
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** ADR-056 flagged 2 of PIC-37's 12 "confirmed by trajectory-plot read" `IMG_7743` post-bump false positives as real plays on playback, and downgraded (not yet retracted) PIC-37's finding pending the other 10. All 10 have now been playback-checked (`EXPERIMENTS.md`, 2026-08-23 final entry): every one is a real play. User's verdict, verbatim: "all of them have actual actions in them, just a variety of different duration of start time and end time. none of them are dead time." 12 of 12 checked, 12 of 12 real.
+
+**Decision.** PIC-37's claim that "post-bump in particular is entirely real dead-time crossings (12/12) — nothing there is a detector flaw at all" is **retracted, fully inverted.** The detector was correct on all 12 crossings; `eval/labels/IMG_7743_postbump_2900s-end.jsonl` is missing 12 real rallies. This is the project's already-named failure mode #2 (label incompleteness, `PROGRESS.md`'s three-failure-modes table), not a new `PIC-31` (dead-time signal) finding and not a `PIC-34` (phantom-crossing geometry) finding — the trajectory-plot method that drove PIC-37's classification produced a confident, wrong answer at 100% (12/12) on this video-half, the same failure class `CLAUDE.md` already retired stills-based verdicts for.
+
+**Consequences.**
+1. **IMG_7743 post-bump's true precision is higher than every figure computed against its current labels** — 12 real detections are being scored as false positives.
+2. **PIC-31's 2026-08-19 duration/rate-threshold rejection partially rests on this same false premise** — its "sanity check first" table's `dead-time junk (n=12)` row is retracted; the table's broader unsupervised-check conclusion (scored against the full label set, not this specific list) likely still stands but wasn't independently re-verified here.
+3. **ADR-055/ADR-056's "no separation" test never had a valid negative-class example in it.** Not "provisional" — invalid as run. `PIC-31` has not yet been tested against any confirmed genuine dead-time example on `IMG_7743`.
+4. **PIC-37's pre-bump numbers (14 "real dead-time crossing," 10 "noise/hallucinated," same trajectory-plot method, zero playback-checked) are now suspect** and should not be cited until spot-checked the same way — the method just failed 12/12 on the one segment where it *was* checked.
+5. **Fix is a relabeling task, not a code change.** `IMG_7743_postbump_2900s-end.jsonl` needs a proper exhaustive re-label pass (`LABELING.md`'s two-layer presence pass — see [[feedback_two_layer_labeling]]) adding the 12 missing rallies with real start/end boundaries. Only after that would this video-half have genuine dead-time examples to test any `PIC-31` candidate signal against. Recommend filing this against Linear `PIC-37` (reopen) and `PIC-31`. **Done — see ADR-058: labels went 6→53, not just +12, and the actual bottleneck this segment has turns out to be recall, not dead-time false positives at all.**
+
+---
+
+## ADR-058 — IMG_7743 post-bump, fully relabeled: false positives are gone (all were boundary fragments), recall is the real remaining problem, and it's a `min_crossings` ceiling
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** ADR-057 called for an exhaustive relabel of `IMG_7743_postbump_2900s-end`. Done: 6 → 53 labels (`EXPERIMENTS.md`, 2026-08-23 postscript), far more than the 12 known gaps — confirming the false-positive list could never have surfaced rallies the detector missed with zero output. Re-scored against shipped defaults: precision 0.818, recall 0.340 (18 matched / 22 predicted / 53 labels) at IoU≥0.5.
+
+**Decision.** Two separate findings, not one:
+
+1. **Precision is effectively perfect — no genuine junk remains.** All 4 residual "false positives" are boundary near-misses (IoU 0.31–0.47) on real, now-labelled rallies, not hallucinated detections. This closes the false-positive side of IMG_7743 post-bump entirely; `PIC-31` (dead-time discrimination) has nothing left to solve on this video-half.
+2. **Recall (0.340) is the real, previously-invisible problem, and it is mechanically explained**: 30 of 35 misses have fewer than `min_crossings=6` raw net crossings in their window, so `cluster_crossings` never emits a segment — these rallies were invisible to every prior false-positive-based analysis on this video, by construction. A diagnostic-only sweep (not a parameter pick — `IMG_7743` is `eval`, locked, ADR-052) shows recall plateaus at 0.453 regardless of how low `min_crossings` goes, while precision collapses (0.818→0.267) as it drops — this is not simply a mistuned constant; some short rallies (1–2 net crossings) are below what any crossing-count threshold could ever assemble, and a lower threshold mainly admits noise, not more real rallies.
+
+**Consequences.**
+- For the current phase-1 deliverable (highlight reel): the practical impact is much smaller than 0.340 suggests — 4 of 5 `quality:1` (highlight-worthy) rallies were matched; 34 of the 35 misses are `quality:2` ordinary short exchanges.
+- `min_crossings=6` was picked on IMG_7743 itself (ADR-048) and re-derived on `dev`-only videos (`PIC-43`) landing on the same value — if `dev` (brickwall, pb_draft_cup, IMG_7744) has the same kind of label-completeness gap IMG_7743 just had, PIC-43's re-derivation carries the same untested blind spot. Not yet checked.
+- Whether the recall ceiling needs a different mechanism entirely (detecting a serve event, not accumulating crossings) rather than further threshold tuning is open.
+- Recommend two new Linear issues rather than reusing `PIC-31` (about dead-time FPs, now near-moot on this video) or `PIC-49` (relabeling, now done): one for re-checking `dev`'s label completeness, one for the `min_crossings` recall ceiling itself. **Corrected same day — see ADR-059: the "recall ceiling" was measured against the wrong target.**
+
+---
+
+## ADR-060 — All four scored videos relabeled and re-checked; `min_crossings=6` confirmed across all of them; `PIC-31`'s dead-time-discrimination problem is, project-wide, almost entirely a labeling artifact
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** ADR-057/058/059 found and corrected IMG_7743 post-bump's label-completeness gap; `PIC-51` found the same on IMG_7744. Deprioritizing `brickwall`/`pb_draft_cup` at that point rested on a circular check (their live-play % matched a `PROGRESS.md` reference table computed from those same labels) — caught when asked directly what the plan was for those two. Relabeled both properly.
+
+**Decision.** All four of the project's scored videos have now been exhaustively relabeled and re-checked in one day: IMG_7743 post-bump (6→53), IMG_7744 (20→75), brickwall (35→49), pb_draft_cup (18→34). Every one had a real, previously unmeasured gap. Re-scored, quality-split (per ADR-059's correction): `quality:1` recall is **flat regardless of `min_crossings`** on all four (brickwall 12/13, pb_draft_cup 7/10, IMG_7743 4/5, IMG_7744 2/3) — `min_crossings=6` is confirmed adequate for what the product actually needs, now checked against honest ground truth on the full scored set, not just IMG_7743-derived or `dev`-derived-but-untested numbers. Residual false positives are, project-wide, almost entirely boundary fragments (16 of 18 checked across brickwall/pb_draft_cup/IMG_7743, IoU 0.18–0.47 on real rallies) rather than genuine junk — only 2 (both on IMG_7744, `PIC-52`) remain unexplained.
+
+**Consequences.**
+- `PIC-31`'s founding problem statement — find a signal to separate real rallies from dead-time/junk crossings — turns out, once every video's labels are honest, to have almost nothing left to solve. What looked like a detection-quality ceiling across this whole project (ADR-050/051/053's precision-artifact thread, PIC-37's FP anatomy, this session's stillness-signal work) was, to a very large degree, an artifact of labels that silently under-counted short/ordinary real rallies — not a property of the detector.
+- `PIC-43`'s `min_crossings=6` choice is now the most-validated constant in the project: derived on `dev`, and independently confirmed adequate against honestly-relabeled ground truth on all four videos including the previously-locked `eval` video.
+- `PROGRESS.md`'s rally-length/live-play density table is finalized with real numbers, no longer provisional.
+- **General lesson, worth carrying forward explicitly:** a "this number matches what we already expected" check is not validation if the expectation was itself derived from the same data being checked. Before treating agreement with a reference figure as evidence a dataset is fine, trace where that reference figure came from.
+- Remaining open threads: `PIC-52` (2 unexplained IMG_7744 segments, low priority); whether `PIC-33`'s adaptive-`gap_sec` or a fragment-aware scoring approach should now be revisited given fragments are the dominant remaining false-positive mechanism everywhere; `PIC-31` itself should probably be closed or substantially re-scoped given this finding.
+
+---
+
+## ADR-061 — `PIC-31` candidate #1 (duration threshold), reversed in part: duration has real signal on honest labels; the 2026-08-19 rejection was measuring label contamination, not the signal
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** The 2026-08-19 rejection of a duration/crossing-rate threshold (`EXPERIMENTS.md`, "yet later" entry) partly rested on IMG_7743 post-bump's since-retracted "confirmed dead-time" false positives (ADR-057), and scored its broader check against all four videos' old, incomplete labels. ADR-060 found every one of those labels missed a large share of real rallies, in exactly the way (short rallies undercounted) that would make a duration signal look weaker than it is.
+
+**Decision.** Re-ran the same candidate generation (raw crossing bursts, `min_crossings=1`) against today's honestly relabeled ground truth on the four confirmed videos. **Duration alone separates real from junk far more cleanly than 2026-08-19 found** — median real/junk duration ratios of 6–15x (vs. ~2x before), and a `duration≥3.0s` cutoff gives 97% recall at ~60% precision pooled (vs. ~23% base rate) — nowhere near the "misclassifies 24–50% of real rallies" the original rejection reported. **Crossing rate shows no such improvement and remains an unreliable feature** (very short junk clusters inflate rate by dividing by a near-zero duration); the original candidate bundled duration and rate together, which understated duration's real value.
+
+**This does not change the shipped default.** Checked whether a duration filter would further clean up `min_crossings=6`'s current residual false positives (all boundary fragments per ADR-060): almost none are short enough to be caught by any reasonable duration cutoff — the signal is largely redundant with what `min_crossings` already provides at the current operating point, not additive on top of it.
+
+**Consequences.** `PIC-31` candidate #1 should no longer be cited as "tried and failed" — it wasn't a fair test. It remains not worth shipping *in addition to* `min_crossings=6` (redundant), but would be a reasonable candidate if the project ever needs an alternative or independent gate to crossing-count clustering (e.g. if a future detector's crossing signal changes shape). This diagnostic pooled `IMG_7743` (`eval`) with `dev` for the threshold sweep — any real adoption would need a proper `dev`-only derivation per ADR-052, not the numbers reported here. Filed as `PIC-53`.
+
+---
+
+## ADR-062 — `start` is not literally serve contact; it's an intentional, variable lead-in for viewers. `LABELING.md` v4 codifies this; the eval harness does not yet account for it.
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** While digging into whether the pre-serve stillness dip marks the true rally start (a localization test against brickwall's now-honest labels, 17 rally starts spread across the full video, not just the previously-checked opening minutes): the dip's minimum lands a median of 1.07s *before* the labeled `start`, with a ~1.3s spread. Asked directly, the operator confirmed today's relabeling pass (`PIC-49`/`PIC-51`) intentionally set `start` a few seconds before actual serve contact — "for the sake of viewers" — varying by feel per rally (roughly 0–3s), not a fixed or consciously-tracked offset. `LABELING.md` as written defines `start` as literal serve contact.
+
+**Decision.** Codify the lead-in as the documented rule (`LABELING.md` v4) rather than re-tightening to literal contact — a highlight reel benefiting from a few seconds of viewer context before a point starts is plausibly correct product behavior, not a labeling defect. `end` is untouched (still ball-dead, no lead-out padding). This is deliberately **not** resolved as "therefore re-fix the labels" — today's relabel stays as-is.
+
+**Consequences, several threads to pull, not yet done:**
+1. **`eval/harness.py`'s IoU matching (`TECH_SPEC.md` §11) now compares predicted segments against a label boundary that moves by an unspecified 0–3s per rally, not a fixed physical event.** This wasn't designed for that. No fix implemented here — needs a real design decision (e.g. a start-tolerant matching mode, or a documented acceptable-offset band) before being trusted for boundary-sensitive comparisons going forward.
+2. **This confounds, doesn't necessarily invalidate, today's earlier boundary-fragment characterization (ADR-060).** The 30 residual false positives scored as boundary near-misses (IoU 0.18–0.49 against real rallies) could be partly explained by this lead-in offset dragging IoU down, on top of (or instead of) genuine `gap_sec`-clustering imprecision (`PIC-33`'s territory). The two explanations aren't yet disentangled — a detector segment starting at the true first crossing, compared against a label padded 0–3s earlier, would show reduced IoU for a reason that has nothing to do with fragmentation.
+3. **The stillness-localization finding itself likely overstated the dip's imprecision** — much or all of the measured 1.07s median / 1.3s spread offset from `label start` may be lead-in-padding variance, not the dip itself wandering relative to true serve contact. The dip may track true contact considerably more tightly than that number suggests; not yet re-measured with this understanding.
+4. **Today's precision/recall numbers for all four relabeled videos (ADR-058/059/060) technically used a boundary convention the eval harness wasn't built around.** Given `IoU≥0.5` is a fairly generous threshold relative to a 0–3s shift on multi-second rallies, this is unlikely to overturn any of today's headline conclusions, but hasn't been quantified.
+
+**Recommend filing as a new Linear issue**: decide and implement how `eval/harness.py` should handle an intentionally-variable `start` lead-in (a tolerance band on the start edge specifically, distinct from `end`, rather than symmetric IoU slack), then re-run today's boundary-fragment and stillness-localization checks with it.
+
+---
+
+## ADR-059 — Correction to ADR-058: the recall "ceiling" was measuring the wrong target. `min_crossings=6` requires no change; recall should be scored per-`quality`, not blended.
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** ADR-058 reported IMG_7743 postbump recall of 0.340 against all 53 relabeled rallies, plateauing at 0.453 even as `min_crossings` dropped to 2, and framed this as a structural ceiling needing a new mechanism. The user pointed out the flaw directly: the presence-pass labels were correctly exhaustive (including single-point failed-return-of-serve rallies, which do count per `LABELING.md`), but the *product goal* is a highlight reel, not a complete inventory of every point — scoring recall against every trivial point, then concluding the pipeline needs to catch more of them, was optimizing for the wrong thing.
+
+**Decision.** Re-scored recall split by the `quality` grade already captured during labeling. `quality:1` (highlight-worthy, n=5) recall is **flat at 4/5 (0.800) for every `min_crossings` value from 6 down to 1** — lowering the threshold recovers zero additional good rallies, it only admits `quality:2`/noise (predictions 22→132, precision 0.818→0.182). **`min_crossings=6` is already at ceiling on the metric that matters and needs no change.** The one missed `quality:1` rally traced to a ~9-second stretch with zero detected net crossings mid-rally — a tracking/occlusion gap, not a clustering-threshold problem; no `min_crossings` value could have caught it.
+
+**Consequences.**
+- `PIC-50` (filed under ADR-058's now-superseded framing, "needs a different recall mechanism") should be corrected or closed — the data no longer supports it as scoped. The one real open item is investigating the single tracking gap at 894–905s, a much narrower, lower-priority question.
+- `PIC-51` (checking `dev` for the same label-completeness gap) still stands — that question is independent of this correction.
+- **General methodological point for this project going forward:** presence-pass labels must stay exhaustive and honest (don't curate at label time — `[[feedback_two_layer_labeling]]`), but *evaluation* of anything recall-related should report `quality:1`-specific numbers alongside the blended one, not the blended number alone. A blended recall figure across all labeled points, most of which are `quality:2` filler, is not a reliable guide to whether the pipeline serves the product's actual goal.
 
 ---
 
