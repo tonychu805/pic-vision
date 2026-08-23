@@ -989,6 +989,23 @@ A fixed-time debounce (merging crossings within some short window into one) was 
 
 ---
 
+## ADR-063 — Reel ranking formula locked in: duration + peak crossing rate + spike count, not flat averages
+
+**Date:** 2026-08-23 · **Status:** accepted
+
+**Context.** `TECH_SPEC.md` §7.2's ranking formula (`n_impacts`/`peak_motion`) belonged to the pre-`ADR-046` player-signal design and was never actually implemented against the TrackNet pipeline — every reel built since (`scripts/make_brickwall_tv3_highlight.py`, 2026-08-21) used an ad hoc single-feature score (raw crossing count), which ADR-054 already found structurally favors long kitchen-heavy dink exchanges over a real spread of rally types.
+
+A first attempt this session at a duration-normalized fix (`crossing_rate` + `velocity_spike_rate`, both crossings/spikes ÷ duration, averaged 50/50) tested clean against the ADR-054 problem — the single highest-raw-crossing rally ranked 19th instead of 1st — but introduced the opposite bias: **rate metrics with a small denominator are noisy and skew toward short clips**. Measured directly: duration correlated -0.34 with crossing rate and -0.53 with spike rate across `brickwall-SEMI`'s 31 candidates. A 5-minute reel built on it was real-time-reviewed by the operator and judged fine, but the operator then asked directly to favor genuinely long rallies that also contain a fast/intense moment, rather than reward brevity.
+
+**Decision.** Switched to three signals, live-tuned against `brickwall-SEMI` playback until the operator called the result "genuinely great": `duration` (used directly, not as a denominator), `peak_crossing_rate` (highest crossings/sec in any 3s sliding window inside the segment — a real burst, not diluted by slower stretches elsewhere in a long rally), and `n_spikes` (raw count of top-decile ball speeds in the segment, not a rate — more chances in a longer clip is a feature here, not a bug). Equal weights (1/3 each). Re-measured: duration now correlates **+0.82** with the combined score. Implemented as `src/select.py`'s `rank_segments` (8 new tests, `tests/test_select.py`), wired into `config.yaml`'s `selection.weights`, and `TECH_SPEC.md` §7.2 updated to match (the `n_impacts`/`peak_motion` version marked superseded rather than deleted, for history).
+
+**Consequences.**
+- Raw crossing count remains excluded as a ranking signal, per ADR-054 — this ADR doesn't reopen that, it replaces the flat-rate signals that came after it.
+- **Not yet validated against `quality:1`/`quality:2` hand grades** the way duration, crossing rate, and top-5 velocity were validated as *quality* signals earlier the same day (`EXPERIMENTS.md`, "Rally quality / selection signals"). Those were tested as "does this separate real quality grades"; this formula was tuned by live playback review of one 5-minute reel on one video, a much weaker form of evidence. Running that check is the natural next step before trusting these weights beyond a first pass.
+- Only tested on `brickwall-SEMI` (doubles, tournament-length rallies). Weights may not transfer to a singles/short-rally video (`pb_draft_cup`) without re-checking, the same caution that applies to every other tuned constant in this project (`gap_sec`, `min_crossings`).
+
+---
+
 ## Template
 
 ```markdown

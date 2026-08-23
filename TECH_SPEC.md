@@ -370,13 +370,18 @@ Holds **every** detected rally; `selected` marks the reel. Nothing is discarded,
 
 ### 7.2 Ranking
 
-Deliberately three hand-weighted features already produced by detection — no model, no new labels (ADR-019).
+**Superseded 2026-08-23 (ADR-063) — the features below (`n_impacts`, `peak_motion`) belonged to the pre-`ADR-046` player-signal design and were never produced by the TrackNet pipeline that replaced it.** Current implementation: `src/select.py`'s `rank_segments`, three hand-weighted features already produced by detection — still no model, no new labels, same spirit as the original ADR-019 decision, different feature set:
 
 ```
-score = w_d · norm(duration) + w_i · norm(n_impacts) + w_m · norm(peak_motion)
+score = w_d · norm(duration) + w_p · norm(peak_crossing_rate) + w_s · norm(n_spikes)
 ```
 
-Starting weights `0.4 / 0.4 / 0.2`, fit on `dev-set-B` against the subjective gate. `n_impacts` is expected to carry most of the signal — shot count is a better proxy for a good point than raw duration, which rewards slow dinking exchanges. Raise `w_i` if tuning confirms.
+- `duration` — the segment's raw length. Used directly, not as a rate denominator, so it's rewarded rather than fought.
+- `peak_crossing_rate` — the highest net-crossings/sec in any 3-second sliding window inside the segment, **not** the segment's flat average rate. A flat average was tried first and found to *penalize* long rallies (correlation with duration: -0.53, on `brickwall-SEMI`) — a slower stretch anywhere in a long rally dilutes its average below a short rally's lucky burst. The peak-window version fixes that (correlation +0.82) by asking "was there a fast moment," not "was the whole thing fast."
+- `n_spikes` — count of frame-to-frame ball speeds in the top decile observed anywhere in the source video, within the segment. Raw count, not a rate, so a longer rally gets more chances to earn credit rather than being penalized for length.
+- Raw net-crossing *count* (uncorrected for duration or peak-vs-average) is explicitly excluded — `DECISIONS.md` ADR-054, confirmed by the 2026-08-21 TrackNetV3 reel it produced (over-selected kitchen-heavy dink exchanges).
+
+Starting weights `1/3, 1/3, 1/3` (`config.yaml`'s `selection.weights`), chosen live against `brickwall-SEMI` playback, not yet checked against the `quality:1`/`quality:2` hand grades that exist for the four other scored videos. Revisit if that check turns up a problem.
 
 ### 7.3 Selection — greedy under budget
 
@@ -599,6 +604,7 @@ pic-vision/
 │   ├── calib.py                    # calibration geometry incl. court_wedge
 │   ├── track.py                     # ball tracker (teleport/re-acquisition confirmation)
 │   ├── ball.py                       # crossing_times / cluster_crossings / adaptive_gap_sec
+│   ├── select.py                       # rally ranking for reel selection (§7.2)
 │   ├── drift.py                       # camera-bump/creep detection
 │   ├── players.py                      # player/court-position helpers
 │   ├── events.py                        # motion_series / kitchen_series signals
@@ -613,6 +619,8 @@ pic-vision/
 │   ├── make_review_reel.py            # cut a reel of flagged candidates for playback review
 │   ├── compute_quality_signals.py      # feature extraction, feeds quality_dashboard.py
 │   ├── quality_dashboard.py             # highlight-worthy signal-exploration dashboard
+│   ├── rank_and_reel.py                  # ranks candidates (src/select.py) + cuts a reel
+│   │                                      # in both chronological and rank order
 │   ├── search_margin_px.py               # dev-only margin_px sweep
 │   └── search_wedge_shape.py              # dev-only court_wedge shape sweep
 │

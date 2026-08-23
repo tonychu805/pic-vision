@@ -12,3 +12,11 @@ capture:
 
 output:
   highlight_budget_sec: 600   # <= 10:00, hard budget (PRD §5)
+
+selection:
+  # src/select.py's rank_segments -- (w_duration, w_peak_crossing_rate, w_n_spikes).
+  # Locked 2026-08-23 after a live-tuning session on brickwall-SEMI (TECH_SPEC §7.2,
+  # DECISIONS.md ADR-063). Not yet checked against quality:1/quality:2 hand grades.
+  weights: [0.3333, 0.3333, 0.3333]
+  peak_window_sec: 3.0
+  velocity_spike_percentile: 90
