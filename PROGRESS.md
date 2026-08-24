@@ -4,7 +4,11 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.24 progress overview.md`](./progress/08.24%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.25 progress overview.md`](./progress/08.25%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+
+**Linear cleanup done 2026-08-25:** 6 issues closed, 5 deprioritized to Low, `PIC-27` built (see below) after being upgraded to High. Full detail in the 08.25 progress file — don't re-review the same issues from scratch next session.
+
+**`track_ball` now returns the tracked x, not just y** (`src/track.py`, `return_x=False` opt-in, `PIC-27` closed) — unblocks `PIC-23`'s corner-angle net-line fix and `PIC-48`'s kitchen-double-crossing trajectory-shape check, neither of which is built yet.
 
 **Immediate next step:** full playback review of the five reels built this week (not just frame samples, which is all any of them have had) — `brickwall_mid_atlantic` (corrected: `clips/brickwall_mid_atlantic_reel_5min_fixed/`, not the superseded original), `IMG_7743` (`clips/IMG_7743_reel_5min/`, via the new `scripts/rank_and_reel_split.py` for its bump-split calibration), `brickwall_pro_series_finals` (`clips/brickwall_pro_series_finals_reel_5min/`), and `IMG_7744` (`clips/IMG_7744_reel_5min/`). Also still open: rally 29's unresolved 3-way conflict on `brickwall-SEMI` (`EXPERIMENTS.md`, 2026-08-23).
 
