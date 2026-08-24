@@ -20,7 +20,7 @@ away from being corrected."""
 
 
 def track_ball(frames, max_jump, reset_after=15, min_seg_frames=None,
-               min_seg_span=None):
+               min_seg_span=None, return_x=False):
     """frames: per-frame candidate lists, each [(x, y, conf), ...] (empty if no
     detection). Returns [y or None] per frame — the tracked ball's image-y, with
     teleporting/out-of-play detections dropped. After reset_after consecutive
@@ -37,7 +37,14 @@ def track_ball(frames, max_jump, reset_after=15, min_seg_frames=None,
     own right: a ball resting on the floor (near-zero movement over a long
     stretch) and a sparsely-visible adjacent-court ball (often only a handful
     of confirmed frames before the next gap). Off by default (None) to keep
-    existing behavior unchanged."""
+    existing behavior unchanged.
+
+    return_x: the tracked x was always computed in lockstep with y (same
+    teleport-rejection, post-reset confirmation, and segment pruning), just
+    never returned (PIC-27) -- every caller had to fall back to raw,
+    unconfirmed x from the predictions CSV for anything needing a real 2-D
+    trajectory. Off by default so every existing caller's return shape is
+    unchanged; pass True to get (ys, xs) instead of just ys."""
     out = []
     xout = []          # parallel x-track, used only for segment pruning below
     last = None        # (x, y) of the confirmed tracked ball
@@ -103,7 +110,8 @@ def track_ball(frames, max_jump, reset_after=15, min_seg_frames=None,
 
     if min_seg_frames is not None or min_seg_span is not None:
         out = _prune_weak_segments(out, xout, min_seg_frames, min_seg_span)
-    return out
+        xout = [x if y is not None else None for x, y in zip(xout, out)]
+    return (out, xout) if return_x else out
 
 
 def _prune_weak_segments(ys, xs, min_frames, min_span):
