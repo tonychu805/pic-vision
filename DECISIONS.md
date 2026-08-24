@@ -1006,6 +1006,25 @@ A first attempt this session at a duration-normalized fix (`crossing_rate` + `ve
 
 ---
 
+## ADR-064 — Fix `pod_infer.py`'s single-ratio coordinate scale-back (silently wrong on non-16:9 video)
+
+**Date:** 2026-08-24 · **Status:** accepted
+
+**Context.** `scripts/pod_infer.py` resizes every frame to TrackNet's fixed input shape (512×288, `prep3`) without preserving aspect ratio, then scales predicted coordinates back to source pixels using one ratio, `img1.shape[0] / HEIGHT` (height only), applied to both x and y. That's only correct when the source video is exactly 16:9 (512:288's own ratio) — every video this project had processed before (`brickwall_30fps`: 1280×720, `brickwall_semi`/`IMG_7744`/`pb_draft_cup`: 1920×1080) happens to be exactly 16:9, so the bug was invisible until `brickwall_mid_atlantic` (1280×640, a 2:1 crop) became the first non-16:9 video run through the pipeline. Found by the operator noticing a tracked-ball marker sitting adjacent to, not on, the ball in a diagnostic overlay video — not a targeted bug search.
+
+**Decision.** Use separate `x_ratio`/`y_ratio` (`img1.shape[1]/WIDTH`, `img1.shape[0]/HEIGHT`) for scaling predicted x and y respectively. Also dropped `prep3`'s `ratio` parameter, unused dead code noticed while fixing this, unrelated to the bug itself.
+
+Verified rather than assumed correct: re-ran inference on `brickwall_mid_atlantic` with the fix and measured the actual before/after shift — 11,020 common-frame detections, mean dx 76.5px, max |dx| 142.0px (exact match to the predicted worst-case math), dy exactly 0 throughout, `correlation(old_x, dx) = +1.000` (a pure linear scale error, confirming the diagnosis precisely, not approximately).
+
+**Consequences.**
+- Re-ran detection on the corrected predictions: 51 of 56 candidates identical; the 5 that changed all trace cleanly to a couple of crossings near the `court_wedge`'s x-boundary flipping in/out — one false candidate (that only existed because a bug-inflated crossing hit `min_crossings=6`) disappeared, one real candidate split after losing two crossings that only existed under the bug. Both are the fix correctly exposing something real, not new breakage. Full detail: `EXPERIMENTS.md`, 2026-08-24 "a real coordinate bug" entry.
+- Rebuilt `brickwall_mid_atlantic`'s reel on the corrected data: 10 of 12 clips unchanged, 2 swapped for verified-genuine replacements.
+- **Only affects x-dependent logic** (`court_wedge` gating, any future x-based signal) — net-crossing detection is y-only and was never affected, so this bug did not change *when* rallies were detected on any video to date, only spatial gating precision, and only on non-16:9 source video (none existed before this session).
+- Every prior video's predictions CSV remains valid as-is (their source aspect ratio made the buggy and correct ratios identical). Only re-run inference for a video if it's non-16:9, or if x-precision specifically is being investigated.
+- The bug was found through ordinary use of a diagnostic tool built for an unrelated purpose (visualizing signals), not a dedicated audit — worth remembering as a case for building visual diagnostics even when not specifically hunting for bugs.
+
+---
+
 ## Template
 
 ```markdown

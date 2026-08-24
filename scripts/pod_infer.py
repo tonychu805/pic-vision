@@ -73,7 +73,7 @@ def court_mask(calib, shape, margin_px=80.0):
     return ((xs >= left[:, None]) & (xs <= right[:, None])).astype(np.uint8)
 
 
-def prep3(imgs, ratio):
+def prep3(imgs):
     """Convert 3 BGR frames to (1,9,H,W) float32 numpy array."""
     channels = []
     for img in imgs:
@@ -98,12 +98,21 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     ok, img1 = cap.read()
     ok, img2 = cap.read()
     ok, img3 = cap.read()
-    ratio = img1.shape[0] / HEIGHT
+    # prep3 resizes every frame to a fixed (WIDTH, HEIGHT) without preserving
+    # aspect ratio, so scaling a prediction back to source pixels needs its
+    # own ratio per axis -- a single height-derived ratio applied to both
+    # silently corrupts every x-coordinate on any non-16:9 source (matches
+    # HEIGHT/WIDTH's 288:512 = 16:9 only by coincidence otherwise). Found
+    # 2026-08-24 on a 1280x640 (2:1) video -- every prior video happened to
+    # be exactly 16:9, so this was invisible until now.
+    x_ratio = img1.shape[1] / WIDTH
+    y_ratio = img1.shape[0] / HEIGHT
     mask = court_mask(calib, img1.shape, margin_px) if calib else None
     if mask is not None:
         print(f"court mask: keeping {100 * mask.mean():.0f}% of the frame "
               f"(margin {margin_px:.0f}px)")
-    print(f"Video: {n_frames} frames @ {fps:.1f} fps = {n_frames / fps:.1f}s, ratio={ratio:.2f}")
+    print(f"Video: {n_frames} frames @ {fps:.1f} fps = {n_frames / fps:.1f}s, "
+          f"x_ratio={x_ratio:.2f} y_ratio={y_ratio:.2f}")
 
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -121,7 +130,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
             trio = [img1, img2, img3]
             if mask is not None:
                 trio = [im * mask[:, :, None] for im in trio]
-            unit = prep3(trio, ratio)
+            unit = prep3(trio)
             raw_pred = model.predict(unit, batch_size=1, verbose=0)
             mask_pred = (raw_pred > 0.5).astype(np.float32)
             h_pred = (mask_pred[0] * 255).astype(np.uint8)
@@ -144,11 +153,11 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
                         return float(probs[i][blob_mask.astype(bool)].max())
                     best_c = max(cnts, key=blob_confidence)
                     best = cv2.boundingRect(best_c)
-                    cx = int(ratio * (best[0] + best[2] / 2))
-                    cy = int(ratio * (best[1] + best[3] / 2))
+                    cx = int(x_ratio * (best[0] + best[2] / 2))
+                    cy = int(y_ratio * (best[1] + best[3] / 2))
                     writer.writerow([count, 1, cx, cy,
-                                     round(ratio * best[2], 1),
-                                     round(ratio * best[3], 1),
+                                     round(x_ratio * best[2], 1),
+                                     round(y_ratio * best[3], 1),
                                      round(blob_confidence(best_c), 4)])
                 count += 1
 
