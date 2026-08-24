@@ -621,6 +621,10 @@ pic-vision/
 │   ├── quality_dashboard.py             # highlight-worthy signal-exploration dashboard
 │   ├── rank_and_reel.py                  # ranks candidates (src/select.py) + cuts a reel
 │   │                                      # in both chronological and rank order
+│   ├── rank_and_reel_split.py             # same, for a session whose calibration is only
+│   │                                      # valid in pieces (e.g. IMG_7743's camera bump)
+│   ├── validate_ranking.py                 # checks rank_segments' score against real
+│   │                                      # quality:1/quality:2 grades (§7.2, ADR-063)
 │   ├── search_margin_px.py               # dev-only margin_px sweep
 │   └── search_wedge_shape.py              # dev-only court_wedge shape sweep
 │
