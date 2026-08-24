@@ -33,6 +33,11 @@ and adds a GRADE mode for the highlight-worthy quality pass, `LABELING.md`):
 false-positive anatomy, parameter sweeps) — not part of this core run-a-session flow.
 See `TECH_SPEC.md` §12 for the full repo layout.
 
+Web UI — upload footage, calibrate, and download the finished reel from a browser
+instead of the steps below (same pipeline underneath):
+
+    python3 webapp.py --port 8801
+
 ## Pipeline
 
 The detection pipeline (`src/cut.py` + `src/`) runs via `make process` (see `Makefile`) —

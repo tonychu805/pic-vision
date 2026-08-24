@@ -597,6 +597,14 @@ pic-vision/
 ├── calibrate_web.py           # same, browser-click UI (for SSH/no-display)
 ├── label.py                   # rally interval labeller, local X11
 ├── label_web.py                # same, browser UI + GRADE mode (highlight-worthy pass)
+├── webapp.py                    # web UI launcher: upload -> calibrate -> pipeline -> preview/download
+│
+├── webapp/                     # the web UI (Flask) -- purely additive, CLI tools above unaffected
+│   ├── app.py                     # routes: upload, calibrate, status polling, preview/download
+│   ├── pipeline.py                  # background job orchestration (drift check -> CFR convert ->
+│   │                                  # TrackNet inference -> scripts/rank_and_reel.py's build_reel)
+│   ├── templates/                     # Jinja2 pages (upload/calibrate/status/preview)
+│   └── jobs/                           # runtime per-job data -- gitignored, regenerable
 │
 ├── src/                        # the production pipeline
 │   ├── cut.py                    # entry point: `python3 -m src.cut` (see Makefile)
@@ -620,7 +628,8 @@ pic-vision/
 │   ├── compute_quality_signals.py      # feature extraction, feeds quality_dashboard.py
 │   ├── quality_dashboard.py             # highlight-worthy signal-exploration dashboard
 │   ├── rank_and_reel.py                  # ranks candidates (src/select.py) + cuts a reel
-│   │                                      # in both chronological and rank order
+│   │                                      # in both chronological and rank order; its
+│   │                                      # build_reel() is also called by webapp/pipeline.py
 │   ├── rank_and_reel_split.py             # same, for a session whose calibration is only
 │   │                                      # valid in pieces (e.g. IMG_7743's camera bump)
 │   ├── validate_ranking.py                 # checks rank_segments' score against real

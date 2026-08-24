@@ -5,6 +5,7 @@ ultralytics
 pyyaml
 google-genai
 python-dotenv
+flask
 
 # dev only
 pytest

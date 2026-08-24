@@ -1,0 +1,41 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>reel — {{ job_id }}</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+  .wrap { max-width: 900px; margin: 40px auto; padding: 0 20px; }
+  h1 { font-size: 20px; }
+  video { width: 100%; background: #000; margin-top: 12px; }
+  .stats { color: #999; font-size: 14px; margin-top: 10px; }
+  .links { margin-top: 16px; }
+  a.dl {
+    display: inline-block; margin-right: 16px; padding: 8px 16px; background: #2a6;
+    color: #fff; text-decoration: none; border-radius: 4px;
+  }
+  select { margin-top: 16px; font-size: 14px; }
+</style></head>
+<body>
+<div class="wrap">
+  <h1>Reel ready — {{ job_id }}</h1>
+  <div class="stats">
+    {{ stats.n_candidates }} candidate rallies detected, {{ stats.n_chosen }} selected,
+    ~{{ stats.total_duration_sec|round(0)|int }}s total
+  </div>
+  <label>View:
+    <select id="which" onchange="switchVideo()">
+      <option value="chrono">Chronological</option>
+      <option value="ranked">Best rally first</option>
+    </select>
+  </label>
+  <video id="player" controls src="/job/{{ job_id }}/video/chrono"></video>
+  <div class="links">
+    <a class="dl" href="/job/{{ job_id }}/download/chrono">Download chronological</a>
+    <a class="dl" href="/job/{{ job_id }}/download/ranked">Download ranked</a>
+  </div>
+</div>
+<script>
+function switchVideo() {
+  const which = document.getElementById('which').value;
+  document.getElementById('player').src = '/job/{{ job_id }}/video/' + which;
+}
+</script>
+</body></html>
