@@ -1101,6 +1101,18 @@ All four reels comply with the 600s hard budget. The subjective gate passes clea
 
 ---
 
+## ADR-068 — Correction to ADR-067: `PRD.md`'s numeric targets are provisional, not binding gates; the subjective gate is the real objective, and it has been met
+
+**Date:** 2026-08-26 · **Status:** accepted (same-day correction)
+
+**Context.** ADR-067 treated `PRD.md` §5's numeric targets (recall ≥0.90, FP ≤1.0/10min, boundary error ≤1.0s, wall clock ≤0.5×, utilization ≥0.85) as binding gates and concluded the prototype gate was "not cleanly met" because three of them fail. The operator corrected this directly: `PRD.md` was drafted 2026-07-30, before any real footage had been collected, calibrated, labeled, or scored — its numeric targets are hypothetical placeholders, not measurements calibrated against real data. The actual objective, `PRD.md` §2's own framing, is narrower and more concrete: "is the resulting reel something I actually watch?" — the subjective gate, not the numeric scaffolding underneath it.
+
+**Decision.** Re-read ADR-067's findings under this correction, not re-measured — the numbers stand, the verdict built on them does not. The subjective gate, the actual objective, has been passed, arguably exceeded (4 reels confirmed good by direct playback 2026-08-25, vs. `PRD.md`'s 3-session minimum). ADR-067's numeric findings (FP rate, boundary error, wall clock, utilization all short of target) are retained as real, correctly-measured **diagnostic** signals — they correctly locate a real, understood rough edge (`PIC-33`/`PIC-55` boundary fragmentation) worth fixing — but are not gates the prototype needed to clear. **The prototype's core question, as `PRD.md` §2 states it, is answered: yes.**
+
+**Consequences.** Withdraw ADR-067's "not cleanly met" headline verdict. `PRD.md` §1's stated next step ("a production PRD follows, written with real numbers instead of guesses") is a live decision again, not foreclosed by unmet numeric targets that were never real gates. `PIC-33`/`PIC-55`'s boundary-fragmentation work remains genuinely worth doing — a real, fixable rough edge, and the numbers it would move are useful signals of reel quality even if not gates — but as ordinary next-iteration work, not a blocker on treating the prototype as successful. This correction is itself a durable lesson worth generalizing: a spec document's numbers are not automatically ground truth just because they're written down — check when and against what they were set before treating them as binding.
+
+---
+
 ## Template
 
 ```markdown
