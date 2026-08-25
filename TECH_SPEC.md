@@ -621,6 +621,10 @@ pic-vision/
 ├── scripts/                    # one-off analysis, diagnostics, parameter sweeps --
 │                                # not part of the operator's core run-a-session flow
 │   ├── pod_infer.py               # RunPod TrackNet inference driver
+│   ├── pod_infer_batched.py        # EXPERIMENTAL, REJECTED -- documented negative result
+│   │                                # (ADR-065); not wired into the pipeline
+│   ├── pod_infer_tffunc.py          # EXPERIMENTAL -- verified throughput fix (ADR-065),
+│   │                                # not yet adopted into pod_infer.py or the pipeline
 │   ├── check_drift.py              # camera-drift CLI -- run before calibrating new footage
 │   ├── fp_anatomy.py                # false-positive mechanism classifier + plots
 │   ├── review_gaps.py                # gap-candidate review/merge tool

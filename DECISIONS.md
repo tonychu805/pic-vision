@@ -1023,6 +1023,20 @@ Verified rather than assumed correct: re-ran inference on `brickwall_mid_atlanti
 - Every prior video's predictions CSV remains valid as-is (their source aspect ratio made the buggy and correct ratios identical). Only re-run inference for a video if it's non-16:9, or if x-precision specifically is being investigated.
 - The bug was found through ordinary use of a diagnostic tool built for an unrelated purpose (visualizing signals), not a dedicated audit — worth remembering as a case for building visual diagnostics even when not specifically hunting for bugs.
 
+## ADR-065 — Local GPU inference throughput: the bottleneck is `model.predict()` overhead, not GPU compute or batch size
+
+**Date:** 2026-08-25 · **Status:** accepted (root cause + fix verified; not yet adopted in `pod_infer.py` — pending operator go-ahead per explicit "don't change code yet")
+
+**Context.** The web UI (`PIC-57`) made inference wait time directly visible to a waiting operator for the first time, surfacing a real regression: a 16.3-minute video took 21.4 minutes of TrackNet inference (23fps, slower than the 30fps source) — 2.5× slower than the 58fps benchmark recorded on the same GPU (`EXPERIMENTS.md`, 2026-08-16), continuing a downward drift across several runs in between (58 → 57.3 → 30.6 → 27.3 → 23fps) that had been noted once before as unexplained and not investigated.
+
+**Decision.** The bottleneck is Keras's high-level `model.predict()` API, called once per 3-frame group in a loop — it carries fixed per-call framework overhead (dataset/iterator setup, retracing checks) that doesn't shrink with more data per call, confirmed by profiling (`.predict()` is ~87% of wall time in isolation) and by directly testing the alternative: a `@tf.function`-wrapped direct model call, traced once, recovers the historical throughput (56.7fps unmasked / 36.2fps with court masking, vs. today's 29.2fps / 22.1fps) with byte-identical CSV output. Two other explanations were tested and ruled out first: thermal throttling (GPU stayed 33-46°C, no throttle flags) and GPU clock/power state (correctly boosts to ~2490MHz under load). **Batching (grouping multiple frame-trios into one `.predict()` call) was also tested and rejected** — it made things slower (25.6fps vs. 29.2fps), which is what actually revealed `.predict()` itself as the cost rather than per-call dispatch overhead scaling with call count.
+
+**Consequences.**
+- The fix, when adopted, is small: swap `model.predict(x, batch_size=1)` for a `@tf.function`-wrapped `model(x, training=False)` call in `scripts/pod_infer.py`. No batching, no CPU/GPU pipelining rearchitecture — the bigger fix originally proposed for the (wrong) CPU-bound-preprocessing theory is unnecessary.
+- Verified only on a 20s/603-frame probe clip so far, not a full-length session — a full-length confirmation run is the natural next step before this is trusted for a real reel.
+- Two new standalone scripts exist under `scripts/`, neither wired into `webapp/pipeline.py` or the documented pipeline: `pod_infer_batched.py` (the rejected batching experiment, kept as a documented negative result) and `pod_infer_tffunc.py` (the verified fix, not yet adopted). Full detail and exact numbers: `EXPERIMENTS.md`, 2026-08-25 "local GPU inference throughput regression root-caused" entry.
+- Once adopted, this should also close the loop on the 2026-08-16 note ("30.6 fps vs 58 fps inference speed gap is unexplained") and the similar unexplained-slowdown flag in the `brickwall_pro_series_finals` entry — same mechanism, not a per-video mystery.
+
 ---
 
 ## Template
