@@ -1,8 +1,12 @@
 # STRATEGY — Beyond the Prototype
 
-**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12
+**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12, reconciliation pass 2026-08-26
 
-**Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. If the core detection signal doesn't hold on one mount, most of this is moot. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
+**Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
+
+**Gate status (2026-08-26): the prototype's own gate is cleared** — `DECISIONS.md` ADR-067/ADR-068 confirm the reel-watchability objective (`PRD.md` §2) has been met. So this document is no longer moot pending that result; it's the live next-decision surface `PRD.md` §1 points at.
+
+**Reconciliation caveat (2026-08-26): most of this document below §3 still describes a player-position-tracking product, which was never built.** `ADR-047` (2026-08-13) pivoted the actual, shipped, validated pipeline to **ball-crossing detection** (TrackNet) — player tracking was deferred and remains completely unbuilt (no player boxes, no positions, nothing). §3 already carries its own superseded note; §4/§7/§8 below were not reconciled at the time and are corrected in place below. Read every "player tracking gives you X" claim in this document as a **future capability contingent on building player tracking from scratch**, not a description of, or free byproduct of, the current system.
 
 Companion documents: [`PRD.md`](./PRD.md) · [`TECH_SPEC.md`](./TECH_SPEC.md) · [`DECISIONS.md`](./DECISIONS.md)
 
@@ -51,7 +55,9 @@ Both are exactly what Phase 0.6 now measures explicitly. If player-only markers 
 
 ## 4. Multi-venue architecture (directional)
 
-**Shape:** one universal segmentation model operating in **court-normalized coordinates**, plus **per-venue calibration**. Calibration absorbs each camera's geometry; the model learns the venue-invariant behavior of a rally.
+**Corrected 2026-08-26 for the actual, shipped mechanism (see the reconciliation caveat above).** The paragraph below described a *learned* segmentation model operating on player position — that was never built. What actually exists and is validated: a **fixed arithmetic pipeline** (`court_wedge` gate → `track_ball` → `crossing_times` → `cluster_crossings`, no trained model in the loop at all) operating on **calibrated ball position**, plus **per-venue calibration** (`calib/*.json`, `court_wedge`, `net_line_y`). The calibration-need conclusion below still holds — it's *more* true for a fixed pipeline than a learned one, since there's no learned venue-invariance to fall back on if calibration is off. "Angle generalization" below is a live, partly-answered question now (see the 2026-08-24 side-on note further down) — reframe it as *does the ball-crossing pipeline survive non-baseline angles*, not player segmentation.
+
+**Shape (original, superseded framing — kept for the calibration argument, not the mechanism):** one universal segmentation model operating in **court-normalized coordinates**, plus **per-venue calibration**. Calibration absorbs each camera's geometry; the model learns the venue-invariant behavior of a rally.
 
 **What calibration does *not* normalize** — and therefore what still causes domain shift venue to venue:
 
@@ -66,7 +72,7 @@ So "universal" is honest for court-plane player *positions* and a fiction for ap
 
 **Angle generalization (progressive):** start by *insisting* on the behind-baseline mount. Expand support **one angle category at a time** (behind-baseline → elevated-corner → side-on …) as labeled footage for each category accumulates. "Any angle" is really "enough coverage of the common angle categories." Collecting other-angle footage can begin before support ships — capture now, label later, enable when a category has enough data.
 
-**Open questions:** does player-only segmentation survive non-baseline angles at all? How much labeled data does a new angle category need before it works?
+**Open questions, corrected for the actual mechanism:** does the ball-crossing pipeline survive non-baseline angles at all? **Partly answered** — corner-angle footage in hand confirmed `net_line_y`'s flat-average slope assumption breaks on that angle; a fix is designed (interpolate net height by image-x) but not built, deferred by the operator (`PIC-23`, see the side-on note below for the easier case). How much labeled data does a new angle category need before it works — genuinely still open, and this pipeline needs boundary/quality labels per venue (for `min_crossings`/`gap_sec` tuning), not a training-data volume question the way a learned model would.
 
 **Side-on/courtside note (2026-08-24, business interest flagged, no footage yet):** a courtside-at-midcourt mount is plausibly *easier* to sell into venues than the current behind-baseline one (no equipment behind the baseline in the ball's path, more of a "watching the match" viewer perspective for the eventual product) and, encouragingly, looks like the cheaper of the two non-baseline angles to actually support. The current ball-crossing signal (`src/ball.py`) is hard-coded to a behind-baseline assumption (net-crossing is a comparison against a roughly constant image-*y*); a side-on view rotates that 90° — net-crossing becomes an image-*x* comparison instead, the same math with an axis swap, not the full court-space rewrite an elevated-corner angle would need. Calibration should be unaffected (a courtside view sees the full court outline at least as well as behind-baseline). The real unknown is ball *occlusion*: a side-on view looks at players edge-on rather than face-on, so a player's body sits between the camera and the ball far more often during net exchanges — untested, needs real footage to check before this angle can be trusted, same as any other new angle category above.
 
@@ -126,31 +132,46 @@ Principles that keep the load honest:
 
 Personalized per-court highlights require linking **court → the people who played there**. Use an **opt-in check-in** (QR scan or name selection at session start) or a within-session visual marker — **not** biometric re-identification (consistent with the privacy stance and `DECISIONS.md` ADR-034).
 
-**Free second product surface:** anonymous within-session movement analytics — kitchen-line presence, distance covered, court coverage, partner spacing / stacking — fall out of the *same player tracking*, need *no ball*, and require *no cross-session identity* — so no privacy conflict (the anonymous-vs-cross-session distinction is drawn in `DECISIONS.md` ADR-034; ADR-008 keeps player *tracking itself* out of the prototype, making this a later-stage capability). A movement-analytics product rides the same foundation as highlights.
+**Free second product surface (corrected 2026-08-26 — not actually free yet):** anonymous within-session movement analytics — kitchen-line presence, distance covered, court coverage, partner spacing / stacking — would fall out of player tracking, need no ball, and require no cross-session identity, so no privacy conflict (the anonymous-vs-cross-session distinction is drawn in `DECISIONS.md` ADR-034). **But player tracking itself does not exist in the shipped pipeline** — `ADR-047` deferred it before it was built, not after, so this is a real future capability requiring player detection/tracking built from scratch, not a byproduct that "rides the same foundation as highlights" the way this section originally claimed. The current foundation (ball-crossing) produces zero player-position data today.
 
 ---
 
-## 8. What player-only tracking unlocks — and can't do
+## 8. What player-only tracking would unlock — and can't do (hypothetical; player tracking is not built)
 
-| Capability | Player-only? | Note |
+**Reframed 2026-08-26.** The table below describes a *hypothetical* system built on player tracking, which does not exist — `ADR-047` deferred it before any of it was built. Read every "Yes" below as "buildable if player tracking gets built," not "available today." See the companion table after it for what the actual, shipped system does.
+
+| Capability (if player tracking were built) | Player-only? | Note |
 |---|---|---|
-| Dead-time trimming / highlight reels | Yes | The core product |
-| Kitchen-line presence, court coverage | Yes | Movement analytics |
-| Player workload, distance, sprint speed | Yes | Anonymous, within-session |
-| Partner positioning / stacking patterns | Yes | Reuses position data |
-| Estimated rally duration | Yes (approx.) | Boundary precision is the Phase 1.5 problem |
-| **Automated line calls** | **No** | Needs ball localization — ruled out (`PRD.md` N8) |
+| Dead-time trimming / highlight reels | Yes | Superseded — the actual shipped mechanism is ball-crossing, not player tracking; see below |
+| Kitchen-line presence, court coverage | Yes | Movement analytics — real future work, not built |
+| Player workload, distance, sprint speed | Yes | Anonymous, within-session — real future work, not built |
+| Partner positioning / stacking patterns | Yes | Reuses position data — real future work, not built |
+| Estimated rally duration | Yes (approx.) | Boundary precision is the Phase 1.5 problem either way |
+| **Automated line calls** | **No** | Needs ball localization — ruled out (`PRD.md` N8) regardless of mechanism |
 | **Ball speed / spin** | **No** | Needs ball tracking |
 | **Bounce detection** (kitchen, net tape) | **No** | Needs ball tracking |
 | **Definitive error attribution** | **No** | Needs paddle-contact + ball trajectory |
 
-The "No" rows all require the ball and align with the prototype's non-goals.
+### What the actual shipped system (ball-crossing, no player tracking) does today
+
+| Capability | Ball-crossing pipeline? | Note |
+|---|---|---|
+| Dead-time trimming / highlight reels | **Yes** | The real, validated core product (`PRD.md` §2, ADR-067/068) |
+| Reel ranking (which rallies make the cut) | **Yes** | `src/select.py`, ADR-063 — duration + peak crossing rate + velocity-spike count |
+| Estimated rally duration/boundaries | Yes (approx.) | Boundary precision is the known open item, `PIC-33`/`PIC-55` |
+| Ball speed, as an internal signal | Partial | Frame-to-frame ball speed is already computed for the ranking signal above; not exposed as a product feature, spin not attempted |
+| Kitchen-line presence, distance covered, court coverage | **No** | Needs player tracking — unbuilt, see §7's correction |
+| Player workload, partner positioning/stacking | **No** | Needs player tracking — unbuilt |
+| Paddle-contact / error attribution | **No** | `PIC-42` prototyped paddle detection (Grounding DINO works, unfiltered); contact detection itself unbuilt |
+| Automated line calls, bounce detection | **No** | Same as above table — out of scope regardless of mechanism |
+
+The practical read: **the current system is a highlights-only product.** Everything in §7's "free second product surface" and most of the original table above is real, plausible future work — but it's a from-scratch build on top of what exists, not a byproduct already sitting there.
 
 ---
 
 ## 9. Business model & monetization (directional)
 
-From a business-model exploration (2026-08-10). Distilled here because it's sound thinking, but **gated on the same thing as everything else: the clipper reliably producing good highlights.** As of 2026-08-10 that is not yet proven — see the caveat at the end, which is the most important part of this section.
+From a business-model exploration (2026-08-10). Distilled here because it's sound thinking, but **gated on the same thing as everything else: the clipper reliably producing good highlights.** As of 2026-08-10 that was not yet proven — **as of 2026-08-26 it is (`DECISIONS.md` ADR-067/068)**, so this gate is cleared. The BOM/hardware caveats below are not: they were written assuming the player-tracking edge-compute profile (§3/§8's superseded mechanism), and have not been redone against the actual ball-crossing pipeline's compute cost — treat the $ figures below as unverified for the current mechanism, not just optimistic.
 
 **Shape — B2B2C.** The **venue is the buyer**, the **players are the consumers**. The venue installs the system to make its courts more attractive and command a premium; players pay for keepsake clips.
 
@@ -178,7 +199,7 @@ From a business-model exploration (2026-08-10). Distilled here because it's soun
 
 ## 10. Open questions, priority-ordered
 
-1. **Do player-only markers cleanly separate dinks and courtesy returns at real camera geometry?** — Phase 0.6. Gates everything below.
+1. **~~Do player-only markers cleanly separate dinks and courtesy returns at real camera geometry?~~ Answered, by a different mechanism than this question assumed (2026-08-26).** The project never tested this via player markers — `ADR-047` pivoted to ball-crossing before that mechanism was tried. The underlying concern (can dinks/courtesy-returns be told apart from real rallies) turned out to resolve mostly through **honest labeling**, not detection logic at all: `ADR-060` found `PIC-31`'s "separate real rallies from dead-time junk" problem is almost entirely a labeling-completeness artifact project-wide, not a signal-separation problem. No longer gates anything below.
 2. **Which piece is actually defensible** — the labeled corpus, the ranking model, or neither?
 3. **Does one edge box hold the load** on real footage (the ball / real-time benchmark)?
 4. **Live or batch** for the venue product? (Currently batch.)
