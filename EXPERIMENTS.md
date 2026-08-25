@@ -2176,3 +2176,38 @@ Throughput degrades steadily as batch size grows. **`batch_size=1` is genuinely 
 - **Net: ~1.28 fully-missed rallies per hour of session time**, plus roughly that many again damaged (truncated, not lost) — measured, not modeled.
 
 **Decision (operator): accept this as a known cost of the rolling-chunk architecture, rather than build the overlap-and-dedupe fix now.** The fix itself is well-understood (give each chunk a small overlap margin with its neighbors, de-duplicate matching detections when merging timestamps) but not built — this entry exists so the ~1.28/hour figure doesn't need re-deriving if this direction is picked back up. See `DECISIONS.md` ADR-066.
+
+## 2026-08-25 (later still) — TrackNetV3 vs. k14, corrected: the "doubles/tournament vs. singles" pattern does not survive adversarial review; the real driver is an InpaintNet config mismatch, and matching it makes the pb_draft_cup loss worse, not better
+
+**Context.** The 2026-08-25 PIC-47 update (Linear only — not previously recorded here, a gap this entry corrects along with the numbers themselves) claimed TrackNetV3 "wins decisively on doubles/tournament footage, loses on the one singles video tested," based on three videos: `brickwall_30fps` (win), `brickwall-SEMI` (clean win), `pb_draft_cup` (loss). Put through this project's adversarial-review process (skeptic/red-team/simplifier, per `CLAUDE.md`) given it was feeding a live detector-choice decision. **Result: 0/3 survived — blocked.**
+
+**Finding 1 — `brickwall_30fps`'s numbers were stale.** Scored 2026-08-21 against the video's pre-relabel 35-label set. The 2026-08-23 capstone relabel (ADR-060, above) grew it to 49 labels and moved k14's own number on the identical config from 0.64/0.80 to **0.705/0.633** (line ~1783). TrackNetV3's 0.694/0.971 was never rescored. Rescored now, against the current 49-label set: **TrackNetV3 0.878/0.878** (49 preds, 43 matched). The win survives and widens, but every number previously cited for this row was wrong.
+
+**Finding 2 — the two "doubles wins" are not independent samples.** `brickwall_30fps` and `brickwall_pro_series_finals` are the same recording (`cache/brickwall_30fps_predictions_k14.csv` and `cache/brickwall_pro_series_finals_predictions_k14.csv` are md5-identical), and `brickwall-SEMI` is a different match at the same venue (per the 2026-08-23 entry above). "n=1 per format" understates it — it's n=1 venue on the winning side.
+
+**Finding 3 — the real defect: `pb_draft_cup`'s TrackNetV3 run used a different model configuration than both brickwall runs, not just different footage.** Both brickwall runs were made with InpaintNet on (a second network that fills gaps in the raw TrackNet detections with a predicted trajectory). `pb_draft_cup`'s original run was TrackNet-only. Confirmed by raw per-frame visibility rate, counted directly from each predictions CSV:
+
+| video | config | frames visible |
+|---|---|---|
+| `brickwall_30fps` | TrackNet + InpaintNet | 44,856/45,397 = **98.8%** |
+| `brickwall-SEMI` | TrackNet + InpaintNet | 26,960/27,000 = **99.9%** |
+| `pb_draft_cup` (original PIC-47 run) | TrackNet only | 7,184/18,736 = **38.3%** |
+| `pb_draft_cup` (rerun with InpaintNet, matching brickwall) | TrackNet + InpaintNet | 18,736/18,736 = **100.0%** |
+
+`pb_draft_cup`'s raw (non-inpainted) detection rate is far lower than either brickwall video's — a real, striking difference, but one about the footage's raw detectability (likely camera distance/resolution/lighting), not about singles-vs-doubles as a game format.
+
+**Rescored `pb_draft_cup` with the InpaintNet-matched CSV**, same shipped pipeline (`court_wedge` → `track_ball` → `crossing_times` → `cluster_crossings`, `gap_sec=3.0`, `min_crossings=6`, IoU≥0.5, `scripts/tv3_bench_pb_and_7744.py`'s `score()`, current 34-label set):
+
+| config | precision | recall | n_pred | n_matched |
+|---|---|---|---|---|
+| k14 (shipped) | **0.864** | 0.559 | 22 | 19 |
+| TV3, no InpaintNet (as originally reported) | 0.826 | 0.559 | 23 | 19 |
+| **TV3, WITH InpaintNet (config-matched)** | **0.690** | 0.588 | 29 | 20 |
+
+Matching the config does not overturn "loses on singles" — it makes the loss materially worse (precision 0.864→0.690, a real 17-point drop, for one additional recalled rally). Likely mechanism: on `pb_draft_cup`, InpaintNet is fabricating a plausible trajectory across 62% of frames (vs. filling small gaps in the other two videos' ~99%-complete raw tracks), and much of that fabricated trajectory generates net crossings the real ball never made — `false_pos_per_10min` nearly triples (2.88 → 8.65) with InpaintNet on.
+
+**Finding 4 — the false-positive segment in the original (no-InpaintNet) comparison sits right at the scoring threshold.** Its best IoU match against a real label is 0.494, one hundredth under the project's 0.5 cutoff (`TECH_SPEC.md` §11) — the original 0.826 vs. 0.864 read as a near-tie was itself an artifact of a boundary case, before the config-mismatch finding above made it moot.
+
+**Finding 5 — the one video that could actually separate format from venue was never scored.** `IMG_7744` (casual doubles, a different venue than brickwall) was named as a follow-up in the 2026-08-21 entry above and never produced output — `/mnt/fast_scratch/tv3_work/IMG_7744_pred/` is empty, its run log is 0 bytes. `scripts/tv3_bench_pb_and_7744.py`'s `IMG_7744` row does not currently run (points at a nonexistent file). Not yet fixed — next step, tracked in PIC-47.
+
+**Conclusion.** No format-based pattern is established. What's actually known: TrackNetV3 clearly beats k14 on both brickwall-venue videos (now correctly scored); on `pb_draft_cup`, once run in the same configuration as the brickwall videos, it loses clearly on precision for a marginal recall gain, and the likely reason is a big raw-detectability gap on this specific footage (38% vs ~99%) that InpaintNet papers over by fabricating most of the trajectory — a footage/camera-quality question, not a doubles-vs-singles one. `IMG_7744` is the next real test (see PIC-47) — it's the only video that can separate format from venue, and it's already calibrated and labeled, just never successfully inferred.
