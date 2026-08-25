@@ -1059,6 +1059,48 @@ Verified rather than assumed correct: re-ran inference on `brickwall_mid_atlanti
 
 ---
 
+## ADR-067 — Formal prototype-gate assessment: recall (corrected) and the subjective gate pass; false-positive rate, boundary error, and budget utilization do not
+
+**Date:** 2026-08-26 · **Status:** accepted (measurement record; supersedes the framing in `PRD.md` §5's 2026-08-26 status notes added earlier the same day, which checked only recall and the subjective gate)
+
+**Context.** Asked directly whether `PRD.md`'s prototype gate has been cleared. Earlier the same day, `PRD.md` §5 was given status notes covering only the two criteria already known to look good (quality-split recall, the subjective playback gate) — an incomplete check, not a formal gate assessment. This entry is the complete one: every metric in `PRD.md` §5, checked against real current numbers, not just the ones already believed to pass.
+
+**Method.** Ran the shipped k14 config (`court_wedge`, `gap_sec=3.0`, `min_crossings=6`, IoU≥0.5) through `eval.harness.detection_metrics` against current honest labels on all 5 labeled video/segments — `IMG_7743` postbump (`eval`, locked), `brickwall_30fps`, `pb_draft_cup`, `IMG_7744`, `brickwall-SEMI`. Separately read the four already-built reels' `manifest.json` files for the Selection targets, and used the confirmed post-`ADR-065` wall-clock number from the operator's real full session (`EXPERIMENTS.md`, 2026-08-25).
+
+**Results.**
+
+| Metric | Target | `IMG_7743`(eval) | `brickwall_30fps` | `pb_draft_cup` | `IMG_7744` | `brickwall-SEMI` |
+|---|---|---|---|---|---|---|
+| Recall (all labels, PRD's literal metric) | ≥0.90 | 0.340 | 0.633 | 0.559 | 0.187 | 0.605 |
+| Recall (`quality:1`, the corrected standard, ADR-059/060) | — | 0.80 (4/5) | 0.923 (12/13) | 0.700 (7/10) | 0.667 (2/3) | ungraded |
+| FP / 10min | ≤1.0 | 2.11 | 5.15 | 2.88 | 2.57 | 5.33 |
+| Boundary error (median) | ≤1.0s | 1.43s | 1.42s | 1.62s | 1.21s | 1.47s |
+
+Wall clock: **0.83×** (13.5 min inference / 16.34 min source, operator's real full session, local GPU, post-`ADR-065`), against a ≤0.5× target.
+
+| Reel (`clips/*/manifest.json`) | Rally count ≥12 | Utilization vs. PRD's 600s budget (≥0.85) | Utilization vs. the 300s the reel script actually defaults to |
+|---|---|---|---|
+| `IMG_7743_reel_5min` | 17 ✓ | 0.33 | 0.66 |
+| `IMG_7744_reel_5min` | 23 ✓ | 0.26 | 0.53 |
+| `brickwall_pro_series_finals_reel_5min` | 8 ✗ | 0.41 | 0.82 |
+| `brickwall_mid_atlantic_reel_5min_fixed` | 12 ✓ | 0.38 | 0.76 |
+
+All four reels comply with the 600s hard budget. The subjective gate passes cleanly, arguably exceeded (4 reels confirmed good by direct playback 2026-08-25, vs. `PRD.md`'s 3-session/2-of-3 minimum).
+
+**Read — not all failures are equally meaningful.**
+
+1. **Recall-all "failing" is not new news.** Already corrected: `quality:1` is the right standard (ADR-059/060), and scored that way recall is genuinely solid and flat everywhere (0.67–0.92). A target-definition fix already made, not an open gap.
+2. **FP rate and boundary error are real, open, and already understood — this just puts a number on a known problem.** ADR-060 found 16/18 checked "false positives" are boundary fragments on real rallies (IoU 0.18–0.47), not hallucinated junk. Both metrics trace to the same two still-open, unfixed items: `gap_sec`-clustering fragmentation (`PIC-33`) and the `LABELING.md` v4 intentional start lead-in the eval harness doesn't account for (`PIC-55`). `PROGRESS.md` already carried the qualitative note ("boundary precision, not detection correctness") — this is the first time it's been checked against PRD's actual numeric bar, and it doesn't clear it.
+3. **Budget utilization is a real, previously-unexamined gap.** Even scored against the 300s the reel script actually targets — not PRD's stated 600s — 3 of 4 reels land at 0.53–0.82, still short of ≥0.85. Not diagnosed: could be overly conservative selection, or a real ceiling on available `quality:1` material in some sessions. New open item, not previously checked.
+4. **A small, previously-undocumented discrepancy:** `scripts/rank_and_reel.py --target-sec` defaults to 300s, not `PRD.md`'s stated 600s "hard budget." Every reel built so far used the 300s default; whether the intended reel length is 5 or 10 minutes has never been explicitly decided.
+5. **Wall clock, even after `ADR-065`'s major fix (23fps → 36fps), is 0.83× — not ≤0.5×.** Measured on local GPU only; `PRD.md` G4 names RunPod GPU as the actual production platform, unmeasured against this bar.
+
+**Decision.** The prototype gate is **not cleanly met**. The two bars that matter most for `PRD.md` §2's original question — does the pipeline find the highlight-worthy rallies, and is the resulting reel something worth watching — are both genuinely solid. But three of `PRD.md`'s own explicit numeric targets (FP rate, boundary error, budget utilization) fail consistently across every scored video, and wall clock fails on the one platform measured. None of this is a surprise discovery about detection quality — `PIC-31`/detector-tuning work is already known (ADR-060) not to be the lever here.
+
+**Consequences.** Do not declare the prototype gate formally passed on this evidence — correcting the framing in `PRD.md` §5's earlier-same-day status notes, which checked only the two passing criteria. The concrete path to actually closing the gate is narrower than continuing detector work: (1) `PIC-33`/`PIC-55`'s boundary-fragmentation fix, which would plausibly move both FP-rate and boundary-error into range — the single highest-leverage remaining item; (2) explicitly decide the real target reel length (5 vs. 10 minutes) and diagnose whether utilization is a selection-tuning problem or a content-availability ceiling; (3) get one real wall-clock number on the actual RunPod production path. Recommend this list as the next deliberate technical direction, ahead of the trained-classifier question (`PIC-46`/`PIC-42`).
+
+---
+
 ## Template
 
 ```markdown
