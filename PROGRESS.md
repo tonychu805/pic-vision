@@ -4,7 +4,11 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.25 progress overview.md`](./progress/08.25%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.26 progress overview.md`](./progress/08.26%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+
+**`PIC-47` (TrackNetV3) is now answered, not open.** On the evidence gathered across three videos, TrackNetV3 with InpaintNet is not a detector worth shipping in place of k14 — it loses on both non-brickwall videos on the metric that matters (`quality:1` recall), because InpaintNet fabricates trajectory on low-raw-detectability footage in a way that generates net crossings not tied to real rallies. Recommended closing the issue as "evaluated, not adopted." The one open, narrower, untested question if this gets revisited: TrackNetV3's raw TrackNet component *without* InpaintNet vs. k14 — not the same claim as the original issue.
+
+**`PRD.md`/`CHECKLIST.md` reconciled with reality, 2026-08-26.** Both documents previously read as though the project was failing its own success bar; that was stale. `PRD.md` §5 now carries dated status notes: the real recall standard is `quality:1` (highlight-worthy) recall, not recall against every label (per `DECISIONS.md` ADR-059/060), and it's solid across all four scored videos. The subjective "would I watch this" gate has also effectively been passed — four reels confirmed good by direct playback on 2026-08-25. **Not decided:** whether to formally declare the prototype gate met and move to a production PRD, per `PRD.md` §1's own stated next step. That's flagged, not made, in the doc updates — it's the operator's call.
 
 **Linear cleanup done 2026-08-25:** 6 issues closed, 5 deprioritized to Low, `PIC-27` built (see below) after being upgraded to High. Full detail in the 08.25 progress file — don't re-review the same issues from scratch next session.
 

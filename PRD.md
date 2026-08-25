@@ -95,6 +95,8 @@ The only user is Tony. These are the modes.
 
 **Detection is measured before selection, never on the 10-minute reel.** Otherwise "dropped to fit the budget" is indistinguishable from "failed to detect," and recall stops meaning anything.
 
+**Status update (2026-08-26).** Scored literally as written above — recall against *every* labeled rally, including trivial single-point exchanges — current numbers miss this target badly (e.g. `IMG_7743`'s eval-set recall is 0.34 against its full 53-label set). That is not evidence the pipeline is failing: `DECISIONS.md` ADR-059 found this exact target was measuring the wrong thing, because the product goal is a highlight reel, not a complete inventory of every point. Scored instead against `quality:1` (highlight-worthy) rallies only — the standard the project settled on after the 2026-08-23 exhaustive relabel of all four scored videos (ADR-060) — recall is flat and solid regardless of `min_crossings`: brickwall 12/13, `pb_draft_cup` 7/10, `IMG_7743` 4/5, `IMG_7744` 2/3 (roughly 0.67–0.92, no exceptions). Whether to formally replace the target above with a quality-split one, or keep this as a documented deviation, is an open decision for whoever owns this doc — not made here.
+
 ### Selection targets — measured on the reel
 
 | Metric | Target |
@@ -111,6 +113,10 @@ Budget compliance is a bug class, not a target to approach. A run that exceeds i
 Every metric above can pass on a reel that's dull to watch. So: **watch `highlights.mp4` from three different sessions and answer "would I have watched this voluntarily?"** Two of three yes, or the ranker gets reworked regardless of the numbers.
 
 This is deliberately unrigorous — it's a prototype and the sample size is one. Formalizing it is the first thing a production PRD should address.
+
+**Status update (2026-08-26).** This gate has effectively been exercised: on 2026-08-25 the operator watched four scored videos' reels directly at playback speed (`brickwall_mid_atlantic`, `IMG_7743`, `brickwall_pro_series_finals`, `IMG_7744`) and confirmed them good ("the reels produced are great") — more than the three-session minimum above, and a clear yes rather than a mixed result. It wasn't run through the literal per-session protocol (an explicit yes/no recorded per session), but the question the protocol exists to answer — is this something I'd actually watch — has a real, positive answer now. See `progress/08.25 progress overview.md`.
+
+**Taken together, the detection-target and subjective-gate updates above mean the question this section exists to answer — has the prototype cleared its own bar — is closer to yes than this document currently states.** Whether to formally declare the prototype gate met and move to §1's stated next step ("a production PRD follows, written with real numbers instead of guesses") is a real decision this document hasn't recorded — flagged here, not decided here.
 
 ### Anti-metrics — do not optimize
 

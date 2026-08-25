@@ -216,6 +216,8 @@ Precision (0.29) is also well short of a usable product, but it responded strong
 
 ## PRD §5 metric targets vs current measured values
 
+**This table is a frozen 2026-08-16 snapshot, not current status** — per this file's own top-of-file note, it was never updated past the original Phase 0/1 gates. Recall in particular reads far worse here than the project's actual current state: the 0.61 below predates the 2026-08-19/23 relabeling work, the `quality:1`-vs-all-labels metric correction (`DECISIONS.md` ADR-059/060), and the subjective playback confirmation on four reels (2026-08-25). See `PRD.md` §5's own 2026-08-26 status updates for the current picture, not this table.
+
 Measured on the 33-label IMG_7743 benchmark, IoU≥0.3, shipped config (`court_wedge` gate, `min_crossings=6`) — `EXPERIMENTS.md` 2026-08-16.
 
 | Metric | Target | Measured | Source |
