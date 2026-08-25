@@ -2132,3 +2132,33 @@ Asked to build reels for both, "without checking the timestamp" (skip re-calibra
 **Conclusion.** The GPU was never the bottleneck, and neither was batch size — the entire regression traces to one line (`model.predict(...)` vs. a compiled direct call). See `DECISIONS.md` ADR-065.
 
 **Not done:** `pod_infer_tffunc.py` is not wired into `webapp/pipeline.py` or documented as the primary path anywhere — both scripts (`_batched.py`, the rejected experiment, and `_tffunc.py`, the verified fix) are standalone/uncommitted-to-production per explicit operator instruction ("don't change code yet"). Also not done: testing whether the same `.predict()`-vs-`tf.function` gap holds on a full-length (2-hour) video rather than a 20s probe clip — the probe was deliberately short for fast iteration; a full-length confirmation run would be the natural next step before adopting this for real.
+
+## 2026-08-25 (later) — full-length confirmation, two follow-up optimizations tested, fix adopted
+
+**Full-length confirmation, closing the item left open above.** Ran `pod_infer_tffunc.py` on the exact video that surfaced the regression (the operator's real session, `webapp/jobs/20260825-014141-de005c/video_cfr.mp4`, 29,418 frames / 980.6s) instead of the 20s probe clip. **13.5 min at 36.3fps** (vs. the original 21.4 min / 23fps) — matches the probe-clip projection almost exactly. Output diffed against the original production `predictions.csv`: **byte-identical**, all 29,418 rows.
+
+**Follow-up #1: does batching help now that `.predict()`'s overhead is gone?** The original batching test used `.predict()`, whose own overhead was large enough to mask whatever batching's real effect would have been. Re-tested with `tf.function` in place, same probe clip, `batch_size` 1/4/8/16/32:
+
+| batch_size | fps |
+|---|---|
+| 1 | 56.5 |
+| 4 | 55.1 |
+| 8 | 49.4 |
+| 16 | 39.4 |
+| 32 | 38.4 |
+
+Throughput degrades steadily as batch size grows. **`batch_size=1` is genuinely optimal for this model on this GPU** — not an artifact of the previously-removed overhead. Settles the batching question definitively; no further exploration warranted.
+
+**Follow-up #2: mask after resize instead of before (tested, rejected).** Court masking currently zeroes out the full-resolution frame (e.g. 1920×1080) before resizing down to the model's 512×288 input — three full-res element-wise multiplies per iteration, a real cost (36.2fps masked vs. 56.7fps unmasked). Tried masking the already-resized (small) frame instead, using a mask itself resized down once via `cv2.resize(..., INTER_NEAREST)`. Speed: **56.5fps**, nearly closing the entire masking gap. **Correctness: failed.** Diffed the full 603-frame probe-clip CSV against the current (mask-before-resize) output:
+
+| column | rows differing |
+|---|---|
+| Visibility | 1 |
+| X | 5 (max \|dx\| = 1184px) |
+| Y | 7 (max \|dy\| = 441px) |
+| W / H | 5 / 7 |
+| Conf | 123 (max \|dConf\| = 0.500) |
+
+124/603 frames (~20%) differ overall, and not by rounding noise — several are large position swings or a flipped detection. Root cause: resizing the *raw, unmasked* frame first blends real background content (whatever's just outside the true court boundary — wall, adjacent court) into pixels that end up "inside" after downsampling, before the mask (itself separately and more coarsely resized) ever gets applied — a thin ring of leaked background survives right at the edge. In the ~80% of frames where nothing salient sits near that ring, output matches; where something does, the contour-picking logic can grab the leaked clutter instead of the real ball. This is exactly the failure mode `court_mask` exists to prevent (2026-08-16 entry above). Not a bug to fix — a structural property of resizing before masking at all, since resize is a blending operation and mask is a hard cutoff; the two don't commute at the boundary. Mask-before-resize (the current, shipped order) stays as-is.
+
+**Fix adopted.** Merged the `tf.function` change directly into `scripts/pod_infer.py` (kept `pod_infer_batched.py` as an archived negative result, deleted the now-redundant `pod_infer_tffunc.py` once its logic was merged). Re-verified post-merge on both the probe clip (36.0fps) and the full production video (13.6 min / 36.2fps, byte-identical to the original CSV) — confirms the merge itself introduced no regression. `webapp/pipeline.py` needed no change, since it already invokes `pod_infer.py` by path. Full test suite green (130 passed). See `DECISIONS.md` ADR-065 for the durable conclusion.

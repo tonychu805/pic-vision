@@ -91,6 +91,17 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
         compile=False,
     )
 
+    # Call the model directly via a compiled tf.function instead of Keras's
+    # high-level model.predict() -- .predict() carries fixed per-call
+    # framework overhead (dataset/iterator setup, retracing checks) that
+    # dominated wall time here (~87% in isolated profiling) and doesn't
+    # shrink with batch size. This alone recovers the project's original
+    # 58fps benchmark; batching was tried and made things worse, not better
+    # (see DECISIONS.md ADR-065).
+    @tf.function
+    def infer(x):
+        return model(x, training=False)
+
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
     n_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
@@ -114,6 +125,16 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     print(f"Video: {n_frames} frames @ {fps:.1f} fps = {n_frames / fps:.1f}s, "
           f"x_ratio={x_ratio:.2f} y_ratio={y_ratio:.2f}")
 
+    # Trace the tf.function once, outside the timed loop below -- the first
+    # call to a @tf.function compiles a graph for that input shape, a
+    # one-time cost a real run shouldn't pay per-frame. Uses the already-read
+    # first trio (mirroring exactly what the loop's first iteration does) so
+    # no frame is skipped or read twice.
+    warm_trio = [img1, img2, img3]
+    if mask is not None:
+        warm_trio = [im * mask[:, :, None] for im in warm_trio]
+    _ = infer(tf.constant(prep3(warm_trio))).numpy()
+
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
         # W,H,Conf are new (2026-08-16): the blob's size and peak probability
@@ -131,7 +152,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
             if mask is not None:
                 trio = [im * mask[:, :, None] for im in trio]
             unit = prep3(trio)
-            raw_pred = model.predict(unit, batch_size=1, verbose=0)
+            raw_pred = infer(tf.constant(unit)).numpy()
             mask_pred = (raw_pred > 0.5).astype(np.float32)
             h_pred = (mask_pred[0] * 255).astype(np.uint8)
             probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred

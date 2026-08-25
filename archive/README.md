@@ -1,8 +1,8 @@
 # Archive — retired code and process
 
-Retired code and process kept for reference, not maintained. Three groups so
-far: the YOLO ball-detection pipeline, one superseded calibration tool, and
-one abandoned workflow template.
+Retired code and process kept for reference, not maintained. Four groups so
+far: the YOLO ball-detection pipeline, one superseded calibration tool, one
+abandoned workflow template, and one rejected performance experiment.
 
 ## YOLO ball-detection pipeline
 
@@ -51,3 +51,19 @@ pipelines use them unchanged.
   first-look pass; for this project's own footage, direct playback review has
   been the actual method used throughout (see `CLAUDE.md`'s "Verifying a
   root-cause claim" section).
+
+## Rejected performance experiment
+
+- `pod_infer_batched.py` — moved here 2026-08-25 (`DECISIONS.md` ADR-065).
+  Investigating a real inference-throughput regression (23fps vs. a
+  documented 58fps benchmark on the same GPU), a live probe suggested the
+  GPU was idle waiting on CPU-bound per-frame preprocessing. This script
+  tested the fix that theory implied — batch multiple frame-trios into one
+  `model.predict()` call — and made things *slower*, not faster, which
+  correctly disproved the theory rather than confirming it. The real cause
+  (Keras's `.predict()` API itself carries fixed per-call overhead
+  independent of batch size) was found afterward and fixed directly in
+  `scripts/pod_infer.py` (a `tf.function`-wrapped direct model call). Kept
+  as a documented negative result — re-batching this call has already been
+  tried and shown not to help, twice (once with `.predict()`, once with
+  `tf.function` — see `EXPERIMENTS.md` 2026-08-25).
