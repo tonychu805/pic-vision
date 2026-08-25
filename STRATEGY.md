@@ -96,6 +96,8 @@ So "universal" is honest for court-plane player *positions* and a fiction for ap
 
 **Cost shape:** local = low, linear per-court hardware + a **fleet-operations burden** (monitoring, updates, remote debugging across venues). Cloud = low hardware but a recurring GPU bill plus the data-processing/privacy relationship the privacy stance exists to avoid. Batch + privacy + single-camera all point local/on-device.
 
+**Option B, made concrete (2026-08-25, exploratory): a rolling 10-minute-chunk variant.** Instead of only player-only detection running during the game, analyze each 10-min capture segment (the same segments already produced for crash-safety, `§1.2` in `TECH_SPEC.md`) as it lands, aggregate detected timestamps across chunks, cut the final reel from the full-res recording afterward — keeps the GPU busy through the session instead of idle-then-burst. Real cost, measured against labels rather than estimated: **~1.28 real rallies/hour fully missed at chunk boundaries** (plus a similar rate truncated, not lost), because a rally straddling a boundary is invisible to `crossing_times`/`cluster_crossings` running independently on each side. **Operator's call: accept this cost rather than build overlap/dedupe handling now** — see `DECISIONS.md` ADR-066 for the fix (well-scoped, not built) and `EXPERIMENTS.md` for the measurement. This variant also depends on `ADR-065`'s inference-throughput fix more than a single-batch-per-session design would: every chunk pays its own detector-invocation setup cost, so it was only cheap to consider at all once that fix landed (~1.7s/chunk vs. the pre-fix ~4-7 min/chunk).
+
 ---
 
 ## 6. Annotation as the core activity

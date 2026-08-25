@@ -1041,6 +1041,24 @@ Verified rather than assumed correct: re-ran inference on `brickwall_mid_atlanti
 
 ---
 
+## ADR-066 — Rolling 10-min-chunk cloud architecture: accept chunk-boundary rally loss (~1.28/hour) rather than build overlap handling now
+
+**Date:** 2026-08-25 · **Status:** accepted (directional, post-prototype — same status as the `STRATEGY.md` §5 architecture it refines; not built)
+
+**Context.** Exploring `STRATEGY.md` §5's "Option B, rolling delivery" concretely: analyze each 10-minute capture segment (reusing the same segments `TECH_SPEC.md` §1.2 already produces for crash-safety) as it lands during recording, instead of batching the whole session after capture finishes — keeps the GPU busy throughout the session rather than idle for ~2 hours then bursting all the work at the end. This makes each chunk its own independent detector invocation, with no visibility into neighboring chunks.
+
+**The risk.** `crossing_times`/`cluster_crossings` needs `min_crossings=6` within one continuous window. A real rally whose crossings straddle a chunk boundary gets split across two unaware detector runs — best case, truncated to a fragment; worst case, both halves fall under `min_crossings=6` and the rally is never detected at all.
+
+**Decision.** Measured the actual cost against real labels rather than estimate it (291 rallies, 6 videos, 2.34 hours, `EXPERIMENTS.md` same date): **2.13 rallies/hour straddle a 10-min boundary; of those, 1.28/hour are full misses** (both halves under `min_crossings=6`), the rest survive as truncated fragments. **Operator accepted this as a known cost of the architecture rather than building the overlap-and-dedupe fix now** (give each chunk a small overlap margin with its neighbors, de-duplicate matching detections when merging timestamps across chunks — the fix is well-understood, just not built).
+
+**Consequences.**
+- If this architecture is picked up for real, ~1 real rally will be fully missed roughly every 45 minutes of session time, plus a comparable rate of truncated (not lost, but incomplete) rallies — a real, non-zero cost, not a rounding error, but small relative to the throughput benefit motivating the architecture (continuous GPU utilization vs. idle-then-burst).
+- The overlap/dedupe fix remains available and well-scoped if this cost turns out to matter more in practice than expected here — this ADR is what to revisit, not re-derive, if that happens.
+- This decision is specific to the 10-minute chunk size. A different chunk size would change both rates (`EXPERIMENTS.md`'s method reproduces easily for a different `CHUNK` value if that's ever reconsidered).
+- Directly reinforced by `ADR-065`: this architecture pays the per-invocation detector setup cost once per chunk, not once per session — the `tf.function` fix (setup cost ~1.7s vs. the pre-fix ~4-7 min) is what makes a 10-minute chunk size viable at all without the setup overhead itself dominating.
+
+---
+
 ## Template
 
 ```markdown
