@@ -26,8 +26,16 @@ import tarfile
 import tempfile
 import time
 
+from dotenv import load_dotenv
+
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
+
+# Same pattern as src/verify.py -- without this, RUNPOD_API_KEY and the
+# CLOUDFLARE_R2_* vars are only visible if the caller manually sourced .env
+# into the shell first, which is exactly the crash a real run hit
+# (KeyError: 'CLOUDFLARE_R2_ACCOUNT_ID') before this was added.
+load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 from src.drift import find_bumps, drift_span
 from scripts.check_drift import measure as drift_measure
@@ -185,7 +193,12 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
         pod_r2("download", calib_key, "/workspace/calib.json")
         pod_r2("download", WEIGHTS_R2_KEY, "/workspace/weights.tar")
         runpod_pod.ssh_run(ip, port, keyfile,
-                            "cd /workspace && tar -xf weights.tar", timeout_sec=120)
+                            # --no-same-owner: the tarball preserves this machine's
+                            # uid/gid (confirmed 2026-08-26 -- without this flag, tar
+                            # tries to chown to that uid on the pod and fails outright
+                            # as "Operation not permitted" running as root there).
+                            "cd /workspace && tar -xf weights.tar --no-same-owner",
+                            timeout_sec=120)
 
         _log("running TrackNet inference on the pod...")
         infer_cmd = (

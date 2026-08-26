@@ -90,17 +90,30 @@ connectivity testing); override with `CLOUD_PIPELINE_BUCKET`.
 
 ## Status (2026-08-26)
 
-**Built, not yet run end-to-end with real GPU inference.** What's confirmed
-working, on real infrastructure, as of today:
+**Setup path measured end-to-end for real; the actual inference call itself
+still isn't.** Confirmed working, on real infrastructure:
 - R2 upload/download from both a local machine and a real RunPod pod
   (`DECISIONS.md` ADR-043 update).
-- RunPod pod creation, SSH access, command execution (same session).
+- RunPod pod creation, SSH access, command execution.
+- Calibration (`ensure_calibration()`), tested live end-to-end.
+- The full setup sequence, timed on a real pod: pod → SSH-ready **13.1s**,
+  `pip install tensorflow[and-cuda]==2.15.1` + deps **66.5s**, weights
+  download (130MB) **5.2s**, untar **1.4s** — **~86s total**, not the
+  "several minutes" this doc originally guessed. Weights upload to R2
+  (one-time, cached after) **29.5s**.
 
-**Not yet tested:** installing TF2.15 fresh on a pod and running real
-TrackNet inference through `pod_infer.py` there — this is the one step that
-combines everything above and hasn't been exercised live. Expect the first
-real run to spend several extra minutes on the TF2.15 install (no way around
-it without a custom pre-built image, which doesn't exist yet).
+Two real bugs found and fixed doing this measurement, not hypothetically:
+the weights tarball preserved this machine's uid/gid, and extracting it as
+root on a fresh pod failed outright (`tar: ... Operation not permitted`) --
+fixed with `--no-same-owner`. And `run_cloud_job.py` never loaded `.env`, so
+a real invocation would crash with `KeyError` unless the caller manually
+sourced it first -- fixed to match `src/verify.py`'s existing `load_dotenv()`
+pattern.
+
+**Not yet tested: the actual `pod_infer.py` inference call on a pod** — the
+one piece that combines a real video with the now-confirmed environment.
+Everything upstream of it (get a working TF2.15+GPU environment ready on a
+fresh pod, in under 90 seconds) is now measured, not assumed.
 
 ## Usage
 
