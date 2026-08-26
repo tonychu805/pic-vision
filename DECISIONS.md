@@ -711,7 +711,11 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 | Tied to RunPod infra/region | Yes — specific datacenters, RunPod pricing (~$0.07/GB/month) | No — independent Cloudflare account |
 | Covers output/delivery too (highlight → end user) | No — Network Volumes only exist inside RunPod | Yes — same account, same zero-egress pricing, unifies input and output storage |
 
-R2 is the more architecturally attractive of the two for this project specifically, since it solves both legs (proxy in, highlight out) from one account instead of splitting storage between RunPod's Network Volume and a separate delivery bucket (`ADR-043`'s original plan used plain S3 for that leg). Not yet built or tested either way — this note exists so the next attempt starts from the real, now fully-checked mechanism instead of re-discovering (or re-mis-discovering) it a third time.
+R2 is the more architecturally attractive of the two for this project specifically, since it solves both legs (proxy in, highlight out) from one account instead of splitting storage between RunPod's Network Volume and a separate delivery bucket (`ADR-043`'s original plan used plain S3 for that leg).
+
+**Tested end-to-end, 2026-08-26: R2-via-boto3 works.** `boto3` `list_buckets`/`put_object`/`get_object` all succeeded against a real R2 bucket (`test-ingest-runpod`) with real credentials — not simulated. One real, previously-undocumented gotcha found in the process: **Cloudflare does not provision the account's S3-compatible endpoint (`https://<ACCOUNT_ID>.r2.cloudflarestorage.com`) until at least one bucket exists in the account.** With zero buckets, the endpoint fails at the TLS handshake stage — before credentials are even checked, so it looks like a broken account/credential/network problem rather than what it is. Confirmed by direct A/B: identical connection attempt failed consistently (TLS 1.2, TLS 1.3, with/without ALPN, `curl` and raw `openssl s_client` all failed identically) before a bucket existed, and succeeded immediately once one did. Worth remembering — this will look like a mysterious connectivity failure to anyone setting up R2 fresh.
+
+**Not yet tested:** the other half of the real path — a RunPod pod/worker pulling a file from R2 (as opposed to this test, which ran from the local dev machine). Same mechanism, same credentials, should work identically, but not confirmed on RunPod's actual network yet.
 
 ---
 
