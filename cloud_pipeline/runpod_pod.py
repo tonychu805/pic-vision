@@ -17,12 +17,19 @@ import requests
 
 API_BASE = "https://rest.runpod.io/v1"
 DEFAULT_IMAGE = "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04"
-# Consumer cards with wide availability; tried in order until one succeeds.
+# Matches the local workstation's GPU on purpose (operator's call, 2026-08-26):
+# every prior optimization in this project (ADR-064, ADR-065) was verified
+# "byte-identical output" on the SAME GPU -- that guarantee doesn't
+# automatically extend across different GPU architectures (different cuDNN
+# kernel/algorithm selection, floating-point non-associativity), and that
+# question has never been checked. Pinning to the identical card sidesteps
+# it entirely instead of needing to verify it. No fallback list -- a
+# fallback would silently trade this guarantee away exactly when it's least
+# visible (a busy capacity night), so this fails loudly instead if
+# unavailable. GPU type ID confirmed valid + available 2026-08-26
+# ($0.24/hr) via a real (immediately terminated) pod creation.
 DEFAULT_GPU_TYPES = [
-    "NVIDIA GeForce RTX 4090",
-    "NVIDIA GeForce RTX 3090",
-    "NVIDIA RTX A4000",
-    "NVIDIA GeForce RTX 3080",
+    "NVIDIA RTX 2000 Ada Generation",
 ]
 
 
@@ -32,9 +39,15 @@ def _headers():
 
 def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
                 container_disk_gb=20):
-    """Create a pod, retrying across GPU types since community-cloud capacity
-    fluctuates (confirmed 2026-08-26: a specific type can 500 with "no
-    instances available" while another succeeds immediately)."""
+    """Create a pod. Tries each GPU type in gpu_type_ids (default:
+    DEFAULT_GPU_TYPES, currently just the RTX 2000 Ada match to local) in
+    order until one succeeds -- retrying across *multiple* types was useful
+    when the default list had several interchangeable options (confirmed
+    2026-08-26: a specific type can 500 with "no instances available" while
+    another succeeds immediately), but with a single pinned type there's
+    nothing to fall back to; pass an explicit gpu_type_ids list to restore
+    that behavior for a call site that doesn't need the same-as-local
+    guarantee."""
     body = {
         "name": name,
         "imageName": image,

@@ -35,10 +35,19 @@ So "isolated from the local pipeline" means, specifically:
   exists). Reached directly, same mechanism validated in `DECISIONS.md`
   ADR-043's update — no RunPod-R2 platform integration exists or is needed.
 - `runpod_pod.py` — RunPod pod lifecycle (create, wait for SSH, run commands,
-  transfer files, terminate) via the REST API + plain `ssh`/`scp`. Retries
-  across a few GPU types on creation, since community-cloud capacity
-  fluctuates (confirmed 2026-08-26 — a CPU-only pod spec failed repeatedly
-  on availability while a GPU pod succeeded immediately).
+  transfer files, terminate) via the REST API + plain `ssh`/`scp`. GPU type
+  is **pinned to `NVIDIA RTX 2000 Ada Generation`** — the same card as the
+  local route's workstation (operator's call, 2026-08-26), deliberately with
+  no fallback to other types: every prior inference optimization in this
+  project was verified "byte-identical output" on the *same* GPU, and
+  whether that holds across different GPU architectures (different cuDNN
+  kernel selection, floating-point non-associativity) has never been
+  checked. Pinning sidesteps that open question rather than needing to
+  verify it. The earlier design retried across a few consumer GPU types for
+  availability (confirmed 2026-08-26 — a CPU-only pod spec failed repeatedly
+  while a GPU pod succeeded immediately); that fallback still exists in
+  `create_pod()` for a caller that passes its own `gpu_type_ids` list, just
+  not as the default anymore.
 - `run_cloud_job.py` — the orchestrator. Mirrors `webapp/pipeline.py`'s
   `run_job` structure: local drift check → local CFR conversion → **upload to
   R2 → RunPod pod runs `pod_infer.py` → results back via R2** → local
