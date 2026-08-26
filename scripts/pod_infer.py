@@ -14,6 +14,8 @@ Model: TNV2_old_weights.h5 must be at /workspace/TNV2_old_weights.h5.
 import argparse
 import csv
 import os
+import queue
+import threading
 import time
 
 os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
@@ -147,11 +149,42 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
         count = 0
         t0 = time.time()
 
-        while ok:
-            trio = [img1, img2, img3]
-            if mask is not None:
-                trio = [im * mask[:, :, None] for im in trio]
-            unit = prep3(trio)
+        # Decode+preprocess (cv2.resize + numpy reshape, CPU-bound, ~53ms/trio
+        # measured on a RunPod pod) and GPU inference (~38ms/trio) were
+        # previously fully serial despite being independent work -- the GPU
+        # sat idle during every resize, and the CPU sat idle during every GPU
+        # call. A background thread decodes+preprocesses the *next* trio
+        # while the main thread runs inference on the *current* one, so the
+        # two costs overlap instead of stack (root-caused via
+        # scripts/profile_pod_infer.py, DECISIONS.md ADR-043). This changes
+        # only *when* the CPU work happens, not what it computes or the order
+        # frames are read/written in -- output is unaffected.
+        frame_q = queue.Queue(maxsize=3)
+        producer_error = []
+
+        def produce():
+            nonlocal ok, img1, img2, img3
+            try:
+                while ok:
+                    trio = [img1, img2, img3]
+                    if mask is not None:
+                        trio = [im * mask[:, :, None] for im in trio]
+                    frame_q.put(prep3(trio))
+                    ok, img1 = cap.read()
+                    ok, img2 = cap.read()
+                    ok, img3 = cap.read()
+            except Exception as e:
+                producer_error.append(e)
+            finally:
+                frame_q.put(None)
+
+        producer = threading.Thread(target=produce, daemon=True)
+        producer.start()
+
+        while True:
+            unit = frame_q.get()
+            if unit is None:
+                break
             raw_pred = infer(tf.constant(unit)).numpy()
             mask_pred = (raw_pred > 0.5).astype(np.float32)
             h_pred = (mask_pred[0] * 255).astype(np.uint8)
@@ -188,9 +221,9 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
                 eta = (n_frames - count) / rate
                 print(f"  {count}/{n_frames}  {rate:.0f} fps  ETA {eta / 60:.1f} min", flush=True)
 
-            ok, img1 = cap.read()
-            ok, img2 = cap.read()
-            ok, img3 = cap.read()
+        producer.join()
+        if producer_error:
+            raise producer_error[0]
 
         cap.release()
         elapsed = time.time() - t0

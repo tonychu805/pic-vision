@@ -164,9 +164,33 @@ small fraction of the loop on both — the earlier "likely network/disk I/O"
 guess was wrong. **The entire gap is single-threaded CPU preprocessing**
 (`prep3()`'s `cv2.resize` + numpy reshape) running ~43% slower per call on
 the pod's shared/virtualized cores despite the pod having far more vCPUs (48
-vs. local's 16) — vCPU count doesn't help a single-threaded stage. Not fixed
-yet; the mechanism points at parallelizing or GPU-offloading `prep3()` as the
-lever, not chasing GPU/network causes.
+vs. local's 16) — vCPU count doesn't help a single-threaded stage.
+
+**Fixed same day.** `scripts/pod_infer.py` now decodes+preprocesses the next
+trio on a background thread while the main thread runs GPU inference on the
+current one, so the two costs overlap instead of stacking serially — pure
+scheduling change, verified byte-identical CSV output against the pre-change
+version (both locally and on a real pod, including the non-multiple-of-3
+tail-frame case). **Real measured result: 29.4fps → 74.8fps on a real pod**
+(local also improved, 36.4→66.8fps). A 10-min/18,000-frame chunk now takes
+~4 min of inference instead of ~10.2 min — comfortably inside the 600s
+chunk budget even before the ~86s pod-setup tax is addressed.
+
+**Still open: the ~86s per-job pod-setup tax** (13.1s boot + 66.5s
+`pip install tensorflow[and-cuda]` + 5.2s weights download + 1.4s untar),
+paid on every job since `run_cloud_job.py` creates and tears down a fresh
+pod each time. Considered three shapes for the rolling-10-min-chunk
+production architecture (`ADR-066`): pod-per-job (today — safest/most
+isolated, but pays the tax every chunk), pod-per-session (amortizes the tax
+across a session's back-to-back chunks, but needs session-lifecycle/watchdog
+logic this project has never built or tested for multi-hour GPU-memory
+stability), and pod-per-day (rejected — realistic booking gaps between
+separate sessions mean paying for idle GPU-hours with no benefit over
+per-session, plus a wider crash blast radius). Leaning toward a **pre-baked
+pod image** with TF2.15+deps already installed instead: keeps per-job
+isolation, cuts the ~86s down to roughly boot-time-only, no new
+lifecycle/watchdog surface. Not yet built — needs Docker + a container
+registry, unconfirmed as available in this environment.
 
 ## Usage
 
