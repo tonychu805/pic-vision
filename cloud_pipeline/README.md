@@ -153,10 +153,20 @@ One real, measured number worth being honest about: **pod inference ran at
 29.4fps (wall-clock ratio ~1.02×, essentially real-time)** — 9000 frames in
 5.1 min for 5 min of source footage. That's slower than the local RTX 2000
 Ada's measured 36.2fps for the same masked config (`ADR-065`) despite being
-the same GPU model pinned specifically for consistency — likely network/disk
-I/O overhead on the pod, not a GPU difference, but not yet root-caused.
-Neither number clears `PRD.md`'s ≤0.5× wall-clock target; this cloud path is
-currently *slower* than the already-short-of-target local path, not faster.
+the same GPU model pinned specifically for consistency. Neither number clears
+`PRD.md`'s ≤0.5× wall-clock target; this cloud path is currently *slower*
+than the already-short-of-target local path, not faster.
+
+**Root-caused same day** (`scripts/profile_pod_infer.py`, `DECISIONS.md`
+ADR-043 final update): GPU inference time is essentially identical on pod vs.
+local (confirms the GPU pin works as intended), and decode/disk I/O is a
+small fraction of the loop on both — the earlier "likely network/disk I/O"
+guess was wrong. **The entire gap is single-threaded CPU preprocessing**
+(`prep3()`'s `cv2.resize` + numpy reshape) running ~43% slower per call on
+the pod's shared/virtualized cores despite the pod having far more vCPUs (48
+vs. local's 16) — vCPU count doesn't help a single-threaded stage. Not fixed
+yet; the mechanism points at parallelizing or GPU-offloading `prep3()` as the
+lever, not chasing GPU/network causes.
 
 ## Usage
 

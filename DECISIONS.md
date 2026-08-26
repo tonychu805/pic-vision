@@ -723,6 +723,17 @@ R2 is the more architecturally attractive of the two for this project specifical
 
 One real, measured number worth recording honestly: **pod inference ran at 29.4fps, wall-clock ratio ~1.02× (essentially real-time)** — slower than the local RTX 2000 Ada's measured 36.2fps for the same masked config (`ADR-065`), despite being pinned to the identical GPU model specifically for consistency. Likely network/disk I/O overhead on the pod, not a GPU difference — not yet root-caused. Neither the local nor the cloud route currently clears `PRD.md`'s ≤0.5× wall-clock target; the cloud route is currently the slower of the two, not faster.
 
+**Root-caused, 2026-08-26 (same day): it's the CPU-side preprocessing, not the GPU and not I/O.** Built a stage-by-stage profiler (`scripts/profile_pod_infer.py`) that times each of decode / preprocess (`cv2.resize` + numpy reshape) / GPU inference / postprocess (contour-finding) separately, over an identical 300-trio budget, run once locally and once on a real freshly-created pod (same GPU type, same weights, same calibration, same clip). Result:
+
+| stage | local (ms/trio) | pod (ms/trio) | delta |
+|---|---|---|---|
+| decode | 5.53 | 3.33 | pod faster |
+| preprocess | 37.25 | 53.29 | **pod +43% slower** |
+| GPU infer | 38.28 | 37.76 | ~identical (−1.4%) |
+| postprocess | 0.80 | 0.41 | pod faster |
+
+Overall: local 36.6fps, pod 31.6fps on this run (close to the original 29.4fps; some run-to-run variance expected at n=300). **The earlier "likely network/disk I/O" guess was wrong** — decode is a small fraction of the loop on both sides (3–7%) and isn't the bottleneck either way. **GPU inference time is essentially identical**, which is exactly what pinning the pod to the same GPU model (`runpod_pod.py`'s `DEFAULT_GPU_TYPES`) was for — confirms that guarantee holds, not just in theory. The entire gap is in single-threaded CPU preprocessing being slower per-call on the pod, despite the pod nominally having far more vCPUs (48 vs. the local workstation's 16 — `nproc`/`free -h` queried live on the pod). vCPU *count* doesn't help here because `prep3()` runs on one core; what matters is per-core throughput, and RunPod's shared/virtualized hosts give a weaker single-core than a dedicated local workstation. Not investigated further (SIMD/AVX build flags in the `opencv-python-headless` pip wheel vs. local's install, specific host CPU model) — the mechanism is already clear enough to act on if the gap needs closing: the fix, if pursued, is parallelizing or GPU-offloading `prep3()`'s per-frame resize (real headroom exists — the pod's 47 idle vCPUs and the GPU's own idle time between calls), not chasing GPU/network explanations that this measurement rules out. Not pursued today — recorded so the wrong guess doesn't get re-derived.
+
 ---
 
 ## ADR-044 — CoreML export of yolov8x at imgsz=1280 for Apple Neural Engine inference
