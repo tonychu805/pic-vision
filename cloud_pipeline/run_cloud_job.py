@@ -24,7 +24,6 @@ import subprocess
 import sys
 import tarfile
 import tempfile
-import time
 
 from dotenv import load_dotenv
 
@@ -49,7 +48,6 @@ WEIGHTS_LOCAL = "/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 POD_INFER_SCRIPT = os.path.join(REPO_ROOT, "scripts", "pod_infer.py")
 POD_R2_HELPER = os.path.join(REPO_ROOT, "cloud_pipeline", "pod_r2_helper.py")
-CALIBRATE_WEB_SCRIPT = os.path.join(REPO_ROOT, "calibrate_web.py")
 
 # Same TF 2.15 pin as the local environment (EXPERIMENTS.md 2026-08-16) --
 # the last Keras-2 release, needed to load this project's TF2.11-era
@@ -80,55 +78,26 @@ def ensure_weights_in_r2():
     _log("weights uploaded to R2")
 
 
-def ensure_calibration(video_path, calib_path, at_sec=60.0, port=8765, poll_sec=2.0):
-    """Closes the gap this route had vs. webapp/app.py: that one collects
-    calibration in-browser per job; this one, until now, just required a
-    calib.json to already exist. Reuses calibrate_web.py -- the existing
-    standalone browser-click tool, already independent of webapp/, so this
-    doesn't reintroduce the coupling the isolation design avoided.
+def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir):
+    # Calibration is a one-time, per-venue setup step, not part of this
+    # per-session job -- see cloud_pipeline/setup_venue_calibration.py.
+    # Corrected 2026-08-26: an earlier version launched calibrate_web.py
+    # automatically right here, which conflated a once-per-venue event (the
+    # camera physically moving is the only reason to redo it, ADR-049) with
+    # the per-session job lifecycle (run every time new footage comes in).
+    if not os.path.exists(calib_path):
+        raise SystemExit(
+            f"no calibration at {calib_path}. This is a one-time setup step, "
+            f"not something run_cloud_job.py does per job -- run it once "
+            f"with:\n"
+            f"  python3 -m cloud_pipeline.setup_venue_calibration "
+            f"--video <a recording from this venue> --out {calib_path}\n"
+            f"then reuse that same path for every future session here.")
 
-    calibrate_web.py blocks forever (server.serve_forever()) and expects a
-    human to Ctrl+C once they see "saved ..." -- there's no clean exit signal
-    to wait on. So this launches it as a subprocess and polls for calib_path
-    to appear instead, then terminates it -- the operator still does the
-    actual clicking, but the orchestrator no longer needs a second manual
-    step run separately beforehand.
-    """
-    if os.path.exists(calib_path):
-        _log(f"calibration already exists at {calib_path}, skipping")
-        return
-
-    _log("no calibration found -- launching calibrate_web.py")
-    proc = subprocess.Popen(
-        [sys.executable, CALIBRATE_WEB_SCRIPT, video_path,
-         "--at", str(at_sec), "--out", calib_path, "--port", str(port)])
-    _log(f"open http://<this-machine>:{port}/ in a browser, click the 12 court "
-         f"points + 2 net-tape points, then Save")
-    _log("waiting for calibration to be saved...")
-    try:
-        while not os.path.exists(calib_path):
-            if proc.poll() is not None:
-                raise RuntimeError(
-                    "calibrate_web.py exited before a calibration was saved "
-                    f"(exit code {proc.returncode})")
-            time.sleep(poll_sec)
-    finally:
-        proc.terminate()
-        try:
-            proc.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            proc.kill()
-    _log(f"calibration saved to {calib_path}")
-
-
-def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
-                   calib_at_sec=60.0, calib_port=8765):
     os.makedirs(out_dir, exist_ok=True)
     cfr_video = os.path.join(out_dir, "video_cfr.mp4")
     csv_path = os.path.join(out_dir, "predictions.csv")
     reel_dir = os.path.join(out_dir, "reel")
-
-    ensure_calibration(video_path, calib_path, at_sec=calib_at_sec, port=calib_port)
 
     # --- Local, GPU-free steps: identical logic to webapp/pipeline.py's
     # drift check and CFR conversion (same functions, same recipe) ---
@@ -227,21 +196,16 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
 def main():
     p = argparse.ArgumentParser(description="Run a session through the cloud (R2 + RunPod) path")
     p.add_argument("--video", required=True)
-    p.add_argument("--calib", default=None,
-                   help="path to calib.json -- reused if it already exists; "
-                        "otherwise calibrate_web.py is launched to create it "
-                        "there (default: <out-dir>/calib.json)")
-    p.add_argument("--calib-at", type=float, default=60.0,
-                   help="seconds into the video to grab the calibration frame from")
-    p.add_argument("--calib-port", type=int, default=8765)
+    p.add_argument("--calib", required=True,
+                   help="path to an existing calib.json for this venue -- "
+                        "produced once via cloud_pipeline.setup_venue_calibration, "
+                        "then reused for every session at that venue. Not "
+                        "generated by this script.")
     p.add_argument("--target-sec", type=float, default=300.0)
     p.add_argument("--session-id", required=True)
     p.add_argument("--out-dir", required=True)
     args = p.parse_args()
-    calib_path = args.calib or os.path.join(args.out_dir, "calib.json")
-    os.makedirs(args.out_dir, exist_ok=True)
-    run_cloud_job(args.video, calib_path, args.target_sec, args.session_id, args.out_dir,
-                  calib_at_sec=args.calib_at, calib_port=args.calib_port)
+    run_cloud_job(args.video, args.calib, args.target_sec, args.session_id, args.out_dir)
 
 
 if __name__ == "__main__":

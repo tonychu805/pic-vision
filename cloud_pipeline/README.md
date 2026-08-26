@@ -56,31 +56,46 @@ So "isolated from the local pipeline" means, specifically:
   standalone script (not an inline `python3 -c` one-liner over SSH, which
   gets fragile fast with nested shell/Python quoting) for the pod's R2
   download/upload calls.
+- `setup_venue_calibration.py` — the *only* place calibration logic lives now
+  (see below). Not imported by `run_cloud_job.py` at all.
 
 ## Calibration
 
-Closed 2026-08-26, tested live (not just imported): `run_cloud_job.py` now calls
-`ensure_calibration()` first. If `--calib`'s path already has a file, it's reused
-as-is. If not, it launches `calibrate_web.py` — the existing standalone
-browser-click tool, already independent of `webapp/`, so reusing it doesn't
-reintroduce the coupling the isolation design avoided — and polls for the file
-to appear rather than waiting for the process to exit (`calibrate_web.py`
-blocks forever on `serve_forever()`; there's no clean exit signal to wait on
-otherwise). Once the operator clicks the 12 court points + 2 net points and
-hits Save in the browser, the file appears, the subprocess is terminated, and
-the job continues automatically.
+**Corrected 2026-08-26 (twice, same day).** First pass added
+`ensure_calibration()` to `run_cloud_job.py`, auto-launching
+`calibrate_web.py` on every job missing a `calib.json`. That was an
+architectural mistake, caught by the operator: calibration is a **one-time,
+per-venue** event — it only needs to change if the camera physically moves
+(`DECISIONS.md` ADR-049) — not something tied to the per-*session* job
+lifecycle. Auto-triggering it inside `run_cloud_job()` conflated the two.
 
-`--calib` is no longer required — it defaults to `<out-dir>/calib.json`.
-`--calib-at` (default 60s) picks which frame to calibrate from; `--calib-port`
-(default 8765) which port the browser server listens on.
+**Fixed by removing it from `run_cloud_job.py` entirely** and moving it to
+its own standalone script, `setup_venue_calibration.py`. Run it once, when a
+venue's camera is first mounted:
 
-Verified directly: launched `ensure_calibration()` against a real video,
-confirmed the server actually came up (`GET /` → 200), POSTed the same
-save payload a real browser click would send, confirmed a real `calib.json`
-was written (RMSE 0.345ft, a real value, not a stub), confirmed the polling
-loop detected it and terminated the subprocess (port stopped responding
-afterward), and confirmed the already-calibrated path returns immediately
-without launching anything.
+```
+python3 -m cloud_pipeline.setup_venue_calibration \
+  --video first-session-from-this-venue.mp4 \
+  --out venues/my-venue/calib.json
+```
+
+It launches `calibrate_web.py` (the existing standalone browser-click tool,
+still independent of `webapp/`) and waits for the save — same mechanism as
+before, just relocated — then refuses to run again if the target path
+already has a file (`SystemExit`, not a silent skip), since re-running this
+per session would be exactly the mistake being corrected.
+
+`run_cloud_job.py` now has **zero calibration logic**. `--calib` is required
+again and must point at an already-existing file; if it doesn't exist,
+`run_cloud_job()` raises `SystemExit` with the exact command to fix it,
+rather than trying to handle it inline. Both failure modes verified live
+(missing file → the exact expected error message; already-exists guard on
+the setup script → the exact expected error message).
+
+**Not addressed here, out of scope for this fix:** `webapp/app.py`'s local
+route still collects calibration fresh, in-browser, *per job* — unchanged,
+and arguably has the same "should this really run every session" question,
+just not one raised or touched today.
 
 ## Prerequisites
 
@@ -104,7 +119,8 @@ still isn't.** Confirmed working, on real infrastructure:
 - R2 upload/download from both a local machine and a real RunPod pod
   (`DECISIONS.md` ADR-043 update).
 - RunPod pod creation, SSH access, command execution.
-- Calibration (`ensure_calibration()`), tested live end-to-end.
+- Calibration setup (`setup_venue_calibration.py`), tested live end-to-end,
+  now correctly scoped as a one-time per-venue step, not a per-job one.
 - The full setup sequence, timed on a real pod: pod → SSH-ready **13.1s**,
   `pip install tensorflow[and-cuda]==2.15.1` + deps **66.5s**, weights
   download (130MB) **5.2s**, untar **1.4s** — **~86s total**, not the
@@ -126,14 +142,20 @@ fresh pod, in under 90 seconds) is now measured, not assumed.
 
 ## Usage
 
+Once per venue, the first time (see Calibration above):
+
+```
+python3 -m cloud_pipeline.setup_venue_calibration \
+  --video first-session.mp4 --out venues/my-venue/calib.json
+```
+
+Then, per session, reusing that same calibration file every time:
+
 ```
 python3 -m cloud_pipeline.run_cloud_job \
   --video path/to/session.mp4 \
+  --calib venues/my-venue/calib.json \
   --target-sec 300 \
   --session-id my-session \
   --out-dir cloud_pipeline/jobs/my-session
 ```
-
-If `cloud_pipeline/jobs/my-session/calib.json` doesn't exist yet, this will
-print a URL, wait for you to calibrate in a browser, then continue on its own.
-Pass `--calib path/to/existing.json` to reuse one instead.

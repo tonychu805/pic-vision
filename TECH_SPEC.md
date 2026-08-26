@@ -615,6 +615,8 @@ pic-vision/
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2
 │   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
 │   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
+│   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
+│   │                                    # run_cloud_job.py has no calibration logic of its own)
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
 ├── src/                        # the production pipeline
