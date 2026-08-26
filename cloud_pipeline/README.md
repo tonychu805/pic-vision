@@ -188,21 +188,27 @@ stability), and pod-per-day (rejected — realistic booking gaps between
 separate sessions mean paying for idle GPU-hours with no benefit over
 per-session, plus a wider crash blast radius).
 
-**Tried the pre-baked pod image, and it lost — measured, not assumed.** Built
+**Tried the pre-baked pod image — cold start lost, but caching won on repeat use.** Built
 `cloud_pipeline/Dockerfile` (base image + `boto3`, `opencv-python-headless`,
 `tensorflow[and-cuda]==2.15.1` pre-installed, matching `POD_SETUP_CMD`
 exactly), pushed it to Docker Hub (`tonychu805/pic-vision-tracknet:tf215-cuda118`).
 Turned out **17.7GB total, with a 4.76GB new layer** on top of the base
 image (`tensorflow[and-cuda]`'s bundled NVIDIA CUDA runtime wheels are the
-bulk of it) — much larger than expected. Created a real fresh pod from it
-and timed pod-create → ready-to-run: **113.4s**, worse than the ~79.6s
-baseline (13.1s boot + 66.5s install) it was meant to replace — a cold pull
-of a large, rarely-used custom image costs more than the pip install did.
-**Reverted the plan; `DEFAULT_IMAGE` was never switched.** The image stays
-pushed but unused. A leaner base (a non-`devel` runtime image, or trimming
-what gets installed) might change this, but that's a new attempt, not
-assumed to work — the honest state is pod-per-job with the plain
-`pip install` tax, unresolved.
+bulk of it) — much larger than expected.
+
+First pod (cold): pod-create → ready-to-run **113.4s**, worse than the
+~79.6s baseline (13.1s boot + 66.5s install). Read initially as a loss.
+**Then tested 5 more pods, ~20s apart over ~10-15 minutes: 70.1s, 20.4s,
+39.5s, 75.9s, 57.7s — average ~52.7s, a real ~34% win over baseline**, every
+one faster than the cold run. The image caches somewhere in RunPod's pool
+after the first pull and later pod creations benefit — not a one-off lucky
+host match, it held across 5 separate creations.
+
+**Still open, not yet switched:** whether that caching survives the longer
+gaps a real production system would have between jobs (hours, not the ~15
+minutes these tests spanned) is untested. `DEFAULT_IMAGE` stays on the
+generic base until that's checked. Treat neither the 113.4s nor the ~53s
+average as the final word on their own.
 
 ## Usage
 
