@@ -48,6 +48,14 @@ So "isolated from the local pipeline" means, specifically:
   gets fragile fast with nested shell/Python quoting) for the pod's R2
   download/upload calls.
 
+## Calibration — not symmetric with the local route
+
+`run_cloud_job.py` takes `--calib` as a **required, pre-existing file path** — unlike
+`webapp/app.py`, it has no calibration UI of its own. Produce `calib.json` first via
+`calibrate.py`/`calibrate_web.py` (the standalone CLI tools), or reuse one already
+produced by a `webapp/` job. This is a real gap, not an oversight to route around
+silently — a browser-based calibration step for this path doesn't exist yet.
+
 ## Prerequisites
 
 `.env` (gitignored, repo root) needs:
