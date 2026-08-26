@@ -48,13 +48,30 @@ So "isolated from the local pipeline" means, specifically:
   gets fragile fast with nested shell/Python quoting) for the pod's R2
   download/upload calls.
 
-## Calibration — not symmetric with the local route
+## Calibration
 
-`run_cloud_job.py` takes `--calib` as a **required, pre-existing file path** — unlike
-`webapp/app.py`, it has no calibration UI of its own. Produce `calib.json` first via
-`calibrate.py`/`calibrate_web.py` (the standalone CLI tools), or reuse one already
-produced by a `webapp/` job. This is a real gap, not an oversight to route around
-silently — a browser-based calibration step for this path doesn't exist yet.
+Closed 2026-08-26, tested live (not just imported): `run_cloud_job.py` now calls
+`ensure_calibration()` first. If `--calib`'s path already has a file, it's reused
+as-is. If not, it launches `calibrate_web.py` — the existing standalone
+browser-click tool, already independent of `webapp/`, so reusing it doesn't
+reintroduce the coupling the isolation design avoided — and polls for the file
+to appear rather than waiting for the process to exit (`calibrate_web.py`
+blocks forever on `serve_forever()`; there's no clean exit signal to wait on
+otherwise). Once the operator clicks the 12 court points + 2 net points and
+hits Save in the browser, the file appears, the subprocess is terminated, and
+the job continues automatically.
+
+`--calib` is no longer required — it defaults to `<out-dir>/calib.json`.
+`--calib-at` (default 60s) picks which frame to calibrate from; `--calib-port`
+(default 8765) which port the browser server listens on.
+
+Verified directly: launched `ensure_calibration()` against a real video,
+confirmed the server actually came up (`GET /` → 200), POSTed the same
+save payload a real browser click would send, confirmed a real `calib.json`
+was written (RMSE 0.345ft, a real value, not a stub), confirmed the polling
+loop detected it and terminated the subprocess (port stopped responding
+afterward), and confirmed the already-calibrated path returns immediately
+without launching anything.
 
 ## Prerequisites
 
@@ -90,8 +107,11 @@ it without a custom pre-built image, which doesn't exist yet).
 ```
 python3 -m cloud_pipeline.run_cloud_job \
   --video path/to/session.mp4 \
-  --calib path/to/calib.json \
   --target-sec 300 \
   --session-id my-session \
   --out-dir cloud_pipeline/jobs/my-session
 ```
+
+If `cloud_pipeline/jobs/my-session/calib.json` doesn't exist yet, this will
+print a URL, wait for you to calibrate in a browser, then continue on its own.
+Pass `--calib path/to/existing.json` to reuse one instead.
