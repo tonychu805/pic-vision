@@ -186,11 +186,23 @@ across a session's back-to-back chunks, but needs session-lifecycle/watchdog
 logic this project has never built or tested for multi-hour GPU-memory
 stability), and pod-per-day (rejected — realistic booking gaps between
 separate sessions mean paying for idle GPU-hours with no benefit over
-per-session, plus a wider crash blast radius). Leaning toward a **pre-baked
-pod image** with TF2.15+deps already installed instead: keeps per-job
-isolation, cuts the ~86s down to roughly boot-time-only, no new
-lifecycle/watchdog surface. Not yet built — needs Docker + a container
-registry, unconfirmed as available in this environment.
+per-session, plus a wider crash blast radius).
+
+**Tried the pre-baked pod image, and it lost — measured, not assumed.** Built
+`cloud_pipeline/Dockerfile` (base image + `boto3`, `opencv-python-headless`,
+`tensorflow[and-cuda]==2.15.1` pre-installed, matching `POD_SETUP_CMD`
+exactly), pushed it to Docker Hub (`tonychu805/pic-vision-tracknet:tf215-cuda118`).
+Turned out **17.7GB total, with a 4.76GB new layer** on top of the base
+image (`tensorflow[and-cuda]`'s bundled NVIDIA CUDA runtime wheels are the
+bulk of it) — much larger than expected. Created a real fresh pod from it
+and timed pod-create → ready-to-run: **113.4s**, worse than the ~79.6s
+baseline (13.1s boot + 66.5s install) it was meant to replace — a cold pull
+of a large, rarely-used custom image costs more than the pip install did.
+**Reverted the plan; `DEFAULT_IMAGE` was never switched.** The image stays
+pushed but unused. A leaner base (a non-`devel` runtime image, or trimming
+what gets installed) might change this, but that's a new attempt, not
+assumed to work — the honest state is pod-per-job with the plain
+`pip install` tax, unresolved.
 
 ## Usage
 
