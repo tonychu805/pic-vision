@@ -511,6 +511,8 @@ N100:
 
 The **proxy video trick** (ADR-043): upload 720p for detection (~90 MB/hr) instead of full-res (~750 MB/hr) — 8× upload reduction while keeping ball detectable. All cutting happens from the locally-held full-res copy.
 
+**Correction (2026-08-26 — `DECISIONS.md` ADR-043 update):** the "upload proxy only" arrow above (N100 → RunPod serverless direct) doesn't fit RunPod's real payload limits — 10MB (`/run`) / 20MB (`/runsync`) against a ~90MB/hr proxy, checked against RunPod's own docs, not assumed. Needs a storage hop (S3-compatible, e.g. Cloudflare R2 — unconfirmed compatibility) between N100 and RunPod for anything but the smallest chunks; not yet built.
+
 **Alternative: all-local on Jetson Orin / Mac mini**
 
 ```

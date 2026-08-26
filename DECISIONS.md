@@ -696,6 +696,10 @@ The **proxy video trick** is the key: send 720p for detection instead of full-re
 
 **Consequences.** Raw footage never leaves the building (privacy preserved). Key risk: measure venue upstream bandwidth before committing — at 2 Mbps required upload, a 50 Mbps venue link supports ~25 courts in parallel. RunPod cost ≈ $0.011/session at prototype scale. For the current POC, the MacBook with CoreML (ADR-044) is used; N100+cloud is the production direction. Ties to ADR-012, ADR-024, ADR-013.
 
+**Update (2026-08-26): the direct-upload-to-serverless mechanism above doesn't fit RunPod's real, documented limits — this was written in 2026-08-12 without checking the API constraints it depends on.** RunPod Serverless caps request payloads at **10MB for `/run` (async) and 20MB for `/runsync` (sync)** (RunPod docs: `serverless/endpoints/operation-reference`, `serverless/workers/handler-functions`, checked 2026-08-26). The ~90MB/60min proxy figure above is 4.5–9× over both limits — a direct single-payload upload of an hour's proxy was never going to work as specified, independent of whether delivery is batch or chunked (`ADR-066`). Even a single 10-minute rolling chunk at the same proxy bitrate (~15MB) is marginal — over `/run`'s limit, under `/runsync`'s — not a safe assumption without testing.
+
+**The fix is RunPod's own documented workaround, not an architecture preference: land the proxy in S3-compatible object storage first, and pass the worker a reference instead of the file itself.** Cloudflare R2 is a plausible fit (S3-API-compatible, no egress fees, relevant since chunks get pulled out repeatedly) but its compatibility with RunPod's S3 integration is unconfirmed — RunPod's docs name MinIO, Backblaze B2, and DigitalOcean Spaces as tested providers, not R2 by name. Not yet built or tested — this note exists so the next attempt starts from the real constraint instead of re-discovering it, and so a storage layer (R2 or otherwise) is understood as required infrastructure for this architecture, not an optional extra.
+
 ---
 
 ## ADR-044 — CoreML export of yolov8x at imgsz=1280 for Apple Neural Engine inference
