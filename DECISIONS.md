@@ -719,6 +719,10 @@ R2 is the more architecturally attractive of the two for this project specifical
 
 **Input-side POC is now fully validated, not just designed:** N100/capture device → R2 (tested from a local machine, standing in for the N100) → RunPod worker (tested on RunPod's real network) all confirmed working with real credentials, real network paths, real cloud resources. What's left for a real implementation, not tested here: actually compressing/chunking real footage into the proxy format, wiring this into `pod_infer.py`, and the output/delivery leg (finished highlight → end user).
 
+**Full `cloud_pipeline` run end-to-end for real, 2026-08-26 — the last untested piece (`pod_infer.py` inference on a pod) is no longer untested.** Deliberately fresh test, no reused artifacts: a random 5-minute clip cut from raw, previously-untouched footage (`videos/raw/brickwall-SEMI.mp4`), a *live* calibration the operator clicked through in a real browser session (RMSE 0.166ft), then one real `run_cloud_job.py` invocation start to finish. **Exit code 0.** 13 candidate rally segments detected, both reels produced and playable (209.5s each), ranking scores in the same 0.011–0.850 range as every other scored video this project has produced. Top-ranked clip sent to the operator directly for a real playback check — this project's own rule that a numbers-only verdict isn't sufficient (`feedback_video_review_method`) still applies; mechanical success is confirmed, detection *quality* on this clip is not yet operator-confirmed.
+
+One real, measured number worth recording honestly: **pod inference ran at 29.4fps, wall-clock ratio ~1.02× (essentially real-time)** — slower than the local RTX 2000 Ada's measured 36.2fps for the same masked config (`ADR-065`), despite being pinned to the identical GPU model specifically for consistency. Likely network/disk I/O overhead on the pod, not a GPU difference — not yet root-caused. Neither the local nor the cloud route currently clears `PRD.md`'s ≤0.5× wall-clock target; the cloud route is currently the slower of the two, not faster.
+
 ---
 
 ## ADR-044 — CoreML export of yolov8x at imgsz=1280 for Apple Neural Engine inference

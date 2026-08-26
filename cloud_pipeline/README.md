@@ -114,8 +114,7 @@ connectivity testing); override with `CLOUD_PIPELINE_BUCKET`.
 
 ## Status (2026-08-26)
 
-**Setup path measured end-to-end for real; the actual inference call itself
-still isn't.** Confirmed working, on real infrastructure:
+**Fully run end-to-end on real infrastructure, real footage, real live calibration.** Confirmed working:
 - R2 upload/download from both a local machine and a real RunPod pod
   (`DECISIONS.md` ADR-043 update).
 - RunPod pod creation, SSH access, command execution.
@@ -135,10 +134,29 @@ a real invocation would crash with `KeyError` unless the caller manually
 sourced it first -- fixed to match `src/verify.py`'s existing `load_dotenv()`
 pattern.
 
-**Not yet tested: the actual `pod_infer.py` inference call on a pod** — the
-one piece that combines a real video with the now-confirmed environment.
-Everything upstream of it (get a working TF2.15+GPU environment ready on a
-fresh pod, in under 90 seconds) is now measured, not assumed.
+**Run end-to-end for real, 2026-08-26 — no piece of this is untested anymore.**
+A genuinely fresh test, deliberately avoiding any prior artifact: a random
+5-minute clip cut from raw, previously-untouched footage
+(`videos/raw/brickwall-SEMI.mp4`), a *live* calibration the operator clicked
+through in a real browser session against `setup_venue_calibration.py`
+(RMSE 0.166ft), then one real `run_cloud_job.py` invocation start to finish
+— drift check, CFR convert, upload, pod creation, TF2.15 install, `pod_infer.py`
+inference, results back via R2, `build_reel()`. **Exit code 0.** 13 candidate
+rally segments detected, both reels (`highlight.mp4`, `highlight_by_rank.mp4`,
+209.5s each) produced and playable, `manifest.json` written, ranking scores
+look sane (0.011–0.850, same shape as every other scored video this project
+has produced). Sent the top-ranked clip to the operator directly for a real
+playback check (this project's own standing rule — a stills/numbers-only
+verdict isn't good enough, `feedback_video_review_method`).
+
+One real, measured number worth being honest about: **pod inference ran at
+29.4fps (wall-clock ratio ~1.02×, essentially real-time)** — 9000 frames in
+5.1 min for 5 min of source footage. That's slower than the local RTX 2000
+Ada's measured 36.2fps for the same masked config (`ADR-065`) despite being
+the same GPU model pinned specifically for consistency — likely network/disk
+I/O overhead on the pod, not a GPU difference, but not yet root-caused.
+Neither number clears `PRD.md`'s ≤0.5× wall-clock target; this cloud path is
+currently *slower* than the already-short-of-target local path, not faster.
 
 ## Usage
 
