@@ -1,6 +1,6 @@
 # STRATEGY — Beyond the Prototype
 
-**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12, reconciliation pass 2026-08-26
+**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12, reconciliation pass 2026-08-26, desktop client sketch 2026-08-26
 
 **Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
 
@@ -108,6 +108,19 @@ So "universal" is honest for court-plane player *positions* and a fiction for ap
 
 **Option B, made concrete (2026-08-25, exploratory): a rolling 10-minute-chunk variant.** Instead of only player-only detection running during the game, analyze each 10-min capture segment (the same segments already produced for crash-safety, `§1.2` in `TECH_SPEC.md`) as it lands, aggregate detected timestamps across chunks, cut the final reel from the full-res recording afterward — keeps the GPU busy through the session instead of idle-then-burst. Real cost, measured against labels rather than estimated: **~1.28 real rallies/hour fully missed at chunk boundaries** (plus a similar rate truncated, not lost), because a rally straddling a boundary is invisible to `crossing_times`/`cluster_crossings` running independently on each side. **Operator's call: accept this cost rather than build overlap/dedupe handling now** — see `DECISIONS.md` ADR-066 for the fix (well-scoped, not built) and `EXPERIMENTS.md` for the measurement. This variant also depends on `ADR-065`'s inference-throughput fix more than a single-batch-per-session design would: every chunk pays its own detector-invocation setup cost, so it was only cheap to consider at all once that fix landed (~1.7s/chunk vs. the pre-fix ~4-7 min/chunk).
 
+**The desktop client (2026-08-26, exploratory): the software vehicle for the local side of "N100 + cloud GPU," generalized to any local box.** This section's hardware table above frames local capture as a *hardware* choice (N100 vs. Jetson vs. Mac mini). A parallel question came up directly: does it have to be vendor-supplied hardware at all, or can a venue point its own workstation (Windows, Mac, whatever) at the same role? Under the current architecture — detection fully offloaded to a RunPod GPU (`ADR-043`) — the local side no longer needs an accelerator to do that job, which was the original reason `DECISIONS.md` (the ADR just before `ADR-043`) rejected venue-owned hardware ("unknown, varied Windows hardware, no reliable accelerator"). That reasoning predates the RunPod pivot and no longer fully applies — worth remembering the next time this tradeoff comes up, so the old objection isn't treated as still-binding without rechecking it.
+
+Scoped out as a single desktop client, venue owner-facing, responsible for:
+
+- **Camera discovery/management** — locate cameras on the local network, let the owner add/configure them. New scope; no existing code does this. `DECISIONS.md`'s RTSP-over-wifi evaluation already found real reliability problems (frame drops, non-monotonic timestamps) worth designing around rather than rediscovering.
+- **Local stream/footage management.**
+- **Encode/compress locally** — this is where CFR conversion belongs (settled 2026-08-26, after initially assuming it should move cloud-side): it's a correctness fix-up (frame timing) and a corruption-repair side effect, not a detection step, so it has no reason to run anywhere but next to the raw footage. Today's implementation hardcodes `h264_nvenc` (`cloud_pipeline/run_cloud_job.py`), which assumes an NVIDIA GPU — a real gap against "any venue's own workstation," not yet fixed (needs a portable/CPU fallback).
+- **Send to the cloud** — already built (`cloud_pipeline/r2_storage.py`), just needs to be called from the client instead of the operator's own CLI.
+- **Receive the cloud pipeline's output and clip from local full-res using the returned timestamps** — this is not new: it's exactly this section's own "proxy video trick: 720p to cloud, cut from local full-res" (`ADR-043`), just never implemented. The desktop client would be the first thing to actually build it.
+- **Push finished clips to Cloudflare as a CDN, served via link** — closes the "output/delivery leg... never built or tested" gap flagged repeatedly since the first `cloud_pipeline` end-to-end run. Needs an access-control decision before it's a bare public link: `§7`'s privacy stance (face-blur / opt-in check-in) exists because footage unavoidably captures bystanders and adjacent courts, so a scoped/signed/expiring link is the likely right shape, not an open one — not yet decided.
+
+**Not yet scoped, flagged not solved:** real cross-platform packaging (this is a native app for venue owners' own machines, not the current CLI-script prototype); and — raised in the same conversation, acknowledged by the operator as a known follow-up, not addressed here — today's RunPod/R2 credentials are the operator's own `.env` values, which cannot ship inside a client distributed to external venue owners without exposing full infrastructure access. Whatever access-scoping fix replaces that is a prerequisite for this client reaching an actual venue, not for prototyping it.
+
 ---
 
 ## 6. Annotation as the core activity
@@ -137,6 +150,8 @@ Principles that keep the load honest:
 Personalized per-court highlights require linking **court → the people who played there**. Use an **opt-in check-in** (QR scan or name selection at session start) or a within-session visual marker — **not** biometric re-identification (consistent with the privacy stance and `DECISIONS.md` ADR-034).
 
 **Free second product surface (corrected 2026-08-26 — not actually free yet):** anonymous within-session movement analytics — kitchen-line presence, distance covered, court coverage, partner spacing / stacking — would fall out of player tracking, need no ball, and require no cross-session identity, so no privacy conflict (the anonymous-vs-cross-session distinction is drawn in `DECISIONS.md` ADR-034). **But player tracking itself does not exist in the shipped pipeline** — `ADR-047` deferred it before it was built, not after, so this is a real future capability requiring player detection/tracking built from scratch, not a byproduct that "rides the same foundation as highlights" the way this section originally claimed. The current foundation (ball-crossing) produces zero player-position data today.
+
+**Delivery mechanism (2026-08-26, exploratory):** `§5`'s desktop client sketch names Cloudflare-as-CDN, link-based delivery as the actual output leg — the piece this section discusses identity/personalization for, but never specifies a transport for. Same caveat applies here: a bare public link sits awkwardly next to this section's own privacy stance, so it likely wants to be scoped/signed/expiring rather than open — not decided, see `§5`.
 
 ---
 
