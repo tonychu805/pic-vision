@@ -608,6 +608,15 @@ pic-vision/
 │   ├── templates/                     # Jinja2 pages (upload/calibrate/status/preview)
 │   └── jobs/                           # runtime per-job data -- gitignored, regenerable
 │
+├── cloud_pipeline/              # R2 + RunPod path (2026-08-26), isolated from webapp/'s
+│   │                              # local-GPU inference -- see cloud_pipeline/README.md
+│   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> R2 upload -> RunPod runs
+│   │                                # pod_infer.py unmodified -> R2 -> local build_reel()
+│   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2
+│   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
+│   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
+│   └── jobs/                            # runtime per-job data -- gitignored, regenerable
+│
 ├── src/                        # the production pipeline
 │   ├── cut.py                    # entry point: `python3 -m src.cut` (see Makefile)
 │   ├── tracknet.py                # TrackNet prediction parsing (RunPod GPU inference)

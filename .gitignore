@@ -33,6 +33,7 @@ cache/
 # Web UI runtime job data (uploaded video, calib, predictions, reel per job)
 # -- regenerable, not source, like cache/ and clips/.
 webapp/jobs/
+cloud_pipeline/jobs/
 
 # Pipeline inference outputs (regenerable from footage + pod_infer.py).
 # NOTE: the old pattern was `predictions*.csv`, which only matched files whose

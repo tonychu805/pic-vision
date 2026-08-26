@@ -6,6 +6,8 @@ pyyaml
 google-genai
 python-dotenv
 flask
+boto3     # cloud_pipeline/ -- Cloudflare R2 (S3-compatible) client
+requests  # cloud_pipeline/ -- RunPod REST API
 
 # dev only
 pytest
