@@ -1,0 +1,36 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>pic-vision</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+  .wrap { max-width: 640px; margin: 80px auto; padding: 0 20px; text-align: center; }
+  h1 { font-size: 22px; }
+  p.sub { color: #999; margin-bottom: 40px; }
+  .choices { display: flex; gap: 20px; justify-content: center; flex-wrap: wrap; }
+  a.choice {
+    display: block; width: 240px; padding: 24px 16px; background: #1a1a1a;
+    border: 1px solid #333; border-radius: 8px; color: #eee; text-decoration: none;
+  }
+  a.choice:hover { border-color: #2a6; }
+  a.choice .title { font-size: 17px; font-weight: bold; margin-bottom: 8px; }
+  a.choice .desc { font-size: 13px; color: #999; }
+  .warn { background: #532; padding: 10px 14px; border-radius: 4px; margin-bottom: 24px; color: #fca; }
+</style></head>
+<body>
+<div class="wrap">
+  <h1>pic-vision — rally highlight reel</h1>
+  <p class="sub">Choose where inference runs.</p>
+  {% if busy %}
+  <div class="warn">A job is already running — wait for it to finish before starting a new one.</div>
+  {% endif %}
+  <div class="choices">
+    <a class="choice" href="/local">
+      <div class="title">Local GPU</div>
+      <div class="desc">Runs on this workstation. Calibrate fresh every upload.</div>
+    </a>
+    <a class="choice" href="/cloud">
+      <div class="title">Cloud (RunPod)</div>
+      <div class="desc">Runs on a billed RunPod GPU pod. Reuses a saved per-venue calibration.</div>
+    </a>
+  </div>
+</div>
+</body></html>

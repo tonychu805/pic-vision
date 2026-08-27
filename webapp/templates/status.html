@@ -4,30 +4,111 @@
   body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
   .wrap { max-width: 720px; margin: 40px auto; padding: 0 20px; }
   h1 { font-size: 20px; }
-  #stage { font-size: 16px; color: #6c6; margin: 16px 0; }
+  .topbar { display: flex; justify-content: space-between; align-items: center; }
+  #cancelBtn {
+    font-size: 13px; padding: 6px 14px; background: #522; color: #fca;
+    border: 1px solid #733; border-radius: 4px; cursor: pointer;
+  }
+  #cancelBtn:hover { background: #633; }
+  #stage { font-size: 16px; color: #6c6; margin: 16px 0 4px; }
   #stage.err { color: #f66; }
+  #stageElapsed { font-size: 12px; color: #888; margin-bottom: 16px; }
+  .steps { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 16px; }
+  .step {
+    font-size: 11px; padding: 4px 8px; border-radius: 10px; background: #1a1a1a;
+    color: #666; border: 1px solid #333;
+  }
+  .step.done { background: #163; color: #8e8; border-color: #274; }
+  .step.active { background: #341; color: #fc6; border-color: #650; }
+  #progWrap { margin: 10px 0 18px; display: none; }
+  #progBar { width: 100%; height: 10px; background: #1a1a1a; border-radius: 5px; overflow: hidden; }
+  #progFill { height: 100%; background: #2a6; width: 0%; transition: width 0.4s; }
+  #progText { font-size: 12px; color: #999; margin-top: 6px; }
   pre {
-    background: #1a1a1a; padding: 12px; border-radius: 4px; max-height: 420px;
+    background: #1a1a1a; padding: 12px; border-radius: 4px; max-height: 380px;
     overflow-y: auto; font-size: 12px; color: #ccc; white-space: pre-wrap;
   }
 </style></head>
 <body>
 <div class="wrap">
-  <h1>Processing job {{ job_id }}</h1>
+  <div class="topbar">
+    <h1>Processing job {{ job_id }}</h1>
+    <button id="cancelBtn" onclick="cancelJob()">Cancel job</button>
+  </div>
+  <div class="steps" id="steps"></div>
   <div id="stage">starting...</div>
+  <div id="stageElapsed"></div>
+  <div id="progWrap">
+    <div id="progBar"><div id="progFill"></div></div>
+    <div id="progText"></div>
+  </div>
   <pre id="log"></pre>
 </div>
 <script>
+function fmtDur(sec) {
+  if (sec < 60) return Math.round(sec) + 's';
+  const m = Math.floor(sec / 60), s = Math.round(sec % 60);
+  return m + 'm ' + s + 's';
+}
+
+function renderSteps(stages, currentKey) {
+  const el = document.getElementById('steps');
+  if (!stages || !stages.length) { el.innerHTML = ''; return; }
+  let seenCurrent = false;
+  el.innerHTML = stages.map(([key, label]) => {
+    let cls = 'step';
+    if (key === currentKey) { cls += ' active'; seenCurrent = true; }
+    else if (!seenCurrent) cls += ' done';
+    return `<span class="${cls}">${label}</span>`;
+  }).join('');
+}
+
+function cancelJob() {
+  if (!confirm('Cancel this job? If it already spun up a RunPod GPU pod, this will terminate it immediately. You can start a new job right after.')) return;
+  const btn = document.getElementById('cancelBtn');
+  btn.disabled = true;
+  btn.textContent = 'cancelling...';
+  fetch('/job/{{ job_id }}/cancel', { method: 'POST' })
+    .then(() => { window.location = '/'; });
+}
+
 function poll() {
   fetch('/job/{{ job_id }}/status.json').then(r => r.json()).then(d => {
     const stageEl = document.getElementById('stage');
     stageEl.textContent = (d.stage || '?') + ': ' + (d.message || '');
     stageEl.className = d.stage === 'error' ? 'err' : '';
+
+    renderSteps(d.stages, d.stage);
+
+    const elapsedEl = document.getElementById('stageElapsed');
+    if (d.stage_started_at && !d.done) {
+      elapsedEl.textContent = fmtDur(Date.now() / 1000 - d.stage_started_at) + ' in this stage';
+    } else {
+      elapsedEl.textContent = '';
+    }
+
+    const progWrap = document.getElementById('progWrap');
+    if (d.progress && d.progress.total) {
+      progWrap.style.display = 'block';
+      const pct = Math.min(100, 100 * d.progress.current / d.progress.total);
+      document.getElementById('progFill').style.width = pct.toFixed(1) + '%';
+      document.getElementById('progText').textContent =
+        `${d.progress.current} / ${d.progress.total} frames` +
+        (d.progress.eta_sec != null ? `  —  ETA ${fmtDur(d.progress.eta_sec)}` : '');
+    } else {
+      progWrap.style.display = 'none';
+    }
+
     const log = document.getElementById('log');
     log.textContent = d.log_tail || '';
     log.scrollTop = log.scrollHeight;
-    if (d.done && d.stage !== 'error') {
-      window.location = '/job/{{ job_id }}';
+
+    if (d.done) {
+      document.getElementById('cancelBtn').style.display = 'none';
+      if (d.stage !== 'error' && d.stage !== 'cancelled') {
+        window.location = '/job/{{ job_id }}';
+        return;
+      }
       return;
     }
     setTimeout(poll, 3000);

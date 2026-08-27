@@ -1,12 +1,12 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>pic-vision</title>
+<html><head><meta charset="utf-8"><title>pic-vision — cloud</title>
 <style>
   body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
   .wrap { max-width: 640px; margin: 60px auto; padding: 0 20px; }
   h1 { font-size: 22px; }
   p.sub { color: #999; }
   label { display: block; margin: 18px 0 6px; font-size: 14px; color: #aaa; }
-  input[type=file], input[type=number] {
+  input[type=file], input[type=number], select {
     font-size: 15px; padding: 8px; width: 100%; box-sizing: border-box;
     background: #1a1a1a; color: #eee; border: 1px solid #333;
   }
@@ -16,21 +16,33 @@
   }
   button:disabled { background: #444; cursor: not-allowed; }
   .warn { background: #532; padding: 10px 14px; border-radius: 4px; margin-top: 16px; color: #fca; }
+  .empty { background: #221; padding: 10px 14px; border-radius: 4px; margin-top: 16px; color: #cc8; }
+  a.link { color: #6cf; font-size: 14px; display: inline-block; margin-top: 20px; }
+  a.back { color: #777; font-size: 13px; display: inline-block; margin-bottom: 16px; }
 </style></head>
 <body>
 <div class="wrap">
-  <a href="/" style="color:#777;font-size:13px;display:inline-block;margin-bottom:16px;">&larr; back</a>
-  <h1>pic-vision — local GPU</h1>
-  <p class="sub">Upload footage, calibrate the court, then wait for the reel.</p>
+  <a class="back" href="/">&larr; back</a>
+  <h1>pic-vision — cloud (RunPod)</h1>
+  <p class="sub">Runs on a billed RunPod GPU pod. Pick an already-calibrated venue, or set one up first.</p>
   {% if busy %}
   <div class="warn">A job is already running — wait for it to finish before starting a new one.</div>
   {% endif %}
-  <form action="/local/upload" method="post" enctype="multipart/form-data">
+  {% if venues %}
+  <form action="/cloud/upload" method="post" enctype="multipart/form-data">
+    <label>Venue (calibration)</label>
+    <select name="venue" {{ 'disabled' if busy }}>
+      {% for v in venues %}<option value="{{ v }}">{{ v }}</option>{% endfor %}
+    </select>
     <label>Video file</label>
     <input type="file" name="video" accept="video/*" required {{ 'disabled' if busy }}>
     <label>Reel length (seconds)</label>
     <input type="number" name="target_sec" value="{{ default_target_sec }}" min="30" step="10" {{ 'disabled' if busy }}>
-    <button type="submit" {{ 'disabled' if busy }}>Upload &amp; calibrate</button>
+    <button type="submit" {{ 'disabled' if busy }}>Upload &amp; run on RunPod</button>
   </form>
+  {% else %}
+  <div class="empty">No calibrated venues yet — set one up first.</div>
+  {% endif %}
+  <a class="link" href="/cloud/new-venue">+ set up a new venue (one-time calibration)</a>
 </div>
 </body></html>

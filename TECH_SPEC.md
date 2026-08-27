@@ -602,14 +602,23 @@ pic-vision/
 ├── webapp.py                    # web UI launcher: upload -> calibrate -> pipeline -> preview/download
 │
 ├── webapp/                     # the web UI (Flask) -- purely additive, CLI tools above unaffected
-│   ├── app.py                     # routes: upload, calibrate, status polling, preview/download
-│   ├── pipeline.py                  # background job orchestration (drift check -> CFR convert ->
-│   │                                  # TrackNet inference -> scripts/rank_and_reel.py's build_reel)
-│   ├── templates/                     # Jinja2 pages (upload/calibrate/status/preview)
+│   ├── app.py                     # routes: home (choose local/cloud) -> upload -> calibrate ->
+│   │                                # status polling -> preview/download; cloud route (2026-08-26)
+│   │                                # picks a saved per-venue cloud_pipeline/venues/*/calib.json
+│   │                                # instead of calibrating fresh
+│   ├── pipeline.py                  # background job orchestration: run_job() (local, drift check ->
+│   │                                  # CFR convert -> TrackNet inference -> build_reel) and
+│   │                                  # run_cloud_job() (2026-08-26, same status.json/log.txt
+│   │                                  # contract, dispatches to cloud_pipeline.run_cloud_job instead)
+│   ├── templates/                     # Jinja2 pages (home/upload/cloud_upload/new_venue/
+│   │                                     # calibrate/status/preview)
 │   └── jobs/                           # runtime per-job data -- gitignored, regenerable
 │
 ├── cloud_pipeline/              # R2 + RunPod path (2026-08-26), isolated from webapp/'s
-│   │                              # local-GPU inference -- see cloud_pipeline/README.md
+│   │                              # local-GPU inference -- see cloud_pipeline/README.md.
+│   │                              # webapp/app.py's cloud route calls into this one-way
+│   │                              # (webapp -> cloud_pipeline); cloud_pipeline still never
+│   │                              # imports webapp/, so its own CLI/isolation is unchanged
 │   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> R2 upload -> RunPod runs
 │   │                                # pod_infer.py unmodified -> R2 -> local build_reel()
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2

@@ -1,5 +1,5 @@
 <!doctype html>
-<html><head><meta charset="utf-8"><title>calibrate — {{ job_id }}</title>
+<html><head><meta charset="utf-8"><title>calibrate</title>
 <style>
   body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
   #bar { padding: 10px 14px; background: #1a1a1a; position: sticky; top: 0; display: flex;
@@ -84,12 +84,12 @@ document.addEventListener('keydown', (e) => {
 
 function reload() {
   const at = document.getElementById('atInput').value;
-  window.location = '/job/{{ job_id }}/calibrate?at=' + encodeURIComponent(at);
+  window.location = '{{ reload_url }}?at=' + encodeURIComponent(at);
 }
 
 function save() {
   statusEl.textContent = 'saving...';
-  fetch('/job/{{ job_id }}/calibrate/save', {
+  fetch('{{ save_url }}', {
     method: 'POST', headers: {'Content-Type': 'application/json'},
     body: JSON.stringify({points, at: AT})
   }).then(r => r.json()).then(d => {

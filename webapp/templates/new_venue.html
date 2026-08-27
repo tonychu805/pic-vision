@@ -1,0 +1,33 @@
+<!doctype html>
+<html><head><meta charset="utf-8"><title>pic-vision — new venue</title>
+<style>
+  body { margin: 0; background: #111; color: #eee; font-family: sans-serif; }
+  .wrap { max-width: 640px; margin: 60px auto; padding: 0 20px; }
+  h1 { font-size: 22px; }
+  p.sub { color: #999; }
+  label { display: block; margin: 18px 0 6px; font-size: 14px; color: #aaa; }
+  input[type=file], input[type=text] {
+    font-size: 15px; padding: 8px; width: 100%; box-sizing: border-box;
+    background: #1a1a1a; color: #eee; border: 1px solid #333;
+  }
+  button {
+    font-size: 16px; padding: 10px 20px; margin-top: 24px; background: #2a6;
+    color: #fff; border: none; border-radius: 4px; cursor: pointer;
+  }
+  a.back { color: #777; font-size: 13px; display: inline-block; margin-bottom: 16px; }
+</style></head>
+<body>
+<div class="wrap">
+  <a class="back" href="/cloud">&larr; back</a>
+  <h1>Set up a new venue</h1>
+  <p class="sub">One-time calibration for a camera. Reused for every future session at this
+  venue — only redo this if the camera physically moves.</p>
+  <form action="/cloud/new-venue" method="post" enctype="multipart/form-data">
+    <label>Venue name (letters, numbers, dashes, underscores)</label>
+    <input type="text" name="venue" pattern="[A-Za-z0-9_-]+" required>
+    <label>A representative video from this venue's camera</label>
+    <input type="file" name="video" accept="video/*" required>
+    <button type="submit">Upload &amp; calibrate</button>
+  </form>
+</div>
+</body></html>

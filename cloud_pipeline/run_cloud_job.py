@@ -20,6 +20,7 @@ hasn't happened yet. See cloud_pipeline/README.md.
 """
 import argparse
 import os
+import re
 import subprocess
 import sys
 import tarfile
@@ -58,27 +59,89 @@ POD_SETUP_CMD = (
 )
 
 
-def _log(msg):
+# Named stages in call order, shared with webapp/pipeline.py's dashboard
+# wrapper so it can render a fixed-step progress indicator instead of one
+# open-ended "cloud_running" blob (added 2026-08-26, same day the dashboard
+# first ran a real job -- the operator asked for visible progress after
+# watching one with no feedback beyond a log tail).
+STAGES = [
+    ("drift_check", "Checking camera drift"),
+    ("convert", "Converting to 30fps CFR"),
+    ("r2_upload", "Uploading video to cloud storage"),
+    ("pod_create", "Creating RunPod GPU pod"),
+    ("pod_install", "Installing dependencies on pod"),
+    ("pod_download", "Downloading video onto pod"),
+    ("inference", "Running TrackNet inference (RunPod GPU)"),
+    ("r2_download", "Uploading results, downloading locally"),
+    ("reel", "Detecting rallies, ranking, cutting reel"),
+]
+
+# pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min".
+_PROGRESS_RE = re.compile(r"^\s*(\d+)/(\d+)\s+(\d+)\s*fps\s+ETA\s+([\d.]+)\s*min")
+
+
+def _log(msg, stage=None):
     print(f"[cloud_pipeline] {msg}", flush=True)
 
 
-def ensure_weights_in_r2():
+class JobCancelled(Exception):
+    """Raised when should_cancel_fn() reports the caller asked to cancel.
+    Checked before each stage below, not just relied on the caller being
+    able to kill an already-created pod after the fact -- a cancel that
+    arrives during drift-check/CFR-convert/R2-upload, or in the gap before
+    create_pod() actually succeeds, would otherwise go unnoticed and this
+    function would create (and get billed for) a real pod nobody is
+    tracking anymore."""
+
+
+def _check_cancel(should_cancel_fn):
+    if should_cancel_fn and should_cancel_fn():
+        raise JobCancelled()
+
+
+def ensure_weights_in_r2(log_fn=None):
     """Uploads the k14 SavedModel to R2 once, if not already there. Every
     job after the first reuses it -- no reason to re-upload 130MB per run."""
+    log = log_fn or _log
     if r2_storage.object_exists(BUCKET, WEIGHTS_R2_KEY):
-        _log("weights already in R2, skipping upload")
+        log("weights already in R2, skipping upload")
         return
-    _log("weights not in R2 yet -- tarring and uploading once (~130MB)")
+    log("weights not in R2 yet -- tarring and uploading once (~130MB)")
     with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
         tar_path = tmp.name
     with tarfile.open(tar_path, "w") as tar:
         tar.add(WEIGHTS_LOCAL, arcname="weights_k14_epoch19")
     r2_storage.upload_file(BUCKET, tar_path, WEIGHTS_R2_KEY)
     os.remove(tar_path)
-    _log("weights uploaded to R2")
+    log("weights uploaded to R2")
 
 
-def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir):
+def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
+                   log_fn=None, progress_fn=None, pod_id_fn=None,
+                   should_cancel_fn=None):
+    # log_fn lets a caller (webapp/pipeline.py's run_cloud_job wrapper)
+    # capture progress into its own status.json/log.txt instead of only
+    # going to stdout -- added so the web dashboard can show live cloud-job
+    # progress the same way it already does for local jobs. Defaults to the
+    # plain print() behavior for CLI use (unchanged from before).
+    #
+    # progress_fn(current, total, eta_sec), when given, is called with real
+    # numbers parsed from pod_infer.py's own periodic progress line during
+    # the inference stage -- the one stage where a live frame count/ETA is
+    # actually known, as opposed to a fabricated percentage for stages this
+    # project has never benchmarked at this scale (R2 transfer of a
+    # video-sized file, etc.).
+    #
+    # pod_id_fn(pod_id), when given, is called the moment a pod is created --
+    # lets a caller (the dashboard's cancel button) record it somewhere it
+    # can terminate the pod directly via the RunPod API even if this
+    # function's own thread is stuck blocked inside a long ssh_run call.
+    #
+    # should_cancel_fn(), when given, is checked before each stage below --
+    # covers the window pod_id_fn() can't: before a pod exists at all, a
+    # cancel request has nothing to kill, so it has to be caught here
+    # instead of relied on being stoppable from the outside.
+    log = log_fn or _log
     # Calibration is a one-time, per-venue setup step, not part of this
     # per-session job -- see cloud_pipeline/setup_venue_calibration.py.
     # Corrected 2026-08-26: an earlier version launched calibrate_web.py
@@ -101,48 +164,70 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir):
 
     # --- Local, GPU-free steps: identical logic to webapp/pipeline.py's
     # drift check and CFR conversion (same functions, same recipe) ---
-    _log("checking for camera drift...")
+    _check_cancel(should_cancel_fn)
+    log("checking for camera drift...", stage="drift_check")
     samples, _ = drift_measure(video_path, step_sec=60.0, width=960)
     span_x, span_y = drift_span(samples)
     bumps = find_bumps(samples, min_step_px=5.0)
     if bumps:
-        _log(f"WARNING: {len(bumps)} camera bump(s) detected, max span "
+        log(f"WARNING: {len(bumps)} camera bump(s) detected, max span "
              f"{max(span_x, span_y):.0f}px (ADR-049) -- continuing anyway")
     else:
-        _log("camera held still")
+        log("camera held still")
 
-    _log("converting to 30fps CFR...")
+    _check_cancel(should_cancel_fn)
+    log("converting to 30fps CFR...", stage="convert")
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",
                      "-i", video_path, "-c:v", "h264_nvenc", "-preset", "p4",
                      "-cq", "20", "-an", "-fps_mode", "cfr", "-r", "30", cfr_video],
                     check=True)
 
     # --- Cloud dispatch: this is the part that's actually new ---
-    ensure_weights_in_r2()
+    _check_cancel(should_cancel_fn)
+    log("checking cached weights in R2...", stage="r2_upload")
+    ensure_weights_in_r2(log_fn=log)
 
     job_prefix = f"jobs/{session_id}"
     video_key = f"{job_prefix}/video_cfr.mp4"
     calib_key = f"{job_prefix}/calib.json"
     csv_key = f"{job_prefix}/predictions.csv"
 
-    _log(f"uploading CFR video + calibration to R2 ({job_prefix})...")
+    log(f"uploading CFR video + calibration to R2 ({job_prefix})...", stage="r2_upload")
     r2_storage.upload_file(BUCKET, cfr_video, video_key)
     r2_storage.upload_file(BUCKET, calib_path, calib_key)
+
+    # Last checkpoint before the one step that actually costs money --
+    # everything above is cheap/local or a plain storage upload; create_pod()
+    # below is the point a cancel request must not miss.
+    _check_cancel(should_cancel_fn)
 
     key_prefix = os.path.join(out_dir, "runpod_key")
     keyfile, pubkey = runpod_pod.generate_ephemeral_keypair(key_prefix)
 
-    _log("creating RunPod pod...")
-    pod_id = runpod_pod.create_pod(name=f"cloud-pipeline-{session_id}", ssh_pubkey=pubkey)
+    log("creating RunPod pod...", stage="pod_create")
+    # FALLBACK_GPU_TYPES (2026-08-26): the pinned RTX 2000 Ada tried first
+    # (preserves the same-as-local byte-identical guarantee when available),
+    # falling back to other Ada-generation cards on capacity failure rather
+    # than hard-failing the job -- an explicit availability-over-certainty
+    # trade the operator asked for after hitting exactly this on a live run.
+    pod_id, gpu_type = runpod_pod.create_pod(
+        name=f"cloud-pipeline-{session_id}", ssh_pubkey=pubkey,
+        gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
+    if pod_id_fn:
+        pod_id_fn(pod_id)
+    if gpu_type != runpod_pod.FALLBACK_GPU_TYPES[0]:
+        log(f"NOTE: pinned GPU unavailable, fell back to {gpu_type} -- output "
+            f"is not verified byte-identical to local on this GPU type "
+            f"(ADR-043)", stage="pod_create")
     try:
-        _log(f"pod {pod_id} created, waiting for SSH...")
+        log(f"pod {pod_id} created ({gpu_type}), waiting for SSH...", stage="pod_create")
         ip, port = runpod_pod.wait_for_ssh(pod_id)
-        _log(f"pod reachable at {ip}:{port}")
+        log(f"pod reachable at {ip}:{port}")
 
-        _log("installing TF2.15 + deps on the pod (a few minutes)...")
+        log("installing TF2.15 + deps on the pod (a few minutes)...", stage="pod_install")
         runpod_pod.ssh_run(ip, port, keyfile, POD_SETUP_CMD, timeout_sec=900)
 
-        _log("copying pod_infer.py and the R2 helper to the pod...")
+        log("copying pod_infer.py and the R2 helper to the pod...", stage="pod_install")
         runpod_pod.scp_to(ip, port, keyfile, POD_INFER_SCRIPT, "/workspace/pod_infer.py")
         runpod_pod.scp_to(ip, port, keyfile, POD_R2_HELPER, "/workspace/pod_r2_helper.py")
 
@@ -157,7 +242,7 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir):
                    f"{action} {BUCKET} {key} {local_path}")
             runpod_pod.ssh_run(ip, port, keyfile, cmd, timeout_sec=timeout_sec)
 
-        _log("downloading video/calib/weights onto the pod from R2...")
+        log("downloading video/calib/weights onto the pod from R2...", stage="pod_download")
         pod_r2("download", video_key, "/workspace/video_cfr.mp4")
         pod_r2("download", calib_key, "/workspace/calib.json")
         pod_r2("download", WEIGHTS_R2_KEY, "/workspace/weights.tar")
@@ -169,27 +254,36 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir):
                             "cd /workspace && tar -xf weights.tar --no-same-owner",
                             timeout_sec=120)
 
-        _log("running TrackNet inference on the pod...")
+        log("running TrackNet inference on the pod...", stage="inference")
         infer_cmd = (
             "cd /workspace && python3 pod_infer.py --video video_cfr.mp4 "
             "--model weights_k14_epoch19 --output predictions.csv --calib calib.json"
         )
-        runpod_pod.ssh_run(ip, port, keyfile, infer_cmd, timeout_sec=7200)
 
-        _log("uploading predictions.csv back to R2...")
+        def _on_infer_line(line):
+            log(line)
+            m = _PROGRESS_RE.match(line)
+            if m and progress_fn:
+                current, total, _fps, eta_min = m.groups()
+                progress_fn(int(current), int(total), float(eta_min) * 60.0)
+
+        runpod_pod.ssh_run(ip, port, keyfile, infer_cmd, timeout_sec=7200,
+                            on_line=_on_infer_line)
+
+        log("uploading predictions.csv back to R2...", stage="r2_download")
         pod_r2("upload", csv_key, "/workspace/predictions.csv", timeout_sec=120)
     finally:
-        _log(f"terminating pod {pod_id}...")
+        log(f"terminating pod {pod_id}...")
         runpod_pod.terminate_pod(pod_id)
 
-    _log("downloading predictions.csv locally...")
+    log("downloading predictions.csv locally...", stage="r2_download")
     r2_storage.download_file(BUCKET, csv_key, csv_path)
 
     # --- Local, GPU-free again: identical detection/ranking/cutting logic
     # to webapp/pipeline.py, via the same shared build_reel() ---
-    _log("detecting rallies, ranking, cutting reel...")
+    log("detecting rallies, ranking, cutting reel...", stage="reel")
     result = build_reel(cfr_video, csv_path, calib_path, reel_dir, target_sec, session_id)
-    _log(f"done: {result}")
+    log(f"done: {result}")
     return result
 
 

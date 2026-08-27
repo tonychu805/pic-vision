@@ -161,71 +161,115 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
         # frames are read/written in -- output is unaffected.
         frame_q = queue.Queue(maxsize=3)
         producer_error = []
+        # Set on any consumer-side exception so the producer (which may be
+        # blocked on a full frame_q.put()) stops promptly instead of being
+        # abandoned mid-block with the VideoCapture still open (found in
+        # committee review, 2026-08-26 -- a crash/Ctrl-C mid-run previously
+        # skipped producer.join()/cap.release() entirely).
+        stop_event = threading.Event()
 
         def produce():
             nonlocal ok, img1, img2, img3
             try:
-                while ok:
+                while ok and not stop_event.is_set():
                     trio = [img1, img2, img3]
                     if mask is not None:
                         trio = [im * mask[:, :, None] for im in trio]
-                    frame_q.put(prep3(trio))
+                    item = prep3(trio)
+                    while True:
+                        try:
+                            frame_q.put(item, timeout=0.5)
+                            break
+                        except queue.Full:
+                            if stop_event.is_set():
+                                return
                     ok, img1 = cap.read()
                     ok, img2 = cap.read()
                     ok, img3 = cap.read()
             except Exception as e:
                 producer_error.append(e)
             finally:
-                frame_q.put(None)
+                # Must retry until stop_event is set, not give up after one
+                # bounded attempt -- a single try (found in committee review,
+                # 2026-08-26) can drop the sentinel if the consumer is just
+                # transiently slow (GPU stall, disk-flush hiccup), which
+                # leaves the consumer's un-timed-out frame_q.get() blocked
+                # forever with no producer left alive to unblock it. Retrying
+                # until stop_event is set matches the same pattern already
+                # used for regular items above, and guarantees delivery on
+                # the normal (non-error, non-stop_event) completion path.
+                while True:
+                    try:
+                        frame_q.put(None, timeout=1.0)
+                        break
+                    except queue.Full:
+                        if stop_event.is_set():
+                            break
 
         producer = threading.Thread(target=produce, daemon=True)
         producer.start()
 
-        while True:
-            unit = frame_q.get()
-            if unit is None:
-                break
-            raw_pred = infer(tf.constant(unit)).numpy()
-            mask_pred = (raw_pred > 0.5).astype(np.float32)
-            h_pred = (mask_pred[0] * 255).astype(np.uint8)
-            probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred
+        try:
+            while True:
+                unit = frame_q.get()
+                if unit is None:
+                    break
+                raw_pred = infer(tf.constant(unit)).numpy()
+                mask_pred = (raw_pred > 0.5).astype(np.float32)
+                h_pred = (mask_pred[0] * 255).astype(np.uint8)
+                probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred
 
-            for i in range(3):
-                if np.amax(h_pred[i]) <= 0:
-                    writer.writerow([count, 0, -1, -1, -1, -1, 0.0])
-                else:
-                    cnts, _ = cv2.findContours(
-                        h_pred[i].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
-                    )
-                    # Pick by peak confidence within the blob, not bounding-box
-                    # area — a larger-but-lower-confidence false positive (e.g. a
-                    # background feature made more salient by preprocessing)
-                    # would otherwise beat a smaller, higher-confidence real ball.
-                    def blob_confidence(c, i=i):
-                        blob_mask = np.zeros_like(h_pred[i])
-                        cv2.drawContours(blob_mask, [c], -1, 1, thickness=-1)
-                        return float(probs[i][blob_mask.astype(bool)].max())
-                    best_c = max(cnts, key=blob_confidence)
-                    best = cv2.boundingRect(best_c)
-                    cx = int(x_ratio * (best[0] + best[2] / 2))
-                    cy = int(y_ratio * (best[1] + best[3] / 2))
-                    writer.writerow([count, 1, cx, cy,
-                                     round(x_ratio * best[2], 1),
-                                     round(y_ratio * best[3], 1),
-                                     round(blob_confidence(best_c), 4)])
-                count += 1
+                for i in range(3):
+                    if np.amax(h_pred[i]) <= 0:
+                        writer.writerow([count, 0, -1, -1, -1, -1, 0.0])
+                    else:
+                        cnts, _ = cv2.findContours(
+                            h_pred[i].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE
+                        )
+                        # Pick by peak confidence within the blob, not bounding-box
+                        # area — a larger-but-lower-confidence false positive (e.g. a
+                        # background feature made more salient by preprocessing)
+                        # would otherwise beat a smaller, higher-confidence real ball.
+                        def blob_confidence(c, i=i):
+                            blob_mask = np.zeros_like(h_pred[i])
+                            cv2.drawContours(blob_mask, [c], -1, 1, thickness=-1)
+                            return float(probs[i][blob_mask.astype(bool)].max())
+                        best_c = max(cnts, key=blob_confidence)
+                        best = cv2.boundingRect(best_c)
+                        cx = int(x_ratio * (best[0] + best[2] / 2))
+                        cy = int(y_ratio * (best[1] + best[3] / 2))
+                        writer.writerow([count, 1, cx, cy,
+                                         round(x_ratio * best[2], 1),
+                                         round(y_ratio * best[3], 1),
+                                         round(blob_confidence(best_c), 4)])
+                    count += 1
 
-            if count % 300 == 0:
-                elapsed = time.time() - t0
-                rate = count / elapsed
-                eta = (n_frames - count) / rate
-                print(f"  {count}/{n_frames}  {rate:.0f} fps  ETA {eta / 60:.1f} min", flush=True)
+                if count % 300 == 0:
+                    elapsed = time.time() - t0
+                    rate = count / elapsed
+                    eta = (n_frames - count) / rate
+                    print(f"  {count}/{n_frames}  {rate:.0f} fps  ETA {eta / 60:.1f} min", flush=True)
+        finally:
+            stop_event.set()
+            producer.join(timeout=5.0)
+            if producer.is_alive():
+                # Producer is presumably blocked inside cap.read() itself
+                # (not the queue, which the timeout above already handles) --
+                # e.g. a stalled network mount or a decoder hang on a corrupt
+                # frame. Releasing cap here while that thread may still be
+                # calling cap.read() on it is a real race (OpenCV's
+                # VideoCapture isn't documented safe for that), so leave it
+                # for process exit to clean up instead of racing it.
+                print("WARNING: producer thread did not stop within 5s "
+                      "(likely stuck in cap.read()) -- skipping cap.release() "
+                      "to avoid a concurrent-access race; process exit will "
+                      "clean it up.", flush=True)
+            else:
+                cap.release()
 
-        producer.join()
         if producer_error:
             raise producer_error[0]
 
-        cap.release()
         elapsed = time.time() - t0
         print(f"\nDone: {count} frames in {elapsed / 60:.1f} min ({count / elapsed:.1f} fps)")
         print(f"Output: {output_csv}")
