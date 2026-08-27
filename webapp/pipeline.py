@@ -50,6 +50,7 @@ except ImportError:
     CLOUD_STAGES = [
         ("drift_check", "Checking camera drift"),
         ("convert", "Converting to 30fps CFR"),
+        ("proxy", "Creating 720p upload proxy"),
         ("r2_upload", "Uploading video to cloud storage"),
         ("pod_create", "Creating RunPod GPU pod"),
         ("pod_install", "Installing dependencies on pod"),

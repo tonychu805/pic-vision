@@ -69,6 +69,7 @@ POD_SETUP_CMD = (
 STAGES = [
     ("drift_check", "Checking camera drift"),
     ("convert", "Converting to 30fps CFR"),
+    ("proxy", "Creating 720p upload proxy"),
     ("r2_upload", "Uploading video to cloud storage"),
     ("pod_create", "Creating RunPod GPU pod"),
     ("pod_install", "Installing dependencies on pod"),
@@ -193,10 +194,11 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     # calib.json from before this field existed can't make that promise, so
     # fall back to uploading the full-res video rather than silently risk
     # every downstream pixel coordinate landing in the wrong scale.
+    _check_cancel(should_cancel_fn)
     with open(calib_path) as f:
         _calib_check = json.load(f)
     if _calib_check.get("calibration_resolution"):
-        log("creating 720p proxy for cloud upload...", stage="convert")
+        log("creating 720p proxy for cloud upload...", stage="proxy")
         upload_video = os.path.join(out_dir, "video_proxy_720p.mp4")
         subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", cfr_video,
                          "-vf", "scale=-2:720", "-c:v", "h264_nvenc", "-preset", "p4",
@@ -205,7 +207,7 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
         log("WARNING: calib.json has no calibration_resolution (calibrated "
             "before this field existed) -- uploading full-res video instead "
             "of a 720p proxy, recalibrate this venue to enable the proxy",
-            stage="convert")
+            stage="proxy")
         upload_video = cfr_video
 
     # --- Cloud dispatch: this is the part that's actually new ---
