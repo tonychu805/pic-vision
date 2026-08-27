@@ -4,7 +4,11 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.26 progress overview.md`](./progress/08.26%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.27 progress overview.md`](./progress/08.27%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+
+**2026-08-27: cloud route now uploads a 720p proxy to R2/RunPod instead of full resolution (`DECISIONS.md` ADR-069).** `calib.json` now records `calibration_resolution`; `pod_infer.py`'s masking and output coordinates are resolution-aware so a lower-res proxy can't silently misalign the court mask (same bug class as `ADR-064`, caught before shipping, not after). Verified byte-identical for old-format calibrations and coordinate-consistent (1.8px mean distance) on a real 720p-vs-native comparison. **Not yet measured: whether detection accuracy holds up at 720p** — only the coordinate mechanism has been verified so far.
+
+**Also 2026-08-27: fixed a real cancel-button race in the web dashboard** (built outside a session, reviewed and one bug found/fixed here) — cancelling before a pod/process was registered previously left the job running unattended, risking a real billed pod nobody was tracking. And: the webapp was found dead mid-job (killed by SIGHUP when its terminal closed, not a crash) — restarted with `nohup` so that can't recur.
 
 **Strategic decisions made 2026-08-26 — read this before re-asking the same questions.** `PIC-47` closed (Linear). Moat hypothesis: **venue relationships** (first-mover + switching cost + footage-flywheel), not the labeled corpus or ranking model — recorded in `STRATEGY.md` §2. Camera angle: **staying behind-baseline**, courtside deprioritized. Delivery architecture: **rolling 10-min chunks preferred over batch** (same total compute, ~8min vs. ~100min delivery latency, spreads GPU load) — caveat: the throughput number behind this is local-GPU-only, never confirmed on RunPod. Movement-analytics business case: **deferred until venue implementation starts.** Trained-classifier direction (`PIC-46`/`PIC-42`): **still not now.**
 
