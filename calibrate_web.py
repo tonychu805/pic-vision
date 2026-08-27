@@ -161,6 +161,8 @@ class Handler(BaseHTTPRequestHandler):
             "net_image_points": [[float(x), float(y)] for x, y in net_points],
             "court_size_ft": [20.0, 44.0],
             "net_y_ft": 22.0,
+            # See calibrate.py's identical field for why this is needed.
+            "calibration_resolution": [STATE["frame_w"], STATE["frame_h"]],
         }
         with open(STATE["out"], "w") as f:
             json.dump(out, f, indent=2)

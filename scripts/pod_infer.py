@@ -45,6 +45,19 @@ def court_mask(calib, shape, margin_px=80.0):
 
     Mirrors src/calib.py's court_wedge geometry, inlined so this script stays
     standalone on the pod (it imports nothing from src/).
+
+    calib['homography'] is an absolute-pixel-coordinate transform with no
+    inherent scale -- it's only valid at the resolution the calibration
+    frame was actually clicked at (calib['calibration_resolution'], written
+    by calibrate.py/calibrate_web.py/webapp/app.py). If `shape` (the frame
+    actually being masked) is a different resolution -- e.g. a lower-res
+    proxy uploaded to save bandwidth -- building the mask directly against
+    `shape` would silently misplace the court boundary. Instead, build the
+    mask at the calibration's own resolution (where the homography's pixel
+    coordinates are valid) and resize the finished boolean mask to `shape`
+    at the end. Resizing the *result* is deliberately simpler and safer than
+    hand-scaling every intermediate row/column number -- exactly that kind
+    of per-axis arithmetic is what produced ADR-064's coordinate bug.
     """
     h_inv = np.linalg.inv(np.array(calib["homography"], dtype=np.float64))
     width_ft, length_ft = calib.get("court_size_ft", [20.0, 44.0])
@@ -56,7 +69,8 @@ def court_mask(calib, shape, margin_px=80.0):
         (xl, yl), (xr, yr) = pts[0][0], pts[0][1]
         rows.append(((float(yl) + float(yr)) / 2.0, float(xl), float(xr)))
     rows.sort()
-    h, w = shape[:2]
+    cal_res = calib.get("calibration_resolution")
+    h, w = (cal_res[1], cal_res[0]) if cal_res else shape[:2]
     left = np.empty(h)
     right = np.empty(h)
     for y in range(h):
@@ -72,7 +86,10 @@ def court_mask(calib, shape, margin_px=80.0):
                     break
         left[y], right[y] = xl - margin_px, xr + margin_px
     xs = np.arange(w)[None, :]
-    return ((xs >= left[:, None]) & (xs <= right[:, None])).astype(np.uint8)
+    mask = ((xs >= left[:, None]) & (xs <= right[:, None])).astype(np.uint8)
+    if (h, w) != shape[:2]:
+        mask = cv2.resize(mask, (shape[1], shape[0]), interpolation=cv2.INTER_NEAREST)
+    return mask
 
 
 def prep3(imgs):
@@ -118,8 +135,18 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     # HEIGHT/WIDTH's 288:512 = 16:9 only by coincidence otherwise). Found
     # 2026-08-24 on a 1280x640 (2:1) video -- every prior video happened to
     # be exactly 16:9, so this was invisible until now.
-    x_ratio = img1.shape[1] / WIDTH
-    y_ratio = img1.shape[0] / HEIGHT
+    #
+    # Output in calib['calibration_resolution'] when present, not this
+    # frame's own resolution -- if this video is a lower-res proxy uploaded
+    # to save bandwidth, predictions.csv still needs to land in the same
+    # pixel space as calib.json's homography/net_y, since that's what every
+    # downstream consumer (build_reel, track_ball, crossing_times) assumes.
+    # This keeps that contract true without any of them needing to know a
+    # proxy was ever involved.
+    cal_res = calib.get("calibration_resolution") if calib else None
+    out_w, out_h = cal_res if cal_res else (img1.shape[1], img1.shape[0])
+    x_ratio = out_w / WIDTH
+    y_ratio = out_h / HEIGHT
     mask = court_mask(calib, img1.shape, margin_px) if calib else None
     if mask is not None:
         print(f"court mask: keeping {100 * mask.mean():.0f}% of the frame "

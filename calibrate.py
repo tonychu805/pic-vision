@@ -242,6 +242,13 @@ def main():
         "net_image_points": [[float(x), float(y)] for x, y in net_clicks],
         "court_size_ft": [20.0, 44.0],
         "net_y_ft": 22.0,
+        # [width, height] of the frame these pixel coordinates were clicked
+        # against. Needed because image_points/homography are absolute pixel
+        # coordinates with no inherent scale -- pod_infer.py uses this to
+        # stay correct if it's ever asked to run on a different-resolution
+        # copy of the video (e.g. a lower-res proxy uploaded to save
+        # bandwidth) than the one this calibration was done on.
+        "calibration_resolution": [frame.shape[1], frame.shape[0]],
     }
     with open(args.out, "w") as f:
         json.dump(out, f, indent=2)

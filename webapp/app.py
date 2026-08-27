@@ -284,6 +284,12 @@ def calibrate_save(job_id):
     with open(os.path.join(job_dir, "job.json")) as f:
         job = json.load(f)
 
+    video_path = os.path.join(job_dir, job["video_file"])
+    cap = cv2.VideoCapture(video_path)
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+
     calib = {
         "video": job["video_file"],
         "frame_at_sec": data.get("at"),
@@ -291,6 +297,8 @@ def calibrate_save(job_id):
         "net_image_points": [[float(x), float(y)] for x, y in net_points],
         "court_size_ft": [20.0, 44.0],
         "net_y_ft": 22.0,
+        # See calibrate.py's identical field for why this is needed.
+        "calibration_resolution": [frame_w, frame_h],
     }
     with open(os.path.join(job_dir, "calib.json"), "w") as f:
         json.dump(calib, f, indent=2)
@@ -356,6 +364,20 @@ def venue_calibrate_save(name):
     except Exception as e:
         return jsonify({"error": str(e)}), 400
 
+    staging_video = _find_staging_video(venue_dir)
+    if not staging_video:
+        # venue_calibrate_page() (the GET route) already requires this file
+        # to exist before it'll render anything to click on, so reaching
+        # here without one means it was removed mid-flow -- fail loudly
+        # rather than write a calib.json with a broken/missing
+        # calibration_resolution that a later cloud job would silently
+        # trust.
+        return jsonify({"error": "staging video is gone -- start over"}), 400
+    cap = cv2.VideoCapture(staging_video)
+    frame_w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    frame_h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    cap.release()
+
     calib = {
         "video": name,
         "frame_at_sec": data.get("at"),
@@ -363,6 +385,8 @@ def venue_calibrate_save(name):
         "net_image_points": [[float(x), float(y)] for x, y in net_points],
         "court_size_ft": [20.0, 44.0],
         "net_y_ft": 22.0,
+        # See calibrate.py's identical field for why this is needed.
+        "calibration_resolution": [frame_w, frame_h],
     }
     with open(calib_path, "w") as f:
         json.dump(calib, f, indent=2)
@@ -370,7 +394,6 @@ def venue_calibrate_save(name):
     # The staging video was only needed to grab a calibration frame -- not
     # kept afterward, matching this project's convention of never committing
     # or retaining raw video (regenerable, and here not even needed again).
-    staging_video = _find_staging_video(venue_dir)
     if staging_video:
         os.remove(staging_video)
 

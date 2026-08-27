@@ -1165,6 +1165,22 @@ All four reels comply with the 600s hard budget. The subjective gate passes clea
 
 ---
 
+## ADR-069 — Upload a 720p proxy to R2/RunPod instead of full resolution; keep the final cut full-res and local
+
+**Date:** 2026-08-27 · **Status:** accepted
+
+**Context.** The cloud route (`cloud_pipeline/run_cloud_job.py`) uploads the full-resolution CFR-converted video to R2 and to the pod — for a 22-minute session, that was a ~1GB transfer each way. Operator asked to shrink this by sending only a 720p proxy for detection, matching `ADR-043`'s original (never-built) "proxy video trick: cut from local full-res" design.
+
+**The risk found before writing any code.** `calib.json`'s `homography`/`image_points` are absolute pixel coordinates with no resolution recorded anywhere — `court_mask()` (`scripts/pod_infer.py`) builds its mask by projecting that homography into pixel space and indexing it directly against whatever frame it's given, assuming the two are the same resolution. They always have been, until now. Feeding `pod_infer.py` a 720p proxy while `calib.json` was calibrated at native resolution would silently misplace the court mask — the same class of bug as `ADR-064`'s coordinate mismatch, but corrupting *what the detector sees* rather than just a reported coordinate.
+
+**Decision.** Record the calibration frame's resolution in `calib.json` (`calibration_resolution: [w, h]`) at every site that writes one (`calibrate.py`, `calibrate_web.py`, `webapp/app.py`'s two save routes). `court_mask()` now builds the mask at the *calibration's* resolution (where the homography is actually valid) and resizes the finished boolean mask to the frame actually being processed via `cv2.resize(..., interpolation=cv2.INTER_NEAREST)`, rather than hand-scaling the intermediate row/column arithmetic — deliberately the simpler, lower-risk option given `ADR-064` was exactly that kind of per-axis scaling mistake. `pod_infer.py`'s output coordinates (`x_ratio`/`y_ratio`) are likewise computed against `calibration_resolution` when present, so predictions.csv always lands in the *calibration's* pixel space regardless of what resolution was actually processed — meaning `build_reel()`, `track_ball`, `crossing_times`, and every other downstream consumer needs zero changes; the proxy is invisible to them. `run_cloud_job.py` uploads a 720p downscale (`ffmpeg -vf scale=-2:720`) instead of the full-res CFR video, but `build_reel()` still cuts the final reel from the untouched full-res local copy. **Old `calib.json` files without `calibration_resolution` fall back to today's exact behavior** (treat the input frame as the calibration resolution) — confirmed byte-identical in testing, not just assumed — and `run_cloud_job.py` refuses to use the 720p proxy for a venue calibrated before this field existed, uploading full-res instead rather than risk a silent scale mismatch.
+
+**Verified, not just reasoned through.** Backward compatibility: ran the pre-change and post-change `pod_infer.py` against the same clip with an old-format `calib.json` — byte-identical output. New behavior: added `calibration_resolution` to a real calib.json, ran `pod_infer.py` once on the native 1920×1080 clip and once on a genuine 720p downscale of the same clip — `x_ratio`/`y_ratio` and the court-mask coverage percentage matched exactly between the two runs, and of 70 frames both runs detected a ball, the mean position distance was 1.8px (max 39.8px, one outlier) *in native-resolution pixel space* — small, expected differences from the lower-res encoding losing fine detail, not a systematic scale mismatch (which would show large, position-dependent errors, not this).
+
+**Consequences.** Detection-accuracy impact of running on 720p versus native resolution is still not measured against real labels — this ADR verifies the coordinate *mechanism* is correct, not that recall/precision hold up at 720p. That's the next thing to check before trusting this in place of full-res for a real scored session. Any venue wanting the bandwidth savings needs to be (re)calibrated after this change to get `calibration_resolution` written; venues calibrated earlier keep working exactly as before, just without the proxy.
+
+---
+
 ## Template
 
 ```markdown

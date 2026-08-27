@@ -19,6 +19,7 @@ the live test (installing TF2.15 fresh on a pod, running real inference)
 hasn't happened yet. See cloud_pipeline/README.md.
 """
 import argparse
+import json
 import os
 import re
 import subprocess
@@ -182,6 +183,30 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
                      "-cq", "20", "-an", "-fps_mode", "cfr", "-r", "30", cfr_video],
                     check=True)
 
+    # Upload a 720p proxy instead of the full-res video -- less to move over
+    # the network both ways -- while build_reel() below still cuts the final
+    # reel from the untouched full-res cfr_video. Only safe if calib.json
+    # records the resolution it was calibrated at (calibration_resolution):
+    # pod_infer.py needs that to keep predictions.csv in the *calibration's*
+    # pixel space regardless of what resolution it actually processed. A
+    # calib.json from before this field existed can't make that promise, so
+    # fall back to uploading the full-res video rather than silently risk
+    # every downstream pixel coordinate landing in the wrong scale.
+    with open(calib_path) as f:
+        _calib_check = json.load(f)
+    if _calib_check.get("calibration_resolution"):
+        log("creating 720p proxy for cloud upload...", stage="convert")
+        upload_video = os.path.join(out_dir, "video_proxy_720p.mp4")
+        subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", cfr_video,
+                         "-vf", "scale=-2:720", "-c:v", "h264_nvenc", "-preset", "p4",
+                         "-cq", "20", "-an", upload_video], check=True)
+    else:
+        log("WARNING: calib.json has no calibration_resolution (calibrated "
+            "before this field existed) -- uploading full-res video instead "
+            "of a 720p proxy, recalibrate this venue to enable the proxy",
+            stage="convert")
+        upload_video = cfr_video
+
     # --- Cloud dispatch: this is the part that's actually new ---
     _check_cancel(should_cancel_fn)
     log("checking cached weights in R2...", stage="r2_upload")
@@ -192,8 +217,8 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     calib_key = f"{job_prefix}/calib.json"
     csv_key = f"{job_prefix}/predictions.csv"
 
-    log(f"uploading CFR video + calibration to R2 ({job_prefix})...", stage="r2_upload")
-    r2_storage.upload_file(BUCKET, cfr_video, video_key)
+    log(f"uploading video + calibration to R2 ({job_prefix})...", stage="r2_upload")
+    r2_storage.upload_file(BUCKET, upload_video, video_key)
     r2_storage.upload_file(BUCKET, calib_path, calib_key)
 
     # Last checkpoint before the one step that actually costs money --

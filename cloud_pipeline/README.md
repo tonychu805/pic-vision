@@ -210,6 +210,19 @@ minutes these tests spanned) is untested. `DEFAULT_IMAGE` stays on the
 generic base until that's checked. Treat neither the 113.4s nor the ~53s
 average as the final word on their own.
 
+**Uploads a 720p proxy instead of full resolution (2026-08-27, `DECISIONS.md`
+ADR-069).** Less to move over the network both ways; `build_reel()` still
+cuts the final reel from the untouched full-res local copy. Required making
+`calib.json` resolution-aware (`calibration_resolution` field) and fixing
+`pod_infer.py`'s court-masking/output-coordinate scaling to match — a real
+correctness risk was caught and fixed *before* shipping this, not after
+(see the ADR for the mechanism). Verified byte-identical for pre-existing
+calibrations and coordinate-consistent on a real 720p-vs-native comparison.
+**Not yet measured: whether detection accuracy holds up at 720p** — only
+the coordinate mechanism has been verified, not recall/precision against
+real labels. A venue calibrated before this field existed gets full-res
+uploads until it's recalibrated (logged as a warning, not silent).
+
 ## Usage
 
 Once per venue, the first time (see Calibration above):
