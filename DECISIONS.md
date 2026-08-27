@@ -1181,6 +1181,22 @@ All four reels comply with the 600s hard budget. The subjective gate passes clea
 
 ---
 
+## ADR-070 — Consistent logging across both pipelines: extend the working per-job pattern, don't add `logging.Logger` as a second system
+
+**Date:** 2026-08-27 · **Status:** accepted
+
+**Context.** Three uncoordinated logging conventions existed: (1) `webapp/pipeline.py`'s per-job `log.txt`/`status.json` pattern, shared by both routes, working well but untimestamped; (2) `cloud_pipeline/run_cloud_job.py`'s bare CLI path, pure `print()`, nothing persisted; (3) `webapp.py` itself, zero logging configuration. (3) caused a real incident the same day: the process was started directly in a terminal, that terminal closed, the process died via SIGHUP with zero trace anywhere (`dmesg`/`journalctl` both empty) — it had to be restarted by hand with an ad hoc `nohup ... > webapp/webapp.log`. Operator asked for "a solid and consistent logging practice across the board."
+
+**Decision.** Don't introduce Python's `logging` module as a second, parallel job-logging system — extend the pattern that already works. A new shared helper, `src/job_log.py`'s `append(job_dir, msg)`, adds a `[HH:MM:SS]` prefix and is the single implementation both `webapp/pipeline.py`'s `_log()` (now a one-line delegate) and `cloud_pipeline/run_cloud_job.py`'s CLI `main()` (via a `_cli_log` closure reusing the existing `log_fn` mechanism, not a new path) call — every `log.txt` line looks identical regardless of which route or entry point produced it, and no caller above `_log()`/`log_fn` needed to change.
+
+`webapp.py` is the one place `logging`'s handler machinery *is* the right tool, not a second system: Werkzeug's request logging and Flask's own error logging already flow through `logging.getLogger('werkzeug')`/`app.logger`, which propagate to root by default, so a `RotatingFileHandler` (5MB × 3 backups) attached to root captures them for free. Also added SIGHUP/SIGTERM/SIGINT handling that logs the signal before exiting — directly closes the "zero trace anywhere" gap the incident exposed. Full `%Y-%m-%d %H:%M:%S` timestamps here (vs. `job_log.append`'s bare `HH:MM:SS`) — deliberate, since this one file spans many days and restarts, unlike a job-scoped log.
+
+**Explicit non-goals:** the five `src/*.py` files' scattered `logging.getLogger`/`basicConfig` usage (different, interactive context, low value to unify, real risk touching detection code for cosmetic benefit); process supervision (nohup/systemd) — this makes a death visible in the log, it doesn't prevent one, confirmed as a separate follow-up with the operator.
+
+**Consequences.** Verified live, not just reasoned through: real startup/request/SIGTERM sequence produced exactly the expected log lines (`2026-08-27 12:27:02 WARNING [webapp] received SIGTERM, shutting down` as the last line before the process died); rotation mechanics confirmed with a small `maxBytes` in isolation; the CLI closure and `webapp/pipeline.py`'s patched `_log()` both confirmed producing matching `[HH:MM:SS]`-prefixed output. Full test suite: 130/130 pass. One pre-existing asymmetry surfaced, not introduced or fixed here: the local route's per-frame inference progress bypasses `_log()` entirely (a raw subprocess-stdout passthrough) while the cloud route's per-frame lines go through `log()`→`_log`, so cloud per-frame lines will carry timestamps and local ones won't — noted so it isn't mistaken for an oversight later.
+
+---
+
 ## Template
 
 ```markdown

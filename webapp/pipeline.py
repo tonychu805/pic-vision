@@ -21,6 +21,7 @@ import traceback
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
+from src import job_log
 from src.drift import find_bumps, drift_span
 from scripts.check_drift import measure as drift_measure
 from scripts.rank_and_reel import build_reel
@@ -113,8 +114,7 @@ def _check_cancel(job_id):
 
 
 def _log(job_dir, msg):
-    with open(os.path.join(job_dir, "log.txt"), "a") as f:
-        f.write(msg.rstrip("\n") + "\n")
+    job_log.append(job_dir, msg)
 
 
 def _set_status(job_dir, **fields):

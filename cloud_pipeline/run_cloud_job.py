@@ -38,6 +38,7 @@ sys.path.insert(0, REPO_ROOT)
 # (KeyError: 'CLOUDFLARE_R2_ACCOUNT_ID') before this was added.
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
+from src import job_log
 from src.drift import find_bumps, drift_span
 from scripts.check_drift import measure as drift_measure
 from scripts.rank_and_reel import build_reel
@@ -324,7 +325,17 @@ def main():
     p.add_argument("--session-id", required=True)
     p.add_argument("--out-dir", required=True)
     args = p.parse_args()
-    run_cloud_job(args.video, args.calib, args.target_sec, args.session_id, args.out_dir)
+
+    # Bare CLI use had no persistence at all -- print()-only, lost the
+    # moment the terminal closed. Reuses the same log_fn mechanism the
+    # dashboard path (webapp/pipeline.py) already relies on, rather than a
+    # second logging path.
+    def _cli_log(msg, stage=None):
+        print(f"[cloud_pipeline] {msg}", flush=True)
+        job_log.append(args.out_dir, msg)
+
+    run_cloud_job(args.video, args.calib, args.target_sec, args.session_id,
+                  args.out_dir, log_fn=_cli_log)
 
 
 if __name__ == "__main__":

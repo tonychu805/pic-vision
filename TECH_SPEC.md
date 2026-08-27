@@ -638,7 +638,9 @@ pic-vision/
 │   ├── drift.py                       # camera-bump/creep detection
 │   ├── players.py                      # player/court-position helpers
 │   ├── events.py                        # motion_series / kitchen_series signals
-│   └── render.py                         # clip rendering
+│   ├── render.py                         # clip rendering
+│   └── job_log.py                         # shared timestamped log.txt writer -- used by both
+│                                            # webapp/pipeline.py and cloud_pipeline/run_cloud_job.py
 │
 ├── scripts/                    # one-off analysis, diagnostics, parameter sweeps --
 │                                # not part of the operator's core run-a-session flow
