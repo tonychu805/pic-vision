@@ -1179,6 +1179,8 @@ All four reels comply with the 600s hard budget. The subjective gate passes clea
 
 **Consequences.** Detection-accuracy impact of running on 720p versus native resolution is still not measured against real labels — this ADR verifies the coordinate *mechanism* is correct, not that recall/precision hold up at 720p. That's the next thing to check before trusting this in place of full-res for a real scored session. Any venue wanting the bandwidth savings needs to be (re)calibrated after this change to get `calibration_resolution` written; venues calibrated earlier keep working exactly as before, just without the proxy.
 
+**Update, 2026-08-28 (`EXPERIMENTS.md`):** measured against real labels on `pb_draft_cup_30fps` (native 1920×1080, 34 labels). 720p showed no accuracy degradation — precision/recall were marginally *better* than native (0.773/0.500 vs. 0.714/0.441), and the one `quality:1` rally that scored as a miss at 720p turned out to be a boundary-threshold artifact (IoU 0.491 vs. native's 0.602 on an otherwise identically-detected rally), not a real missed detection. Caveat: single video, and this session also surfaced real run-to-run non-determinism in `pod_infer.py` (~7% of frames land a different position on a rerun with identical inputs) that this one comparison can't fully separate from a genuine resolution effect. Good enough to keep shipping the 720p proxy; not exhaustive enough to call the resolution question permanently closed.
+
 ---
 
 ## ADR-070 — Consistent logging across both pipelines: extend the working per-job pattern, don't add `logging.Logger` as a second system

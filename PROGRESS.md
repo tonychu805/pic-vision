@@ -4,7 +4,9 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.27 progress overview.md`](./progress/08.27%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/08.28 progress overview.md`](./progress/08.28%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+
+**2026-08-28: `ADR-069`'s open question answered — 720p detection accuracy holds up against real labels**, no degradation found (see `EXPERIMENTS.md`, `progress/08.28...`). One real mistake (wrong model weights file) caught mid-session by sanity-checking against a cached baseline before trusting results. Still open: an uncommitted per-venue calibration (`cloud_pipeline/venues/brickwall-mid-atlantic-720p/calib.json`) from the prior session's ADR-069 work.
 
 **2026-08-27: cloud route now uploads a 720p proxy to R2/RunPod instead of full resolution (`DECISIONS.md` ADR-069).** `calib.json` now records `calibration_resolution`; `pod_infer.py`'s masking and output coordinates are resolution-aware so a lower-res proxy can't silently misalign the court mask (same bug class as `ADR-064`, caught before shipping, not after). Verified byte-identical for old-format calibrations and coordinate-consistent (1.8px mean distance) on a real 720p-vs-native comparison. **Not yet measured: whether detection accuracy holds up at 720p** — only the coordinate mechanism has been verified so far.
 
