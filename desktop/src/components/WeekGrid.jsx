@@ -24,9 +24,17 @@ function sessionAt(sessions, day, hour) {
 // session to remove it entirely. Each session is a distinct object with
 // its own start/end (see electron/schedule.js), not just a flag per
 // hour -- two sessions that touch with no gap (1-2pm, then 2-4pm) stay
-// visually and structurally separate, marked by a divider at the start
-// of each session, because each is meant to become its own highlight
-// job once real capture/detection exist.
+// visually and structurally separate (the normal gap between cells is
+// left in place between them), while a single continuous booking (e.g.
+// 11am-1pm, one object spanning two hours) has that same gap visually
+// bridged/filled so it reads as one unbroken block -- the two cases look
+// different because they *are* different (one highlight job vs. two),
+// not because of an added border.
+//
+// CSS Grid, not nested flexbox: row/column track sizes are fixed by the
+// grid definition regardless of a cell's content, so the small absolutely-
+// positioned "bridge" rect that fills a gap between two same-session
+// cells never perturbs row height or the hour-label gutter's alignment.
 export default function WeekGrid({ sessions, onCreate, onDelete }) {
   const [drag, setDrag] = useState(null); // {day, min, max} while dragging a new session, else null
 
@@ -50,61 +58,70 @@ export default function WeekGrid({ sessions, onCreate, onDelete }) {
     setDrag(null);
   };
 
+  // A cell's "group" identifies what it's part of: an existing session's
+  // id, or a synthetic marker while it's inside the in-progress drag
+  // preview. Two vertically-adjacent cells only bridge the gap between
+  // them when they share the same group -- an empty cell, a different
+  // session, or the edge of the grid never bridges.
+  const groupAt = (day, hour) => {
+    if (hour < 0 || hour > 23) return null;
+    const session = sessionAt(sessions, day, hour);
+    if (session) return session.id;
+    if (drag && drag.day === day && hour >= drag.min && hour <= drag.max) return "preview";
+    return null;
+  };
+
   return (
-    <div style={{ display: "inline-flex", flexDirection: "column", gap: GAP, userSelect: "none" }} onMouseLeave={endDrag} onMouseUp={endDrag}>
-      <div style={{ display: "flex", gap: GAP, paddingLeft: 26 }}>
-        {DAY_LABELS.map((label) => (
-          <div key={label} style={{ width: CELL_SIZE, textAlign: "center", fontSize: 9, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
-            {label[0]}
+    <div style={{ display: "flex", gap: GAP, userSelect: "none" }} onMouseLeave={endDrag} onMouseUp={endDrag}>
+      <div style={{ display: "flex", flexDirection: "column", gap: GAP, paddingTop: 16 }}>
+        {Array.from({ length: 24 }, (_, hour) => (
+          <div key={hour} style={{ width: 24, height: CELL_SIZE, flex: "none", textAlign: "right", fontSize: 9.5, lineHeight: `${CELL_SIZE}px`, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }}>
+            {hour % HOUR_LABEL_EVERY === 0 ? hourLabel(hour) : ""}
           </div>
         ))}
       </div>
-      {Array.from({ length: 24 }, (_, hour) => (
-        <div key={hour} style={{ display: "flex", gap: GAP, alignItems: "center" }}>
-          <div style={{ width: 24, flex: "none", textAlign: "right", fontSize: 9.5, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }}>
-            {hour % HOUR_LABEL_EVERY === 0 ? hourLabel(hour) : ""}
-          </div>
-          {DAY_LABELS.map((_, day) => {
-            const session = sessionAt(sessions, day, hour);
-            const previewing = drag && drag.day === day && hour >= drag.min && hour <= drag.max;
-            // A divider renders only at a session's own start and own end --
-            // never at an hour *inside* a session -- so a single 2-hour
-            // booking (11am-1pm, one object) stays one unbroken block, while
-            // two separate 1-hour bookings that happen to touch (11-12,
-            // then 12-1) each get their own start+end border right at the
-            // seam between them, doubling up for a clearly visible divider.
-            const isSessionStart = session && hour === session.start;
-            const isSessionEnd = session && hour === session.end - 1;
-            const dividerColor = "var(--color-bg)";
-            return (
-              <div
-                key={day}
-                onMouseDown={() => startDrag(day, hour)}
-                onMouseEnter={() => extendDrag(day, hour)}
-                title={
-                  session
-                    ? `${DAY_LABELS[day]} ${timeLabel(session.start)}–${timeLabel(session.end)}${session.label ? ` — ${session.label}` : ""} — click to remove`
-                    : `${DAY_LABELS[day]} ${hourLabel(hour)} — drag to book a session`
-                }
-                style={{
-                  width: CELL_SIZE,
-                  height: CELL_SIZE,
-                  borderRadius: 2,
-                  boxSizing: "border-box",
-                  borderTop: `2px solid ${isSessionStart ? dividerColor : "transparent"}`,
-                  borderBottom: `2px solid ${isSessionEnd ? dividerColor : "transparent"}`,
-                  background: previewing
-                    ? "color-mix(in srgb, var(--color-accent) 45%, transparent)"
-                    : session
-                      ? "var(--color-accent)"
-                      : "color-mix(in srgb, var(--color-text) 8%, transparent)",
-                  cursor: "pointer",
-                }}
-              />
-            );
-          })}
+
+      <div>
+        <div style={{ display: "flex", gap: GAP, marginBottom: GAP }}>
+          {DAY_LABELS.map((label) => (
+            <div key={label} style={{ width: CELL_SIZE, textAlign: "center", fontSize: 9, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+              {label[0]}
+            </div>
+          ))}
         </div>
-      ))}
+
+        <div style={{ display: "grid", gridTemplateColumns: `repeat(7, ${CELL_SIZE}px)`, gridTemplateRows: `repeat(24, ${CELL_SIZE}px)`, gap: GAP }}>
+          {Array.from({ length: 24 }, (_, hour) =>
+            DAY_LABELS.map((_, day) => {
+              const session = sessionAt(sessions, day, hour);
+              const previewing = drag && drag.day === day && hour >= drag.min && hour <= drag.max;
+              const bridgesDown = groupAt(day, hour) !== null && groupAt(day, hour) === groupAt(day, hour + 1);
+              const color = previewing
+                ? "color-mix(in srgb, var(--color-accent) 45%, transparent)"
+                : session
+                  ? "var(--color-accent)"
+                  : "color-mix(in srgb, var(--color-text) 8%, transparent)";
+              return (
+                <div
+                  key={`${day}-${hour}`}
+                  onMouseDown={() => startDrag(day, hour)}
+                  onMouseEnter={() => extendDrag(day, hour)}
+                  title={
+                    session
+                      ? `${DAY_LABELS[day]} ${timeLabel(session.start)}–${timeLabel(session.end)}${session.label ? ` — ${session.label}` : ""} — click to remove`
+                      : `${DAY_LABELS[day]} ${hourLabel(hour)} — drag to book a session`
+                  }
+                  style={{ position: "relative", width: CELL_SIZE, height: CELL_SIZE, borderRadius: 2, background: color, cursor: "pointer" }}
+                >
+                  {bridgesDown && (
+                    <div style={{ position: "absolute", left: 0, right: 0, bottom: -GAP, height: GAP, background: color, pointerEvents: "none" }} />
+                  )}
+                </div>
+              );
+            })
+          )}
+        </div>
+      </div>
     </div>
   );
 }

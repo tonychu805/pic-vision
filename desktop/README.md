@@ -209,14 +209,27 @@ job once real capture/detection exist, and a flat "is this hour active"
 set can't represent that boundary at all. Drag across the grid to book a
 session spanning exactly the hours dragged; click an existing session
 (on the grid, or its delete button in the list alongside the grid) to
-remove it. Two touching sessions get a visibly reinforced divider right
-at their shared edge (a border drawn at each session's own start and end
-hour only -- never at an hour strictly inside one), while a genuine
-multi-hour session's internal hours stay borderless so it reads as one
-unbroken block -- confirmed via `getComputedStyle` on the real rendered
-cells, not just eyeballed, after an initial version's divider (a subtle
-1.5px shadow at session-start only) turned out too faint to actually
-notice. No per-session label/name in the UI yet (not needed yet) --
+remove it. A genuine multi-hour session (11am-1pm, one object) renders
+with the gap between its own cells visually closed -- an absolutely-
+positioned "bridge" rect, only ever drawn between two cells that share
+the *same* session id -- so it reads as one unbroken block; two sessions
+that merely touch (2-3pm, then 3-4pm, two different ids) get no bridge
+and keep the normal gap between them, which is what actually signals
+they're different, not an added line. This needed `WeekGrid.jsx` on CSS
+Grid rather than nested flex rows -- a shared flex row per hour can't
+collapse spacing for one day's column without shifting every other
+day's row height and breaking the hour-label gutter's alignment; a
+grid's row/column tracks are fixed regardless of a child's content, so
+the bridge (out of layout flow) never perturbs it. Verified
+geometrically via `getBoundingClientRect`, not just eyeballed: a real
+continuous session's bridge lands exactly flush against its two cells
+(0px gap), two separate touching sessions measure the real 2px gap, and
+the label gutter still lines up with its row after the rewrite. (Two
+earlier attempts used borders instead -- a single subtle shadow at a
+session's start, then a stronger two-sided border at start+end -- both
+worked as coded but relied on an *added* line to signal difference
+rather than the *absence* of the normal gap, which is what this version
+does instead.) No per-session label/name in the UI yet (not needed yet) --
 `schedule.js`'s `label` field and rename IPC call still exist, just
 unused by this page for now. Booking a range that overlaps existing
 sessions trims or splits them rather than silently double-booking
