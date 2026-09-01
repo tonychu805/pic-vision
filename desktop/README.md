@@ -105,7 +105,16 @@ app, not a description of the intended change.
 **Cameras + camera detail pages are wired to the real backend** -- nothing
 shown there is fabricated:
 
-- **Scan for cameras** -- runs two independent methods together, both real:
+- **Scan for cameras** -- runs two independent methods together, both real.
+  **Auto-runs whenever the Cameras page opens** (2026-09-01, not just on
+  the first "Scan again" click) -- discovery/sweep results are
+  deliberately never persisted (a stale "found a camera" from minutes ago
+  is worse than a fresh one), but this page unmounts whenever nav
+  switches away and remounts fresh on return, which wiped that state
+  with no scan re-triggered to replace it -- reported as "the scanning
+  screen seems stateless... the cameras are gone" (real, especially
+  visible with zero configured cameras, where the page showed nothing at
+  all instead of "scan again to see what's here").
   - **ONVIF WS-Discovery** (`electron/cameras/discovery.js`) -- a
     multicast probe; only finds cameras that choose to answer it. Filters
     results by the responder's own declared `<wsd:Types>` -- the `onvif`
@@ -123,7 +132,14 @@ shown there is fabricated:
     re-admitted them too. Fixed by building the confirmed list directly
     from the event data instead of cross-referencing anything afterward
     -- verified against the real network twice, including a repeat scan
-    to rule out a one-off.
+    to rule out a one-off. **A second real bug surfaced verifying the
+    auto-scan fix below:** one physical device commonly answers a single
+    probe more than once (multiple interfaces, or the probe going out
+    more than once), and building the list from raw events lost the
+    deduplication `Discovery.probe()`'s own resolved list had apparently
+    been doing for free -- the same Tapo C200 showed up twice in one
+    scan. Fixed by keying the accumulated device map by `cam.hostname`
+    instead of pushing every event to an array.
   - **RTSP port sweep + protocol confirm** (`electron/cameras/networkSweep.js`)
     -- TCP-probes port 554 against every host in the subnet, in parallel,
     then (if the port is open) sends a real RTSP `OPTIONS` request and

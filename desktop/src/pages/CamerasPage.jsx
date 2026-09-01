@@ -228,6 +228,17 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange }) {
 
   useEffect(() => {
     refreshConfigured();
+    // Discovery results (discovered/sweepHits/hasScanned) are local state,
+    // not persisted anywhere -- deliberately, since a stale "found a
+    // camera" from 10 minutes ago is worse than a fresh scan, not better.
+    // But this whole page unmounts when nav switches away (App.jsx only
+    // renders it while nav === "cameras") and remounts fresh on return,
+    // wiping that state -- without this, coming back from another page
+    // looked exactly like "the cameras disappeared" (real report,
+    // 2026-09-01) rather than "scan results are naturally ephemeral."
+    // Auto-scanning here instead of requiring another manual click keeps
+    // that ephemerality without it reading as data loss.
+    startScan();
   }, []);
 
   const startScan = async () => {

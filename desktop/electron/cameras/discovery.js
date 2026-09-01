@@ -66,12 +66,23 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
   // object (same shape as the resolved one, confirmed by hostname/
   // xaddrs being populated at event time) has no cross-referencing step
   // to break.
-  const confirmed = [];
+  // Keyed by hostname, not pushed to an array -- a single physical device
+  // commonly answers a WS-Discovery multicast probe more than once (over
+  // multiple network interfaces, or the probe itself going out more than
+  // once), each answer firing its own `device` event. Confirmed on real
+  // hardware 2026-09-01: the same Tapo C200 showed up twice in one scan
+  // once events were the only source of truth here (the promise-resolved
+  // `Discovery.probe()` list this replaced likely deduplicated
+  // internally before resolving; going straight to events lost that for
+  // free). `cam.hostname` is reliably populated (confirmed via the same
+  // debug logging that found the urn bug above) and is what a real
+  // camera's XAddr actually identifies it by, so it's the natural key.
+  const confirmed = new Map();
   const sourceIpByHostname = new Map();
 
   const onDevice = (cam, rinfo, xml) => {
     if (declaresNetworkVideoTransmitter(xml)) {
-      confirmed.push(cam);
+      confirmed.set(cam.hostname, cam);
       sourceIpByHostname.set(cam.hostname, rinfo.address);
     }
   };
@@ -83,7 +94,7 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
   try {
     await Discovery.probe({ timeout }); // resolved value unused -- only
                                          // awaited for completion/timeout
-    const devices = confirmed.map(toPlainDevice);
+    const devices = [...confirmed.values()].map(toPlainDevice);
     // cam.hostname comes from the device's own XAddr URL, which some
     // responders (e.g. the two NAS boxes this filter rejects) give as a
     // symbolic hostname rather than an IP -- ARP only indexes IPs.
