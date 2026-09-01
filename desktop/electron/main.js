@@ -127,7 +127,16 @@ function createWindow() {
 
   if (isDev) {
     win.loadURL("http://localhost:5173");
-    win.webContents.openDevTools({ mode: "detach" });
+    // Used to open unconditionally on every dev launch -- a whole extra
+    // Chromium UI surface (detached DevTools window) the compositor has
+    // to service on top of the app's own GPU process + 2 renderers,
+    // whether or not anyone's actually looking at it. Reported
+    // 2026-09-01 as system-wide mouse lag whenever the dev server
+    // starts; --remote-debugging-port=9223 (already set in package.json)
+    // gives full CDP access without this window at all, which is how
+    // this session verifies changes anyway -- opt in with
+    // OPEN_DEVTOOLS=1 when actually wanted.
+    if (process.env.OPEN_DEVTOOLS) win.webContents.openDevTools({ mode: "detach" });
   } else {
     win.loadFile(path.join(__dirname, "..", "dist", "index.html"));
   }

@@ -35,6 +35,16 @@ injected) via the Chrome DevTools Protocol instead of needing to see the
 window. Also dev-only; do not ship a packaged build with an open debug
 port.
 
+`npm run dev` no longer opens a detached DevTools window automatically
+(2026-09-01 -- reported as system-wide mouse lag on every dev launch,
+plausibly compositor contention from Electron's own GPU-compositing
+surfaces on an already-loaded desktop; removing this one, unconditional
+extra Chromium window is a real, verified reduction, though not a
+confirmed full fix). Set `OPEN_DEVTOOLS=1` before `npm run dev` if you
+actually want the visible window -- the CDP port above already gives
+full DevTools-equivalent access without it, which is how this project's
+own dev sessions have driven verification all along.
+
 ## Visual design
 
 The UI (all 5 pages, the "Nocturne" dark design system -- Inter, blurple
