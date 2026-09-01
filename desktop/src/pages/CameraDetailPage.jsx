@@ -204,22 +204,13 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+            <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
+            <span className={v.stateTagClass}>{v.stateLabel}</span>
+          </div>
           <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", marginTop: 2 }}>{v.subtitle} · {v.ip}</div>
         </div>
         <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />
-      </div>
-
-      <div style={{ position: "relative", aspectRatio: "16/9", borderRadius: "var(--radius-md)", overflow: "hidden", background: v.live ? "linear-gradient(160deg, var(--color-neutral-800), var(--color-neutral-900))" : "var(--color-neutral-900)", boxShadow: "var(--shadow-sm)" }}>
-        <div style={{ position: "absolute", inset: 0, display: "grid", placeItems: "center", alignContent: "center", gap: 8 }}>
-          <i className={v.thumbIcon} style={{ fontSize: 44, color: v.live ? "var(--color-accent-300)" : "color-mix(in srgb, var(--color-text) 30%, transparent)" }} />
-          <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 45%, transparent)" }}>
-            No live preview yet — this app cuts highlight clips from footage, it doesn't decode RTSP for a viewer.
-          </span>
-        </div>
-        <div style={{ position: "absolute", top: 10, left: 10 }}>
-          <span className={v.stateTagClass}>{v.stateLabel}</span>
-        </div>
       </div>
 
       <RecordingControl camera={card.camera} />
