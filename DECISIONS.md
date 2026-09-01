@@ -1199,6 +1199,38 @@ All four reels comply with the 600s hard budget. The subjective gate passes clea
 
 ---
 
+## ADR-071 — Split the venue-side system: a thin local agent (LAN-bound work only) vs. a cloud web app (everything that's just data)
+
+**Date:** 2026-09-02 · **Status:** accepted (architecture only — nothing in this ADR is built yet)
+
+**Context.** `STRATEGY.md` §5 originally scoped the desktop client (`desktop/`) to own the *entire* venue-side pipeline: camera discovery/management, local stream/footage management, local encode, sending to the cloud, receiving cloud output back, and CDN delivery. Two days of building `desktop/` (camera discovery, calibration-adjacent flows, manual recording — `PIC-64`/`PIC-66`) made clear that most of that scope doesn't actually need to run at the venue. The forcing constraint: ONVIF discovery is UDP multicast and a venue's cameras sit on a private LAN with no port-forwarding, so camera-facing work (discovery, RTSP connect/capture) can only run on a machine physically at the venue — that part isn't optional. But scheduling, court/venue management records, footage review, and multi-venue admin are just data, and don't need to be anywhere near the venue at all. Operator: "I was expecting heavy lifting on the web app (including camera management, etc)... schedulers, other court management tasks remain on the web app on the cloud."
+
+No hosted, multi-venue, authenticated web app exists anywhere in this repo today — `webapp/` (Flask) is a single-operator local tool (upload footage, calibrate, run the pipeline, download a reel), not venue-facing or cloud-hosted. This ADR fixes the target shape both existing pieces should grow toward, before either grows further in the wrong direction.
+
+**Decision.**
+
+**Local agent keeps** (LAN-bound or needs the actual local file on disk — can't move):
+- Camera discovery/management (`electron/cameras/*`, built)
+- Recording/capture (`electron/capture.js`, built)
+- Court calibration — currently `setup_venue_calibration.py`, a standalone script never folded into `desktop/`; belongs there, not in the web app, since it needs a live/local frame to click points on and is invalidated by camera movement (ADR-049)
+- Transcoding (CFR conversion) — currently ffmpeg calls inside `cloud_pipeline/run_cloud_job.py`/`webapp/pipeline.py`, NVIDIA-only (`PIC-67`), not yet invoked by `desktop/` at all
+- Uploading to R2 — currently `cloud_pipeline/r2_storage.py`, real and working, not yet invoked by `desktop/`
+- Receiving cloud-pipeline output and cutting the final reel from local full-res footage — per ADR-043's own privacy-driven reasoning (full-res video stays local), this step has to run wherever the full-res file is, i.e. the local agent, not the web app, regardless of how everything else splits
+
+**Cloud web app takes** (pure data/orchestration, no LAN dependency):
+- Scheduling — today's `ScheduleOverviewPage`/`ScheduleEditorPage` + `electron/schedule.js`, built in `desktop/` this session, migrates wholesale (data and UI both) once the web app exists. Today's implementation isn't wasted work: it's the real interim mechanism and the reference design for the migrated version, but `desktop/` is not its permanent home.
+- Court/venue management records, footage review, multi-venue admin, delivery to players — all new, none of it built yet.
+
+**Reuse, don't reimplement:** the local agent's transcode/upload/calibration work already exists as real, working Python (`cloud_pipeline/r2_storage.py`, the ffmpeg CFR calls, `setup_venue_calibration.py`). The Node/Electron agent should invoke these as subprocesses — the same pattern `capture.js` already uses for `ffmpeg` directly — not port R2 upload or calibration math into JavaScript from scratch. This was already `PIC-68`'s scoped plan; this ADR just confirms it's still the right call under the wider split.
+
+**Connectivity: local agent is outbound-only.** It polls (or maintains a lightweight persistent connection to) a cloud backend for pending commands and reports status back — it never needs an inbound port opened on the venue's router. This was chosen, not defaulted to, because the operator explicitly located the web app "on the cloud" (ruling out a local-only web UI serving the same box), and an outbound-only model needs zero network configuration at the venue, consistent with the project's standing "any camera, no vendor-specific setup" stance extended to networking too. Polling over a persistent WebSocket for the *first* version — camera management, calibration, transcode, and schedule sync are none of them latency-sensitive the way a live video feed would be; a persistent channel is a reasonable later upgrade if command latency becomes a real problem, not a day-one requirement.
+
+**The schedule-ownership/local-trigger split, made explicit:** scheduling *data and UI* move to the cloud, but *actually starting/stopping a recording on time* still has to execute locally (`PIC-72`). The local agent closes that gap by polling/caching the schedule for its own cameras over the same outbound connectivity channel above — not a separate mechanism.
+
+**Consequences.** Nothing here is built — this is the target shape for `PIC-68` (wire capture to `cloud_pipeline`), `PIC-72` (schedule → capture trigger), and the not-yet-created web-app work, not a new implementation task itself. Concretely still missing, now with a fixed target instead of an open question: a local-agent API surface (nothing external can drive `desktop/`'s Node backend today — only its own Electron renderer can, via IPC), the outbound connectivity/relay mechanism itself, a real multi-tenant database and auth system (today everything is flat JSON — `electron-store` locally, R2 objects for footage — with zero user accounts anywhere), and per-venue scoped cloud credentials (`PIC-71`, a hard prerequisite for the web app to trigger any venue's pipeline safely). `desktop/`'s Schedule UI, built earlier this session, is explicitly interim — a future session moving scheduling to the web app should treat it as the reference design to port, not a mystery to re-derive, but should also actually remove it from `desktop/` once the migration lands rather than maintaining the same feature in two places.
+
+---
+
 ## Template
 
 ```markdown
