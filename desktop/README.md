@@ -276,7 +276,13 @@ shown there is fabricated:
   `GetDeviceInformation`, or "Not available" where ONVIF genuinely has no
   such field (MAC address is never fabricated -- ONVIF doesn't return
   one) -- an RTSP-added camera gets manufacturer from the MAC/vendor
-  lookup instead and says so for the rest. **A real crash bug here, found
+  lookup instead and says so for the rest. **Collapsed by default**
+  (2026-09-01, operator's call) behind a "Show camera details" toggle --
+  real data (raw stream URLs, ONVIF paths, MAC/serial fields that are
+  often just "Not available"), but genuinely technical, not something a
+  venue owner needs in front of them every time they open a camera. Same
+  disclosure pattern as `ManualAddDialog`'s "Advanced settings"
+  elsewhere in this app, not a new one. **A real crash bug here, found
   and fixed 2026-09-01:** signing in to a WS-Discovery-found camera
   directly from its detail page (`CameraDetailPage.jsx`'s inline
   `SignInInline` form -- distinct from the manual-add dialog's flow,

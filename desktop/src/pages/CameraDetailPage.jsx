@@ -112,6 +112,14 @@ function RemoveCameraControl({ camera, onRemoved }) {
 export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraRenamed }) {
   const v = cardVisuals(card);
   const panels = detailPanels(card.camera);
+  // Collapsed by default (2026-09-01, operator's call) -- Identity/
+  // Network/Streams is real data but genuinely technical (raw stream
+  // URLs, ONVIF paths, MAC/serial fields that are often just "Not
+  // available"), not something a venue owner needs in front of them
+  // every time they open a camera. Same disclosure pattern as
+  // ManualAddDialog's "Advanced settings" elsewhere in this app, not a
+  // new one.
+  const [showDetails, setShowDetails] = useState(false);
 
   return (
     <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "18px 22px 26px" }}>
@@ -139,30 +147,44 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         </div>
       </div>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
-        <InfoPanel title="Identity" rows={panels.identity} />
-        <InfoPanel title="Network" rows={panels.network} />
-      </div>
+      <button
+        type="button"
+        className="btn btn-ghost"
+        style={{ marginTop: 14, fontSize: 12.5 }}
+        onClick={() => setShowDetails((v) => !v)}
+      >
+        <i className={`ph ${showDetails ? "ph-caret-up" : "ph-caret-down"}`} style={{ fontSize: 13 }} />
+        {showDetails ? "Hide camera details" : "Show camera details"}
+      </button>
 
-      <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Streams</div>
-        {panels.streams.length === 0 ? (
-          <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
-            No stream URI on record for this camera.
-          </p>
-        ) : (
-          panels.streams.map((s) => (
-            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
-              <span className="tag tag-outline">{s.label}</span>
-              <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
-              <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{s.spec}</span>
-              <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => navigator.clipboard.writeText(s.url)}>
-                <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
-              </button>
-            </div>
-          ))
-        )}
-      </div>
+      {showDetails && (
+        <>
+          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 10 }}>
+            <InfoPanel title="Identity" rows={panels.identity} />
+            <InfoPanel title="Network" rows={panels.network} />
+          </div>
+
+          <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
+            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Streams</div>
+            {panels.streams.length === 0 ? (
+              <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
+                No stream URI on record for this camera.
+              </p>
+            ) : (
+              panels.streams.map((s) => (
+                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+                  <span className="tag tag-outline">{s.label}</span>
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
+                  <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{s.spec}</span>
+                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => navigator.clipboard.writeText(s.url)}>
+                    <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
+                  </button>
+                </div>
+              ))
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 }
