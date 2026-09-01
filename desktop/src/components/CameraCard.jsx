@@ -90,19 +90,18 @@ export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss
           <span style={{ fontWeight: 500, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
             {v.name}
           </span>
-          <span style={{ marginLeft: "auto", fontFamily: "ui-monospace, Menlo, monospace", fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>
-            {v.ip}
-          </span>
         </div>
-        {/* Real detail (vendor/model, or an honest "Camera"/"Not available"
-            fallback when unknown -- cameraView.js) shown directly, not
-            summarized into a coded ONVIF/RTSP badge. That badge implied a
-            streaming-protocol choice that doesn't exist -- every camera
-            streams over RTSP regardless of how it was connected; ONVIF
-            only changes whether real device metadata like this is known
-            at all. Dropped 2026-09-01 rather than relabeled, since this
-            subtitle already says the real thing plainly. */}
-        <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>{v.subtitle}</div>
+        {/* IP address and vendor/model dropped from the card entirely
+            2026-09-01 ("hide ip and camera information on the card too",
+            following the detail page's own collapse-by-default) -- that
+            detail still lives on the camera's detail page, behind "Show
+            camera details" there. Kept for discovered/sweep cards: their
+            subtitle is an action prompt ("Tap to sign in"), not device
+            info, and removing it would leave a card with no explanation
+            of what tapping it does. */}
+        {card.kind !== "configured" && (
+          <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>{v.subtitle}</div>
+        )}
         <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
           <span className={v.stateTagClass}>{v.stateLabel}</span>
         </div>

@@ -211,6 +211,16 @@ shown there is fabricated:
     shows the real thing (actual vendor/model, or an honest "Camera"/
     "Not available" when unknown), so there was nothing worth encoding
     into a second badge.
+  - **IP address and vendor/model dropped from the card entirely**
+    (2026-09-01, operator: "hide ip and camera information on the card
+    too" -- following the detail page's own collapse-by-default a couple
+    changes earlier). A configured card now shows just its name and
+    connection state; the same detail is still there, one tap away,
+    behind that camera's own "Show camera details" toggle. Kept for
+    discovered/sweep cards specifically: their subtitle line is an
+    action prompt ("Tap to sign in," "Tap to set up"), not device
+    information, and removing it would leave a card with no explanation
+    of what tapping it actually does.
 - **Vendor (brand) identification** -- every discovery/sweep hit is looked
   up by MAC address (ARP -- the OS already knows it from the probe/scan
   itself) against the IEEE OUI registry (`oui-data`, bundled locally as a
