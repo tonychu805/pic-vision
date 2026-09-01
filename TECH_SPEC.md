@@ -628,16 +628,20 @@ pic-vision/
 │   │                                    # run_cloud_job.py has no calibration logic of its own)
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
-├── desktop/                     # venue owner-facing desktop client (2026-09-01,
-│   │                              # STRATEGY.md §5) -- Electron + React, POC scope:
-│   │                              # camera discovery/management, a per-camera
-│   │                              # weekly booked-session schedule (config only, not
-│   │                              # wired to capture yet), and -- as of the same
-│   │                              # day, PIC-66 -- real manual recording (RTSP pull
-│   │                              # via ffmpeg, capture.js). Everything else in §5
-│   │                              # (CFR encode -- PIC-67's NVIDIA-only gap, R2
-│   │                              # upload, receiving cloud output back and cutting
-│   │                              # from local full-res, CDN delivery) is unbuilt.
+├── desktop/                     # venue owner-facing local agent (2026-09-01,
+│   │                              # STRATEGY.md §5; ADR-071 as of 2026-09-02) --
+│   │                              # Electron + React, POC scope: camera discovery/
+│   │                              # management, a per-camera weekly booked-session
+│   │                              # schedule (config only, not wired to capture
+│   │                              # yet), and -- as of 2026-09-02, PIC-66 -- real
+│   │                              # manual recording (RTSP pull via ffmpeg,
+│   │                              # capture.js). Everything else in the local
+│   │                              # agent's own scope per ADR-071 (court
+│   │                              # calibration, CFR encode -- PIC-67's NVIDIA-only
+│   │                              # gap, R2 upload, receiving cloud output back and
+│   │                              # cutting from local full-res) is unbuilt. CDN
+│   │                              # delivery is NOT this app's scope -- ADR-071
+│   │                              # moved it to the (also unbuilt) cloud web app.
 │   │                              # Visual design (all 5
 │   │                              # pages, "Nocturne" design system) implemented
 │   │                              # from a Claude Design handoff bundle

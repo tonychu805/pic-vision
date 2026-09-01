@@ -1,6 +1,6 @@
 # STRATEGY — Beyond the Prototype
 
-**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12, reconciliation pass 2026-08-26, desktop client sketch 2026-08-26
+**Status:** Exploratory · **Owner:** Tony · **Last updated:** 2026-08-12, reconciliation pass 2026-08-26, desktop client sketch 2026-08-26, ADR-071 architecture split 2026-09-02
 
 **Nothing in this document is committed.** It records the direction and the open questions from a design conversation about what a multi-venue product *could* look like, so the thinking isn't lost. The prototype ([`PRD.md`](./PRD.md)) gates all of it — specifically the Phase 0.6 result. Venue deployment is "a different product, not a port" (`PRD.md` §10), and this document does not change prototype scope.
 
@@ -160,7 +160,7 @@ Personalized per-court highlights require linking **court → the people who pla
 
 **Free second product surface (corrected 2026-08-26 — not actually free yet):** anonymous within-session movement analytics — kitchen-line presence, distance covered, court coverage, partner spacing / stacking — would fall out of player tracking, need no ball, and require no cross-session identity, so no privacy conflict (the anonymous-vs-cross-session distinction is drawn in `DECISIONS.md` ADR-034). **But player tracking itself does not exist in the shipped pipeline** — `ADR-047` deferred it before it was built, not after, so this is a real future capability requiring player detection/tracking built from scratch, not a byproduct that "rides the same foundation as highlights" the way this section originally claimed. The current foundation (ball-crossing) produces zero player-position data today.
 
-**Delivery mechanism (2026-08-26, exploratory):** `§5`'s desktop client sketch names Cloudflare-as-CDN, link-based delivery as the actual output leg — the piece this section discusses identity/personalization for, but never specifies a transport for. Same caveat applies here: a bare public link sits awkwardly next to this section's own privacy stance, so it likely wants to be scoped/signed/expiring rather than open — not decided, see `§5`.
+**Delivery mechanism (2026-08-26, exploratory; owner corrected 2026-09-02 — `DECISIONS.md` ADR-071):** Cloudflare-as-CDN, link-based delivery is the actual output leg — the piece this section discusses identity/personalization for, but never specifies a transport for. Originally sketched as the desktop client's job; per ADR-071 that's now the **cloud web app**'s "delivery to players" responsibility (`§5`) — the local agent's role stops at uploading the finished clip's bytes, it doesn't serve the link. Same caveat applies either way: a bare public link sits awkwardly next to this section's own privacy stance, so it likely wants to be scoped/signed/expiring rather than open — not decided, see `§5`.
 
 ---
 

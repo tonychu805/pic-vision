@@ -1,19 +1,28 @@
-# Desktop client (POC)
+# Desktop client / local agent (POC)
 
-Venue owner-facing desktop app -- the first scoped piece from
-`STRATEGY.md` §5's "desktop client": **camera discovery/management**.
-Everything else in that section (local footage handling, R2 upload,
-receiving the cloud pipeline's output, CDN delivery) is not built yet.
+Venue owner-facing local app -- per `DECISIONS.md` ADR-071 (2026-09-02),
+this is the **local agent** half of a two-part architecture: it owns
+everything that has to run on a machine physically at the venue (camera
+discovery/management, recording, and eventually calibration/transcode/
+upload), while a separate, not-yet-built cloud web app owns everything
+that's just data (scheduling, court/venue management, delivery to
+players). See `STRATEGY.md` §5 for the full split and `progress/09.02
+progress overview.md` for how it was decided. Built so far: camera
+discovery/management, recording (`electron/capture.js`). Not yet built:
+calibration, transcode, upload, receiving the cloud pipeline's output,
+or any connection to the (not yet existing) web app.
 
 Electron + React (Vite), chosen over Tauri for the POC because v1's actual
 feature -- ONVIF discovery and RTSP handling -- is Node's ecosystem, not
 Rust's; see `progress/` for the fuller stack discussion. All Node/OS access
-(ONVIF calls, camera storage) is kept behind `electron/main.js`'s five
-`ipcMain.handle` calls and `electron/preload.js`'s matching
+(ONVIF calls, camera storage, recording) is kept behind `electron/main.js`'s
+`ipcMain.handle` calls and `electron/preload.cjs`'s matching
 `contextBridge` surface -- the renderer never touches Node directly. That
 boundary is deliberate: it's what would let a later Tauri port keep
-`electron/cameras/*.js` as a Node "sidecar" process instead of a Rust
-rewrite.
+`electron/cameras/*.js` (and `capture.js`, `schedule.js`) as a Node
+"sidecar" process instead of a Rust rewrite -- or, per ADR-071, what
+would let this same backend eventually grow a real local-agent API
+surface without restructuring it first.
 
 ## Run it
 
@@ -424,7 +433,7 @@ problem for RunPod/R2 credentials ("cannot ship `.env` values to external
 venue owners") -- whatever secret-storage fix lands for that should cover
 this too, not be solved separately.
 
-## Recording (`electron/capture.js`, 2026-09-01 -- PIC-66)
+## Recording (`electron/capture.js`, 2026-09-02 -- PIC-66)
 
 Real, not a stub: a "Start recording" / "Stop recording" control on each
 configured camera's detail page spawns `ffmpeg` and pulls the camera's
@@ -461,7 +470,7 @@ like a UI bug rather than a diagnosable error. Fixed with a 2-second
 startup grace period before trusting a start actually worked; a fast
 `ffmpeg` exit within that window now rejects with the real error instead.
 
-Trigger is a manual button only (operator's call, 2026-09-01) -- not
+Trigger is a manual button only (operator's call, 2026-09-02) -- not
 tied to the Schedule page's booked sessions yet, even though the
 Schedule page's own copy already promises that ("each booking becomes
 its own highlight reel once automatic capture is built"). A manual
@@ -483,10 +492,14 @@ Python pipeline in this repo), not buried in an app-private directory.
   alerts if one segment comes back short.
 - No packaging/signing configured beyond the bare `electron-builder`
   target list in `package.json`.
-- Everything past capture in STRATEGY.md §5's list (local CFR encode --
+- Everything past capture in the local agent's own scope per `DECISIONS.md`
+  ADR-071 / `STRATEGY.md` §5 (court calibration, local CFR encode --
   `PIC-67`'s NVIDIA-only gap, R2 upload, receiving cloud output back and
-  cutting from local full-res, CDN delivery) is unbuilt.
+  cutting from local full-res) is unbuilt. CDN delivery is no longer this
+  app's job at all -- ADR-071 moved it to the (also not-yet-built) cloud
+  web app.
 - The Schedule page's on/off toggle still has no real effect -- capture
   now exists, but nothing reads a camera's booked sessions to
-  automatically start/stop it yet. See Linear `PIC-66`-`71`
-  (`Venue Deployment`) for the full remaining integration scope.
+  automatically start/stop it yet (`PIC-72`). See Linear `PIC-66` (Done),
+  `PIC-72`, and `PIC-73` (`Venue Deployment`) for the remaining
+  integration scope.
