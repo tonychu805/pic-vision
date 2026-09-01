@@ -67,7 +67,15 @@ export default function WeekGrid({ sessions, onCreate, onDelete }) {
           {DAY_LABELS.map((_, day) => {
             const session = sessionAt(sessions, day, hour);
             const previewing = drag && drag.day === day && hour >= drag.min && hour <= drag.max;
+            // A divider renders only at a session's own start and own end --
+            // never at an hour *inside* a session -- so a single 2-hour
+            // booking (11am-1pm, one object) stays one unbroken block, while
+            // two separate 1-hour bookings that happen to touch (11-12,
+            // then 12-1) each get their own start+end border right at the
+            // seam between them, doubling up for a clearly visible divider.
             const isSessionStart = session && hour === session.start;
+            const isSessionEnd = session && hour === session.end - 1;
+            const dividerColor = "var(--color-bg)";
             return (
               <div
                 key={day}
@@ -82,12 +90,14 @@ export default function WeekGrid({ sessions, onCreate, onDelete }) {
                   width: CELL_SIZE,
                   height: CELL_SIZE,
                   borderRadius: 2,
+                  boxSizing: "border-box",
+                  borderTop: `2px solid ${isSessionStart ? dividerColor : "transparent"}`,
+                  borderBottom: `2px solid ${isSessionEnd ? dividerColor : "transparent"}`,
                   background: previewing
                     ? "color-mix(in srgb, var(--color-accent) 45%, transparent)"
                     : session
                       ? "var(--color-accent)"
                       : "color-mix(in srgb, var(--color-text) 8%, transparent)",
-                  boxShadow: isSessionStart ? "inset 0 1.5px 0 var(--color-bg)" : undefined,
                   cursor: "pointer",
                 }}
               />

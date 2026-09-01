@@ -16,27 +16,19 @@ function sortedSessions(sessions) {
   return [...sessions].sort((a, b) => a.day - b.day || a.start - b.start);
 }
 
-// One row in the session list -- shows the booked time range, an editable
-// label (defaults to a placeholder, not a fabricated name), and a delete
+// One row in the session list -- the booked time range plus a delete
 // button. Redundant with clicking the session directly on the grid, but
-// more discoverable and the only way to rename one.
-function SessionRow({ session, onRename, onDelete }) {
-  const [label, setLabel] = useState(session.label ?? "");
-
+// more discoverable. No name/label field yet -- not needed until
+// something downstream actually distinguishes sessions by name rather
+// than just by day+time (schedule.js/scheduleAPI still support a label,
+// this UI just doesn't expose it yet).
+function SessionRow({ session, onDelete }) {
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
       <span className="tag tag-outline" style={{ flex: "none", width: 34, justifyContent: "center" }}>{DAY_LABELS[session.day]}</span>
-      <span style={{ flex: "none", width: 118, fontSize: 12.5, fontFamily: "ui-monospace, Menlo, monospace" }}>
+      <span style={{ flex: 1, fontSize: 12.5, fontFamily: "ui-monospace, Menlo, monospace" }}>
         {timeLabel(session.start)}–{timeLabel(session.end)}
       </span>
-      <input
-        className="input"
-        style={{ flex: 1, minHeight: 28, fontSize: 12.5 }}
-        placeholder="Untitled session"
-        value={label}
-        onChange={(e) => setLabel(e.target.value)}
-        onBlur={() => onRename(session.id, label)}
-      />
       <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => onDelete(session.id)}>
         <i className="ph ph-trash" style={{ fontSize: 14 }} />
       </button>
@@ -47,7 +39,7 @@ function SessionRow({ session, onRename, onDelete }) {
 // Full per-camera session editor -- click-and-drag any range of hour
 // cells to book a session, click an existing one to remove it, each
 // persisted immediately via scheduleAPI (electron/schedule.js). The list
-// below the grid is the same data, sorted, with rename/delete controls.
+// below the grid is the same data, sorted, with a delete control.
 export default function ScheduleEditorPage({ camera, onBack }) {
   const [sessions, setSessions] = useState(null); // null while loading
   const [savedAt, setSavedAt] = useState(null);
@@ -66,12 +58,6 @@ export default function ScheduleEditorPage({ camera, onBack }) {
 
   const deleteSession = async (sessionId) => {
     const next = await window.scheduleAPI.remove(camera.id, sessionId);
-    setSessions(next);
-    setSavedAt(Date.now());
-  };
-
-  const renameSession = async (sessionId, label) => {
-    const next = await window.scheduleAPI.rename(camera.id, sessionId, label);
     setSessions(next);
     setSavedAt(Date.now());
   };
@@ -116,7 +102,7 @@ export default function ScheduleEditorPage({ camera, onBack }) {
                 </p>
               ) : (
                 sortedSessions(sessions).map((s) => (
-                  <SessionRow key={s.id} session={s} onRename={renameSession} onDelete={deleteSession} />
+                  <SessionRow key={s.id} session={s} onDelete={deleteSession} />
                 ))
               )}
             </div>

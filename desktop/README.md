@@ -209,11 +209,20 @@ job once real capture/detection exist, and a flat "is this hour active"
 set can't represent that boundary at all. Drag across the grid to book a
 session spanning exactly the hours dragged; click an existing session
 (on the grid, or its delete button in the list alongside the grid) to
-remove it; the list also lets you give a session a label. Booking a
-range that overlaps existing sessions trims or splits them rather than
-silently double-booking (`electron/schedule.js`'s `subtractRange`) --
-verified directly, not just via the UI: a session added in the middle of
-an existing one correctly splits it into two independent remainders.
+remove it. Two touching sessions get a visibly reinforced divider right
+at their shared edge (a border drawn at each session's own start and end
+hour only -- never at an hour strictly inside one), while a genuine
+multi-hour session's internal hours stay borderless so it reads as one
+unbroken block -- confirmed via `getComputedStyle` on the real rendered
+cells, not just eyeballed, after an initial version's divider (a subtle
+1.5px shadow at session-start only) turned out too faint to actually
+notice. No per-session label/name in the UI yet (not needed yet) --
+`schedule.js`'s `label` field and rename IPC call still exist, just
+unused by this page for now. Booking a range that overlaps existing
+sessions trims or splits them rather than silently double-booking
+(`electron/schedule.js`'s `subtractRange`) -- verified directly, not
+just via the UI: a session added in the middle of an existing one
+correctly splits it into two independent remainders.
 **What this doesn't do yet: actually start or stop anything.** There's no
 real capture/recording process in this app at all (`PIC-66`,
 `STRATEGY.md` §5's "Local stream/footage management" bullet) -- this is
