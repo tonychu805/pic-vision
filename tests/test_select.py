@@ -1,4 +1,4 @@
-from src.select import frame_speeds, spike_threshold, peak_rate, rank_segments
+from src.select import frame_speeds, spike_threshold, peak_rate, peak_window, rank_segments
 
 
 def test_frame_speeds_basic():
@@ -32,6 +32,21 @@ def test_peak_rate_finds_a_burst_a_flat_average_would_dilute():
     pk = peak_rate(events, start=0.0, end=20.0, window=3.0, step=0.25)
     assert pk > flat_avg
     assert pk == 2.0  # 6 events / 3.0s window
+
+
+def test_peak_window_falls_back_to_full_range_for_short_segment():
+    w_start, w_end, rate = peak_window([1.0, 1.5], start=1.0, end=2.0, window=3.0)
+    assert (w_start, w_end, rate) == (1.0, 2.0, 2 / 1.0)
+
+
+def test_peak_window_locates_the_burst_a_flat_average_would_dilute():
+    # same fixture as test_peak_rate_finds_a_burst_a_flat_average_would_dilute --
+    # the burst is in the first 2s, so the located window should start near 0.
+    events = [0.0, 0.4, 0.8, 1.2, 1.6, 2.0]
+    w_start, w_end, rate = peak_window(events, start=0.0, end=20.0, window=3.0, step=0.25)
+    assert rate == 2.0
+    assert w_end - w_start == 3.0
+    assert 0.0 <= w_start <= 0.25  # window slides in 0.25s steps from start=0.0
 
 
 def test_rank_segments_favors_duration_when_other_signals_tie():

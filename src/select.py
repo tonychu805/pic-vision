@@ -60,19 +60,34 @@ def spike_threshold(speeds, percentile=90):
     return statistics.quantiles(vals, n=100)[percentile - 1]
 
 
+def peak_window(event_times, start, end, window=3.0, step=0.25):
+    """Like peak_rate, but also returns *where* the busiest window is, not
+    just how busy it was -- needed to cut a clip around just the burst
+    rather than the whole segment it was found in.
+
+    Returns (window_start, window_end, rate). Falls back to the whole
+    [start, end) range if the segment is shorter than `window` (no room to
+    slide)."""
+    if end - start <= window:
+        rate = len(event_times) / (end - start) if end > start else 0.0
+        return start, end, rate
+    best_start, best_rate = start, 0.0
+    w = start
+    while w + window <= end:
+        count = sum(1 for t in event_times if w <= t <= w + window)
+        rate = count / window
+        if rate > best_rate:
+            best_start, best_rate = w, rate
+        w += step
+    return best_start, best_start + window, best_rate
+
+
 def peak_rate(event_times, start, end, window=3.0, step=0.25):
     """Highest count-per-second of `event_times` in any `window`-second
     sliding window fully inside [start, end]. Falls back to the flat
     average if the segment is shorter than `window` (no room to slide)."""
-    if end - start <= window:
-        return len(event_times) / (end - start) if end > start else 0.0
-    best = 0.0
-    w = start
-    while w + window <= end:
-        count = sum(1 for t in event_times if w <= t <= w + window)
-        best = max(best, count / window)
-        w += step
-    return best
+    _, _, rate = peak_window(event_times, start, end, window=window, step=step)
+    return rate
 
 
 def _minmax(vals):

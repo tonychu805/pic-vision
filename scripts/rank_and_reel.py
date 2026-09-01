@@ -35,7 +35,8 @@ PAD_SEC = 3.0
 WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # (duration, peak_crossing_rate, n_spikes) -- config.yaml
 
 
-def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path=None):
+def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path=None,
+                weights=WEIGHTS):
     """Detect rally candidates, rank them, and cut a highlight reel.
 
     Writes highlight.mp4 (chronological) and highlight_by_rank.mp4 (best-scored
@@ -43,6 +44,11 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
     stderr appended to it too -- webapp/pipeline.py passes its job's log.txt so
     a job run through the web UI is tailable there; plain CLI usage leaves it
     None and relies on stderr alone.
+
+    weights: (w_duration, w_peak_crossing_rate, w_n_spikes) passed to
+    src/select.py's rank_segments -- defaults to the shipped config.yaml
+    formula (ADR-063). Overriding this changes what gets ranked highest but
+    not the candidate segments themselves or how they're cut.
 
     Returns {"manifest", "chronological", "ranked", "stats"} -- stats is
     {"n_candidates", "n_chosen", "total_duration_sec"}.
@@ -82,7 +88,7 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
     speeds = frame_speeds(raw_points)
     threshold = spike_threshold(speeds, percentile=90)
 
-    ranked = rank_segments(segments, times_crossed, speeds, threshold, weights=WEIGHTS)
+    ranked = rank_segments(segments, times_crossed, speeds, threshold, weights=weights)
 
     report_stdout(f"\n{'rank':>4} {'start':>7} {'end':>7} {'dur':>6} {'pk_cr/s':>8} "
                   f"{'spikes':>6} {'score':>6}")
@@ -140,10 +146,15 @@ def main():
     ap.add_argument("--out-dir", required=True)
     ap.add_argument("--target-sec", type=float, default=300.0)
     ap.add_argument("--session-id", default="reel")
+    ap.add_argument("--weights", type=float, nargs=3, default=None,
+                     metavar=("W_DURATION", "W_PEAK_CROSSING_RATE", "W_N_SPIKES"),
+                     help="override the shipped 1/3-1/3-1/3 ranking weights, "
+                          "e.g. --weights 0 1 0 for a burst-only reel")
     args = ap.parse_args()
 
     build_reel(args.video, args.csv, args.calib, args.out_dir,
-               args.target_sec, args.session_id)
+               args.target_sec, args.session_id,
+               weights=tuple(args.weights) if args.weights else WEIGHTS)
 
 
 if __name__ == "__main__":
