@@ -424,17 +424,69 @@ problem for RunPod/R2 credentials ("cannot ship `.env` values to external
 venue owners") -- whatever secret-storage fix lands for that should cover
 this too, not be solved separately.
 
+## Recording (`electron/capture.js`, 2026-09-01 -- PIC-66)
+
+Real, not a stub: a "Start recording" / "Stop recording" control on each
+configured camera's detail page spawns `ffmpeg` and pulls the camera's
+actual RTSP stream to local `.mkv` segments -- the first thing in this
+whole client that pulls live video rather than just verifying a stream
+exists. Command shape is exactly `TECH_SPEC.md` §1.2's spec: `-c copy`
+(stream copy, no re-encode -- sidesteps `PIC-67`'s GPU-encoder question
+entirely for this step), 10-minute segments (a crash or Wi-Fi drop costs
+one segment, not the whole recording, per the real frame-drop testing in
+`DECISIONS.md` ADR-030/032), `-use_wallclock_as_timestamps 1` (the
+camera's own RTP timestamps are unreliable/non-monotonic, same ADR).
+Stopping is always a clean `SIGINT`, never a hard kill (ADR-031 found
+that corrupts the output container) -- including on app quit, via a
+`before-quit` handler that waits for any active recording to actually
+finish stopping first.
+
+**One real bug found and fixed before this was trusted, not by reading
+the spec and assuming it was right:** `TECH_SPEC.md`'s own example
+command uses a `.mp4` filename, but its own prose two lines later says
+`pcm_alaw` audio requires MKV, since MP4 has no codec tag for it -- and
+the Tapo C200 streams exactly that. Copying the example literally
+produced a real, silent-looking failure (`Could not find tag for codec
+pcm_alaw... Could not write header`, 0-byte output file) the first time
+this ran against a real camera. Fixed by using `.mkv` -- confirmed
+against *two* real cameras with *different* audio codecs (the C200's
+`pcm_alaw`, the Synology's `pcm_mulaw`), both producing valid,
+ffprobe-clean files.
+
+**A second real gap fixed the same way:** the first version returned
+"recording started" the instant `ffmpeg` was spawned, so a fast failure
+(like the one above) reported success and then silently reverted to
+"Start recording" seconds later with no explanation -- confusing, reads
+like a UI bug rather than a diagnosable error. Fixed with a 2-second
+startup grace period before trusting a start actually worked; a fast
+`ffmpeg` exit within that window now rejects with the real error instead.
+
+Trigger is a manual button only (operator's call, 2026-09-01) -- not
+tied to the Schedule page's booked sessions yet, even though the
+Schedule page's own copy already promises that ("each booking becomes
+its own highlight reel once automatic capture is built"). A manual
+button was simpler to get right first; wiring it to sessions is the
+natural next step, not a separate mechanism.
+
+Recordings save to `~/pic-vision-recordings/<camera name>/<timestamp>/`
+-- outside Electron's own userData directory, deliberately, since these
+files need to be findable by a human (and eventually fed into the
+Python pipeline in this repo), not buried in an app-private directory.
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
-  drops/non-monotonic timestamps pulling RTSP over wifi, and preferred
-  local (SD-card) recording over a live pull once available. This client
-  only proves out *discovery/connectivity* so far -- it doesn't record or
-  pull a stream yet, so ADR-032's preference hasn't been designed into it.
+  drops/non-monotonic timestamps pulling RTSP over wifi. Recording now
+  exists (`electron/capture.js`, above) and takes the same real risk on
+  every session -- 10-minute segmentation bounds the damage, per that
+  ADR's own conclusion, but nothing here retries a dropped connection or
+  alerts if one segment comes back short.
 - No packaging/signing configured beyond the bare `electron-builder`
   target list in `package.json`.
-- Everything past camera management in STRATEGY.md §5's list (local
-  encode, R2 upload, CDN delivery) is unbuilt.
-- The Schedule page's on/off toggle has no real effect -- there's no
-  capture process for it to gate (`PIC-66`). See Linear `PIC-66`-`71`
+- Everything past capture in STRATEGY.md §5's list (local CFR encode --
+  `PIC-67`'s NVIDIA-only gap, R2 upload, receiving cloud output back and
+  cutting from local full-res, CDN delivery) is unbuilt.
+- The Schedule page's on/off toggle still has no real effect -- capture
+  now exists, but nothing reads a camera's booked sessions to
+  automatically start/stop it yet. See Linear `PIC-66`-`71`
   (`Venue Deployment`) for the full remaining integration scope.

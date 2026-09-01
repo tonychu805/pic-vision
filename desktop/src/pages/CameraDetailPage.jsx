@@ -1,5 +1,80 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { cardVisuals, detailPanels } from "../lib/cameraView.js";
+
+function formatElapsed(startedAt) {
+  const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
+  const m = Math.floor(secs / 60);
+  const s = secs % 60;
+  return `${m}:${String(s).padStart(2, "0")}`;
+}
+
+// Manual start/stop recording (PIC-66, 2026-09-01) -- the first real
+// piece of "pull a live stream," not just verify one exists. Polls
+// captureAPI.status every 2s rather than trusting only its own start/
+// stop calls, so it stays correct if a recording was started/stopped
+// from elsewhere (there's only ever one electron/capture.js process
+// tracking this, but the UI shouldn't assume it's the only thing that
+// touched it).
+function RecordingControl({ camera }) {
+  const [status, setStatus] = useState({ recording: false });
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const [, forceTick] = useState(0); // re-render every 2s so the elapsed-time text keeps moving
+
+  useEffect(() => {
+    const refresh = () => window.captureAPI.status(camera.id).then(setStatus);
+    refresh();
+    const interval = setInterval(() => { refresh(); forceTick((n) => n + 1); }, 2000);
+    return () => clearInterval(interval);
+  }, [camera.id]);
+
+  const start = async () => {
+    setBusy(true);
+    setError("");
+    try {
+      const s = await window.captureAPI.start(camera.id);
+      setStatus({ recording: true, ...s });
+    } catch (err) {
+      setError(err.message);
+    }
+    setBusy(false);
+  };
+
+  const stop = async () => {
+    setBusy(true);
+    await window.captureAPI.stop(camera.id);
+    setStatus({ recording: false });
+    setBusy(false);
+  };
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "12px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
+      {status.recording ? (
+        <>
+          <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--color-accent-2-400)", animation: "blip 1.4s ease-in-out infinite" }} />
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13, fontWeight: 500 }}>Recording · {formatElapsed(status.startedAt)}</div>
+            <div style={{ fontSize: 11.5, fontFamily: "ui-monospace, Menlo, monospace", color: "color-mix(in srgb, var(--color-text) 50%, transparent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Saving to {status.outDir}
+            </div>
+          </div>
+          <button className="btn btn-primary" style={{ fontSize: 12.5, flex: "none", color: "var(--color-accent-2-400)", borderColor: "var(--color-accent-2-400)" }} disabled={busy} onClick={stop}>
+            {busy ? "Stopping…" : "Stop recording"}
+          </button>
+        </>
+      ) : (
+        <>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+            {error || `Recordings save to ~/pic-vision-recordings/${camera.label}/`}
+          </div>
+          <button className="btn btn-primary" style={{ fontSize: 12.5, flex: "none" }} disabled={busy} onClick={start}>
+            <i className="ph ph-record" style={{ fontSize: 14 }} />{busy ? "Starting…" : "Start recording"}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
 
 function InfoPanel({ title, rows }) {
   return (
@@ -146,6 +221,8 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
           <span className={v.stateTagClass}>{v.stateLabel}</span>
         </div>
       </div>
+
+      <RecordingControl camera={card.camera} />
 
       <button
         type="button"

@@ -630,11 +630,15 @@ pic-vision/
 │
 ├── desktop/                     # venue owner-facing desktop client (2026-09-01,
 │   │                              # STRATEGY.md §5) -- Electron + React, POC scope:
-│   │                              # camera discovery/management, plus a per-camera
-│   │                              # weekly activation schedule (config only -- no
-│   │                              # real capture process reads it yet, PIC-66).
-│   │                              # Everything else in §5 (local encode, R2 upload,
-│   │                              # CDN delivery) is unbuilt. Visual design (all 5
+│   │                              # camera discovery/management, a per-camera
+│   │                              # weekly booked-session schedule (config only, not
+│   │                              # wired to capture yet), and -- as of the same
+│   │                              # day, PIC-66 -- real manual recording (RTSP pull
+│   │                              # via ffmpeg, capture.js). Everything else in §5
+│   │                              # (CFR encode -- PIC-67's NVIDIA-only gap, R2
+│   │                              # upload, receiving cloud output back and cutting
+│   │                              # from local full-res, CDN delivery) is unbuilt.
+│   │                              # Visual design (all 5
 │   │                              # pages, "Nocturne" design system) implemented
 │   │                              # from a Claude Design handoff bundle
 │   │                              # (desktop-utility-by-claude-design.zip, repo
@@ -659,10 +663,17 @@ pic-vision/
 │   │   │                              # that touch, e.g. 1-2pm then 2-4pm, stay
 │   │   │                              # distinct objects; overlap-safe add
 │   │   │                              # (trims/splits existing sessions), electron-
-│   │   │                              # store) -- config only, doesn't start/stop
-│   │   │                              # capture yet (PIC-66 doesn't exist); meant
-│   │   │                              # to be the per-session boundary a future
-│   │   │                              # highlight job reads from
+│   │   │                              # store) -- config only; capture.js exists
+│   │   │                              # now (below) but isn't wired to sessions yet,
+│   │   │                              # still just a manual button
+│   │   ├── capture.js                   # manual start/stop recording -- spawns
+│   │   │                              # ffmpeg per TECH_SPEC §1.2's spec (RTSP pull,
+│   │   │                              # -c copy, 10-min segments, wallclock
+│   │   │                              # timestamps), .mkv not .mp4 (a real bug: the
+│   │   │                              # spec's own .mp4 example silently fails on
+│   │   │                              # pcm_alaw audio, which real cameras stream);
+│   │   │                              # clean SIGINT stop only (ADR-031), incl. on
+│   │   │                              # app quit
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -701,12 +712,15 @@ pic-vision/
 │       │                                    # session to remove it), DayActivityStrip
 │       │                                    # (per-camera weekly summary bars)
 │       ├── pages/                          # CamerasPage (real), CameraDetailPage
-│       │                                    # (real), ScheduleOverviewPage +
-│       │                                    # ScheduleEditorPage (real -- session
-│       │                                    # booking + rename/delete list, schedule.js
-│       │                                    # config only, no real capture behind it
-│       │                                    # yet), Alerts/Credentials/Settings
-│       │                                    # (mock data, illustrative)
+│       │                                    # (real -- incl. a real Start/Stop
+│       │                                    # recording control, capture.js, manual
+│       │                                    # button only, not tied to Schedule yet),
+│       │                                    # ScheduleOverviewPage + ScheduleEditorPage
+│       │                                    # (real -- session booking + rename/delete
+│       │                                    # list, schedule.js config only, still
+│       │                                    # not wired to capture.js),
+│       │                                    # Alerts/Credentials/Settings (mock data,
+│       │                                    # illustrative)
 │       ├── lib/cameraView.js                # real-camera -> mockup card/detail
 │       │                                    # view-model (STATE_META, buildCards)
 │       └── data/mockData.js                  # sample data for the 3 mock pages,

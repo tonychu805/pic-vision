@@ -15,6 +15,7 @@ import {
 } from "./cameras/store.js";
 import { getNetworkInfo } from "./system.js";
 import { listSessions, addSession, removeSession, renameSession, listSchedules, removeSchedule } from "./schedule.js";
+import { startRecording, stopRecording, stopAllRecordings, recordingStatus } from "./capture.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -91,6 +92,24 @@ function registerScheduleHandlers() {
   });
 }
 
+// Manual start/stop recording (capture.js) -- PIC-66. Takes just a
+// cameraId, not credentials from the renderer -- looks the full camera
+// object (including its stored password) up server-side via
+// listCameras(), same trust boundary as everything else here.
+function registerCaptureHandlers() {
+  ipcMain.handle("capture:start", async (_event, cameraId) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("Camera not found");
+    return startRecording(camera);
+  });
+  ipcMain.handle("capture:stop", async (_event, cameraId) => {
+    return stopRecording(cameraId);
+  });
+  ipcMain.handle("capture:status", async (_event, cameraId) => {
+    return recordingStatus(cameraId);
+  });
+}
+
 // Registered once against whichever window is currently focused -- a single
 // -window POC, but avoids the "second handler for window:minimize" crash
 // that registering inside createWindow() would hit on a second
@@ -145,6 +164,7 @@ function createWindow() {
 app.whenReady().then(() => {
   registerCameraHandlers();
   registerScheduleHandlers();
+  registerCaptureHandlers();
   registerWindowControlHandlers();
   createWindow();
 
@@ -155,4 +175,16 @@ app.whenReady().then(() => {
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") app.quit();
+});
+
+// A recording is a background ffmpeg process, not tied to any window --
+// quitting the app without this would either orphan it (still running,
+// invisible) or leave it to the OS to kill outright (SIGKILL-equivalent,
+// which ADR-031 found corrupts the output container). before-quit runs
+// before Electron actually tears anything down, so this can await a real
+// clean SIGINT stop first.
+app.on("before-quit", async (e) => {
+  e.preventDefault();
+  await stopAllRecordings();
+  app.exit(0);
 });
