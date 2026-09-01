@@ -7,6 +7,7 @@ import {
   listCameras,
   addCamera,
   removeCamera,
+  renameCamera,
   testConnection,
   probeRtspFallback,
   addCameraViaRtsp,
@@ -40,6 +41,9 @@ function registerCameraHandlers() {
     const cameras = removeCamera(id);
     removeSchedule(id); // no orphaned schedule left behind for a deleted camera
     return cameras;
+  });
+  ipcMain.handle("cameras:rename", async (_event, id, label) => {
+    return renameCamera(id, label);
   });
   ipcMain.handle("cameras:testConnection", async (_event, config) => {
     return testConnection(config);

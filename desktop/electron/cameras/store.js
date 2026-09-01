@@ -90,6 +90,17 @@ export function removeCamera(id) {
   return cameras;
 }
 
+// Name only, deliberately -- connection details (hostname/port/path/
+// credentials) aren't editable yet; changing those would need the same
+// re-verification addCamera/addCameraViaRtsp already do before saving,
+// which this doesn't attempt.
+export function renameCamera(id, label) {
+  const cameras = listCameras();
+  const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
+  store.set("cameras", next);
+  return next.find((c) => c.id === id);
+}
+
 // --- RTSP-direct fallback (2026-09-01) ------------------------------
 // For cameras where ONVIF doesn't work (disabled, misconfigured, or -- a
 // real case this session -- switched to a different operation mode

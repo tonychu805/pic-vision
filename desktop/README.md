@@ -221,6 +221,17 @@ shown there is fabricated:
   -- an RTSP-added camera is re-checked with the same RTSP `DESCRIBE`
   exchange it was added with, not an ONVIF call it was never going to
   answer.
+- **Rename camera** (2026-09-01) -- click a configured camera's name on
+  its detail page to edit it in place, `Enter`/blur saves, `Escape`
+  cancels. Name only, deliberately -- connection details (hostname/port/
+  path/credentials) aren't editable yet; changing those would need the
+  same re-verification `addCamera`/`addCameraViaRtsp` already do before
+  saving, which `renameCamera` doesn't attempt. Preserves the card's
+  existing connection state across a rename (doesn't reset to
+  "Checking…" -- a rename doesn't change whether the camera is actually
+  reachable). Verified against a throwaway dummy camera, not a real one:
+  renamed through the real inline editor, confirmed the new name on disk
+  and reflected back on the Cameras grid, cleaned up afterward.
 - **Network panel** (sidebar) -- the CIDR shown is this machine's real
   primary interface (`os.networkInterfaces()`, `electron/system.js`), not
   the mockup's hardcoded `10.0.4.0/24` sample.

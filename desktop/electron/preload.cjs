@@ -21,6 +21,7 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   list: () => ipcRenderer.invoke("cameras:list"),
   add: (config) => ipcRenderer.invoke("cameras:add", config),
   remove: (id) => ipcRenderer.invoke("cameras:remove", id),
+  rename: (id, label) => ipcRenderer.invoke("cameras:rename", id, label),
   testConnection: (config) => ipcRenderer.invoke("cameras:testConnection", config),
   sweep: (options) => ipcRenderer.invoke("cameras:sweep", options),
   probeRtspFallback: (config) => ipcRenderer.invoke("cameras:probeRtspFallback", config),

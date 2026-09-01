@@ -55,6 +55,60 @@ function SignInInline({ device, onSignedIn }) {
   );
 }
 
+// Click the name to rename it in place -- name only, not connection
+// details (hostname/port/path/credentials aren't editable yet, that
+// would need the same re-verification addCamera/addCameraViaRtsp do
+// before saving, which renameCamera doesn't attempt).
+function EditableCameraName({ camera, onRenamed }) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(camera.label);
+  const [saving, setSaving] = useState(false);
+
+  const save = async () => {
+    const label = value.trim();
+    if (!label || label === camera.label) {
+      setEditing(false);
+      setValue(camera.label);
+      return;
+    }
+    setSaving(true);
+    const updated = await window.cameraAPI.rename(camera.id, label);
+    setSaving(false);
+    setEditing(false);
+    onRenamed(updated);
+  };
+
+  if (editing) {
+    return (
+      <input
+        className="input"
+        autoFocus
+        style={{ fontSize: 20, fontFamily: "var(--font-heading)", height: "auto", padding: "2px 8px", maxWidth: 320 }}
+        value={value}
+        disabled={saving}
+        onChange={(e) => setValue(e.target.value)}
+        onBlur={save}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") save();
+          if (e.key === "Escape") { setValue(camera.label); setEditing(false); }
+        }}
+      />
+    );
+  }
+
+  return (
+    <button
+      className="btn btn-ghost"
+      style={{ padding: 0, fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2, color: "var(--color-text)", justifyContent: "flex-start", gap: 8 }}
+      onClick={() => setEditing(true)}
+      title="Rename this camera"
+    >
+      {camera.label}
+      <i className="ph ph-pencil-simple" style={{ fontSize: 15, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }} />
+    </button>
+  );
+}
+
 // Two-step: "Remove camera" first shows an inline confirm rather than
 // removing on the first click (a real camera + its schedule are both
 // gone for good -- electron-store, no undo) or using window.confirm's
@@ -89,7 +143,7 @@ function RemoveCameraControl({ camera, onRemoved }) {
   );
 }
 
-export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraSignedIn }) {
+export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraSignedIn, onCameraRenamed }) {
   const v = cardVisuals(card);
   const isDiscoveredOnly = card.kind === "discovered";
   const panels = isDiscoveredOnly ? null : detailPanels(card.camera);
@@ -102,8 +156,12 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2 }}>{v.name}</div>
-          <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{v.subtitle} · {v.ip}</div>
+          {isDiscoveredOnly ? (
+            <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2 }}>{v.name}</div>
+          ) : (
+            <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
+          )}
+          <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", marginTop: 2 }}>{v.subtitle} · {v.ip}</div>
         </div>
         {!isDiscoveredOnly && <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />}
       </div>

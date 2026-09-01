@@ -69,6 +69,12 @@ export default function App() {
                 // loading state for something already confirmed live.
                 setSelectedCard(configuredCard(camera, "ok"));
               }}
+              onCameraRenamed={(camera) => {
+                // Keep the card's existing connection state -- a rename
+                // doesn't change whether the camera is actually reachable,
+                // so resetting to "checking" here would be a lie.
+                setSelectedCard((prev) => configuredCard(camera, prev.state));
+              }}
             />
           )}
           {nav === "schedule" && <ScheduleOverviewPage onEditCamera={editSchedule} />}
