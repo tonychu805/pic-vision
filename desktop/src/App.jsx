@@ -60,6 +60,7 @@ export default function App() {
             <CameraDetailPage
               card={selectedCard}
               onBack={backToGrid}
+              onCameraRemoved={backToGrid}
               onCameraSignedIn={(camera) => {
                 setSelectedCard({ key: camera.id, kind: "configured", camera });
               }}

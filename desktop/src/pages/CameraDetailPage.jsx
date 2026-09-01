@@ -55,7 +55,41 @@ function SignInInline({ device, onSignedIn }) {
   );
 }
 
-export default function CameraDetailPage({ card, onBack, onCameraSignedIn }) {
+// Two-step: "Remove camera" first shows an inline confirm rather than
+// removing on the first click (a real camera + its schedule are both
+// gone for good -- electron-store, no undo) or using window.confirm's
+// native OS dialog, which would look inconsistent against this app's own
+// custom-drawn chrome.
+function RemoveCameraControl({ camera, onRemoved }) {
+  const [confirming, setConfirming] = useState(false);
+  const [removing, setRemoving] = useState(false);
+
+  const remove = async () => {
+    setRemoving(true);
+    await window.cameraAPI.remove(camera.id);
+    onRemoved();
+  };
+
+  if (!confirming) {
+    return (
+      <button className="btn btn-ghost" style={{ fontSize: 12.5, flex: "none" }} onClick={() => setConfirming(true)}>
+        <i className="ph ph-trash" style={{ fontSize: 14 }} />Remove camera
+      </button>
+    );
+  }
+
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
+      <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Remove this camera and its schedule?</span>
+      <button className="btn btn-secondary" style={{ fontSize: 12 }} disabled={removing} onClick={() => setConfirming(false)}>Cancel</button>
+      <button className="btn btn-primary" style={{ fontSize: 12, color: "var(--color-accent-2-400)", borderColor: "var(--color-accent-2-400)" }} disabled={removing} onClick={remove}>
+        {removing ? "Removing…" : "Remove"}
+      </button>
+    </div>
+  );
+}
+
+export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraSignedIn }) {
   const v = cardVisuals(card);
   const isDiscoveredOnly = card.kind === "discovered";
   const panels = isDiscoveredOnly ? null : detailPanels(card.camera);
@@ -67,10 +101,11 @@ export default function CameraDetailPage({ card, onBack, onCameraSignedIn }) {
       </button>
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
-        <div style={{ minWidth: 0 }}>
+        <div style={{ minWidth: 0, flex: 1 }}>
           <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2 }}>{v.name}</div>
           <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{v.subtitle} · {v.ip}</div>
         </div>
+        {!isDiscoveredOnly && <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />}
       </div>
 
       <div style={{ position: "relative", aspectRatio: "16/9", borderRadius: "var(--radius-md)", overflow: "hidden", background: v.live ? "linear-gradient(160deg, var(--color-neutral-800), var(--color-neutral-900))" : "var(--color-neutral-900)", boxShadow: "var(--shadow-sm)" }}>

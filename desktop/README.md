@@ -195,6 +195,19 @@ shown there is fabricated:
 - **Network panel** (sidebar) -- the CIDR shown is this machine's real
   primary interface (`os.networkInterfaces()`, `electron/system.js`), not
   the mockup's hardcoded `10.0.4.0/24` sample.
+- **Remove camera** (camera detail page, 2026-09-01) -- the backend
+  (`cameraAPI.remove`) existed from the start, but no button ever called
+  it; a venue owner who added a camera by mistake had no way to take it
+  back out. Two-step (an inline "remove this camera and its schedule?"
+  confirm, not a first-click delete or the OS's native `window.confirm`
+  dialog, which would look out of place against this app's own custom
+  chrome) -- removing a camera also removes its schedule (`PIC-66`'s
+  `electron/schedule.js` sessions), same as it already did when this was
+  callable only via the IPC layer directly. Verified against a throwaway
+  dummy camera entry, not the operator's real one: added directly to the
+  on-disk store, removed through the new UI, confirmed gone from both the
+  list and disk, confirmed the real camera and its own schedule were
+  untouched throughout.
 
 **Schedule page is real, but config-only** (`electron/schedule.js`,
 `src/pages/ScheduleOverviewPage.jsx` + `ScheduleEditorPage.jsx`,
