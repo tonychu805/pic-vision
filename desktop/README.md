@@ -240,6 +240,17 @@ shown there is fabricated:
   manual path entry needed.
 - **Connect & add** -- either ONVIF or the RTSP fallback path verifies
   before saving; only cameras that actually respond get saved.
+  **Idempotent by hostname** (2026-09-01, real bug fix) --
+  `addCamera`/`addCameraViaRtsp` (`electron/cameras/store.js`) used to
+  push a new entry on every successful call with no check against what's
+  already configured, so two genuine successful add attempts for the
+  same physical camera (a slow first request plus a retry, a double-
+  click, reopening the dialog without realizing the first one already
+  worked) created two separate entries for it -- found for real (two
+  "Synology camera"/"Court 1" entries at the same IP) right after the
+  credential-workflow unification made a retry likely. Both functions
+  now check for an existing camera at the same hostname first and
+  return it unchanged instead of re-verifying and duplicating.
   Identity/network/streams panels on the detail page show real
   manufacturer/model/serial/firmware/stream-URI from ONVIF's
   `GetDeviceInformation`, or "Not available" where ONVIF genuinely has no

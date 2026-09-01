@@ -57,7 +57,21 @@ export async function testConnection({ hostname, port, username, password, path,
   return { info, streamUri };
 }
 
+// Real duplicate found 2026-09-01: the same physical Synology camera got
+// added twice (two independent `addCamera` calls a few seconds apart,
+// same hostname, no cross-check between them) -- neither addCamera nor
+// addCameraViaRtsp had ever refused or noticed a hostname that was
+// already configured. Idempotent by hostname now: a second add for an
+// already-configured hostname just returns the existing entry rather
+// than re-verifying and creating a duplicate -- the camera was already
+// verified when it was first added, so there's nothing to re-check.
+function existingByHostname(hostname) {
+  return listCameras().find((c) => c.hostname === hostname);
+}
+
 export async function addCamera({ label, hostname, port, username, password, path }) {
+  const existing = existingByHostname(hostname);
+  if (existing) return existing;
   const { info, streamUri } = await testConnection({ hostname, port, username, password, path });
   const camera = {
     id: randomUUID(),
@@ -139,6 +153,8 @@ export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
 }
 
 export async function addCameraViaRtsp({ label, hostname, port, path, username, password }) {
+  const existing = existingByHostname(hostname);
+  if (existing) return existing;
   port = port || 554;
   await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
   const vendors = vendorsForIps([hostname]);
