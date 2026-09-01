@@ -13,7 +13,7 @@ import {
   parseRtspUrl,
 } from "./cameras/store.js";
 import { getNetworkInfo } from "./system.js";
-import { getSchedule, setSchedule, listSchedules, removeSchedule } from "./schedule.js";
+import { listSessions, addSession, removeSession, renameSession, listSchedules, removeSchedule } from "./schedule.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -66,15 +66,21 @@ function registerCameraHandlers() {
   });
 }
 
-// Per-camera weekly activation schedule (schedule.js) -- storage + UI only,
-// see that file's header for why nothing here actually starts/stops
-// capture yet (PIC-66 doesn't exist).
+// Per-camera booked sessions (schedule.js) -- storage + UI only, see that
+// file's header for why nothing here actually starts/stops capture yet
+// (PIC-66 doesn't exist).
 function registerScheduleHandlers() {
-  ipcMain.handle("schedule:get", async (_event, cameraId) => {
-    return getSchedule(cameraId);
+  ipcMain.handle("schedule:list", async (_event, cameraId) => {
+    return listSessions(cameraId);
   });
-  ipcMain.handle("schedule:set", async (_event, cameraId, cells) => {
-    return setSchedule(cameraId, cells);
+  ipcMain.handle("schedule:add", async (_event, cameraId, session) => {
+    return addSession(cameraId, session);
+  });
+  ipcMain.handle("schedule:remove", async (_event, cameraId, sessionId) => {
+    return removeSession(cameraId, sessionId);
+  });
+  ipcMain.handle("schedule:rename", async (_event, cameraId, sessionId, label) => {
+    return renameSession(cameraId, sessionId, label);
   });
   ipcMain.handle("schedule:listAll", async () => {
     return listSchedules();

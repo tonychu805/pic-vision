@@ -654,11 +654,15 @@ pic-vision/
 │   │   │                              # not guessed)
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel
-│   │   ├── schedule.js                  # per-camera weekly activation schedule
-│   │   │                              # (168-cell store, electron-store) -- config
-│   │   │                              # only, doesn't start/stop capture yet
-│   │   │                              # (PIC-66 doesn't exist); the future capture
-│   │   │                              # scheduler's config source
+│   │   ├── schedule.js                  # per-camera booked sessions (day + hour
+│   │   │                              # range, not a flat cell set -- two sessions
+│   │   │                              # that touch, e.g. 1-2pm then 2-4pm, stay
+│   │   │                              # distinct objects; overlap-safe add
+│   │   │                              # (trims/splits existing sessions), electron-
+│   │   │                              # store) -- config only, doesn't start/stop
+│   │   │                              # capture yet (PIC-66 doesn't exist); meant
+│   │   │                              # to be the per-session boundary a future
+│   │   │                              # highlight job reads from
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -692,12 +696,14 @@ pic-vision/
 │       ├── index.css                     # "Nocturne" design tokens, ported from
 │       │                                  # the handoff bundle's styles.css
 │       ├── components/                    # TitleBar, Sidebar, CameraCard, WeekGrid
-│       │                                    # (interactive 7x24 schedule editor),
-│       │                                    # DayActivityStrip (per-camera weekly
-│       │                                    # summary bars)
+│       │                                    # (interactive 7x24 session booking grid
+│       │                                    # -- drag to book, click a booked
+│       │                                    # session to remove it), DayActivityStrip
+│       │                                    # (per-camera weekly summary bars)
 │       ├── pages/                          # CamerasPage (real), CameraDetailPage
 │       │                                    # (real), ScheduleOverviewPage +
-│       │                                    # ScheduleEditorPage (real -- schedule.js
+│       │                                    # ScheduleEditorPage (real -- session
+│       │                                    # booking + rename/delete list, schedule.js
 │       │                                    # config only, no real capture behind it
 │       │                                    # yet), Alerts/Credentials/Settings
 │       │                                    # (mock data, illustrative)

@@ -1,8 +1,8 @@
 import { useEffect, useState } from "react";
 import DayActivityStrip from "../components/DayActivityStrip.jsx";
 
-// Overview across every configured camera: how many hours/week each is
-// scheduled active, at a glance, with a way in to each camera's full
+// Overview across every configured camera: how many sessions are booked
+// and how many hours, at a glance, with a way in to each camera's full
 // editor. Mirrors the Cameras grid -> detail drill-down pattern already
 // used elsewhere in the app rather than introducing a different nav shape.
 export default function ScheduleOverviewPage({ onEditCamera }) {
@@ -25,7 +25,7 @@ export default function ScheduleOverviewPage({ onEditCamera }) {
     <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "18px 22px 26px" }}>
       <div style={{ marginBottom: 4, fontFamily: "var(--font-heading)", fontSize: 22 }}>Schedule</div>
       <p style={{ fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", marginTop: 0, marginBottom: 18, maxWidth: 560 }}>
-        Set which hours of the week each camera is active. This doesn't control live view — it defines when this camera should be included once automatic capture is built.
+        Book sessions for each camera — a 1–2pm booking and a 2–4pm booking stay separate even when they're back to back. This doesn't control live view; it defines the sessions a highlight reel will eventually be built for, once automatic capture exists.
       </p>
 
       {loading ? (
@@ -37,8 +37,8 @@ export default function ScheduleOverviewPage({ onEditCamera }) {
       ) : (
         <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
           {cameras.map((camera) => {
-            const cells = schedules[camera.id]?.cells ?? [];
-            const hoursPerWeek = cells.length;
+            const sessions = schedules[camera.id]?.sessions ?? [];
+            const totalHours = sessions.reduce((sum, s) => sum + (s.end - s.start), 0);
             return (
               <div
                 key={camera.id}
@@ -54,10 +54,12 @@ export default function ScheduleOverviewPage({ onEditCamera }) {
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14, fontWeight: 500 }}>{camera.label}</div>
                   <div style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>
-                    {hoursPerWeek === 0 ? "No schedule set — treated as always off" : `${hoursPerWeek}h / week scheduled active`}
+                    {sessions.length === 0
+                      ? "No sessions booked yet"
+                      : `${sessions.length} session${sessions.length === 1 ? "" : "s"} / week, ${totalHours}h total`}
                   </div>
                 </div>
-                <DayActivityStrip cells={cells} />
+                <DayActivityStrip sessions={sessions} />
                 <button className="btn btn-secondary" style={{ fontSize: 12.5, flex: "none" }} onClick={() => onEditCamera(camera)}>
                   <i className="ph ph-calendar" style={{ fontSize: 14 }} />
                   Edit schedule

@@ -198,24 +198,35 @@ shown there is fabricated:
 
 **Schedule page is real, but config-only** (`electron/schedule.js`,
 `src/pages/ScheduleOverviewPage.jsx` + `ScheduleEditorPage.jsx`,
-`src/components/WeekGrid.jsx` + `DayActivityStrip.jsx`, 2026-09-01) -- a
-per-camera weekly activation schedule: a 7x24 grid (one cell per hour per
-day, minimum block size one hour), click or click-drag to toggle a cell,
-persisted immediately via `electron-store` (`schedules.json`). The
-overview page lists every configured camera with a compact per-day
-activity summary (bar height per day, hours/week) and a way into that
-camera's full editor. **What this doesn't do yet: actually start or stop
-anything.** There's no real capture/recording process in this app at all
-(`PIC-66`, `STRATEGY.md` §5's "Local stream/footage management" bullet) --
-this is the schedule a future capture scheduler would read, built and
-verified now (real drag-to-toggle, real persistence round-tripped through
-`scheduleAPI.get`/`.set`, confirmed against the on-disk JSON) so it's
-ready to wire up rather than redesigned later. One real bug caught before
-shipping: the overview's per-day activity bars used a linear 0-24h height
-scale that rounded anything under ~6h/day to the same pixel height as
-0h/day (color differed, height didn't) -- caught by reading the actual
-rendered `style.height` values via CDP, not just checking the numbers/
-colors looked right, fixed with a higher floor for any nonzero day.
+`src/components/WeekGrid.jsx` + `DayActivityStrip.jsx`, 2026-09-01,
+reworked same day from an earlier flat-cell version) -- per-camera
+**sessions**, not just "hours on/off": each is a distinct object (day of
+week + start/end hour, minimum block size one hour), so a 1-2pm booking
+and a back-to-back 2-4pm booking for someone else stay two separate
+sessions rather than merging into one indistinguishable 1-4pm block --
+the point being that each session is meant to become its own highlight
+job once real capture/detection exist, and a flat "is this hour active"
+set can't represent that boundary at all. Drag across the grid to book a
+session spanning exactly the hours dragged; click an existing session
+(on the grid, or its delete button in the list alongside the grid) to
+remove it; the list also lets you give a session a label. Booking a
+range that overlaps existing sessions trims or splits them rather than
+silently double-booking (`electron/schedule.js`'s `subtractRange`) --
+verified directly, not just via the UI: a session added in the middle of
+an existing one correctly splits it into two independent remainders.
+**What this doesn't do yet: actually start or stop anything.** There's no
+real capture/recording process in this app at all (`PIC-66`,
+`STRATEGY.md` §5's "Local stream/footage management" bullet) -- this is
+the per-session boundary a future capture scheduler / highlight-job
+runner would read, built and verified now (real coordinate-based drags
+via CDP, persistence round-tripped through `scheduleAPI`, confirmed
+against the on-disk JSON) so it's ready to wire up rather than
+redesigned later. One real bug caught before shipping: the overview's
+per-day activity bars used a linear 0-24h height scale that rounded
+anything under ~6h/day to the same pixel height as 0h/day (color
+differed, height didn't) -- caught by reading the actual rendered
+`style.height` values via CDP, not just checking the numbers/colors
+looked right, fixed with a higher floor for any nonzero day.
 
 **Alerts, Credentials, and Scan Settings pages are pixel-matched but not
 functional** -- there's no alert monitoring, no stored/tried credential

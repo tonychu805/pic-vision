@@ -1,40 +1,73 @@
-// Per-camera weekly activation schedule -- when the (not-yet-built, PIC-66)
-// capture/pipeline step should be allowed to run for a given camera.
-// Deliberately UI + storage only for now: nothing in this file starts or
-// stops a real recording process, because no real process exists yet
-// (STRATEGY.md §5's "Local stream/footage management" bullet, PIC-66).
-// This is the config a future capture scheduler would read from, built now
-// so it's ready to wire up rather than re-designed later.
+// Per-camera booked sessions -- discrete day-of-week + hour-range blocks
+// (start inclusive, end exclusive: "1-2pm" is {start:13, end:14}), not a
+// flat "hour is active" set. A flat set can't represent the boundary
+// between two back-to-back bookings (1-2pm for one person, 2-4pm for
+// another) -- they'd merge into one indistinguishable 1-4pm block. Once
+// real capture + detection exist (PIC-66/69), each session is meant to
+// become its own highlight-reel job, so the boundary has to survive even
+// when sessions touch with zero gap between them.
 //
-// A schedule is a set of active 1-hour cells across a repeating week, not
-// specific calendar dates -- venue operating hours repeat weekly, and a
-// fixed 168-cell grid (7 days x 24 hours) is the simplest thing that can't
-// grow unbounded the way a per-date log would. Cell key format: "<day>-<hour>",
-// day 0=Sunday..6=Saturday (matches JS Date#getDay(), the convention a real
-// capture scheduler will need to check against "is it active right now").
+// Still config/storage only -- nothing consumes this yet, see the header
+// comment in the previous cell-based version of this file (superseded
+// 2026-09-01) and STRATEGY.md §5.
 import Store from "electron-store";
+import { randomUUID } from "node:crypto";
 
 const store = new Store({ name: "schedules" });
 
-export function isValidCell(cell) {
-  const m = /^([0-6])-([0-9]|1[0-9]|2[0-3])$/.exec(cell);
-  return m !== null;
+function isValidRange(day, start, end) {
+  return (
+    Number.isInteger(day) && day >= 0 && day <= 6 &&
+    Number.isInteger(start) && start >= 0 && start < 24 &&
+    Number.isInteger(end) && end > start && end <= 24
+  );
 }
 
-export function getSchedule(cameraId) {
+export function listSessions(cameraId) {
   const all = store.get("schedules", {});
-  return { cameraId, cells: all[cameraId]?.cells ?? [] };
+  return all[cameraId]?.sessions ?? [];
 }
 
-export function setSchedule(cameraId, cells) {
-  if (!Array.isArray(cells) || !cells.every(isValidCell)) {
-    throw new Error("cells must be an array of \"<0-6>-<0-23>\" strings");
-  }
+function saveSessions(cameraId, sessions) {
   const all = store.get("schedules", {});
-  // De-dupe -- a drag gesture can pass the same cell twice.
-  all[cameraId] = { cells: [...new Set(cells)] };
+  all[cameraId] = { sessions };
   store.set("schedules", all);
-  return { cameraId, cells: all[cameraId].cells };
+  return sessions;
+}
+
+// Removes [start, end) on `day` from any existing session, splitting a
+// session that's only partly overlapped and dropping one that's fully
+// consumed -- so committing a new session can never leave two sessions
+// silently overlapping the same hour.
+function subtractRange(sessions, day, start, end) {
+  const result = [];
+  for (const s of sessions) {
+    if (s.day !== day || s.end <= start || s.start >= end) {
+      result.push(s); // different day, or no overlap at all
+      continue;
+    }
+    const keepsLeft = s.start < start;
+    if (keepsLeft) result.push({ ...s, end: start });
+    if (s.end > end) result.push({ ...s, id: keepsLeft ? randomUUID() : s.id, start: end });
+    // else: s is fully inside [start,end) -- fully consumed, dropped
+  }
+  return result;
+}
+
+export function addSession(cameraId, { day, start, end, label }) {
+  if (!isValidRange(day, start, end)) throw new Error("invalid session range");
+  const cleared = subtractRange(listSessions(cameraId), day, start, end);
+  const session = { id: randomUUID(), day, start, end, label: label || null };
+  return saveSessions(cameraId, [...cleared, session]);
+}
+
+export function removeSession(cameraId, sessionId) {
+  return saveSessions(cameraId, listSessions(cameraId).filter((s) => s.id !== sessionId));
+}
+
+export function renameSession(cameraId, sessionId, label) {
+  const next = listSessions(cameraId).map((s) => (s.id === sessionId ? { ...s, label: label || null } : s));
+  return saveSessions(cameraId, next);
 }
 
 export function listSchedules() {

@@ -1,16 +1,13 @@
 const DAY_LABELS = ["S", "M", "T", "W", "T", "F", "S"];
 
 // Compact, read-only weekly-activity summary for one camera -- 7 bars, one
-// per day, height proportional to how many of that day's 24 hours are
-// scheduled active. Used on the Schedule overview page instead of a full
+// per day, height proportional to that day's total booked hours across
+// all its sessions. Used on the Schedule overview page instead of a full
 // WeekGrid thumbnail, which reads poorly at list-row size.
-export default function DayActivityStrip({ cells, height = 28 }) {
-  const set = cells instanceof Set ? cells : new Set(cells);
-  const counts = DAY_LABELS.map((_, day) => {
-    let n = 0;
-    for (let h = 0; h < 24; h++) if (set.has(`${day}-${h}`)) n++;
-    return n;
-  });
+export default function DayActivityStrip({ sessions, height = 28 }) {
+  const counts = DAY_LABELS.map((_, day) =>
+    sessions.filter((s) => s.day === day).reduce((sum, s) => sum + (s.end - s.start), 0)
+  );
 
   // The 0h floor (2px) and the smallest possible active value (1h) need to
   // be visibly different heights, not just different colors -- a linear
@@ -25,7 +22,7 @@ export default function DayActivityStrip({ cells, height = 28 }) {
       {counts.map((n, day) => (
         <div key={day} style={{ display: "flex", flexDirection: "column", alignItems: "center", gap: 2, width: 10 }}>
           <div
-            title={`${DAY_LABELS[day]}: ${n}h scheduled`}
+            title={`${DAY_LABELS[day]}: ${n}h booked`}
             style={{
               width: 8,
               height: barHeight(n),

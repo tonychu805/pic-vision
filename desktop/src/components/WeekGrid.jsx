@@ -1,4 +1,4 @@
-import { useRef, useState } from "react";
+import { useState } from "react";
 
 const DAY_LABELS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const HOUR_LABEL_EVERY = 3; // show a label every 3 hours, keeps the gutter readable
@@ -10,45 +10,44 @@ function hourLabel(hour) {
   return `${h}${hour < 12 ? "am" : "pm"}`;
 }
 
-function cellKey(day, hour) {
-  return `${day}-${hour}`;
+function timeLabel(hour) {
+  return hour === 24 ? "12am" : hourLabel(hour);
 }
 
-// Interactive 7x24 weekly grid (one cell per hour per day) -- click, or
-// click-and-drag across cells, to toggle a camera's active schedule. Each
-// cell is a whole hour, the minimum block size; there's no finer-grained
-// toggle. Read/write only -- doesn't start or stop anything real (PIC-66
-// doesn't exist yet), just persists which hours a camera is scheduled active.
-export default function WeekGrid({ cells, onCommit }) {
-  const activeSet = cells instanceof Set ? cells : new Set(cells);
-  const [draft, setDraft] = useState(null); // Set while dragging, else null (render from `cells`)
-  const dragMode = useRef(null); // "activate" | "deactivate", decided by the first cell touched
+function sessionAt(sessions, day, hour) {
+  return sessions.find((s) => s.day === day && hour >= s.start && hour < s.end);
+}
 
-  const rendered = draft ?? activeSet;
-
-  const applyToCell = (day, hour, base) => {
-    const key = cellKey(day, hour);
-    const next = new Set(base);
-    if (dragMode.current === "activate") next.add(key);
-    else next.delete(key);
-    return next;
-  };
+// Interactive 7x24 weekly grid of booked sessions -- click-and-drag over
+// empty cells to book a new session spanning exactly the hours dragged
+// (a single click also works, booking one hour); click an existing
+// session to remove it entirely. Each session is a distinct object with
+// its own start/end (see electron/schedule.js), not just a flag per
+// hour -- two sessions that touch with no gap (1-2pm, then 2-4pm) stay
+// visually and structurally separate, marked by a divider at the start
+// of each session, because each is meant to become its own highlight
+// job once real capture/detection exist.
+export default function WeekGrid({ sessions, onCreate, onDelete }) {
+  const [drag, setDrag] = useState(null); // {day, min, max} while dragging a new session, else null
 
   const startDrag = (day, hour) => {
-    dragMode.current = activeSet.has(cellKey(day, hour)) ? "deactivate" : "activate";
-    setDraft(applyToCell(day, hour, activeSet));
+    const existing = sessionAt(sessions, day, hour);
+    if (existing) {
+      onDelete(existing.id);
+      return;
+    }
+    setDrag({ day, min: hour, max: hour });
   };
 
-  const enterDuringDrag = (day, hour) => {
-    if (draft === null) return;
-    setDraft((prev) => applyToCell(day, hour, prev));
+  const extendDrag = (day, hour) => {
+    if (drag === null || day !== drag.day) return;
+    setDrag((prev) => ({ ...prev, min: Math.min(prev.min, hour), max: Math.max(prev.max, hour) }));
   };
 
   const endDrag = () => {
-    if (draft === null) return;
-    onCommit([...draft]);
-    setDraft(null);
-    dragMode.current = null;
+    if (drag === null) return;
+    onCreate(drag.day, drag.min, drag.max + 1);
+    setDrag(null);
   };
 
   return (
@@ -66,18 +65,29 @@ export default function WeekGrid({ cells, onCommit }) {
             {hour % HOUR_LABEL_EVERY === 0 ? hourLabel(hour) : ""}
           </div>
           {DAY_LABELS.map((_, day) => {
-            const active = rendered.has(cellKey(day, hour));
+            const session = sessionAt(sessions, day, hour);
+            const previewing = drag && drag.day === day && hour >= drag.min && hour <= drag.max;
+            const isSessionStart = session && hour === session.start;
             return (
               <div
                 key={day}
                 onMouseDown={() => startDrag(day, hour)}
-                onMouseEnter={() => enterDuringDrag(day, hour)}
-                title={`${DAY_LABELS[day]} ${hourLabel(hour)} — click to toggle`}
+                onMouseEnter={() => extendDrag(day, hour)}
+                title={
+                  session
+                    ? `${DAY_LABELS[day]} ${timeLabel(session.start)}–${timeLabel(session.end)}${session.label ? ` — ${session.label}` : ""} — click to remove`
+                    : `${DAY_LABELS[day]} ${hourLabel(hour)} — drag to book a session`
+                }
                 style={{
                   width: CELL_SIZE,
                   height: CELL_SIZE,
                   borderRadius: 2,
-                  background: active ? "var(--color-accent)" : "color-mix(in srgb, var(--color-text) 8%, transparent)",
+                  background: previewing
+                    ? "color-mix(in srgb, var(--color-accent) 45%, transparent)"
+                    : session
+                      ? "var(--color-accent)"
+                      : "color-mix(in srgb, var(--color-text) 8%, transparent)",
+                  boxShadow: isSessionStart ? "inset 0 1.5px 0 var(--color-bg)" : undefined,
                   cursor: "pointer",
                 }}
               />
