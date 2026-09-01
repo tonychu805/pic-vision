@@ -196,7 +196,25 @@ shown there is fabricated:
   `GetDeviceInformation`, or "Not available" where ONVIF genuinely has no
   such field (MAC address is never fabricated -- ONVIF doesn't return
   one) -- an RTSP-added camera gets manufacturer from the MAC/vendor
-  lookup instead and says so for the rest.
+  lookup instead and says so for the rest. **A real crash bug here, found
+  and fixed 2026-09-01:** signing in to a WS-Discovery-found camera
+  directly from its detail page (`CameraDetailPage.jsx`'s inline
+  `SignInInline` form -- distinct from the manual-add dialog's flow,
+  which was already fine) successfully saved the camera but then crashed
+  the whole app to a blank white screen, because the hand-built "now
+  configured" card object it switched to was missing every field
+  `cardVisuals()`/`STATE_META` expect (only `key`/`kind`/`camera` were
+  set), and that lookup has no fallback. Went unexercised all session
+  because it needed a camera that both answers WS-Discovery *and* signs
+  in via plain ONVIF with no fallback needed -- the first one to do both
+  was a real TP-Link Tapo C200, added this same day. Fixed by extracting
+  the one correct card-building shape (`cameraView.js`'s new
+  `configuredCard()`) and using it in both places that build a
+  "configured" card, instead of `buildCards()`'s version being the only
+  correct one. Verified against the real network: removed the C200,
+  rediscovered it, redid the actual sign-in through the real form fields
+  (not a shortcut), confirmed the app rendered its full detail page
+  afterward instead of going blank.
 - **Test connection** -- run automatically for every configured camera on
   page load, driving each card's Streaming/Not-answering state and dot
   color for real. Branches on how the camera was added (`connectionType`)

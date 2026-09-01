@@ -22,6 +22,31 @@ export const STATE_META = {
   unconfirmed: { label: "Unconfirmed", dot: "var(--color-neutral-500)", tagClass: "tag tag-neutral" },
 };
 
+// Builds a full card for one configured (persisted) camera -- the only
+// place this shape is assembled, so a card handed to cardVisuals()/JSX
+// always has every field STATE_META and the detail page expect. A card
+// missing `state` (or any of these) isn't just visually incomplete --
+// cardVisuals() does `STATE_META[card.state].label` with no fallback, so
+// a card built any other way throws and takes down the whole render tree
+// (found 2026-09-01: the post-sign-in flow in App.jsx built one of these
+// by hand, missing every field but `key`/`kind`/`camera`, and crashed the
+// app the moment a real ONVIF sign-in actually succeeded for the first
+// time this session -- the underlying `cameraAPI.add()` call had already
+// completed and saved the camera, so it looked like "sign in failed" when
+// the save had actually worked and only the *next* render crashed).
+export function configuredCard(c, state) {
+  return {
+    key: c.id,
+    kind: "configured",
+    camera: c,
+    name: c.label,
+    ip: c.hostname,
+    subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
+    proto: c.connectionType === "rtsp" ? "RTSP" : "ONVIF",
+    state,
+  };
+}
+
 // A "card" is either a configured (persisted) camera, an ONVIF discovery
 // result not yet signed in to, or a network-sweep hit (RTSP port open,
 // ONVIF unconfirmed) -- unified so the grid can render all three the same
@@ -30,19 +55,7 @@ export const STATE_META = {
 export function buildCards({ configured, discovered, sweepHits, statusByHostname }) {
   const configuredHostnames = new Set(configured.map((c) => c.hostname));
 
-  const configuredCards = configured.map((c) => {
-    const state = statusByHostname[c.hostname] ?? "checking";
-    return {
-      key: c.id,
-      kind: "configured",
-      camera: c,
-      name: c.label,
-      ip: c.hostname,
-      subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
-      proto: c.connectionType === "rtsp" ? "RTSP" : "ONVIF",
-      state,
-    };
-  });
+  const configuredCards = configured.map((c) => configuredCard(c, statusByHostname[c.hostname] ?? "checking"));
 
   // Plain-language names for anything not yet added -- a venue owner has
   // no use for a raw IP or protocol name as the headline. Vendor (from

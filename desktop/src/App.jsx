@@ -3,6 +3,7 @@ import TitleBar from "./components/TitleBar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import CamerasPage from "./pages/CamerasPage.jsx";
 import CameraDetailPage from "./pages/CameraDetailPage.jsx";
+import { configuredCard } from "./lib/cameraView.js";
 import ScheduleOverviewPage from "./pages/ScheduleOverviewPage.jsx";
 import ScheduleEditorPage from "./pages/ScheduleEditorPage.jsx";
 import AlertsPage from "./pages/AlertsPage.jsx";
@@ -62,7 +63,11 @@ export default function App() {
               onBack={backToGrid}
               onCameraRemoved={backToGrid}
               onCameraSignedIn={(camera) => {
-                setSelectedCard({ key: camera.id, kind: "configured", camera });
+                // "ok" (Streaming), not "checking" -- signing in just proved
+                // connectivity a moment ago (ONVIF connect + GetDeviceInformation
+                // both succeeded), so there's no reason to show a transient
+                // loading state for something already confirmed live.
+                setSelectedCard(configuredCard(camera, "ok"));
               }}
             />
           )}
