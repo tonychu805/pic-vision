@@ -299,14 +299,23 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   // ONVIF-only, no fallback if it failed -- while a sweep hit opened this
   // fuller dialog with the RTSP fallback ladder. Different capability
   // depending on discovery method wasn't a deliberate distinction worth
-  // keeping, so both now open the same dialog. `card.device.port` carries
-  // the real ONVIF port from a WS-Discovery hit (e.g. a Tapo C200's 2020)
-  // instead of defaulting to 80 and asking the user to find it under
-  // "Advanced settings" if that default happens to be wrong.
+  // keeping, so both now open the same dialog.
   const handleCardOpen = (card) => {
     if (selectMode) return togglePick(card.key);
     if (card.kind === "configured") return onOpenCamera(card);
-    return openManual(card.device.hostname, card.device.vendor, card.device.port ?? 80);
+    // `device.port` means two different things depending on how the card
+    // was found -- a WS-Discovery hit's is the real ONVIF port (e.g. a
+    // Tapo C200's 2020, worth pre-filling instead of a possibly-wrong 80),
+    // but a sweep hit's is the RTSP port it was found on (554), which is
+    // NOT an ONVIF port. Passing that through as the dialog's ONVIF-
+    // connect port was a real bug found right after shipping it: the
+    // initial ONVIF attempt then tried an HTTP/SOAP request against a
+    // raw RTSP port and hung indefinitely (a stuck "Connecting…") instead
+    // of failing fast the way a real wrong-port HTTP request does --
+    // reproduced live on the Synology BC510, which used to fail over to
+    // the RTSP ladder in about a second.
+    const onvifPort = card.kind === "discovered" ? card.device.port ?? 80 : 80;
+    return openManual(card.device.hostname, card.device.vendor, onvifPort);
   };
 
   return (

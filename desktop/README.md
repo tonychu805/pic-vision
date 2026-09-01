@@ -179,7 +179,18 @@ shown there is fabricated:
     under "Advanced settings"). `CameraDetailPage.jsx` is simpler for it
     -- it only ever shows a *configured* camera now, so its own
     `isDiscoveredOnly` branch and inline sign-in form are gone entirely,
-    not just unused.
+    not just unused. **A real regression from the port pre-fill above,
+    caught the same day within one real use:** the pre-fill logic used
+    `device.port` for *any* card, but that field means something
+    different depending on discovery method -- a WS-Discovery hit's is
+    the real ONVIF port, a sweep hit's is the RTSP port it was found on
+    (554), not an ONVIF port at all. Passing 554 through as the ONVIF-
+    connect port made the initial ONVIF attempt send an HTTP/SOAP request
+    at a raw RTSP port, which hangs instead of failing fast -- reproduced
+    live on the Synology BC510 (a stuck "Connecting…" that used to fail
+    over to the RTSP ladder in about a second). Fixed by only using
+    `device.port` for `kind === "discovered"` cards; sweep hits keep the
+    plain 80 default.
 - **Vendor (brand) identification** -- every discovery/sweep hit is looked
   up by MAC address (ARP -- the OS already knows it from the probe/scan
   itself) against the IEEE OUI registry (`oui-data`, bundled locally as a
