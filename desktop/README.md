@@ -191,6 +191,15 @@ shown there is fabricated:
     over to the RTSP ladder in about a second). Fixed by only using
     `device.port` for `kind === "discovered"` cards; sweep hits keep the
     plain 80 default.
+  - **Dismiss a not-yet-configured card without signing in first**
+    (2026-09-01 -- "even before signing in, i should still be able to
+    delete a detected camera," e.g. a device that turns out not to be
+    the operator's camera at all). A small × on the card
+    (`CameraCard.jsx`, hidden during select-mode -- the checkbox takes
+    that spot instead) removes it from `discovered`/`sweepHits`.
+    Session-local, not persisted anywhere: the device is still really on
+    the network, so it's expected to reappear on the next "Scan again" --
+    there's no configured record to delete, only a card to hide for now.
 - **Vendor (brand) identification** -- every discovery/sweep hit is looked
   up by MAC address (ARP -- the OS already knows it from the probe/scan
   itself) against the IEEE OUI registry (`oui-data`, bundled locally as a

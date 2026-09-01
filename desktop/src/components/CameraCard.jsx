@@ -1,6 +1,6 @@
 import { cardVisuals } from "../lib/cameraView.js";
 
-export default function CameraCard({ card, selectMode, picked, onOpen }) {
+export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss }) {
   const v = cardVisuals(card);
   return (
     <div
@@ -56,13 +56,30 @@ export default function CameraCard({ card, selectMode, picked, onOpen }) {
             {v.live ? "LIVE" : v.proto}
           </span>
         </div>
-        {selectMode && (
+        {selectMode ? (
           <div style={{ position: "absolute", top: 8, right: 8 }}>
             <i
               className={picked ? "ph-fill ph-check-circle" : "ph ph-circle"}
               style={{ fontSize: 20, color: picked ? "var(--color-accent)" : "color-mix(in srgb, var(--color-text) 45%, transparent)" }}
             />
           </div>
+        ) : (
+          // A not-yet-configured card (found by discovery/sweep, never
+          // saved anywhere) shouldn't require signing in just to get rid
+          // of it -- e.g. a device that turned out not to be the
+          // operator's camera at all. Dismisses from this scan's results
+          // only (session-local, not persisted) -- it can reappear on the
+          // next "Scan again" since the device is still really there.
+          card.kind !== "configured" && (
+            <button
+              className="btn btn-ghost"
+              style={{ position: "absolute", top: 6, right: 6, padding: 4, minHeight: 0, background: "color-mix(in srgb, #000 45%, transparent)" }}
+              title="Not my camera — remove from this list"
+              onClick={(e) => { e.stopPropagation(); onDismiss?.(); }}
+            >
+              <i className="ph ph-x" style={{ fontSize: 13 }} />
+            </button>
+          )
         )}
       </div>
       <div style={{ padding: "10px 12px 12px", display: "flex", flexDirection: "column", gap: 6 }}>

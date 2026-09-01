@@ -318,6 +318,18 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
     return openManual(card.device.hostname, card.device.vendor, onvifPort);
   };
 
+  // Removes a not-yet-configured card from this scan's results without
+  // requiring the operator to sign in first (a real request, 2026-09-01
+  // -- "even before signing in, i should still be able to delete a
+  // detected camera," e.g. a device that turns out not to be theirs at
+  // all). Session-local, not persisted anywhere: the device is still
+  // really on the network, so it can reappear on the next "Scan again"
+  // -- there's nothing to un-discover, only a card to hide for now.
+  const dismissDevice = (hostname) => {
+    setDiscovered((d) => d.filter((device) => device.hostname !== hostname));
+    setSweepHits((s) => s.filter((device) => device.hostname !== hostname));
+  };
+
   return (
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "16px 22px 12px" }}>
@@ -400,7 +412,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
         <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "0 22px 22px" }}>
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
             {cards.map((card) => (
-              <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} />
+              <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
             ))}
           </div>
         </div>
