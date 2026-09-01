@@ -112,7 +112,18 @@ shown there is fabricated:
     npm package itself doesn't, and two real Synology NAS boxes on this
     network were coming back as "cameras" before that filter was added
     (`progress/09.01 progress overview.md` has the full story, including
-    the wrong first guess at why).
+    the wrong first guess at why). **That filter had a real latent bug,
+    found the same day it first "worked":** it cross-referenced a `Set`
+    of confirmed device URNs against `Discovery.probe()`'s resolved list,
+    but `cam.urn` is `undefined` on this version of `onvif`'s Cam
+    objects -- so the check degenerated into "did *any* device pass,"
+    which only happened to filter correctly while zero real cameras had
+    ever answered a scan. The moment a real camera (a TP-Link Tapo C200)
+    finally responded alongside the NAS boxes, its pass silently
+    re-admitted them too. Fixed by building the confirmed list directly
+    from the event data instead of cross-referencing anything afterward
+    -- verified against the real network twice, including a repeat scan
+    to rule out a one-off.
   - **RTSP port sweep + protocol confirm** (`electron/cameras/networkSweep.js`)
     -- TCP-probes port 554 against every host in the subnet, in parallel,
     then (if the port is open) sends a real RTSP `OPTIONS` request and

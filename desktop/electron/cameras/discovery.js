@@ -21,16 +21,15 @@ const DEFAULT_TIMEOUT_MS = 5000;
 // computer" type, unrelated to ONVIF). The library's own event API is the
 // only place the raw XML is exposed (the promise-resolved Cam objects drop
 // it entirely), so this listens for `device` events to filter by the
-// responder's actual declared type, cross-referenced against the promise's
-// resolved list for completion/timeout handling.
+// responder's actual declared type.
 //
 // Regex, not an XML parser, because the shape is fixed and small (one
-// `<wsd:Types>...</wsd:Types>` element in a known SOAP envelope) and
-// `onvif` itself already parsed+validated the envelope before emitting
-// this event -- a second full XML parse here would be pure overhead for a
-// pattern this constrained. NOT verified against a real ONVIF camera's
-// response shape in this session (none was reachable to test) -- only
-// confirmed to correctly reject the two non-camera responses above.
+// `<...Types>...</...Types>` element in a known SOAP envelope) and `onvif`
+// itself already parsed+validated the envelope before emitting this event.
+// Now verified against a real ONVIF camera's response too (a TP-Link Tapo
+// C200, 2026-09-01): its `<wsdd:Types>tdn:NetworkVideoTransmitter</wsdd:Types>`
+// matches correctly and is included, alongside real Scopes confirming it
+// (`onvif://www.onvif.org/hardware/C200`).
 function declaresNetworkVideoTransmitter(xml) {
   const match = xml.match(/<[\w:]*Types>([^<]*)<\/[\w:]*Types>/i);
   if (!match) return false;
@@ -50,20 +49,30 @@ function toPlainDevice(cam) {
 }
 
 export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
-  const confirmedUrns = new Set();
-  // cam.hostname comes from the device's own XAddr URL, which some
-  // responders (e.g. the two NAS boxes this filter rejects) give as a
-  // symbolic hostname rather than an IP -- ARP only indexes IPs. rinfo.address
-  // is the literal UDP packet's source address, always a real IP, so it's
-  // used for the vendor lookup instead of trusting cam.hostname to be one.
-  // Real ONVIF cameras almost always report a plain IP XAddr anyway, but
-  // this doesn't depend on that being true.
-  const sourceIpByUrn = new Map();
+  // Confirmed devices are accumulated directly from `device` events, not
+  // by cross-referencing Discovery.probe()'s resolved list afterward --
+  // that cross-reference was a real bug (found 2026-09-01, once a real
+  // camera finally responded alongside the NAS boxes during testing):
+  // `cam.urn` is `undefined` on this version of `onvif`'s Cam objects at
+  // both the event and the resolved-list stage, so the old
+  // `confirmedUrns.has(cam.urn)` filter degenerated into "does any
+  // confirmed device exist at all" -- as soon as one real camera passed
+  // the type check, `confirmedUrns` held `{undefined}`, which then
+  // matched *every* resolved device's equally-undefined `.urn`, silently
+  // re-admitting the NAS boxes the filter was supposed to reject. It
+  // "worked" in earlier testing purely because no real camera had ever
+  // answered a scan yet, so `confirmedUrns` stayed empty and nothing
+  // could pass. Building the list straight from the event's own `cam`
+  // object (same shape as the resolved one, confirmed by hostname/
+  // xaddrs being populated at event time) has no cross-referencing step
+  // to break.
+  const confirmed = [];
+  const sourceIpByHostname = new Map();
 
   const onDevice = (cam, rinfo, xml) => {
     if (declaresNetworkVideoTransmitter(xml)) {
-      confirmedUrns.add(cam.urn);
-      sourceIpByUrn.set(cam.urn, rinfo.address);
+      confirmed.push(cam);
+      sourceIpByHostname.set(cam.hostname, rinfo.address);
     }
   };
   const onError = () => {}; // required per onvif's own docs -- a bad-XML reply
@@ -72,11 +81,19 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
   Discovery.on("error", onError);
 
   try {
-    const cams = await Discovery.probe({ timeout });
-    const devices = cams.filter((cam) => confirmedUrns.has(cam.urn)).map(toPlainDevice);
-    const sourceIps = devices.map((d) => sourceIpByUrn.get(d.urn)).filter(Boolean);
+    await Discovery.probe({ timeout }); // resolved value unused -- only
+                                         // awaited for completion/timeout
+    const devices = confirmed.map(toPlainDevice);
+    // cam.hostname comes from the device's own XAddr URL, which some
+    // responders (e.g. the two NAS boxes this filter rejects) give as a
+    // symbolic hostname rather than an IP -- ARP only indexes IPs.
+    // rinfo.address is the literal UDP packet's source address, always a
+    // real IP, so it's used for the vendor lookup instead of trusting
+    // cam.hostname to be one. Real ONVIF cameras almost always report a
+    // plain IP XAddr anyway, but this doesn't depend on that being true.
+    const sourceIps = devices.map((d) => sourceIpByHostname.get(d.hostname)).filter(Boolean);
     const vendors = vendorsForIps(sourceIps);
-    return devices.map((d) => ({ ...d, vendor: vendors[sourceIpByUrn.get(d.urn)] ?? null }));
+    return devices.map((d) => ({ ...d, vendor: vendors[sourceIpByHostname.get(d.hostname)] ?? null }));
   } finally {
     Discovery.off("device", onDevice);
     Discovery.off("error", onError);
