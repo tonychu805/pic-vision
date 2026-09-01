@@ -42,7 +42,6 @@ export function configuredCard(c, state) {
     name: c.label,
     ip: c.hostname,
     subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
-    proto: c.connectionType === "rtsp" ? "RTSP" : "ONVIF",
     state,
   };
 }
@@ -71,7 +70,6 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
       name: d.vendor ? `${d.vendor} camera` : "Camera found",
       ip: `${d.hostname}:${d.port}`,
       subtitle: "Tap to sign in",
-      proto: "ONVIF",
       state: "auth",
     }));
 
@@ -95,7 +93,6 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
           : "Possible device found",
       ip: `${s.hostname}:${s.port}`,
       subtitle: s.confirmed ? "Tap to set up" : "Tap to check",
-      proto: "RTSP",
       state: s.confirmed ? "rtsp" : "unconfirmed",
     }));
 

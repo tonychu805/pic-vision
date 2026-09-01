@@ -200,6 +200,17 @@ shown there is fabricated:
     Session-local, not persisted anywhere: the device is still really on
     the network, so it's expected to reappear on the next "Scan again" --
     there's no configured record to delete, only a card to hide for now.
+  - **The card's ONVIF/RTSP badge is gone, not relabeled** (2026-09-01,
+    operator: "i'd rather not having a label on the card, but rather
+    just display the detail information as is"). It was never actually
+    naming a streaming protocol choice -- every camera streams over RTSP
+    regardless of how it was connected (ONVIF just adds device metadata
+    on top, via `GetDeviceInformation`), so a two-value "ONVIF"/"RTSP"
+    pill implied a distinction that doesn't exist at the video layer.
+    Removed outright rather than relabeled -- the subtitle line already
+    shows the real thing (actual vendor/model, or an honest "Camera"/
+    "Not available" when unknown), so there was nothing worth encoding
+    into a second badge.
 - **Vendor (brand) identification** -- every discovery/sweep hit is looked
   up by MAC address (ARP -- the OS already knows it from the probe/scan
   itself) against the IEEE OUI registry (`oui-data`, bundled locally as a

@@ -42,20 +42,22 @@ export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss
                       : "not responding"}
           </span>
         </div>
-        <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6 }}>
-          <span
-            style={{
-              padding: "2px 7px",
-              borderRadius: "var(--radius-sm)",
-              font: "600 9.5px ui-monospace, Menlo, monospace",
-              letterSpacing: "0.08em",
-              background: v.live ? "color-mix(in srgb, var(--color-accent) 85%, transparent)" : "color-mix(in srgb, #000 55%, transparent)",
-              color: v.live ? "#161826" : "color-mix(in srgb, var(--color-text) 60%, transparent)",
-            }}
-          >
-            {v.live ? "LIVE" : v.proto}
-          </span>
-        </div>
+        {v.live && (
+          <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6 }}>
+            <span
+              style={{
+                padding: "2px 7px",
+                borderRadius: "var(--radius-sm)",
+                font: "600 9.5px ui-monospace, Menlo, monospace",
+                letterSpacing: "0.08em",
+                background: "color-mix(in srgb, var(--color-accent) 85%, transparent)",
+                color: "#161826",
+              }}
+            >
+              LIVE
+            </span>
+          </div>
+        )}
         {selectMode ? (
           <div style={{ position: "absolute", top: 8, right: 8 }}>
             <i
@@ -92,10 +94,17 @@ export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss
             {v.ip}
           </span>
         </div>
+        {/* Real detail (vendor/model, or an honest "Camera"/"Not available"
+            fallback when unknown -- cameraView.js) shown directly, not
+            summarized into a coded ONVIF/RTSP badge. That badge implied a
+            streaming-protocol choice that doesn't exist -- every camera
+            streams over RTSP regardless of how it was connected; ONVIF
+            only changes whether real device metadata like this is known
+            at all. Dropped 2026-09-01 rather than relabeled, since this
+            subtitle already says the real thing plainly. */}
         <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>{v.subtitle}</div>
         <div style={{ display: "flex", gap: 6, marginTop: 2 }}>
           <span className={v.stateTagClass}>{v.stateLabel}</span>
-          <span className="tag tag-neutral">{v.proto}</span>
         </div>
       </div>
     </div>
