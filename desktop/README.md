@@ -209,27 +209,24 @@ job once real capture/detection exist, and a flat "is this hour active"
 set can't represent that boundary at all. Drag across the grid to book a
 session spanning exactly the hours dragged; click an existing session
 (on the grid, or its delete button in the list alongside the grid) to
-remove it. A genuine multi-hour session (11am-1pm, one object) renders
-with the gap between its own cells visually closed -- an absolutely-
-positioned "bridge" rect, only ever drawn between two cells that share
-the *same* session id -- so it reads as one unbroken block; two sessions
-that merely touch (2-3pm, then 3-4pm, two different ids) get no bridge
-and keep the normal gap between them, which is what actually signals
-they're different, not an added line. This needed `WeekGrid.jsx` on CSS
-Grid rather than nested flex rows -- a shared flex row per hour can't
-collapse spacing for one day's column without shifting every other
-day's row height and breaking the hour-label gutter's alignment; a
-grid's row/column tracks are fixed regardless of a child's content, so
-the bridge (out of layout flow) never perturbs it. Verified
-geometrically via `getBoundingClientRect`, not just eyeballed: a real
-continuous session's bridge lands exactly flush against its two cells
-(0px gap), two separate touching sessions measure the real 2px gap, and
-the label gutter still lines up with its row after the rewrite. (Two
-earlier attempts used borders instead -- a single subtle shadow at a
-session's start, then a stronger two-sided border at start+end -- both
-worked as coded but relied on an *added* line to signal difference
-rather than the *absence* of the normal gap, which is what this version
-does instead.) No per-session label/name in the UI yet (not needed yet) --
+remove it. Each session renders as **one real rectangle**, not a stack
+of per-hour cells: `WeekGrid.jsx` splits an interaction layer (168
+plain, always-neutral cells handling all the click/drag hit-testing,
+unchanged) from a `pointer-events: none` visual overlay on top -- one
+absolutely-positioned `<div>` per session, sized to its full span
+(`spanRect()`: a 2-hour booking is one 34px-tall shape with its own
+single `border-radius`, not two 16px squares glued together). A stack
+of individually-rounded cells still reads as multiple pieces even with
+zero gap between them -- rounded corners repeat at every hour boundary
+-- so a per-cell approach (tried twice: a border at each session's
+start/end hour, then a gap-closing "bridge" rect between same-session
+cells) could get the *spacing* right but never the *shape* right.
+Verified geometrically via `getBoundingClientRect`, not just eyeballed:
+a real continuous 2-hour booking measures as exactly one 34px element
+(not two 16px ones), two separate touching 1-hour bookings measure as
+two distinct 16px elements with a real 2px gap between them, and the
+hour-label gutter still lines up with its row. No per-session label/name
+in the UI yet (not needed yet) --
 `schedule.js`'s `label` field and rename IPC call still exist, just
 unused by this page for now. Booking a range that overlaps existing
 sessions trims or splits them rather than silently double-booking
