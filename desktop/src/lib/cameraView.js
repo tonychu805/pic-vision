@@ -38,8 +38,8 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
       camera: c,
       name: c.label,
       ip: c.hostname,
-      subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || "ONVIF camera",
-      proto: "ONVIF",
+      subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
+      proto: c.connectionType === "rtsp" ? "RTSP" : "ONVIF",
       state,
     };
   });
@@ -115,23 +115,31 @@ export function cardVisuals(card) {
 // than inventing MAC/subnet/gateway values the way the mockup's fixtures do.
 export function detailPanels(camera) {
   const na = "Not available";
+  const viaRtsp = camera.connectionType === "rtsp";
   return {
     identity: [
       { k: "Vendor", v: camera.manufacturer || na },
-      { k: "Model", v: camera.model || na },
-      { k: "Serial", v: camera.serialNumber || na },
+      // A camera added via the RTSP fallback never went through ONVIF's
+      // GetDeviceInformation -- model/serial/firmware are genuinely
+      // unknown, not just unset, so this says so rather than implying
+      // they were looked up and came back empty.
+      { k: "Model", v: viaRtsp ? "Not available (added without ONVIF)" : camera.model || na },
+      { k: "Serial", v: viaRtsp ? "Not available (added without ONVIF)" : camera.serialNumber || na },
       { k: "MAC", v: na },
-      { k: "Firmware", v: camera.firmwareVersion || na },
+      { k: "Firmware", v: viaRtsp ? "Not available (added without ONVIF)" : camera.firmwareVersion || na },
     ],
     network: [
       { k: "Address", v: `${camera.hostname}:${camera.port}` },
-      { k: "ONVIF path", v: camera.path || "/onvif/device_service (default)" },
+      {
+        k: viaRtsp ? "Stream path" : "ONVIF path",
+        v: camera.path || (viaRtsp ? na : "/onvif/device_service (default)"),
+      },
       { k: "Mode", v: na },
       { k: "Subnet", v: na },
       { k: "Gateway", v: na },
     ],
     streams: camera.streamUri
-      ? [{ label: "MAIN", url: camera.streamUri, spec: "reported by camera's GetStreamUri" }]
+      ? [{ label: "MAIN", url: camera.streamUri, spec: viaRtsp ? "found directly, without ONVIF" : "reported by camera's GetStreamUri" }]
       : [],
   };
 }

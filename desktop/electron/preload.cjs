@@ -23,6 +23,10 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   remove: (id) => ipcRenderer.invoke("cameras:remove", id),
   testConnection: (config) => ipcRenderer.invoke("cameras:testConnection", config),
   sweep: (options) => ipcRenderer.invoke("cameras:sweep", options),
+  probeRtspFallback: (config) => ipcRenderer.invoke("cameras:probeRtspFallback", config),
+  addRtsp: (config) => ipcRenderer.invoke("cameras:addRtsp", config),
+  parseRtspUrl: (raw, fallbackUsername, fallbackPassword) =>
+    ipcRenderer.invoke("cameras:parseRtspUrl", raw, fallbackUsername, fallbackPassword),
 });
 
 // process.platform is a value, not a function -- safe to expose directly

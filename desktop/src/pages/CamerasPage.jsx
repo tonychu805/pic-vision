@@ -11,12 +11,25 @@ const SCAN_TIMEOUT_MS = 5000;
 // whether or not we'd already found the device for them. Two real
 // contexts now get different copy, and Port/path move behind "Advanced"
 // since most people should never need them.
+//
+// Extended the same day with an RTSP fallback ladder, after a real camera
+// on this network turned out to have a fully working video stream despite
+// its ONVIF service being completely off (see store.js's addCameraViaRtsp
+// for the full reasoning): when the ONVIF attempt fails, this
+// automatically tries a short generic list of common stream paths before
+// giving up, and offers a raw-RTSP-URL field as the true last resort --
+// each step vendor-neutral, none of it branching on a detected brand.
 function ManualAddDialog({ initialHostname = "", initialVendor = null, onClose, onAdded }) {
   const foundIt = Boolean(initialHostname);
   const [form, setForm] = useState({ label: "", hostname: initialHostname, port: 80, path: "", username: "", password: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+  // 'form' -> trying ONVIF | 'tryingRtsp' -> auto-probing common stream
+  // paths | 'rtspUrl' -> ONVIF and the auto-probe both failed, offer a
+  // raw-URL field as the last resort.
+  const [phase, setPhase] = useState("form");
+  const [rtspUrl, setRtspUrl] = useState("");
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const submit = async (e) => {
@@ -26,11 +39,102 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, onClose, 
     try {
       const camera = await window.cameraAPI.add({ ...form, port: Number(form.port) || 80 });
       onAdded(camera);
+      return;
+    } catch (onvifErr) {
+      // ONVIF failed -- before giving up, see if the camera has a real
+      // video stream anyway (a real case this session: ONVIF was
+      // completely switched off, but the stream itself worked the whole
+      // time at a common, guessable path).
+      setPhase("tryingRtsp");
+      try {
+        const found = await window.cameraAPI.probeRtspFallback({
+          hostname: form.hostname,
+          username: form.username,
+          password: form.password,
+        });
+        if (found) {
+          const camera = await window.cameraAPI.addRtsp({
+            label: form.label,
+            hostname: form.hostname,
+            port: 554,
+            path: found.path,
+            username: form.username,
+            password: form.password,
+          });
+          onAdded(camera);
+          return;
+        }
+      } catch {
+        // fall through to the manual RTSP-URL offer below
+      }
+      setPhase("rtspUrl");
+      setError(onvifErr.message);
+      setSaving(false);
+    }
+  };
+
+  const submitRtspUrl = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      const parsed = await window.cameraAPI.parseRtspUrl(rtspUrl, form.username, form.password);
+      const camera = await window.cameraAPI.addRtsp({ label: form.label, ...parsed });
+      onAdded(camera);
     } catch (err) {
       setError(err.message);
       setSaving(false);
     }
   };
+
+  if (phase === "tryingRtsp") {
+    return (
+      <div className="dialog-backdrop">
+        <div className="dialog">
+          <div className="dialog-title">Looking for a video stream…</div>
+          <div className="dialog-body">
+            Sign-in didn't work the usual way — checking whether this camera has a video stream available directly.
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (phase === "rtspUrl") {
+    return (
+      <div className="dialog-backdrop">
+        <form className="dialog" onSubmit={submitRtspUrl}>
+          <div className="dialog-title">Couldn't connect automatically</div>
+          <div className="dialog-body">
+            This camera might have ONVIF turned off — check its own app or settings for a network option called
+            "ONVIF" and make sure it's turned on, then try again above. In the meantime, if your camera's app shows
+            you a video stream address (sometimes called an "RTSP URL" or "stream URL"), you can paste it here to
+            add it directly.
+          </div>
+          <div className="field">
+            <label>Video stream address</label>
+            <input
+              className="input"
+              value={rtspUrl}
+              onChange={(e) => setRtspUrl(e.target.value)}
+              placeholder="rtsp://192.168.1.42:554/..."
+              required
+              autoFocus
+            />
+          </div>
+          {error && (
+            <p style={{ color: "var(--color-accent-2-400)", fontSize: 13, margin: 0 }}>
+              Couldn't connect with that either. ({error})
+            </p>
+          )}
+          <div className="dialog-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Connecting…" : "Connect & add"}</button>
+          </div>
+        </form>
+      </div>
+    );
+  }
 
   return (
     <div className="dialog-backdrop">

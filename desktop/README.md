@@ -152,15 +152,46 @@ shown there is fabricated:
   `/onvif/device_service`) / username / password entered directly. Not
   part of the original mockup (which has no manual-add affordance at all)
   -- added because the gap was real, not hypothetical.
-- **Connect & add** -- either path calls `cam.connect()` +
-  `getDeviceInformation()`; only cameras that actually respond get saved.
+- **RTSP fallback ladder, automatic** (`electron/cameras/rtspProbe.js`,
+  `store.js`'s `addCameraViaRtsp`) -- the real payoff of the BC510
+  investigation: its ONVIF service turned out to be switched off entirely
+  (a Synology-specific "Operation Mode" setting, `svs`/`onvif`/`c2`), yet
+  its actual video stream worked the whole time at `rtsp://host:554/1` --
+  found by reading the camera's own client JS, then confirmed for real
+  with `ffprobe` (2880×1620 H.264 + audio) before building anything.
+  ONVIF metadata (model/serial/firmware) isn't actually load-bearing for
+  this product -- it needs a stream to cut highlights from, not a model
+  name -- so when the manual-add form's ONVIF attempt fails, it now
+  automatically tries a short, generic list of common stream paths (`/1`,
+  `/2`, `/live`, ... -- deliberately not a per-vendor path table) with the
+  same credentials, verified by a real RTSP `DESCRIBE` exchange (Digest
+  auth implemented from scratch here, since unlike `OPTIONS` it isn't
+  credential-free). A subtle real bug caught before trusting it: the
+  first version opened a fresh TCP connection per request and failed
+  against a real server (LIVE555) that ties its auth nonce to the
+  connection it was issued on -- fixed by holding one connection across
+  both the challenge and the authenticated retry. If no common path
+  works, the dialog offers a raw-RTSP-URL field as the true last resort
+  (found in the camera's own app, works for anything the generic list
+  misses). A camera added this way shows "Not available (added without
+  ONVIF)" for model/serial/firmware rather than silently leaving them
+  blank -- real end-to-end result on the BC510: added and streaming,
+  same friction as a normal attempt (IP + username + password), zero
+  manual path entry needed.
+- **Connect & add** -- either ONVIF or the RTSP fallback path verifies
+  before saving; only cameras that actually respond get saved.
   Identity/network/streams panels on the detail page show real
-  manufacturer/model/serial/firmware/stream-URI from that call, or "Not
-  available" where ONVIF genuinely has no such field (MAC address is never
-  fabricated -- ONVIF's `GetDeviceInformation` doesn't return one).
+  manufacturer/model/serial/firmware/stream-URI from ONVIF's
+  `GetDeviceInformation`, or "Not available" where ONVIF genuinely has no
+  such field (MAC address is never fabricated -- ONVIF doesn't return
+  one) -- an RTSP-added camera gets manufacturer from the MAC/vendor
+  lookup instead and says so for the rest.
 - **Test connection** -- run automatically for every configured camera on
   page load, driving each card's Streaming/Not-answering state and dot
-  color for real.
+  color for real. Branches on how the camera was added (`connectionType`)
+  -- an RTSP-added camera is re-checked with the same RTSP `DESCRIBE`
+  exchange it was added with, not an ONVIF call it was never going to
+  answer.
 - **Network panel** (sidebar) -- the CIDR shown is this machine's real
   primary interface (`os.networkInterfaces()`, `electron/system.js`), not
   the mockup's hardcoded `10.0.4.0/24` sample.

@@ -665,10 +665,21 @@ pic-vision/
 │   │       ├── vendorLookup.js             # MAC (via ARP) -> manufacturer (IEEE OUI
 │   │       │                              # registry, `oui-data` dep, no network
 │   │       │                              # calls); generic, not vendor-curated
+│   │       ├── rtspProbe.js                # confirms a real RTSP stream (DESCRIBE +
+│   │       │                              # Digest auth, no ffmpeg dep) -- the
+│   │       │                              # fallback for cameras whose ONVIF doesn't
+│   │       │                              # work at all but a stream exists anyway
 │   │       └── store.js                  # persisted camera list + connect/test,
 │   │                                       # incl. an optional ONVIF path override
+│   │                                       # and addCameraViaRtsp (the RTSP fallback)
 │   │                                       # (electron-store; POC stores camera
 │   │                                       # passwords in plaintext, see README)
+│   ├── scripts/
+│   │   └── benchmark-decode.sh            # real N-camera decode/proxy-encode
+│   │                                       # capacity test for target hardware
+│   │                                       # (N100 etc.) -- checks real Intel
+│   │                                       # GPU PCI vendor ID, refuses to run
+│   │                                       # on non-Intel/no-iGPU machines
 │   └── src/                          # React (Vite) renderer
 │       ├── App.jsx                      # TitleBar + Sidebar + page switch
 │       ├── index.css                     # "Nocturne" design tokens, ported from

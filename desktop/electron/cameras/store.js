@@ -14,6 +14,8 @@ import Store from "electron-store";
 import onvifPromises from "onvif/promises/index.js";
 const { Cam } = onvifPromises;
 import { randomUUID } from "node:crypto";
+import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
+import { vendorsForIps } from "./vendorLookup.js";
 
 const store = new Store({ name: "cameras" });
 
@@ -21,7 +23,19 @@ export function listCameras() {
   return store.get("cameras", []);
 }
 
-export async function testConnection({ hostname, port, username, password, path }) {
+export async function testConnection({ hostname, port, username, password, path, connectionType }) {
+  // Stored cameras carry their own connectionType ('onvif' or 'rtsp',
+  // added by addCamera/addCameraViaRtsp) -- an RTSP-direct camera has no
+  // ONVIF service to test against at all, so the periodic status check
+  // (CamerasPage.jsx) needs to actually probe the way it was added, not
+  // always assume ONVIF. Absent (the ONVIF add flow's own internal
+  // pre-save check, before anything is stored) defaults to ONVIF, same as
+  // before this branch existed.
+  if (connectionType === "rtsp") {
+    await describeRtspStream({ hostname, port: port || 554, path, username, password });
+    return { info: {}, streamUri: null };
+  }
+
   // path defaults to the library's own '/onvif/device_service' when
   // omitted -- but that's not universal. A real Synology camera on this
   // network (2026-09-01) serves ONVIF at '/Onvif/device_service' (capital
@@ -61,6 +75,7 @@ export async function addCamera({ label, hostname, port, username, password, pat
     serialNumber: info.serialNumber,
     firmwareVersion: info.firmwareVersion,
     streamUri,
+    connectionType: "onvif",
     addedAt: new Date().toISOString(),
   };
   const cameras = listCameras();
@@ -73,4 +88,68 @@ export function removeCamera(id) {
   const cameras = listCameras().filter((c) => c.id !== id);
   store.set("cameras", cameras);
   return cameras;
+}
+
+// --- RTSP-direct fallback (2026-09-01) ------------------------------
+// For cameras where ONVIF doesn't work (disabled, misconfigured, or -- a
+// real case this session -- switched to a different operation mode
+// entirely) but a real video stream exists anyway. RTSP gives no device
+// metadata the way ONVIF's GetDeviceInformation does (manufacturer here
+// comes from vendorLookup.js's MAC lookup instead, model/serial/firmware
+// stay "Not available"), but for this product's actual job -- cutting
+// highlights from footage -- a working stream is what matters, and ONVIF
+// was never a hard requirement for that, just the easiest way to get one
+// when it's available.
+
+// Tries the short generic path list (rtspProbe.js) with credentials the
+// user already entered for an ONVIF attempt that just failed. Doesn't
+// throw on "nothing worked" -- that's a normal outcome (an unusual/
+// nonstandard camera), not an error; the caller decides what to offer
+// next (the raw-URL fallback).
+export async function probeRtspFallback({ hostname, port, username, password }) {
+  return findWorkingRtspPath({ hostname, port: port || 554, username, password });
+}
+
+// Verifies one exact, fully-specified RTSP URL the user supplied
+// themselves (found in the camera's own app/settings) -- the true last
+// resort once neither ONVIF nor the generic path guesses worked. Accepts
+// credentials embedded in the URL (rtsp://user:pass@host:port/path, what
+// the camera's own app would show) or supplied separately.
+export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
+  const url = new URL(raw);
+  if (url.protocol !== "rtsp:") throw new Error("Must start with rtsp://");
+  return {
+    hostname: url.hostname,
+    port: Number(url.port) || 554,
+    path: url.pathname + url.search,
+    username: decodeURIComponent(url.username) || fallbackUsername,
+    password: decodeURIComponent(url.password) || fallbackPassword,
+  };
+}
+
+export async function addCameraViaRtsp({ label, hostname, port, path, username, password }) {
+  port = port || 554;
+  await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
+  const vendors = vendorsForIps([hostname]);
+  const vendor = vendors[hostname] ?? null;
+  const camera = {
+    id: randomUUID(),
+    label: label || (vendor ? `${vendor} camera` : "Camera"),
+    hostname,
+    port,
+    path,
+    username,
+    password,
+    manufacturer: vendor,
+    model: null,
+    serialNumber: null,
+    firmwareVersion: null,
+    streamUri: `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`,
+    connectionType: "rtsp",
+    addedAt: new Date().toISOString(),
+  };
+  const cameras = listCameras();
+  cameras.push(camera);
+  store.set("cameras", cameras);
+  return camera;
 }

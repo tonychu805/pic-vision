@@ -3,7 +3,15 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverCameras } from "./cameras/discovery.js";
 import { sweepNetwork } from "./cameras/networkSweep.js";
-import { listCameras, addCamera, removeCamera, testConnection } from "./cameras/store.js";
+import {
+  listCameras,
+  addCamera,
+  removeCamera,
+  testConnection,
+  probeRtspFallback,
+  addCameraViaRtsp,
+  parseRtspUrl,
+} from "./cameras/store.js";
 import { getNetworkInfo } from "./system.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -39,6 +47,19 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:sweep", async (_event, options) => {
     const { cidr, address } = getNetworkInfo();
     return sweepNetwork({ ...options, cidr, excludeHost: address });
+  });
+  // RTSP-direct fallback (2026-09-01) -- for cameras where ONVIF doesn't
+  // work at all but a real stream exists anyway. See store.js's own
+  // comment on why this isn't a lesser path: the product needs a stream,
+  // not ONVIF specifically.
+  ipcMain.handle("cameras:probeRtspFallback", async (_event, config) => {
+    return probeRtspFallback(config);
+  });
+  ipcMain.handle("cameras:addRtsp", async (_event, config) => {
+    return addCameraViaRtsp(config);
+  });
+  ipcMain.handle("cameras:parseRtspUrl", async (_event, raw, fallbackUsername, fallbackPassword) => {
+    return parseRtspUrl(raw, fallbackUsername, fallbackPassword);
   });
 }
 
