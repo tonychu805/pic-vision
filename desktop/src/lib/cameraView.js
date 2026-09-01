@@ -18,8 +18,8 @@ export const STATE_META = {
   // definitely speaking RTSP, ONVIF support is still unknown. `unconfirmed`
   // is weaker still: the TCP port answered but nothing recognizable as
   // RTSP came back, so this could be any service, camera or not.
-  rtsp: { label: "RTSP confirmed", dot: "var(--color-accent-2-400)", tagClass: "tag tag-outline" },
-  unconfirmed: { label: "Possible camera", dot: "var(--color-neutral-500)", tagClass: "tag tag-neutral" },
+  rtsp: { label: "Ready to add", dot: "var(--color-accent-2-400)", tagClass: "tag tag-outline" },
+  unconfirmed: { label: "Unconfirmed", dot: "var(--color-neutral-500)", tagClass: "tag tag-neutral" },
 };
 
 // A "card" is either a configured (persisted) camera, an ONVIF discovery
@@ -44,15 +44,20 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
     };
   });
 
+  // Plain-language names for anything not yet added -- a venue owner has
+  // no use for a raw IP or protocol name as the headline. Vendor (from
+  // vendorLookup.js's MAC lookup, generic across brands) is included when
+  // known since "which camera is this" is exactly what a first-time,
+  // non-technical user needs to recognize their own device by.
   const discoveredCards = discovered
     .filter((d) => !configuredHostnames.has(d.hostname))
     .map((d) => ({
       key: d.hostname,
       kind: "discovered",
       device: d,
-      name: d.hostname,
+      name: d.vendor ? `${d.vendor} camera` : "Camera found",
       ip: `${d.hostname}:${d.port}`,
-      subtitle: d.vendor ? `${d.vendor} — unassigned camera` : "Unassigned camera",
+      subtitle: "Tap to sign in",
       proto: "ONVIF",
       state: "auth",
     }));
@@ -64,14 +69,19 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
       key: s.hostname,
       kind: "sweep",
       device: s,
-      name: s.hostname,
+      // Confidence-appropriate wording: `confirmed` means a real RTSP
+      // handshake happened -- safe to call it a camera. `unconfirmed`
+      // means only that a port answered -- could be anything, so it's
+      // called a "device," not a "camera," until proven otherwise.
+      name: s.confirmed
+        ? s.vendor
+          ? `${s.vendor} camera found`
+          : "Camera found"
+        : s.vendor
+          ? `${s.vendor} device found`
+          : "Possible device found",
       ip: `${s.hostname}:${s.port}`,
-      subtitle: [
-        s.vendor,
-        s.confirmed ? `RTSP confirmed (port ${s.port})` : `port ${s.port} open, not confirmed as RTSP`,
-      ]
-        .filter(Boolean)
-        .join(" — "),
+      subtitle: s.confirmed ? "Tap to set up" : "Tap to check",
       proto: "RTSP",
       state: s.confirmed ? "rtsp" : "unconfirmed",
     }));

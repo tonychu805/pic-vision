@@ -59,6 +59,47 @@ file's own comments:
   mockup's flat grey -- same reasoning: once they're the only way to close
   the window, real semantic color is load-bearing, not decorative.
 
+## Plain-language pass (2026-09-01)
+
+The mockup's UI text (ONVIF, RTSP, "port sweep," raw IPs as card titles)
+reads fine for the person who built the discovery mechanism and badly for
+the actual audience -- a venue owner with no technical background. A
+walkthrough done as that person, screenshot by screenshot, found five real
+problems and all five are fixed:
+
+- **The manual-add form was the biggest blocker.** It asked for an IP
+  address, a port, and an "ONVIF path" with no explanation and no help
+  finding any of it. `CamerasPage.jsx`'s `ManualAddDialog` now shows
+  different copy depending on context (found a device vs. starting blank),
+  explains where to find an IP address, and moves Port/path behind an
+  "Advanced settings" disclosure most people should never need to open.
+- **Cards were labeled by raw IP and protocol name.** `cameraView.js`'s
+  `buildCards` now names them by what they are and what to do
+  ("Synology camera found" / "Tap to set up"), using the vendor lookup
+  (`vendorLookup.js`) already built for exactly this. Confidence-
+  appropriate wording matters here: an RTSP-confirmed sweep hit is called
+  a "camera," an unconfirmed one a "device" -- it might not be a camera
+  at all.
+- **The Alerts/Credentials/Settings mock content was a real risk, not
+  just unpolished.** It read as real data about the venue (a small gray
+  "Illustrative" caption was easy to miss under fully realistic fake
+  courts and alerts). All three now show a loud, colored `PreviewBanner`
+  and the sample content itself is dimmed with its buttons disabled,
+  rather than looking fully live.
+- **The sidebar's network panel showed a raw CIDR and interface name**
+  ("192.168.1.0/24" / "Interface · enp1s0") as the first thing anyone
+  sees. Replaced with "Connected / Scanning this network for cameras";
+  the technical detail is still available as a hover tooltip, not the
+  headline.
+- **There was no guidance once something was found.** A one-line banner
+  now appears above the grid ("We found something that might be your
+  camera below — tap it to finish setting it up") the moment an
+  unconfigured card exists.
+
+Verified via the same CDP-driven walkthrough used throughout this
+project's other real testing -- actual screenshots of the actual running
+app, not a description of the intended change.
+
 ## What's real vs. illustrative
 
 **Cameras + camera detail pages are wired to the real backend** -- nothing

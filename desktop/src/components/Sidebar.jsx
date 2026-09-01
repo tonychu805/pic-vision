@@ -1,5 +1,4 @@
 import { useEffect, useState } from "react";
-import { MOCK_ALERTS } from "../data/mockData.js";
 import logo from "../assets/pic-vision-logo.png";
 
 const NAV_ITEMS = [
@@ -61,14 +60,14 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           {item.key === "cameras" && (
             <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.6 }}>{deviceCount}</span>
           )}
-          {item.key === "alerts" && (
-            <span className="tag tag-accent" style={{ marginLeft: "auto", padding: "1px 7px", fontSize: 10 }}>
-              {MOCK_ALERTS.length}
-            </span>
-          )}
         </button>
       ))}
 
+      {/* Used to show the raw CIDR + interface name ("192.168.1.0/24" /
+          "Interface · enp1s0") as the headline -- meaningless to a
+          non-technical venue owner and the first thing a plain-language
+          walkthrough (2026-09-01) noticed. Kept available as a hover
+          tooltip for troubleshooting, not in the primary view. */}
       <div
         style={{
           marginTop: "auto",
@@ -76,23 +75,16 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           borderRadius: "var(--radius-md)",
           background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
         }}
+        title={network?.cidr ? `Network: ${network.cidr}${network.interfaceName ? ` (${network.interfaceName})` : ""}` : undefined}
       >
-        <div
-          style={{
-            fontSize: 10,
-            letterSpacing: "0.08em",
-            textTransform: "uppercase",
-            color: "color-mix(in srgb, var(--color-text) 45%, transparent)",
-            marginBottom: 4,
-          }}
-        >
-          Network
+        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+          <i className="ph ph-wifi-high" style={{ fontSize: 14, color: "var(--color-accent-300)" }} />
+          <span style={{ fontSize: 12, fontWeight: 500 }}>
+            {network?.cidr ? "Connected" : "Checking…"}
+          </span>
         </div>
-        <div style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12 }}>
-          {network?.cidr ?? "Detecting…"}
-        </div>
-        <div style={{ fontSize: 11, color: "color-mix(in srgb, var(--color-text) 45%, transparent)" }}>
-          {network?.interfaceName ? `Interface · ${network.interfaceName}` : " "}
+        <div style={{ fontSize: 11, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", marginTop: 2 }}>
+          Scanning this network for cameras
         </div>
       </div>
     </div>

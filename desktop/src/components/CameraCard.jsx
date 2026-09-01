@@ -30,16 +30,16 @@ export default function CameraCard({ card, selectMode, picked, onOpen }) {
           />
           <span style={{ fontSize: 11, color: "color-mix(in srgb, var(--color-text) 45%, transparent)" }}>
             {v.live
-              ? "live sub-stream"
+              ? "connected"
               : v.state === "auth"
-                ? "preview locked"
+                ? "needs sign-in"
                 : v.state === "checking"
                   ? "checking…"
                   : v.state === "rtsp"
-                    ? "RTSP responded, ONVIF unknown"
+                    ? "not set up yet"
                     : v.state === "unconfirmed"
-                      ? "port open, protocol unknown"
-                      : "not answering"}
+                      ? "not sure what this is yet"
+                      : "not responding"}
           </span>
         </div>
         <div style={{ position: "absolute", top: 8, left: 8, display: "flex", gap: 6 }}>
