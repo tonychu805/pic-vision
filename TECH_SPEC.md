@@ -630,9 +630,11 @@ pic-vision/
 │
 ├── desktop/                     # venue owner-facing desktop client (2026-09-01,
 │   │                              # STRATEGY.md §5) -- Electron + React, POC scope:
-│   │                              # camera discovery/management only. Everything
-│   │                              # else in §5 (local encode, R2 upload, CDN
-│   │                              # delivery) is unbuilt. Visual design (all 5
+│   │                              # camera discovery/management, plus a per-camera
+│   │                              # weekly activation schedule (config only -- no
+│   │                              # real capture process reads it yet, PIC-66).
+│   │                              # Everything else in §5 (local encode, R2 upload,
+│   │                              # CDN delivery) is unbuilt. Visual design (all 5
 │   │                              # pages, "Nocturne" design system) implemented
 │   │                              # from a Claude Design handoff bundle
 │   │                              # (desktop-utility-by-claude-design.zip, repo
@@ -652,6 +654,11 @@ pic-vision/
 │   │   │                              # not guessed)
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel
+│   │   ├── schedule.js                  # per-camera weekly activation schedule
+│   │   │                              # (168-cell store, electron-store) -- config
+│   │   │                              # only, doesn't start/stop capture yet
+│   │   │                              # (PIC-66 doesn't exist); the future capture
+│   │   │                              # scheduler's config source
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -684,9 +691,15 @@ pic-vision/
 │       ├── App.jsx                      # TitleBar + Sidebar + page switch
 │       ├── index.css                     # "Nocturne" design tokens, ported from
 │       │                                  # the handoff bundle's styles.css
-│       ├── components/                    # TitleBar, Sidebar, CameraCard
+│       ├── components/                    # TitleBar, Sidebar, CameraCard, WeekGrid
+│       │                                    # (interactive 7x24 schedule editor),
+│       │                                    # DayActivityStrip (per-camera weekly
+│       │                                    # summary bars)
 │       ├── pages/                          # CamerasPage (real), CameraDetailPage
-│       │                                    # (real), Alerts/Credentials/Settings
+│       │                                    # (real), ScheduleOverviewPage +
+│       │                                    # ScheduleEditorPage (real -- schedule.js
+│       │                                    # config only, no real capture behind it
+│       │                                    # yet), Alerts/Credentials/Settings
 │       │                                    # (mock data, illustrative)
 │       ├── lib/cameraView.js                # real-camera -> mockup card/detail
 │       │                                    # view-model (STATE_META, buildCards)

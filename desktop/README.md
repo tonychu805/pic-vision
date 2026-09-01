@@ -196,6 +196,27 @@ shown there is fabricated:
   primary interface (`os.networkInterfaces()`, `electron/system.js`), not
   the mockup's hardcoded `10.0.4.0/24` sample.
 
+**Schedule page is real, but config-only** (`electron/schedule.js`,
+`src/pages/ScheduleOverviewPage.jsx` + `ScheduleEditorPage.jsx`,
+`src/components/WeekGrid.jsx` + `DayActivityStrip.jsx`, 2026-09-01) -- a
+per-camera weekly activation schedule: a 7x24 grid (one cell per hour per
+day, minimum block size one hour), click or click-drag to toggle a cell,
+persisted immediately via `electron-store` (`schedules.json`). The
+overview page lists every configured camera with a compact per-day
+activity summary (bar height per day, hours/week) and a way into that
+camera's full editor. **What this doesn't do yet: actually start or stop
+anything.** There's no real capture/recording process in this app at all
+(`PIC-66`, `STRATEGY.md` §5's "Local stream/footage management" bullet) --
+this is the schedule a future capture scheduler would read, built and
+verified now (real drag-to-toggle, real persistence round-tripped through
+`scheduleAPI.get`/`.set`, confirmed against the on-disk JSON) so it's
+ready to wire up rather than redesigned later. One real bug caught before
+shipping: the overview's per-day activity bars used a linear 0-24h height
+scale that rounded anything under ~6h/day to the same pixel height as
+0h/day (color differed, height didn't) -- caught by reading the actual
+rendered `style.height` values via CDP, not just checking the numbers/
+colors looked right, fixed with a higher floor for any nonzero day.
+
 **Alerts, Credentials, and Scan Settings pages are pixel-matched but not
 functional** -- there's no alert monitoring, no stored/tried credential
 sets, and no multi-protocol (mDNS/UPnP/vendor-specific) or multi-range
@@ -225,3 +246,6 @@ this too, not be solved separately.
   target list in `package.json`.
 - Everything past camera management in STRATEGY.md §5's list (local
   encode, R2 upload, CDN delivery) is unbuilt.
+- The Schedule page's on/off toggle has no real effect -- there's no
+  capture process for it to gate (`PIC-66`). See Linear `PIC-66`-`71`
+  (`Venue Deployment`) for the full remaining integration scope.

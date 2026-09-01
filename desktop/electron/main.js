@@ -13,6 +13,7 @@ import {
   parseRtspUrl,
 } from "./cameras/store.js";
 import { getNetworkInfo } from "./system.js";
+import { getSchedule, setSchedule, listSchedules, removeSchedule } from "./schedule.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -36,7 +37,9 @@ function registerCameraHandlers() {
     return addCamera(config);
   });
   ipcMain.handle("cameras:remove", async (_event, id) => {
-    return removeCamera(id);
+    const cameras = removeCamera(id);
+    removeSchedule(id); // no orphaned schedule left behind for a deleted camera
+    return cameras;
   });
   ipcMain.handle("cameras:testConnection", async (_event, config) => {
     return testConnection(config);
@@ -60,6 +63,21 @@ function registerCameraHandlers() {
   });
   ipcMain.handle("cameras:parseRtspUrl", async (_event, raw, fallbackUsername, fallbackPassword) => {
     return parseRtspUrl(raw, fallbackUsername, fallbackPassword);
+  });
+}
+
+// Per-camera weekly activation schedule (schedule.js) -- storage + UI only,
+// see that file's header for why nothing here actually starts/stops
+// capture yet (PIC-66 doesn't exist).
+function registerScheduleHandlers() {
+  ipcMain.handle("schedule:get", async (_event, cameraId) => {
+    return getSchedule(cameraId);
+  });
+  ipcMain.handle("schedule:set", async (_event, cameraId, cells) => {
+    return setSchedule(cameraId, cells);
+  });
+  ipcMain.handle("schedule:listAll", async () => {
+    return listSchedules();
   });
 }
 
@@ -107,6 +125,7 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerCameraHandlers();
+  registerScheduleHandlers();
   registerWindowControlHandlers();
   createWindow();
 

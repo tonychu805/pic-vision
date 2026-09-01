@@ -46,3 +46,9 @@ contextBridge.exposeInMainWorld("windowAPI", {
 contextBridge.exposeInMainWorld("systemAPI", {
   getNetworkInfo: () => ipcRenderer.invoke("system:networkInfo"),
 });
+
+contextBridge.exposeInMainWorld("scheduleAPI", {
+  get: (cameraId) => ipcRenderer.invoke("schedule:get", cameraId),
+  set: (cameraId, cells) => ipcRenderer.invoke("schedule:set", cameraId, cells),
+  listAll: () => ipcRenderer.invoke("schedule:listAll"),
+});
