@@ -15,46 +15,6 @@ function InfoPanel({ title, rows }) {
   );
 }
 
-function SignInInline({ device, onSignedIn }) {
-  const [form, setForm] = useState({ label: "", username: "", password: "" });
-  const [error, setError] = useState("");
-  const [saving, setSaving] = useState(false);
-  const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
-
-  const submit = async () => {
-    setSaving(true);
-    setError("");
-    try {
-      const camera = await window.cameraAPI.add({
-        label: form.label,
-        hostname: device.hostname,
-        port: device.port,
-        username: form.username,
-        password: form.password,
-      });
-      onSignedIn(camera);
-    } catch (err) {
-      setError(err.message);
-      setSaving(false);
-    }
-  };
-
-  return (
-    <div style={{ display: "flex", alignItems: "flex-end", gap: 10, marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-accent-900)" }}>
-      <div style={{ flex: "none", width: 210 }}>
-        <div style={{ fontSize: 13.5, fontWeight: 500, color: "var(--color-accent-100)" }}>Sign in to see this camera</div>
-        <div style={{ fontSize: 11.5, color: "var(--color-accent-300)" }}>It answered discovery but hasn't been signed in to yet.</div>
-        {error && <div style={{ fontSize: 11.5, color: "var(--color-accent-2-400)", marginTop: 4 }}>{error}</div>}
-      </div>
-      <div className="field" style={{ flex: 1 }}><label>User</label><input className="input" value={form.username} onChange={update("username")} /></div>
-      <div className="field" style={{ flex: 1 }}><label>Password</label><input className="input" type="password" value={form.password} onChange={update("password")} /></div>
-      <button className="btn btn-primary" style={{ flex: "none" }} disabled={saving} onClick={submit}>
-        {saving ? "Signing in…" : "Sign in"}
-      </button>
-    </div>
-  );
-}
-
 // Click the name to rename it in place -- name only, not connection
 // details (hostname/port/path/credentials aren't editable yet, that
 // would need the same re-verification addCamera/addCameraViaRtsp do
@@ -143,10 +103,15 @@ function RemoveCameraControl({ camera, onRemoved }) {
   );
 }
 
-export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraSignedIn, onCameraRenamed }) {
+// A configured camera's detail page only, now -- an unconfigured card
+// (found via WS-Discovery or the RTSP sweep, `kind !== "configured"`)
+// goes straight to ManualAddDialog from the grid instead (CamerasPage.jsx,
+// 2026-09-01: one workflow to connect a camera regardless of how it was
+// found, replacing this page's own separate, weaker inline sign-in form
+// -- ONVIF-only, no RTSP fallback if it failed).
+export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraRenamed }) {
   const v = cardVisuals(card);
-  const isDiscoveredOnly = card.kind === "discovered";
-  const panels = isDiscoveredOnly ? null : detailPanels(card.camera);
+  const panels = detailPanels(card.camera);
 
   return (
     <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "18px 22px 26px" }}>
@@ -156,14 +121,10 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
         <div style={{ minWidth: 0, flex: 1 }}>
-          {isDiscoveredOnly ? (
-            <div style={{ fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2 }}>{v.name}</div>
-          ) : (
-            <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
-          )}
+          <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
           <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", marginTop: 2 }}>{v.subtitle} · {v.ip}</div>
         </div>
-        {!isDiscoveredOnly && <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />}
+        <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />
       </div>
 
       <div style={{ position: "relative", aspectRatio: "16/9", borderRadius: "var(--radius-md)", overflow: "hidden", background: v.live ? "linear-gradient(160deg, var(--color-neutral-800), var(--color-neutral-900))" : "var(--color-neutral-900)", boxShadow: "var(--shadow-sm)" }}>
@@ -178,36 +139,30 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         </div>
       </div>
 
-      {isDiscoveredOnly && <SignInInline device={card.device} onSignedIn={onCameraSignedIn} />}
+      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
+        <InfoPanel title="Identity" rows={panels.identity} />
+        <InfoPanel title="Network" rows={panels.network} />
+      </div>
 
-      {panels && (
-        <>
-          <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 16 }}>
-            <InfoPanel title="Identity" rows={panels.identity} />
-            <InfoPanel title="Network" rows={panels.network} />
-          </div>
-
-          <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Streams</div>
-            {panels.streams.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
-                No stream URI on record for this camera.
-              </p>
-            ) : (
-              panels.streams.map((s) => (
-                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
-                  <span className="tag tag-outline">{s.label}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
-                  <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{s.spec}</span>
-                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => navigator.clipboard.writeText(s.url)}>
-                    <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
-                  </button>
-                </div>
-              ))
-            )}
-          </div>
-        </>
-      )}
+      <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
+        <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Streams</div>
+        {panels.streams.length === 0 ? (
+          <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
+            No stream URI on record for this camera.
+          </p>
+        ) : (
+          panels.streams.map((s) => (
+            <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+              <span className="tag tag-outline">{s.label}</span>
+              <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
+              <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{s.spec}</span>
+              <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => navigator.clipboard.writeText(s.url)}>
+                <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
+              </button>
+            </div>
+          ))
+        )}
+      </div>
     </div>
   );
 }

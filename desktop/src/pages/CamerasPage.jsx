@@ -19,9 +19,9 @@ const SCAN_TIMEOUT_MS = 5000;
 // automatically tries a short generic list of common stream paths before
 // giving up, and offers a raw-RTSP-URL field as the true last resort --
 // each step vendor-neutral, none of it branching on a detected brand.
-function ManualAddDialog({ initialHostname = "", initialVendor = null, onClose, onAdded }) {
+function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPort = 80, onClose, onAdded }) {
   const foundIt = Boolean(initialHostname);
-  const [form, setForm] = useState({ label: "", hostname: initialHostname, port: 80, path: "", username: "", password: "" });
+  const [form, setForm] = useState({ label: "", hostname: initialHostname, port: initialPort, path: "", username: "", password: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -210,7 +210,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState(new Set());
   const [manualOpen, setManualOpen] = useState(false);
-  const [manualPrefill, setManualPrefill] = useState({ hostname: "", vendor: null });
+  const [manualPrefill, setManualPrefill] = useState({ hostname: "", vendor: null, port: 80 });
   const [bulkOpen, setBulkOpen] = useState(false);
   const scanTimer = useRef(null);
 
@@ -288,19 +288,25 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
 
   const togglePick = (key) => setPicked((p) => { const next = new Set(p); next.has(key) ? next.delete(key) : next.add(key); return next; });
 
-  const openManual = (hostname = "", vendor = null) => {
-    setManualPrefill({ hostname, vendor });
+  const openManual = (hostname = "", vendor = null, port = 80) => {
+    setManualPrefill({ hostname, vendor, port });
     setManualOpen(true);
   };
 
+  // One workflow for every not-yet-configured card, regardless of how it
+  // was found (operator's call, 2026-09-01: signing in to a WS-Discovery
+  // hit used to open a separate, simpler inline form on a detail page --
+  // ONVIF-only, no fallback if it failed -- while a sweep hit opened this
+  // fuller dialog with the RTSP fallback ladder. Different capability
+  // depending on discovery method wasn't a deliberate distinction worth
+  // keeping, so both now open the same dialog. `card.device.port` carries
+  // the real ONVIF port from a WS-Discovery hit (e.g. a Tapo C200's 2020)
+  // instead of defaulting to 80 and asking the user to find it under
+  // "Advanced settings" if that default happens to be wrong.
   const handleCardOpen = (card) => {
     if (selectMode) return togglePick(card.key);
-    // Sweep hits don't have a working ONVIF path (or even a confirmed
-    // ONVIF service) yet -- there's no detail page to show, so send
-    // straight to manual-add, prefilled, rather than a page with nothing
-    // real on it.
-    if (card.kind === "sweep") return openManual(card.device.hostname, card.device.vendor);
-    onOpenCamera(card);
+    if (card.kind === "configured") return onOpenCamera(card);
+    return openManual(card.device.hostname, card.device.vendor, card.device.port ?? 80);
   };
 
   return (
@@ -395,6 +401,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
         <ManualAddDialog
           initialHostname={manualPrefill.hostname}
           initialVendor={manualPrefill.vendor}
+          initialPort={manualPrefill.port}
           onClose={() => setManualOpen(false)}
           onAdded={() => { setManualOpen(false); refreshConfigured(); }}
         />

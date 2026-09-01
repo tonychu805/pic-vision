@@ -164,9 +164,22 @@ shown there is fabricated:
     means ONVIF is confirmed present, just needs credentials.
   - Neither one is the mockup's design (it names 6 protocols as
     checkboxes, all illustrative except these two, see Scan Settings).
-    Cards from ONVIF discovery render "Sign-in needed" with an inline
-    credential form; sweep hits have no known ONVIF path yet, so clicking
-    one opens the manual-add dialog pre-filled with its IP instead.
+  - **One workflow to connect any not-yet-configured camera, however it
+    was found** (2026-09-01, unified from two): clicking a card from
+    either method used to open two genuinely different UIs -- a
+    WS-Discovery hit opened a narrow inline sign-in form on its own
+    detail page (ONVIF-only, no fallback if it failed), while a sweep
+    hit opened the fuller manual-add dialog with the full RTSP fallback
+    ladder. Different capability depending on how a camera happened to
+    be found wasn't a deliberate distinction (operator: "i want one
+    single workflow") -- both now open the same manual-add dialog,
+    pre-filled with whatever's already known (hostname always; the real
+    ONVIF port too for a WS-Discovery hit, e.g. a Tapo C200's 2020,
+    instead of defaulting to 80 and asking the user to find the real one
+    under "Advanced settings"). `CameraDetailPage.jsx` is simpler for it
+    -- it only ever shows a *configured* camera now, so its own
+    `isDiscoveredOnly` branch and inline sign-in form are gone entirely,
+    not just unused.
 - **Vendor (brand) identification** -- every discovery/sweep hit is looked
   up by MAC address (ARP -- the OS already knows it from the probe/scan
   itself) against the IEEE OUI registry (`oui-data`, bundled locally as a

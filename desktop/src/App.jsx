@@ -72,13 +72,6 @@ export default function App() {
               card={selectedCard}
               onBack={backToGrid}
               onCameraRemoved={backToGrid}
-              onCameraSignedIn={(camera) => {
-                // "ok" (Streaming), not "checking" -- signing in just proved
-                // connectivity a moment ago (ONVIF connect + GetDeviceInformation
-                // both succeeded), so there's no reason to show a transient
-                // loading state for something already confirmed live.
-                setSelectedCard(configuredCard(camera, "ok"));
-              }}
               onCameraRenamed={(camera) => {
                 // Keep the card's existing connection state -- a rename
                 // doesn't change whether the camera is actually reachable,
