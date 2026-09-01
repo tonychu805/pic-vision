@@ -48,6 +48,8 @@ debug_frames/
 # Analysis images (scatter plots, annotated frames) — regenerable, often multi-MB
 *.png
 *.jpg
+# ...except real, committed UI assets (not regenerable analysis output)
+!desktop/src/assets/*.png
 
 # Ad hoc reference material (chat exports, etc.) — not project docs, don't belong in history
 *.pdf

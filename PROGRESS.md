@@ -4,7 +4,9 @@ This file is a pointer, not the log itself — see [`AGENTS.md`](./AGENTS.md) fo
 
 ## ▶ NEXT SESSION — start here
 
-**[`progress/08.28 progress overview.md`](./progress/08.28%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+**[`progress/09.01 progress overview.md`](./progress/09.01%20progress%20overview.md)** is the most recent entry as of this writing. Check the `progress/` folder for anything newer before trusting that.
+
+**2026-09-01: the desktop client (`STRATEGY.md` §5) is under way — `desktop/`, Electron + React.** Camera discovery/management is real and working: ONVIF WS-Discovery, an RTSP network sweep with a real protocol-level confirm step (`electron/cameras/networkSweep.js`), and manual add with an ONVIF-path override. The full 5-page UI was implemented from a Claude Design mockup handoff (`desktop-utility-by-claude-design.zip`), with only the Cameras/detail pages wired to the real backend. Several real bugs found and fixed same day, more than one corrected after an initial wrong guess: an Electron preload ESM/CJS mismatch, a WS-Discovery false-positive (two NAS boxes reading as "cameras" — the `onvif` library never checks the responder's declared type), and a real Synology BC510 whose ONVIF is simply switched off (root cause found by reading the camera's own client JS — it has a Synology/ONVIF/cloud "Operation Mode" toggle, defaults to Synology's own protocol). Explicit product direction set from that last one: stay ONVIF-generic, no vendor-specific UX — recorded as a project memory. Full detail, including the corrections, in the 09.01 file.
 
 **2026-08-28: `ADR-069`'s open question answered — 720p detection accuracy holds up against real labels**, no degradation found (see `EXPERIMENTS.md`, `progress/08.28...`). One real mistake (wrong model weights file) caught mid-session by sanity-checking against a cached baseline before trusting results. Still open: an uncommitted per-venue calibration (`cloud_pipeline/venues/brickwall-mid-atlantic-720p/calib.json`) from the prior session's ADR-069 work.
 

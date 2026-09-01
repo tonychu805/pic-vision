@@ -1,0 +1,48 @@
+{
+  "name": "pic-vision-desktop",
+  "version": "0.1.0",
+  "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
+  "private": true,
+  "main": "electron/main.js",
+  "type": "module",
+  "scripts": {
+    "dev:renderer": "vite",
+    "dev:electron": "electron . --no-sandbox --remote-debugging-port=9223",
+    "dev": "concurrently -k -n renderer,electron -c blue,green \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
+    "build:renderer": "vite build",
+    "build": "npm run build:renderer && electron-builder"
+  },
+  "build": {
+    "appId": "com.picvisionai.desktop",
+    "productName": "Pic Vision Camera Manager",
+    "files": [
+      "dist/**/*",
+      "electron/**/*"
+    ],
+    "mac": {
+      "target": "dmg"
+    },
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": "AppImage"
+    }
+  },
+  "dependencies": {
+    "@phosphor-icons/web": "^2.1.2",
+    "electron-store": "^10.0.0",
+    "onvif": "^0.8.2",
+    "oui-data": "^2.1.12"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "concurrently": "^9.1.2",
+    "electron": "^33.3.1",
+    "electron-builder": "^25.1.8",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "vite": "^6.0.7",
+    "wait-on": "^8.0.1"
+  }
+}

@@ -628,6 +628,61 @@ pic-vision/
 │   │                                    # run_cloud_job.py has no calibration logic of its own)
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
+├── desktop/                     # venue owner-facing desktop client (2026-09-01,
+│   │                              # STRATEGY.md §5) -- Electron + React, POC scope:
+│   │                              # camera discovery/management only. Everything
+│   │                              # else in §5 (local encode, R2 upload, CDN
+│   │                              # delivery) is unbuilt. Visual design (all 5
+│   │                              # pages, "Nocturne" design system) implemented
+│   │                              # from a Claude Design handoff bundle
+│   │                              # (desktop-utility-by-claude-design.zip, repo
+│   │                              # root) -- real backend wired only for the
+│   │                              # Cameras page; Alerts/Credentials/Settings are
+│   │                              # pixel-matched but illustrative. See
+│   │                              # desktop/README.md.
+│   ├── electron/
+│   │   ├── main.js                  # frameless BrowserWindow (custom HTML title
+│   │   │                              # bar, mockup-driven) + the ipcMain.handle
+│   │   │                              # calls the renderer can reach
+│   │   ├── preload.cjs                # contextBridge boundary -- .cjs, not .js
+│   │   │                              # (Electron's preload loader ignores
+│   │   │                              # package.json's "type": "module"; see
+│   │   │                              # the file's own comment for how this was
+│   │   │                              # found -- CDP against the real renderer,
+│   │   │                              # not guessed)
+│   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
+│   │   │                              # for the sidebar's Network panel
+│   │   └── cameras/
+│   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
+│   │       │                              # filters by the responder's own declared
+│   │       │                              # <wsd:Types> -- the library itself doesn't
+│   │       │                              # (real false positives found+fixed 2026-09-01)
+│   │       ├── networkSweep.js            # RTSP-port (554) subnet sweep + a real
+│   │       │                              # RTSP OPTIONS handshake to confirm the
+│   │       │                              # protocol, not just that the port is
+│   │       │                              # open -- finds cameras that don't answer
+│   │       │                              # WS-Discovery at all (a real one didn't)
+│   │       ├── vendorLookup.js             # MAC (via ARP) -> manufacturer (IEEE OUI
+│   │       │                              # registry, `oui-data` dep, no network
+│   │       │                              # calls); generic, not vendor-curated
+│   │       └── store.js                  # persisted camera list + connect/test,
+│   │                                       # incl. an optional ONVIF path override
+│   │                                       # (electron-store; POC stores camera
+│   │                                       # passwords in plaintext, see README)
+│   └── src/                          # React (Vite) renderer
+│       ├── App.jsx                      # TitleBar + Sidebar + page switch
+│       ├── index.css                     # "Nocturne" design tokens, ported from
+│       │                                  # the handoff bundle's styles.css
+│       ├── components/                    # TitleBar, Sidebar, CameraCard
+│       ├── pages/                          # CamerasPage (real), CameraDetailPage
+│       │                                    # (real), Alerts/Credentials/Settings
+│       │                                    # (mock data, illustrative)
+│       ├── lib/cameraView.js                # real-camera -> mockup card/detail
+│       │                                    # view-model (STATE_META, buildCards)
+│       └── data/mockData.js                  # sample data for the 3 mock pages,
+│                                              # ported verbatim from the handoff
+│
+
 ├── src/                        # the production pipeline
 │   ├── cut.py                    # entry point: `python3 -m src.cut` (see Makefile)
 │   ├── tracknet.py                # TrackNet prediction parsing (RunPod GPU inference)
