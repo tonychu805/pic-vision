@@ -197,7 +197,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, onClose, 
   );
 }
 
-export default function CamerasPage({ onOpenCamera, onCameraCountChange }) {
+export default function CamerasPage({ onOpenCamera, onCameraCountChange, active }) {
   const [configured, setConfigured] = useState([]);
   const [discovered, setDiscovered] = useState([]);
   const [sweepHits, setSweepHits] = useState([]);
@@ -227,19 +227,21 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange }) {
   };
 
   useEffect(() => {
-    refreshConfigured();
-    // Discovery results (discovered/sweepHits/hasScanned) are local state,
-    // not persisted anywhere -- deliberately, since a stale "found a
-    // camera" from 10 minutes ago is worse than a fresh scan, not better.
-    // But this whole page unmounts when nav switches away (App.jsx only
-    // renders it while nav === "cameras") and remounts fresh on return,
-    // wiping that state -- without this, coming back from another page
-    // looked exactly like "the cameras disappeared" (real report,
-    // 2026-09-01) rather than "scan results are naturally ephemeral."
-    // Auto-scanning here instead of requiring another manual click keeps
-    // that ephemerality without it reading as data loss.
+    // Operator's call (2026-09-01), reversing the auto-rescan fix from
+    // moments earlier: don't throw away scan results just because the
+    // tab was switched away and back -- App.jsx now keeps this page
+    // mounted (hidden, not unmounted) instead, so this only ever runs
+    // once per app session, not once per visit. `refreshConfigured`
+    // still runs every time the tab becomes active again (see the
+    // `active` effect below) since that's a cheap local-store read, not
+    // a real network scan, and it needs to catch a camera renamed or
+    // removed from its own detail page while this tab was hidden.
     startScan();
   }, []);
+
+  useEffect(() => {
+    if (active) refreshConfigured();
+  }, [active]);
 
   const startScan = async () => {
     setScanning(true);

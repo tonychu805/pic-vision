@@ -56,7 +56,17 @@ export default function App() {
           deviceCount={cameraCount}
         />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
-          {nav === "cameras" && <CamerasPage onOpenCamera={openCamera} onCameraCountChange={setCameraCount} />}
+          {/* Stays mounted (just hidden) even while another page is showing,
+              instead of unmounting -- discovery/sweep scan results used to
+              reset to nothing on every visit because unmounting wiped them
+              (operator report, 2026-09-01: "the scanning screen seems
+              stateless"). `active` still drives a cheap refresh of the
+              *configured* camera list on return, since that can genuinely
+              change elsewhere (a rename/removal on the detail page) while
+              this tab was hidden -- only the real network scan is skipped. */}
+          <div style={{ display: nav === "cameras" ? "flex" : "none", flex: 1, minWidth: 0, flexDirection: "column" }}>
+            <CamerasPage onOpenCamera={openCamera} onCameraCountChange={setCameraCount} active={nav === "cameras"} />
+          </div>
           {nav === "detail" && selectedCard && (
             <CameraDetailPage
               card={selectedCard}

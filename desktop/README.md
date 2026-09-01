@@ -105,16 +105,25 @@ app, not a description of the intended change.
 **Cameras + camera detail pages are wired to the real backend** -- nothing
 shown there is fabricated:
 
-- **Scan for cameras** -- runs two independent methods together, both real.
-  **Auto-runs whenever the Cameras page opens** (2026-09-01, not just on
-  the first "Scan again" click) -- discovery/sweep results are
-  deliberately never persisted (a stale "found a camera" from minutes ago
-  is worse than a fresh one), but this page unmounts whenever nav
-  switches away and remounts fresh on return, which wiped that state
-  with no scan re-triggered to replace it -- reported as "the scanning
-  screen seems stateless... the cameras are gone" (real, especially
-  visible with zero configured cameras, where the page showed nothing at
-  all instead of "scan again to see what's here").
+- **Scan for cameras** -- runs two independent methods together, both
+  real. **Runs once per app session, not once per visit** (2026-09-01) --
+  `CamerasPage` used to unmount whenever nav left it and remount fresh on
+  return, silently wiping its scan results (reported as "the scanning
+  screen seems stateless... the cameras are gone," real, especially
+  visible with zero configured cameras where the page showed nothing at
+  all). The fix that actually shipped isn't "rescan automatically on
+  every visit" -- that was tried first and reasonably rejected (operator:
+  re-running a real ~5s network scan just because a tab was glanced away
+  from throws away anything mid-interaction for no reason). Instead,
+  `App.jsx` now keeps `CamerasPage` mounted permanently (CSS `display:
+  none` when hidden, not unmounted), so its state -- scan results,
+  select-mode, an open manual-add dialog, all of it -- survives switching
+  tabs for free. A separate, cheap effect (keyed on an `active` prop) re-
+  reads the *configured* camera list every time the tab becomes visible
+  again, since that can genuinely change elsewhere (a rename/removal on
+  a camera's own detail page) while this tab was hidden -- that's a local
+  store read + per-camera connection re-check, not the real network scan,
+  so it doesn't reintroduce the waste the fix above was rejected for.
   - **ONVIF WS-Discovery** (`electron/cameras/discovery.js`) -- a
     multicast probe; only finds cameras that choose to answer it. Filters
     results by the responder's own declared `<wsd:Types>` -- the `onvif`
