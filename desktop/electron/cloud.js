@@ -6,6 +6,7 @@
 // cameras/store.js and schedule.js.
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
+import { isRecording, listRecordings } from "./capture.js";
 
 const store = new Store({ name: "cloud" });
 
@@ -53,25 +54,48 @@ export function disconnectCloud() {
   store.delete("connection");
 }
 
+// startRecording's outDir name is new Date().toISOString() with ':' and
+// '.' replaced by '-' (capture.js, filesystem-safe). Reversing that back
+// into a real ISO timestamp for the cloud side rather than re-deriving
+// "when did this session start" a second way -- the directory name
+// already is that answer.
+function parseRecordingStartedAt(name) {
+  const m = name?.match(/^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/);
+  return m ? `${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z` : null;
+}
+
 // Live-checks every configured camera the same way CamerasPage.jsx's own
 // "checking" -> testConnection -> ok/offline flow already does (no new
 // health-check logic invented) -- but from the main process, on the
 // heartbeat's own schedule, so status is fresh even with no renderer
-// window open. Only non-sensitive identity fields are reported --
+// window open. Only non-sensitive identity/state fields are reported --
 // hostname/port/username/password/streamUri never leave this machine,
 // per ADR-071's "camera-facing data stays local" (a stream URI can embed
 // credentials for an RTSP camera, so it's excluded same as the rest).
+// calibPath/sampleClipPath are local filesystem paths (can embed the
+// OS username), so only a derived boolean/count crosses -- never the
+// path itself.
 async function cameraStatuses() {
   const cameras = listCameras();
   const results = await Promise.allSettled(cameras.map((c) => testConnection(c)));
-  return cameras.map((c, i) => ({
-    cameraId: c.id,
-    label: c.label,
-    connectionType: c.connectionType,
-    manufacturer: c.manufacturer ?? null,
-    model: c.model ?? null,
-    status: results[i].status === "fulfilled" ? "online" : "offline",
-  }));
+  return cameras.map((c, i) => {
+    const recordings = listRecordings(c);
+    return {
+      cameraId: c.id,
+      label: c.label,
+      connectionType: c.connectionType,
+      manufacturer: c.manufacturer ?? null,
+      model: c.model ?? null,
+      status: results[i].status === "fulfilled" ? "online" : "offline",
+      firmwareVersion: c.firmwareVersion ?? null,
+      serialNumber: c.serialNumber ?? null,
+      addedAt: c.addedAt ?? null,
+      isRecording: isRecording(c.id),
+      isCalibrated: Boolean(c.calibPath),
+      recordingCount: recordings.length,
+      lastRecordingAt: parseRecordingStartedAt(recordings[0]?.name),
+    };
+  });
 }
 
 async function sendHeartbeat() {

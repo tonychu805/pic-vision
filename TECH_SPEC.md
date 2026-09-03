@@ -783,11 +783,18 @@ pic-vision/
 │   │   │                              # CamerasPage.jsx's own renderer-only
 │   │   │                              # status check already does, just now
 │   │   │                              # also from the main process on a
-│   │   │                              # schedule) and sends label/
-│   │   │                              # connectionType/manufacturer/model/
-│   │   │                              # status only -- never hostname/port/
-│   │   │                              # username/password/streamUri. Court/
-│   │   │                              # reel data still doesn't cross this.
+│   │   │                              # schedule). Sends label/connectionType/
+│   │   │                              # manufacturer/model/status plus
+│   │   │                              # (2026-09-03) firmwareVersion/
+│   │   │                              # serialNumber/addedAt (identity, already
+│   │   │                              # non-sensitive) and isRecording
+│   │   │                              # (capture.js)/isCalibrated (derived
+│   │   │                              # boolean from calibPath)/recordingCount/
+│   │   │                              # lastRecordingAt (from listRecordings) --
+│   │   │                              # never hostname/port/username/password/
+│   │   │                              # streamUri, nor the raw calibPath/
+│   │   │                              # sampleClipPath (local filesystem paths).
+│   │   │                              # Court/reel data still doesn't cross this.
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -916,16 +923,23 @@ pic-vision/
 │   │   │   ├── cameras/                   # REAL as of 2026-09-03 (was mock) --
 │   │   │   │                             # page.tsx (server fetch) + cameras-
 │   │   │   │                             # client.tsx (10s poll), same split as
-│   │   │   │                             # overview/. Shows the desktop agent's
-│   │   │   │                             # actual reported cameras (public.cameras
-│   │   │   │                             # table, synced every heartbeat) -- label/
-│   │   │   │                             # status/connection type/model/last
-│   │   │   │                             # synced only. No Court/Pipeline stage/
-│   │   │   │                             # Buffer/Queued columns -- none of those
-│   │   │   │                             # correspond to any real per-camera state
-│   │   │   │                             # (checked against cameras/store.js's
-│   │   │   │                             # actual data model first), dropped
-│   │   │   │                             # rather than faked
+│   │   │   │                             # overview/. Table: label/status/
+│   │   │   │                             # connection type/model/last synced.
+│   │   │   │                             # Clicking a row opens a right-side
+│   │   │   │                             # detail sheet (CameraDetailSheet,
+│   │   │   │                             # matches public/claude-design.html's
+│   │   │   │                             # "CAMERA DETAIL" panel layout) adding
+│   │   │   │                             # serial number/firmware/calibration
+│   │   │   │                             # state/recording state/recording
+│   │   │   │                             # session count+last-started/paired
+│   │   │   │                             # date -- all real `cameras` columns
+│   │   │   │                             # as of this date, sourced from
+│   │   │   │                             # cameras/store.js + capture.js via
+│   │   │   │                             # cloud.js's heartbeat. Still no
+│   │   │   │                             # Court/Buffer/Queued/pipeline-stage --
+│   │   │   │                             # none of those correspond to any real
+│   │   │   │                             # per-camera state yet, dropped rather
+│   │   │   │                             # than faked
 │   │   │   ├── courts/, reels/, members/, team/  # still mock data
 │   │   │   │                             # (lib/mockData.ts), disabled action
 │   │   │   │                             # buttons with a title tooltip explaining
@@ -951,13 +965,15 @@ pic-vision/
 │   │                                    # status/camera_count/last_seen_at; as of
 │   │                                    # 2026-09-03 also upserts a `cameras` array
 │   │                                    # if the desktop agent sent one (label/
-│   │                                    # connectionType/manufacturer/model/status
-│   │                                    # only -- hostname/port/username/password/
-│   │                                    # streamUri never leave the agent) into
-│   │                                    # public.cameras, then deletes whatever's
-│   │                                    # NOT in that payload anymore (handles a
-│   │                                    # removed camera, or the whole list going
-│   │                                    # empty)
+│   │                                    # connectionType/manufacturer/model/status/
+│   │                                    # firmwareVersion/serialNumber/addedAt/
+│   │                                    # isRecording/isCalibrated/recordingCount/
+│   │                                    # lastRecordingAt -- hostname/port/
+│   │                                    # username/password/streamUri never leave
+│   │                                    # the agent) into public.cameras, then
+│   │                                    # deletes whatever's NOT in that payload
+│   │                                    # anymore (handles a removed camera, or
+│   │                                    # the whole list going empty)
 │   ├── components/app/                 # Sidebar (nav groups matching the mockup,
 │   │   │                              # real collapse toggle), TopBar (title +
 │   │   │                              # real Sign out), AlertBanner (REAL --

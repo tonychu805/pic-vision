@@ -660,6 +660,35 @@ Wi-Fi network automatically...") described the old behavior and no
 longer matched reality, so it was reworded to describe scanning as
 something the operator triggers.
 
+## Cloud console camera sync now reports more fields (2026-09-03)
+
+`electron/cloud.js`'s heartbeat (`cameraStatuses()`) originally sent only
+`label`/`connectionType`/`manufacturer`/`model`/`status`, because that's
+all any real per-camera state the cloud console had a use for. The
+console's Cameras page (`pic-vision-cloud-console/app/(app)/cameras/`)
+grew a click-to-open detail sheet the same day, and the operator asked
+what else the desktop side already knows that could go in it. Answer: a
+few real fields that were sitting in `cameras/store.js`/`capture.js`
+unsent -- `firmwareVersion`/`serialNumber`/`addedAt` (from the camera's
+own ONVIF `getDeviceInformation()` + when it was added), `isRecording`
+(`capture.js`'s `isRecording(cameraId)`), `isCalibrated` (a boolean
+derived from whether `calibPath` is set -- not the path itself), and
+`recordingCount`/`lastRecordingAt` (from `listRecordings(camera)`, the
+newest session's directory-name timestamp parsed back to ISO). The
+privacy boundary from ADR-071/the sample-clip incident is unchanged:
+`hostname`/`port`/`username`/`password`/`streamUri` still never leave
+this machine, and the raw `calibPath`/`sampleClipPath` filesystem paths
+(which can embed the OS username) stay local too -- only derived
+booleans/counts cross for those. **Requires restarting the desktop app**
+to pick up the `cloud.js` change (a main-process module, same as every
+other main-process edit this project has hit before). Migration applied
+directly via Supabase MCP (`cameras_add_heartbeat_detail_fields`, adds
+`firmware_version`/`serial_number`/`added_at`/`is_recording`/
+`is_calibrated`/`recording_count`/`last_recording_at` to `public.cameras`,
+all nullable/defaulted so existing rows aren't broken); verified via a
+throwaway agent + direct heartbeat POST (test data deleted after,
+confirmed the real account's 3 cameras/2 agents were untouched).
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
