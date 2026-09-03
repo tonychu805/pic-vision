@@ -618,14 +618,33 @@ pic-vision/
 │   │                              # local-GPU inference -- see cloud_pipeline/README.md.
 │   │                              # webapp/app.py's cloud route calls into this one-way
 │   │                              # (webapp -> cloud_pipeline); cloud_pipeline still never
-│   │                              # imports webapp/, so its own CLI/isolation is unchanged
+│   │                              # imports webapp/, so its own CLI/isolation is unchanged.
+│   │                              # desktop/electron/pipeline.js (PIC-68, 2026-09-02) is a
+│   │                              # second caller, one level up: it invokes
+│   │                              # run_desktop_job.py, which imports webapp/pipeline.py's
+│   │                              # run_cloud_job(job_dir)/cancel_job(job_dir) -- reusing
+│   │                              # that job_dir/status.json/log.txt contract rather than
+│   │                              # inventing a second one, so desktop/'s the only new
+│   │                              # import direction (desktop -> webapp, still never
+│   │                              # webapp -> desktop or cloud_pipeline -> either)
 │   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> R2 upload -> RunPod runs
 │   │                                # pod_infer.py unmodified -> R2 -> local build_reel()
+│   ├── run_desktop_job.py            # PIC-68: CLI wrapper for desktop/'s pipeline.js --
+│   │                                # writes job.json then calls webapp.pipeline's
+│   │                                # run_cloud_job(job_dir) on a background thread so a
+│   │                                # SIGINT/SIGTERM from the Electron parent can call its
+│   │                                # cancel_job(job_dir) (terminates any RunPod pod already
+│   │                                # created, not just this process)
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2
 │   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
 │   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
 │   │                                    # run_cloud_job.py has no calibration logic of its own)
+│   ├── save_calibration.py               # 2026-09-03: computes+writes calib.json from 14
+│   │                                    # clicked points against a snapshot image -- the
+│   │                                    # desktop client's live-camera calibration flow
+│   │                                    # (calibration.js) spawns this rather than
+│   │                                    # reimplementing calibrate.py's homography fit in JS
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
 ├── desktop/                     # venue owner-facing local agent (2026-09-01,
@@ -635,11 +654,38 @@ pic-vision/
 │   │                              # schedule (config only, not wired to capture
 │   │                              # yet), and -- as of 2026-09-02, PIC-66 -- real
 │   │                              # manual recording (RTSP pull via ffmpeg,
-│   │                              # capture.js). Everything else in the local
-│   │                              # agent's own scope per ADR-071 (court
-│   │                              # calibration, CFR encode -- PIC-67's NVIDIA-only
-│   │                              # gap, R2 upload, receiving cloud output back and
-│   │                              # cutting from local full-res) is unbuilt. CDN
+│   │                              # capture.js) and -- as of 2026-09-02, PIC-68 --
+│   │                              # a "send to cloud" trigger (pipeline.js) that
+│   │                              # invokes cloud_pipeline/run_desktop_job.py as a
+│   │                              # subprocess (concatenating capture.js's segments
+│   │                              # first) rather than reimplementing R2 upload/
+│   │                              # RunPod dispatch/reel-cutting in JS, per ADR-071.
+│   │                              # Court calibration itself IS now built into the
+│   │                              # client (2026-09-03, superseding PIC-68's original
+│   │                              # "pass an existing calib.json path in" scope):
+│   │                              # CalibrationControl (CameraDetailPage.jsx) takes a
+│   │                              # live snapshot from the camera's own stream
+│   │                              # (capture.js's grabSnapshot) and lets the operator
+│   │                              # click the 12 court + 2 net points in the app --
+│   │                              # calibration.js then spawns
+│   │                              # cloud_pipeline/save_calibration.py (calibrate.py's
+│   │                              # homography fit, not reimplemented in JS) to write
+│   │                              # calib.json to that camera's own recordings folder
+│   │                              # and record its path via store.js's setCalibPath.
+│   │                              # The native file picker (system.js's pickCalibFile)
+│   │                              # stays as a secondary "import an existing file"
+│   │                              # option. Also 2026-09-03: ManualAddDialog
+│   │                              # (CamerasPage.jsx) can add a "sample clip"
+│   │                              # camera -- an uploaded local video file
+│   │                              # (store.js's addCameraFromSampleClip) standing
+│   │                              # in for a live one, so calibration/the cloud
+│   │                              # pipeline can be exercised without a real,
+│   │                              # court-facing camera (neither one on this
+│   │                              # network has reliably been that). PIC-67's
+│   │                              # CFR-encode NVIDIA-only gap is
+│   │                              # still open (handled inside run_desktop_job.py's
+│   │                              # call into the existing Python, not by desktop/
+│   │                              # itself). CDN
 │   │                              # delivery is NOT this app's scope -- ADR-071
 │   │                              # moved it to the (also unbuilt) cloud web app.
 │   │                              # Visual design (all 5
@@ -661,7 +707,23 @@ pic-vision/
 │   │   │                              # found -- CDP against the real renderer,
 │   │   │                              # not guessed)
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
-│   │   │                              # for the sidebar's Network panel
+│   │   │                              # for the sidebar's Network panel, plus (PIC-68)
+│   │   │                              # pickCalibFile -- native file dialog, now the
+│   │   │                              # secondary "import an existing calib.json" path
+│   │   ├── calibration.js               # 2026-09-03: live-camera calibration --
+│   │   │                              # takes a snapshot (capture.js's grabSnapshot),
+│   │   │                              # spawns cloud_pipeline/save_calibration.py with
+│   │   │                              # the renderer's 14 clicked points, records the
+│   │   │                              # result via store.js's setCalibPath; the
+│   │   │                              # homography fit itself stays in Python
+│   │   │                              # (calibrate.py), per ADR-071
+│   │   ├── pipeline.js                  # PIC-68: spawns cloud_pipeline/run_desktop_job.py
+│   │   │                              # per recording, concatenating capture.js's
+│   │   │                              # 10-min segments first (ffmpeg concat, stream
+│   │   │                              # copy); polls/relays the same status.json
+│   │   │                              # contract webapp/pipeline.py's dashboard route
+│   │   │                              # already uses; cancel sends SIGINT, same
+│   │   │                              # "never a hard kill" convention as capture.js
 │   │   ├── schedule.js                  # per-camera booked sessions (day + hour
 │   │   │                              # range, not a flat cell set -- two sessions
 │   │   │                              # that touch, e.g. 1-2pm then 2-4pm, stay
@@ -677,7 +739,55 @@ pic-vision/
 │   │   │                              # spec's own .mp4 example silently fails on
 │   │   │                              # pcm_alaw audio, which real cameras stream);
 │   │   │                              # clean SIGINT stop only (ADR-031), incl. on
-│   │   │                              # app quit
+│   │   │                              # app quit; also (PIC-68) listRecordings,
+│   │   │                              # scanning its own RECORDINGS_ROOT layout for
+│   │   │                              # pipeline.js to list and send to the cloud;
+│   │   │                              # also (2026-09-03) grabSnapshot -- one still
+│   │   │                              # frame from the live stream for
+│   │   │                              # calibration.js (`-frames:v 1` + a 10s
+│   │   │                              # connect timeout; SIGKILL-safe, unlike
+│   │   │                              # stopRecording, since there's no in-
+│   │   │                              # progress container to corrupt); also
+│   │   │                              # probeDuration/grabFrameFromFile, the
+│   │   │                              # same for a "sample clip" camera (a
+│   │   │                              # frame seeked out of its uploaded file
+│   │   │                              # instead of a live pull); and
+│   │   │                              # discardAllSnapshots, called from
+│   │   │                              # main.js's before-quit so a snapshot
+│   │   │                              # left over from a modal closed
+│   │   │                              # mid-flow doesn't linger in /tmp
+│   │   │                              # indefinitely -- real gap found the
+│   │   │                              # same day, where one such leftover
+│   │   │                              # was a live, private frame
+│   │   ├── pythonBin.js                 # 2026-09-03: resolves .venv/bin/python3 if
+│   │   │                              # present (falls back to bare "python3")
+│   │   │                              # -- calibration.js/pipeline.js's spawned
+│   │   │                              # subprocess previously used a bare
+│   │   │                              # "python3", which silently resolved to
+│   │   │                              # the system interpreter (no cv2/numpy)
+│   │   │                              # when the app wasn't launched from a
+│   │   │                              # shell that had activated the repo's
+│   │   │                              # .venv -- root cause of a real "cannot
+│   │   │                              # save calibration" report
+│   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
+│   │   │                              # to pic-vision-cloud-console (ADR-071) --
+│   │   │                              # pairAgent (exchanges a short-lived
+│   │   │                              # pairing code for a long-lived API
+│   │   │                              # token, electron-store) + a 30s
+│   │   │                              # heartbeat loop reporting online status.
+│   │   │                              # Same day: also reports the real camera
+│   │   │                              # list -- cameraStatuses() runs
+│   │   │                              # cameras/store.js's testConnection
+│   │   │                              # against every configured camera in
+│   │   │                              # parallel each tick (the same check
+│   │   │                              # CamerasPage.jsx's own renderer-only
+│   │   │                              # status check already does, just now
+│   │   │                              # also from the main process on a
+│   │   │                              # schedule) and sends label/
+│   │   │                              # connectionType/manufacturer/model/
+│   │   │                              # status only -- never hostname/port/
+│   │   │                              # username/password/streamUri. Court/
+│   │   │                              # reel data still doesn't cross this.
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -697,7 +807,18 @@ pic-vision/
 │   │       │                              # work at all but a stream exists anyway
 │   │       └── store.js                  # persisted camera list + connect/test,
 │   │                                       # incl. an optional ONVIF path override
-│   │                                       # and addCameraViaRtsp (the RTSP fallback)
+│   │                                       # and addCameraViaRtsp (the RTSP fallback),
+│   │                                       # and setCalibPath -- a per-camera
+│   │                                       # calib.json path, set either by
+│   │                                       # calibration.js's live snapshot-and-click
+│   │                                       # flow or the pickCalibFile import fallback,
+│   │                                       # not computed here itself; also
+│   │                                       # (2026-09-03) addCameraFromSampleClip --
+│   │                                       # a "sample clip" camera (an uploaded
+│   │                                       # video file, connectionType
+│   │                                       # "sampleClip", no hostname/credentials)
+│   │                                       # for exercising calibration/the cloud
+│   │                                       # pipeline without a real camera
 │   │                                       # (electron-store; POC stores camera
 │   │                                       # passwords in plaintext, see README)
 │   ├── scripts/
@@ -715,20 +836,161 @@ pic-vision/
 │       │                                    # -- drag to book, click a booked
 │       │                                    # session to remove it), DayActivityStrip
 │       │                                    # (per-camera weekly summary bars)
-│       ├── pages/                          # CamerasPage (real), CameraDetailPage
+│       ├── pages/                          # CamerasPage (real -- ManualAddDialog's
+│       │                                    # "Add" dropdown, 2026-09-03, offers "a
+│       │                                    # live camera" or "a sample clip" --
+│       │                                    # the latter uploads a local video file
+│       │                                    # via cameraAPI.addSampleClip instead of
+│       │                                    # connecting to anything), CameraDetailPage
 │       │                                    # (real -- incl. a real Start/Stop
 │       │                                    # recording control, capture.js, manual
-│       │                                    # button only, not tied to Schedule yet),
+│       │                                    # button only, not tied to Schedule yet
+│       │                                    # (hidden for a sample-clip camera, which
+│       │                                    # has no live stream to record);
+│       │                                    # plus, PIC-68, a "Cloud pipeline" panel --
+│       │                                    # CalibrationControl (2026-09-03: live
+│       │                                    # snapshot + click-14-points modal, calling
+│       │                                    # calibration.js; a file-picker "import"
+│       │                                    # fallback stays available) + a "Send to
+│       │                                    # cloud" row per past recording, polling
+│       │                                    # pipeline.js's job status),
 │       │                                    # ScheduleOverviewPage + ScheduleEditorPage
 │       │                                    # (real -- session booking + rename/delete
 │       │                                    # list, schedule.js config only, still
 │       │                                    # not wired to capture.js),
 │       │                                    # Alerts/Credentials/Settings (mock data,
-│       │                                    # illustrative)
+│       │                                    # illustrative), CloudPage (2026-09-03,
+│       │                                    # real -- pairing-code input calling
+│       │                                    # cloud.js's cloudAPI.pair, "Connected
+│       │                                    # as <venue>" status, Disconnect)
 │       ├── lib/cameraView.js                # real-camera -> mockup card/detail
 │       │                                    # view-model (STATE_META, buildCards)
 │       └── data/mockData.js                  # sample data for the 3 mock pages,
 │                                              # ported verbatim from the handoff
+│
+├── pic-vision-cloud-console/     # ADR-071's "cloud web app" side, first real code
+│   │                              # 2026-09-03 -- its OWN separate git repo (github.com/
+│   │                              # tonychu805/pic-vision-cloud-console), just nested
+│   │                              # here, not a submodule/subtree; `git status` at the
+│   │                              # pic-vision root never sees its changes. Bootstrapped
+│   │                              # via v0.app (Next.js App Router, Supabase for DB+
+│   │                              # auth, hosted on Netlify not Vercel -- matches
+│   │                              # picvisionai.com). public/claude-design.html is the
+│   │                              # original static design mockup, still an iframe at
+│   │                              # "/", untouched -- but every one of its screens
+│   │                              # (Overview/Cameras/Courts/Reels/Members/Team/
+│   │                              # Settings + sign-in) is now ALSO ported to a real
+│   │                              # page below, pixel-matched against a live
+│   │                              # screenshot of that mockup (Playwright, since no
+│   │                              # browser-automation MCP tool was available). Only
+│   │                              # Overview (agents/heartbeat data) and sign-in
+│   │                              # (Supabase Auth) are wired to real data; Cameras/
+│   │                              # Courts/Reels/Members/Team/most of Settings show
+│   │                              # the mockup's own sample data verbatim
+│   │                              # (lib/mockData.ts) -- operator's own scope call,
+│   │                              # not something to assume is real without checking.
+│   ├── app/
+│   │   ├── globals.css                 # the "Nocturne" design system (same tokens
+│   │   │                              # as desktop/src/index.css, confirmed
+│   │   │                              # byte-identical to the mockup's own computed
+│   │   │                              # styles) ported in as a `.nocturne`-scoped
+│   │   │                              # addition -- doesn't touch the pre-existing
+│   │   │                              # light --background/--foreground the "/"
+│   │   │                              # mockup wrapper still uses
+│   │   ├── sign-in/page.tsx            # Supabase Auth email/password, rebuilt to
+│   │   │                              # match the mockup's split-screen design;
+│   │   │                              # creates a venues row on first sign-in (1:1
+│   │   │                              # owner:venue for now)
+│   │   ├── (app)/                      # route group sharing one auth-gated shell
+│   │   │   ├── layout.tsx                 # redirects to /sign-in if signed out;
+│   │   │   │                             # fetches venue+agents once, passes to
+│   │   │   │                             # AppShell (components/app/)
+│   │   │   ├── overview/                  # REAL data: page.tsx (server fetch) +
+│   │   │   │                             # overview-client.tsx (client, 10s poll) --
+│   │   │   │                             # only shows stats with real data behind
+│   │   │   │                             # them (agents online, cameras reporting
+│   │   │   │                             # summed from heartbeat camera_count); the
+│   │   │   │                             # mockup's "Reels delivered"/"Jobs in
+│   │   │   │                             # flight" cards are left out rather than
+│   │   │   │                             # faked
+│   │   │   ├── cameras/                   # REAL as of 2026-09-03 (was mock) --
+│   │   │   │                             # page.tsx (server fetch) + cameras-
+│   │   │   │                             # client.tsx (10s poll), same split as
+│   │   │   │                             # overview/. Shows the desktop agent's
+│   │   │   │                             # actual reported cameras (public.cameras
+│   │   │   │                             # table, synced every heartbeat) -- label/
+│   │   │   │                             # status/connection type/model/last
+│   │   │   │                             # synced only. No Court/Pipeline stage/
+│   │   │   │                             # Buffer/Queued columns -- none of those
+│   │   │   │                             # correspond to any real per-camera state
+│   │   │   │                             # (checked against cameras/store.js's
+│   │   │   │                             # actual data model first), dropped
+│   │   │   │                             # rather than faked
+│   │   │   ├── courts/, reels/, members/, team/  # still mock data
+│   │   │   │                             # (lib/mockData.ts), disabled action
+│   │   │   │                             # buttons with a title tooltip explaining
+│   │   │   │                             # why (same PreviewBanner-style honesty
+│   │   │   │                             # convention as desktop/'s mock pages);
+│   │   │   │                             # reels/page.tsx's All/Ready/Processing
+│   │   │   │                             # filter is real client-side filtering,
+│   │   │   │                             # trivial enough not to leave inert
+│   │   │   └── settings/page.tsx          # mostly mock form fields, EXCEPT the
+│   │   │                                 # "Pairing code" tab under Desktop
+│   │   │                                 # utility -- the real pairing flow
+│   │   │                                 # (moved here from the old /dashboard
+│   │   │                                 # page to match where the mockup itself
+│   │   │                                 # puts it, confirmed by screenshotting
+│   │   │                                 # that screen, not guessed)
+│   │   └── api/agents/
+│   │       ├── pairing-code/route.ts   # authenticated (venue session) -- creates an
+│   │       │                          # unpaired agent row + a 10-min pairing code
+│   │       ├── pair/route.ts            # unauthenticated (the auth bootstrap itself)
+│   │       │                          # -- exchanges a valid pairing code for a
+│   │       │                          # long-lived API token (stored as a hash only)
+│   │       └── heartbeat/route.ts        # Bearer-token authenticated -- updates
+│   │                                    # status/camera_count/last_seen_at; as of
+│   │                                    # 2026-09-03 also upserts a `cameras` array
+│   │                                    # if the desktop agent sent one (label/
+│   │                                    # connectionType/manufacturer/model/status
+│   │                                    # only -- hostname/port/username/password/
+│   │                                    # streamUri never leave the agent) into
+│   │                                    # public.cameras, then deletes whatever's
+│   │                                    # NOT in that payload anymore (handles a
+│   │                                    # removed camera, or the whole list going
+│   │                                    # empty)
+│   ├── components/app/                 # Sidebar (nav groups matching the mockup,
+│   │   │                              # real collapse toggle), TopBar (title +
+│   │   │                              # real Sign out), AlertBanner (REAL --
+│   │   │                              # renders only when an actual agent has
+│   │   │                              # gone stale, unlike the mockup's
+│   │   │                              # always-on fake "CAM-05 offline" banner),
+│   │   │                              # AppShell (client, wires the three above +
+│   │   │                              # usePathname()-derived page title),
+│   │   │                              # PageHeader, Pill (tone from
+│   │   │                              # lib/pillTone.ts), StatCard
+│   ├── lib/
+│   │   ├── supabase/{client,server,admin}.ts  # browser (RLS), server-session (RLS),
+│   │   │                                    # and service-role (bypasses RLS -- only
+│   │   │                                    # for the pair/heartbeat routes, which
+│   │   │                                    # authenticate via pairing_code/
+│   │   │                                    # api_token_hash, not a Supabase session)
+│   │   ├── agentToken.ts                     # pairing-code + API-token generation/
+│   │   │                                    # hashing, shared by pair.ts/heartbeat.ts
+│   │   ├── mockData.ts                        # sample data for the not-yet-real
+│   │   │                                    # sections, ported verbatim from the
+│   │   │                                    # mockup's own content, not invented
+│   │   └── pillTone.ts                         # maps a mockup status label (e.g.
+│   │                                          # "Offline"/"Uploading"/"Enabled") to
+│   │                                          # Pill's neutral/progress/alert tone
+│   ├── netlify.toml                    # Next.js Runtime plugin -- v0.app's own
+│   │                                  # auto-deploy-on-merge is Vercel-only, doesn't
+│   │                                  # apply here; operator still has to do the
+│   │                                  # one-time "link this repo" step in Netlify's
+│   │                                  # own dashboard (no Netlify MCP tool available)
+│   └── .env.local.example              # NEXT_PUBLIC_SUPABASE_URL/ANON_KEY pre-filled
+│                                      # (from the provisioned project); SUPABASE_
+│                                      # SERVICE_ROLE_KEY deliberately blank -- has to
+│                                      # be pulled from the Supabase dashboard by hand
 │
 
 ├── src/                        # the production pipeline

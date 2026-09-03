@@ -12,10 +12,15 @@ import {
   probeRtspFallback,
   addCameraViaRtsp,
   parseRtspUrl,
+  setCalibPath,
+  addCameraFromSampleClip,
 } from "./cameras/store.js";
-import { getNetworkInfo } from "./system.js";
+import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
 import { listSessions, addSession, removeSession, renameSession, listSchedules, removeSchedule } from "./schedule.js";
-import { startRecording, stopRecording, stopAllRecordings, recordingStatus } from "./capture.js";
+import { startRecording, stopRecording, stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
+import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
+import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
+import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop } from "./cloud.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -69,6 +74,21 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:parseRtspUrl", async (_event, raw, fallbackUsername, fallbackPassword) => {
     return parseRtspUrl(raw, fallbackUsername, fallbackPassword);
   });
+  ipcMain.handle("cameras:setCalibPath", async (_event, id, calibPath) => {
+    return setCalibPath(id, calibPath);
+  });
+  ipcMain.handle("system:pickCalibFile", async () => {
+    return pickCalibFile();
+  });
+  // "Sample clip" source (2026-09-03) -- ManualAddDialog's dropdown
+  // alternative to a live camera, for exercising calibration/the cloud
+  // pipeline without one. See store.js's addCameraFromSampleClip.
+  ipcMain.handle("cameras:addSampleClip", async (_event, config) => {
+    return addCameraFromSampleClip(config);
+  });
+  ipcMain.handle("system:pickVideoFile", async () => {
+    return pickVideoFile();
+  });
 }
 
 // Per-camera booked sessions (schedule.js) -- storage + UI only, see that
@@ -108,6 +128,80 @@ function registerCaptureHandlers() {
   ipcMain.handle("capture:status", async (_event, cameraId) => {
     return recordingStatus(cameraId);
   });
+  ipcMain.handle("capture:listRecordings", async (_event, cameraId) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("Camera not found");
+    return listRecordings(camera);
+  });
+}
+
+// Live-camera calibration (calibration.js) -- take a snapshot from the
+// camera's own stream, let the renderer collect 14 clicked points, then
+// hand them to cloud_pipeline/save_calibration.py. Looks the full camera
+// object up server-side by id, same trust-boundary convention as
+// registerCaptureHandlers.
+function registerCalibrationHandlers() {
+  ipcMain.handle("calibration:snapshot", async (_event, cameraId, atSec) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("Camera not found");
+    return takeCalibrationSnapshot(camera, atSec);
+  });
+  ipcMain.handle("calibration:discardSnapshot", async (_event, snapshotPath) => {
+    return discardCalibrationSnapshot(snapshotPath);
+  });
+  ipcMain.handle("calibration:save", async (_event, cameraId, snapshotPath, points) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("Camera not found");
+    return saveCalibration(camera, snapshotPath, points);
+  });
+}
+
+// Hands a finished recording to cloud_pipeline/run_desktop_job.py
+// (pipeline.js) -- PIC-68. Looks the camera's calibPath up server-side
+// (setCalibPath's IPC handler above is the only way it gets set) rather
+// than trusting one the renderer might pass in, same trust-boundary
+// convention as registerCaptureHandlers looking up the full camera object
+// instead of accepting credentials from the renderer.
+function registerPipelineHandlers() {
+  ipcMain.handle("pipeline:run", async (_event, { cameraId, recordingDir, targetSec }) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("Camera not found");
+    if (!camera.calibPath) throw new Error("No calibration file set for this camera");
+    const sessionId = `${camera.label}-${path.basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    // A sample-clip camera's one "recording" IS the uploaded file already
+    // -- no segments to concatenate, so pipeline.js's videoPath override
+    // is passed straight through instead of looking for session-*.mkv
+    // files that were never written for this camera.
+    const videoPath = camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined;
+    return runCloudJob({ recordingDir, videoPath, calibPath: camera.calibPath, targetSec, sessionId });
+  });
+  ipcMain.handle("pipeline:status", async (_event, jobDir) => {
+    return pipelineStatus(jobDir);
+  });
+  ipcMain.handle("pipeline:statusForRecording", async (_event, recordingDir) => {
+    return pipelineStatusForRecording(recordingDir);
+  });
+  ipcMain.handle("pipeline:cancel", async (_event, recordingDir) => {
+    return cancelCloudJob(recordingDir);
+  });
+}
+
+// Pairing + heartbeat (cloud.js) -- the desktop agent's first outbound
+// connection to pic-vision-cloud-console, ADR-071's "polls or a
+// lightweight persistent connection for commands/status, never an inbound
+// port" directive. No camera-facing data crosses this yet, just pairing
+// and an online/last-seen signal.
+function registerCloudHandlers() {
+  ipcMain.handle("cloud:pair", async (_event, pairingCode) => {
+    return pairAgent(pairingCode);
+  });
+  ipcMain.handle("cloud:status", async () => {
+    return getCloudConnection();
+  });
+  ipcMain.handle("cloud:disconnect", async () => {
+    disconnectCloud();
+    return null;
+  });
 }
 
 // Registered once against whichever window is currently focused -- a single
@@ -135,6 +229,15 @@ function createWindow() {
     width: 1280,
     height: 840,
     frame: false,
+    // App.jsx's root div already draws borderRadius:12 + overflow:hidden
+    // (the mockup's own rounded window) -- but that only clips this
+    // window's OWN content. Without the window itself being transparent,
+    // the OS still paints a plain opaque rectangle behind it, so the 4
+    // corner triangles outside the CSS radius showed as solid squared-off
+    // fill instead of true rounded corners. transparent:true lets the
+    // desktop show through those corners instead.
+    transparent: true,
+    backgroundColor: "#00000000",
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : undefined,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -165,8 +268,12 @@ app.whenReady().then(() => {
   registerCameraHandlers();
   registerScheduleHandlers();
   registerCaptureHandlers();
+  registerCalibrationHandlers();
+  registerPipelineHandlers();
+  registerCloudHandlers();
   registerWindowControlHandlers();
   createWindow();
+  startHeartbeatLoop(); // no-op if never paired; resumes automatically if it was
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -186,5 +293,10 @@ app.on("window-all-closed", () => {
 app.on("before-quit", async (e) => {
   e.preventDefault();
   await stopAllRecordings();
+  // A calibration snapshot left over from a modal closed mid-flow
+  // (window closed without Save or Cancel) shouldn't linger in /tmp
+  // indefinitely -- real gap found 2026-09-03, where one such leftover
+  // was a live, private frame from a real camera.
+  discardAllSnapshots();
   app.exit(0);
 });

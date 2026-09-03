@@ -28,6 +28,8 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   addRtsp: (config) => ipcRenderer.invoke("cameras:addRtsp", config),
   parseRtspUrl: (raw, fallbackUsername, fallbackPassword) =>
     ipcRenderer.invoke("cameras:parseRtspUrl", raw, fallbackUsername, fallbackPassword),
+  setCalibPath: (id, calibPath) => ipcRenderer.invoke("cameras:setCalibPath", id, calibPath),
+  addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
 });
 
 // process.platform is a value, not a function -- safe to expose directly
@@ -46,12 +48,34 @@ contextBridge.exposeInMainWorld("windowAPI", {
 
 contextBridge.exposeInMainWorld("systemAPI", {
   getNetworkInfo: () => ipcRenderer.invoke("system:networkInfo"),
+  pickCalibFile: () => ipcRenderer.invoke("system:pickCalibFile"),
+  pickVideoFile: () => ipcRenderer.invoke("system:pickVideoFile"),
 });
 
 contextBridge.exposeInMainWorld("captureAPI", {
   start: (cameraId) => ipcRenderer.invoke("capture:start", cameraId),
   stop: (cameraId) => ipcRenderer.invoke("capture:stop", cameraId),
   status: (cameraId) => ipcRenderer.invoke("capture:status", cameraId),
+  listRecordings: (cameraId) => ipcRenderer.invoke("capture:listRecordings", cameraId),
+});
+
+contextBridge.exposeInMainWorld("calibrationAPI", {
+  snapshot: (cameraId, atSec) => ipcRenderer.invoke("calibration:snapshot", cameraId, atSec),
+  discardSnapshot: (snapshotPath) => ipcRenderer.invoke("calibration:discardSnapshot", snapshotPath),
+  save: (cameraId, snapshotPath, points) => ipcRenderer.invoke("calibration:save", cameraId, snapshotPath, points),
+});
+
+contextBridge.exposeInMainWorld("pipelineAPI", {
+  run: (params) => ipcRenderer.invoke("pipeline:run", params),
+  status: (jobDir) => ipcRenderer.invoke("pipeline:status", jobDir),
+  statusForRecording: (recordingDir) => ipcRenderer.invoke("pipeline:statusForRecording", recordingDir),
+  cancel: (recordingDir) => ipcRenderer.invoke("pipeline:cancel", recordingDir),
+});
+
+contextBridge.exposeInMainWorld("cloudAPI", {
+  pair: (pairingCode) => ipcRenderer.invoke("cloud:pair", pairingCode),
+  status: () => ipcRenderer.invoke("cloud:status"),
+  disconnect: () => ipcRenderer.invoke("cloud:disconnect"),
 });
 
 contextBridge.exposeInMainWorld("scheduleAPI", {

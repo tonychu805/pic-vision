@@ -9,6 +9,7 @@ import ScheduleEditorPage from "./pages/ScheduleEditorPage.jsx";
 import AlertsPage from "./pages/AlertsPage.jsx";
 import CredentialsPage from "./pages/CredentialsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
+import CloudPage from "./pages/CloudPage.jsx";
 
 export default function App() {
   const [nav, setNav] = useState("cameras");
@@ -87,6 +88,7 @@ export default function App() {
           {nav === "alerts" && <AlertsPage />}
           {nav === "credentials" && <CredentialsPage />}
           {nav === "settings" && <SettingsPage />}
+          {nav === "cloud" && <CloudPage />}
         </div>
       </div>
     </div>

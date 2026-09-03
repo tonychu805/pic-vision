@@ -341,7 +341,17 @@ def run_cloud_job(job_dir):
         _set_status(job_dir, stage="done", message="done", done=True, progress=None,
                     reel_chronological=result["chronological"],
                     reel_ranked=result["ranked"], stats=result["stats"])
-    except Exception as e:
+    # (Exception, SystemExit), not just Exception -- cloud_pipeline.run_cloud_job's
+    # own missing-calibration guard raises SystemExit (fine for its bare-CLI
+    # use, where an uncaught SystemExit just prints one clean line and exits),
+    # but that isn't an Exception subclass, so a plain `except Exception` here
+    # let it escape uncaught: this function's own thread died silently and
+    # status.json was left stuck at whatever stage was last set (drift_check)
+    # forever instead of ever reaching stage="error" -- found 2026-09-02 while
+    # adding PIC-68's desktop-agent caller, but this path is shared with the
+    # Flask dashboard's cloud-job route too, so it was a live bug there
+    # already, not something new to this caller.
+    except (Exception, SystemExit) as e:
         if _current_stage(job_dir) == "cancelled":
             return  # cancel_job() already wrote the terminal status -- don't stomp it
         _log(job_dir, "[error] " + "".join(

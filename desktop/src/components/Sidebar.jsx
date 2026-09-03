@@ -1,5 +1,10 @@
 import { useEffect, useState } from "react";
-import logo from "../assets/pic-vision-logo.png";
+// 2026-09-03: swapped for the white-on-transparent mark (matches the
+// dark "Nocturne" sidebar background -- the old blue-on-white version
+// was designed for a light background, not this one). Same
+// pic-vision-cloud-console/public/pic-vision-logo-white.png used there,
+// so the two apps show the same brand mark.
+import logo from "../assets/pic-vision-logo-white.png";
 
 const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
@@ -7,6 +12,7 @@ const NAV_ITEMS = [
   { key: "alerts", label: "Alerts", icon: "ph-warning-circle" },
   { key: "credentials", label: "Credentials", icon: "ph-key" },
   { key: "settings", label: "Scan settings", icon: "ph-sliders-horizontal" },
+  { key: "cloud", label: "Cloud console", icon: "ph-cloud" },
 ];
 
 function navButtonStyle(active) {

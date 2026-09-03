@@ -35,13 +35,17 @@ export const STATE_META = {
 // completed and saved the camera, so it looked like "sign in failed" when
 // the save had actually worked and only the *next* render crashed).
 export function configuredCard(c, state) {
+  const isSampleClip = c.connectionType === "sampleClip";
   return {
     key: c.id,
     kind: "configured",
     camera: c,
     name: c.label,
-    ip: c.hostname,
-    subtitle: [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
+    // A sample-clip camera has no network address -- nothing to show here.
+    ip: isSampleClip ? null : c.hostname,
+    subtitle: isSampleClip
+      ? "Sample clip"
+      : [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
     state,
   };
 }
@@ -51,10 +55,16 @@ export function configuredCard(c, state) {
 // ONVIF unconfirmed) -- unified so the grid can render all three the same
 // way the mockup's DEVICES list does (some entries already streaming, some
 // needing auth).
-export function buildCards({ configured, discovered, sweepHits, statusByHostname }) {
-  const configuredHostnames = new Set(configured.map((c) => c.hostname));
+export function buildCards({ configured, discovered, sweepHits, statusById }) {
+  // .filter(Boolean): a sample-clip camera has no hostname, and several
+  // configured ones sharing `undefined` here must never be treated as the
+  // same discovered/sweep device.
+  const configuredHostnames = new Set(configured.map((c) => c.hostname).filter(Boolean));
 
-  const configuredCards = configured.map((c) => configuredCard(c, statusByHostname[c.hostname] ?? "checking"));
+  // Keyed by id, not hostname -- a sample-clip camera has no hostname at
+  // all, and two of them would otherwise collide under the same
+  // `undefined` key and show each other's status.
+  const configuredCards = configured.map((c) => configuredCard(c, statusById[c.id] ?? "checking"));
 
   // Plain-language names for anything not yet added -- a venue owner has
   // no use for a raw IP or protocol name as the headline. Vendor (from
@@ -102,9 +112,13 @@ export function buildCards({ configured, discovered, sweepHits, statusByHostname
 export function cardVisuals(card) {
   const meta = STATE_META[card.state];
   const live = card.state === "ok";
+  // "Streaming" reads wrong for a sample-clip camera, which never streams
+  // anything -- STATE_META's "ok" otherwise just means "its file is
+  // there," so say that instead.
+  const isSampleClip = card.kind === "configured" && card.camera.connectionType === "sampleClip";
   return {
     ...card,
-    stateLabel: meta.label,
+    stateLabel: isSampleClip && card.state === "ok" ? "File ready" : meta.label,
     stateTagClass: meta.tagClass,
     dot: meta.dot,
     live,
@@ -126,6 +140,21 @@ export function cardVisuals(card) {
 export function detailPanels(camera) {
   const na = "Not available";
   const viaRtsp = camera.connectionType === "rtsp";
+  if (camera.connectionType === "sampleClip") {
+    return {
+      identity: [
+        { k: "Source", v: "Uploaded sample clip" },
+        { k: "Vendor", v: na },
+        { k: "Model", v: na },
+        { k: "Serial", v: na },
+        { k: "Firmware", v: na },
+      ],
+      network: [{ k: "Address", v: na }, { k: "Mode", v: "Not networked" }],
+      streams: camera.sampleClipPath
+        ? [{ label: "FILE", url: camera.sampleClipPath, spec: "uploaded video file, not a live stream" }]
+        : [],
+    };
+  }
   return {
     identity: [
       { k: "Vendor", v: camera.manufacturer || na },

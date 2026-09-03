@@ -14,8 +14,11 @@ import Store from "electron-store";
 import onvifPromises from "onvif/promises/index.js";
 const { Cam } = onvifPromises;
 import { randomUUID } from "node:crypto";
+import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { vendorsForIps } from "./vendorLookup.js";
+import { RECORDINGS_ROOT, sanitizeForPath } from "../capture.js";
 
 const store = new Store({ name: "cameras" });
 
@@ -23,7 +26,16 @@ export function listCameras() {
   return store.get("cameras", []);
 }
 
-export async function testConnection({ hostname, port, username, password, path, connectionType }) {
+export async function testConnection({ hostname, port, username, password, path: connectPath, connectionType, sampleClipPath }) {
+  // A sample-clip "camera" has no network connection to test at all --
+  // the closest equivalent check is just confirming its one video file is
+  // still where it was left (it could have been moved/deleted outside the
+  // app since being added).
+  if (connectionType === "sampleClip") {
+    if (!sampleClipPath || !existsSync(sampleClipPath)) throw new Error("Sample clip file is missing");
+    return { info: {}, streamUri: null };
+  }
+
   // Stored cameras carry their own connectionType ('onvif' or 'rtsp',
   // added by addCamera/addCameraViaRtsp) -- an RTSP-direct camera has no
   // ONVIF service to test against at all, so the periodic status check
@@ -32,18 +44,18 @@ export async function testConnection({ hostname, port, username, password, path,
   // pre-save check, before anything is stored) defaults to ONVIF, same as
   // before this branch existed.
   if (connectionType === "rtsp") {
-    await describeRtspStream({ hostname, port: port || 554, path, username, password });
+    await describeRtspStream({ hostname, port: port || 554, path: connectPath, username, password });
     return { info: {}, streamUri: null };
   }
 
-  // path defaults to the library's own '/onvif/device_service' when
+  // connectPath defaults to the library's own '/onvif/device_service' when
   // omitted -- but that's not universal. A real Synology camera on this
   // network (2026-09-01) serves ONVIF at '/Onvif/device_service' (capital
   // O) instead, confirmed via a raw HTTP probe (401 + WWW-Authenticate:
   // Digest realm="IPCam" there, plain 404 at the lowercase path) -- WS-
   // Discovery never found it either, so manual add is the only way in,
   // and it needs this override to actually reach the right endpoint.
-  const cam = new Cam({ hostname, port: port || 80, username, password, path: path || undefined });
+  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined });
   await cam.connect();
   const info = await cam.getDeviceInformation();
   let streamUri = null;
@@ -98,6 +110,42 @@ export async function addCamera({ label, hostname, port, username, password, pat
   return camera;
 }
 
+const SAMPLE_CLIP_EXT = new Set([".mp4", ".mov", ".mkv", ".avi", ".MP4", ".MOV", ".MKV", ".AVI"]);
+
+// "Sample clip" source (2026-09-03, ManualAddDialog's dropdown): a local
+// video file stands in for a live camera, so calibration and the cloud
+// pipeline can be exercised without a real, court-facing camera -- neither
+// camera on this network has reliably been one (see the day's progress
+// notes). No `existingByHostname` dedup here -- a sample-clip camera has
+// no hostname, so that check doesn't apply and isn't called.
+export function addCameraFromSampleClip({ label, filePath }) {
+  if (!filePath || !existsSync(filePath)) throw new Error("File not found: " + filePath);
+  const ext = path.extname(filePath);
+  if (!SAMPLE_CLIP_EXT.has(ext)) throw new Error(`Unsupported video file type ${ext || "(none)"}`);
+
+  const camera = {
+    id: randomUUID(),
+    label: label || path.basename(filePath, ext),
+    connectionType: "sampleClip",
+    addedAt: new Date().toISOString(),
+  };
+  // Copied into this camera's own recordings folder (capture.js's
+  // RECORDINGS_ROOT/sanitizeForPath(label)/ layout) rather than referenced
+  // in place -- the original file could be moved or deleted by the
+  // operator afterward, and this "camera" needs its one video to keep
+  // existing for as long as the camera entry does.
+  const dir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label));
+  mkdirSync(dir, { recursive: true });
+  const dest = path.join(dir, "sample-clip" + ext);
+  copyFileSync(filePath, dest);
+  camera.sampleClipPath = dest;
+
+  const cameras = listCameras();
+  cameras.push(camera);
+  store.set("cameras", cameras);
+  return camera;
+}
+
 export function removeCamera(id) {
   const cameras = listCameras().filter((c) => c.id !== id);
   store.set("cameras", cameras);
@@ -111,6 +159,22 @@ export function removeCamera(id) {
 export function renameCamera(id, label) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
+  store.set("cameras", next);
+  return next.find((c) => c.id === id);
+}
+
+// Points at a per-camera calib.json (invalidated only by the camera
+// physically moving -- ADR-049), so pipeline.js's cloud job has something
+// to pass as --calib. Two callers: calibration.js's saveCalibration()
+// after a live snapshot-and-click pass (the primary flow), or an existing
+// file the operator picked via a native file dialog (system.js's
+// pickCalibFile) -- e.g. one produced by
+// cloud_pipeline/setup_venue_calibration.py, or another camera's already-
+// clicked calibration for a reused mount. Either way this function only
+// remembers the path; it never computes a calibration itself.
+export function setCalibPath(id, calibPath) {
+  const cameras = listCameras();
+  const next = cameras.map((c) => (c.id === id ? { ...c, calibPath } : c));
   store.set("cameras", next);
   return next.find((c) => c.id === id);
 }

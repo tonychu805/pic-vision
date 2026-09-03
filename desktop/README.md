@@ -8,9 +8,12 @@ upload), while a separate, not-yet-built cloud web app owns everything
 that's just data (scheduling, court/venue management, delivery to
 players). See `STRATEGY.md` §5 for the full split and `progress/09.02
 progress overview.md` for how it was decided. Built so far: camera
-discovery/management, recording (`electron/capture.js`). Not yet built:
-calibration, transcode, upload, receiving the cloud pipeline's output,
-or any connection to the (not yet existing) web app.
+discovery/management, recording (`electron/capture.js`), calibration
+(`electron/calibration.js`, 2026-09-03), and triggering transcode/upload/
+inference/reel-cutting by invoking the existing Python as a subprocess
+(`electron/pipeline.js`, PIC-68). Not yet built: receiving the cloud
+pipeline's output back for local review, or any connection to the (not
+yet existing) web app.
 
 Electron + React (Vite), chosen over Tauri for the POC because v1's actual
 feature -- ONVIF discovery and RTSP handling -- is Node's ecosystem, not
@@ -125,24 +128,25 @@ app, not a description of the intended change.
 shown there is fabricated:
 
 - **Scan for cameras** -- runs two independent methods together, both
-  real. **Runs once per app session, not once per visit** (2026-09-01) --
-  `CamerasPage` used to unmount whenever nav left it and remount fresh on
-  return, silently wiping its scan results (reported as "the scanning
-  screen seems stateless... the cameras are gone," real, especially
-  visible with zero configured cameras where the page showed nothing at
-  all). The fix that actually shipped isn't "rescan automatically on
-  every visit" -- that was tried first and reasonably rejected (operator:
-  re-running a real ~5s network scan just because a tab was glanced away
-  from throws away anything mid-interaction for no reason). Instead,
-  `App.jsx` now keeps `CamerasPage` mounted permanently (CSS `display:
-  none` when hidden, not unmounted), so its state -- scan results,
-  select-mode, an open manual-add dialog, all of it -- survives switching
-  tabs for free. A separate, cheap effect (keyed on an `active` prop) re-
-  reads the *configured* camera list every time the tab becomes visible
-  again, since that can genuinely change elsewhere (a rename/removal on
-  a camera's own detail page) while this tab was hidden -- that's a local
-  store read + per-camera connection re-check, not the real network scan,
-  so it doesn't reintroduce the waste the fix above was rejected for.
+  real. **Manual only, never automatic** (operator's call, 2026-09-03,
+  reversing the auto-scan-on-launch behavior this page used to have) --
+  `startScan` now only ever fires from an explicit "Scan"/"Scan again"
+  click, not on mount. State still survives switching tabs regardless
+  (2026-09-01 fix, unrelated to when a scan starts): `CamerasPage` used to
+  unmount whenever nav left it and remount fresh on return, silently
+  wiping its scan results (reported as "the scanning screen seems
+  stateless... the cameras are gone," real, especially visible with zero
+  configured cameras where the page showed nothing at all). `App.jsx` now
+  keeps `CamerasPage` mounted permanently (CSS `display: none` when
+  hidden, not unmounted), so its state -- scan results, select-mode, an
+  open manual-add dialog, all of it -- survives switching tabs for free.
+  A separate, cheap effect (keyed on an `active` prop) re-reads the
+  *configured* camera list every time the tab becomes visible again
+  (also on the very first mount, so already-added cameras still show up
+  immediately despite no scan running), since that can genuinely change
+  elsewhere (a rename/removal on a camera's own detail page) while this
+  tab was hidden -- that's a local store read + per-camera connection
+  re-check, not the real network scan.
   - **ONVIF WS-Discovery** (`electron/cameras/discovery.js`) -- a
     multicast probe; only finds cameras that choose to answer it. Filters
     results by the responder's own declared `<wsd:Types>` -- the `onvif`
@@ -482,6 +486,180 @@ Recordings save to `~/pic-vision-recordings/<camera name>/<timestamp>/`
 files need to be findable by a human (and eventually fed into the
 Python pipeline in this repo), not buried in an app-private directory.
 
+## Cloud pipeline (`electron/pipeline.js`, 2026-09-02 -- PIC-68)
+
+Each camera's detail page now has a "Cloud pipeline" panel below Recording:
+a calibration control (below) and a "Send to cloud" row per past recording
+(`capture.js`'s new `listRecordings`, which just lists what's on disk under
+`~/pic-vision-recordings/`, since nothing tracked recordings anywhere
+before this).
+
+**Calibration (`electron/calibration.js`, 2026-09-03).** Originally scoped
+(PIC-68) to just a native file picker for an existing `calib.json` -- not a
+calibration flow. Superseded the same day: `CalibrationControl`
+(`CameraDetailPage.jsx`) now takes a real snapshot from the camera's own
+live stream (`capture.js`'s `grabSnapshot`, `ffmpeg -frames:v 1` against the
+RTSP URL) and opens a modal where the operator clicks the 12 court
+intersections + 2 net-tape points directly on the image -- the same
+click-collection flow `webapp/templates/calibrate.html`'s browser UI
+already offers, ported into React rather than reimplemented from scratch.
+The 14 points are handed to `cloud_pipeline/save_calibration.py` (new),
+which imports `calibrate.py`'s `solve_assignment`/`compute_calibration`
+to fit the homography -- the actual math stays in Python and gets invoked
+as a subprocess, per ADR-071, not ported to JS. The result is written to
+`~/pic-vision-recordings/<camera>/calib.json` (a sibling of that camera's
+recording folders, not nested in one -- a calibration outlives any single
+session) and remembered via `store.js`'s `calibPath`, same field PIC-68
+already used. The native file picker (`system.js`'s `pickCalibFile`) stays
+as a secondary "Import file…" option, for a calibration produced elsewhere
+(`cloud_pipeline/setup_venue_calibration.py`, or reusing another camera's
+click pass for the same physical mount).
+
+**Verified:** `save_calibration.py`'s homography fit against a real,
+already-scored calibration (`calib/IMG_7743_calib.json`) -- feeding its
+recorded `image_points`/`net_image_points` back through the new script
+reproduced its exact `reprojection_rmse_ft` (0.845 ft) and `point_names`,
+confirming the port introduced no drift from `calibrate.py`'s own math.
+`grabSnapshot` verified against a real configured camera (a live RTSP
+pull, decoded and confirmed valid via `cv2.imread`) -- **not** against
+footage of an actual court, since neither camera currently configured on
+this machine is pointed at one (a live-snapshot test against the real
+"Court 1" camera briefly exposed an unrelated private frame from its
+current, non-court position before this was noticed -- the file was
+deleted immediately; see the operator's own note for why the click-modal
+UI itself has not been exercised end-to-end against a real snapshot the
+same way). `vite build` clean; `pytest -q --ignore=archive` unaffected
+(132 passed -- `archive/`'s own pre-existing, unrelated collection error
+still blocks a bare `pytest -q`, same as before this change).
+
+"Send to cloud" spawns `cloud_pipeline/run_desktop_job.py` -- concatenating
+`capture.js`'s 10-minute segments into one file first (`ffmpeg concat`,
+stream copy, same `-c copy` capture already uses) -- which itself just
+calls `webapp/pipeline.py`'s `run_cloud_job(job_dir)`/`cancel_job(job_dir)`
+on a background thread. This is the ADR-071 "reuse the existing Python,
+don't reimplement R2 upload/RunPod dispatch/reel-cutting in JS" directive
+in its most literal form: `pipeline.js` itself does nothing but spawn a
+process, poll the same `status.json` the Flask dashboard already writes,
+and relay it to the UI. Cancel sends `SIGINT` (never a hard kill, same
+convention as `capture.js`/ADR-031) -- the Python wrapper's own signal
+handler calls `cancel_job()`, which terminates any RunPod pod already
+created so a cancelled job can't keep billing unattended.
+
+**One real bug found and fixed while wiring this, not assumed away:**
+`cloud_pipeline/run_cloud_job.py`'s missing-calibration guard raises
+`SystemExit` (reasonable for its own bare-CLI use -- a clean one-line
+message instead of a traceback), but `webapp/pipeline.py`'s
+`run_cloud_job(job_dir)` only caught `Exception`, which `SystemExit`
+isn't a subclass of. A job with no calibration silently escaped that
+`except` block, and `status.json` was left stuck at `stage="drift_check"`
+forever instead of ever reaching `stage="error"` -- confirmed by actually
+running the failure case against this repo (a missing-calibration path,
+below), not by reading the code and assuming the existing
+`except Exception` was broad enough. This was a live bug in the Flask
+dashboard's cloud-job route too, not something new to this caller --
+fixed at the shared `except (Exception, SystemExit)` in `webapp/pipeline.py`.
+
+**Not yet exercised against real cloud/GPU resources.** Verified so far:
+the missing-calibration failure path end-to-end (subprocess spawn ->
+`job.json` -> `status.json`/`log.txt` -> `stage="error"` surfaced back
+through `pipelineAPI.status`), plus a renderer build. A full run that
+actually uploads to R2 and creates a billed RunPod pod has not been run
+from the desktop client -- that needs real per-venue credentials and
+should be a deliberate, confirmed test given the cost, not something
+exercised casually while wiring the plumbing.
+
+## Sample-clip camera source (`electron/cameras/store.js`'s `addCameraFromSampleClip`, 2026-09-03)
+
+`ManualAddDialog`'s "Add" flow (`CamerasPage.jsx`) now offers a dropdown:
+"a live camera" (the existing ONVIF/RTSP flow, unchanged) or "a sample clip"
+-- upload a local video file instead of connecting to anything. Built
+directly in response to neither camera on this network reliably being
+pointed at a real court, which made testing calibration/the cloud pipeline
+either impossible or a real privacy risk (see the recording section's
+own note on the day's live-snapshot incident).
+
+A sample-clip camera (`connectionType: "sampleClip"`) has no hostname,
+credentials, or live stream -- just a `sampleClipPath`, the uploaded file
+copied into that camera's own `~/pic-vision-recordings/<camera>/` folder
+(so the original, wherever the operator picked it from, can be moved or
+deleted afterward without breaking anything). It plugs into the existing
+UI with minimal special-casing:
+
+- **Recording control** is hidden (nothing to start/stop); a small info
+  line explains why.
+- **`capture.js`'s `listRecordings`** returns the one uploaded file as a
+  single synthetic "recording" entry, so the existing "Send to cloud" row
+  and `pipeline.js` work unchanged -- `pipeline.js` gained one thing:
+  a `videoPath` override so it can skip `concatSegments` (there are no
+  segments) and hand the file straight to `run_desktop_job.py`.
+- **Calibration** grabs its snapshot by seeking into the file
+  (`capture.js`'s new `probeDuration`/`grabFrameFromFile`, `ffmpeg -ss`)
+  instead of pulling a live RTSP frame, defaulting to 10% into the clip
+  (same heuristic `webapp/app.py`'s own frame-grab uses, so an intro/black
+  frame at t=0 isn't what gets clicked) -- with a "frame at __ seconds /
+  Reload frame" control in the modal to pick a clearer moment.
+- `testConnection` for a sample clip just confirms the file still exists
+  (nothing to actually connect to); the camera-grid status polling
+  (`CamerasPage.jsx`) was switched from keying by hostname to keying by
+  camera id in the same change, since a sample-clip camera has no
+  hostname and two of them would otherwise collide on `undefined`.
+
+**Verified:** `listRecordings`, `probeDuration`, and `grabFrameFromFile`
+against a real (synthetic, `ffmpeg -f lavfi testsrc`, not footage of
+anyone or anywhere real) test video -- correct duration, correct frame at
+an arbitrary seek point, and a correct, informative failure when seeking
+past the end of the file. `addCameraFromSampleClip` itself (the
+electron-store-backed persistence) wasn't exercised the same way --
+`electron-store` needs a real Electron environment to construct
+(`Conf`'s `projectName` requirement), which a bare Node script run for
+this verification doesn't provide -- so that path is reviewed, not
+runtime-tested, pending the operator trying it in the real app.
+
+**A related real gap found and fixed the same day:** verifying this
+surfaced a leftover live-camera snapshot file in `/tmp` -- from Court 1,
+the real camera this session's earlier calibration work had already
+caused an incident with. Its calibration modal had evidently been closed
+(app restarted or navigated away from) without Save or Cancel running,
+so nothing ever called `discardSnapshot`. Fixed two ways: `capture.js`
+now tracks every outstanding snapshot file and sweeps them up from
+`main.js`'s `before-quit` (alongside the existing `stopAllRecordings`),
+and `CalibrationModal` itself now discards its current snapshot on
+unmount (e.g. navigating to a different camera's page), not only via its
+own Save/Cancel buttons. Neither path corrupts anything by discarding a
+file that's already gone (both Save and Cancel already remove it; the new
+cleanup is a no-op in that case).
+
+**Another real bug found trying this feature, not while building it:**
+operator report -- "when i click choose file, nothing happened." Same root
+cause as the `calibrationAPI` incident earlier in this file: a
+`main.js`/`preload.cjs` change (`pickVideoFile`) hadn't taken effect yet
+(a full app restart is needed for those, not Vite's renderer hot-reload),
+so `window.systemAPI.pickVideoFile` was undefined -- but unlike the
+calibration snapshot flow, `ManualAddDialog`'s `pickClipFile` had no
+try/catch, so the thrown error became an unhandled promise rejection with
+literally nothing visible happening. Fixed by wrapping the call, with an
+explicit `typeof ... !== "function"` check that names the actual cause
+("this feature isn't loaded yet -- restart the app") rather than a
+generic error. Found and fixed the identical gap in `CalibrationControl`'s
+"Import file…" button proactively at the same time -- same missing
+try/catch, same silent-failure shape, not yet reported but clearly the
+same bug class.
+
+## Camera scanning is manual only (2026-09-03)
+
+Operator: "dont automatically scan everytime i start the app."
+`CamerasPage.jsx` used to call `startScan()` unconditionally on mount
+(see "What's real vs. illustrative" above); removed outright --
+scanning now only ever runs from an explicit "Scan"/"Scan again" click.
+Already-configured cameras still load immediately regardless (the
+separate `active`-keyed effect that reads the local camera store, kept
+as-is), so this doesn't blank the page for anyone with cameras already
+added -- only the automatic *network scan* for new/undiscovered ones was
+removed. The empty-state copy ("picvision looks for cameras on your
+Wi-Fi network automatically...") described the old behavior and no
+longer matched reality, so it was reworded to describe scanning as
+something the operator triggers.
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
@@ -492,14 +670,27 @@ Python pipeline in this repo), not buried in an app-private directory.
   alerts if one segment comes back short.
 - No packaging/signing configured beyond the bare `electron-builder`
   target list in `package.json`.
-- Everything past capture in the local agent's own scope per `DECISIONS.md`
-  ADR-071 / `STRATEGY.md` §5 (court calibration, local CFR encode --
-  `PIC-67`'s NVIDIA-only gap, R2 upload, receiving cloud output back and
-  cutting from local full-res) is unbuilt. CDN delivery is no longer this
-  app's job at all -- ADR-071 moved it to the (also not-yet-built) cloud
-  web app.
+- Court calibration's flow (`electron/calibration.js`, 2026-09-03) has its
+  homography math verified (reproduces a real prior calibration's exact
+  RMSE) and its snapshot mechanisms verified for both sources (a real
+  camera's live stream, and seeking into an uploaded sample clip), but the
+  click-collection modal itself has never been exercised end-to-end
+  against a real snapshot of an actual court -- neither camera on this
+  machine is currently pointed at one. The sample-clip source (above)
+  removes the reason that couldn't be tested safely; it just hasn't been
+  clicked through in the running app yet.
+- `PIC-67`'s CFR-encode NVIDIA-only gap is still open, but it's no longer
+  the local agent's own problem to solve -- `pipeline.js` hands the whole
+  job to `run_desktop_job.py`, which is the existing Python doing the
+  encoding, same as the Flask dashboard's local-GPU route always has.
+- The cloud pipeline trigger (`PIC-68`, above) has not been run
+  end-to-end against real R2/RunPod resources from the desktop client --
+  only the local, no-cost failure path (missing calibration) has been
+  verified live. Per-venue scoped cloud credentials (`PIC-71`) are also
+  still a hard prerequisite before this can point at anything but the
+  operator's own `.env`.
 - The Schedule page's on/off toggle still has no real effect -- capture
   now exists, but nothing reads a camera's booked sessions to
-  automatically start/stop it yet (`PIC-72`). See Linear `PIC-66` (Done),
-  `PIC-72`, and `PIC-73` (`Venue Deployment`) for the remaining
+  automatically start/stop it yet (`PIC-72`). See Linear `PIC-66`/`PIC-68`
+  (Done), `PIC-72`, and `PIC-73` (`Venue Deployment`) for the remaining
   integration scope.

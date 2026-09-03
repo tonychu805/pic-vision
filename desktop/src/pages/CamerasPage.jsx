@@ -21,6 +21,13 @@ const SCAN_TIMEOUT_MS = 5000;
 // each step vendor-neutral, none of it branching on a detected brand.
 function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPort = 80, onClose, onAdded }) {
   const foundIt = Boolean(initialHostname);
+  // "Sample clip" (2026-09-03): a local video file stands in for a live
+  // camera, so calibration and the cloud pipeline can be exercised
+  // without a real, court-facing camera -- neither one on this network
+  // has reliably been that. Only offered on a genuine "Add manually" open
+  // (foundIt=false); a prefilled discovered-device card is already known
+  // to be a real camera.
+  const [sourceType, setSourceType] = useState("camera");
   const [form, setForm] = useState({ label: "", hostname: initialHostname, port: initialPort, path: "", username: "", password: "" });
   const [showAdvanced, setShowAdvanced] = useState(false);
   const [error, setError] = useState("");
@@ -31,6 +38,46 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   const [phase, setPhase] = useState("form");
   const [rtspUrl, setRtspUrl] = useState("");
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
+
+  const [clipLabel, setClipLabel] = useState("");
+  const [clipPath, setClipPath] = useState("");
+  const [clipError, setClipError] = useState("");
+  const [clipSaving, setClipSaving] = useState(false);
+
+  // Real bug found 2026-09-03: with no try/catch here, a main-process
+  // change that hadn't taken effect yet (preload.cjs only reloads on a
+  // full app restart, not Vite's renderer hot-reload -- see
+  // desktop/README.md's own note on this exact class of bug) made
+  // `window.systemAPI.pickVideoFile` undefined, and calling it threw
+  // inside this async function with nothing catching the rejection --
+  // the button looked like it silently did nothing. Caught this specific
+  // case explicitly so it says so instead of failing invisibly.
+  const pickClipFile = async () => {
+    setClipError("");
+    if (typeof window.systemAPI?.pickVideoFile !== "function") {
+      setClipError("This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).");
+      return;
+    }
+    try {
+      const picked = await window.systemAPI.pickVideoFile();
+      if (picked) setClipPath(picked);
+    } catch (err) {
+      setClipError(err.message);
+    }
+  };
+
+  const submitSampleClip = async (e) => {
+    e.preventDefault();
+    if (!clipPath) return;
+    setClipSaving(true);
+    setClipError("");
+    try {
+      onAdded(await window.cameraAPI.addSampleClip({ label: clipLabel, filePath: clipPath }));
+    } catch (err) {
+      setClipError(err.message);
+      setClipSaving(false);
+    }
+  };
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,6 +147,56 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     );
   }
 
+  // Only rendered on a genuine "Add manually" open (foundIt=false) --
+  // switching source type wouldn't make sense once a real device is
+  // already known (a discovered card, or the RTSP-fallback phases below).
+  const sourceSelector = !foundIt && (
+    <div className="field">
+      <label>Add</label>
+      <select className="input" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
+        <option value="camera">A live camera</option>
+        <option value="sampleClip">A sample clip (for testing)</option>
+      </select>
+    </div>
+  );
+
+  if (sourceType === "sampleClip" && !foundIt) {
+    return (
+      <div className="dialog-backdrop">
+        <form className="dialog" onSubmit={submitSampleClip}>
+          <div className="dialog-title">Add a sample clip</div>
+          {sourceSelector}
+          <div className="dialog-body">
+            Upload a video file to test calibration and the cloud pipeline without a real camera — it's treated
+            like a camera whose one recording is this file.
+          </div>
+          <div className="field">
+            <label>Name (optional)</label>
+            <input className="input" value={clipLabel} onChange={(e) => setClipLabel(e.target.value)} placeholder="Test clip" />
+          </div>
+          <div className="field">
+            <label>Video file</label>
+            <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <button type="button" className="btn btn-secondary" onClick={pickClipFile}>Choose file…</button>
+              <span style={{ fontSize: 12.5, fontFamily: "ui-monospace, Menlo, monospace", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {clipPath || "No file chosen"}
+              </span>
+            </div>
+          </div>
+          {clipError && (
+            <p style={{ color: "var(--color-accent-2-400)", fontSize: 13, margin: 0 }}>{clipError}</p>
+          )}
+          <div className="dialog-actions">
+            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="submit" className="btn btn-primary" disabled={clipSaving || !clipPath}>
+              {clipSaving ? "Adding…" : "Add"}
+            </button>
+          </div>
+        </form>
+      </div>
+    );
+  }
+
   if (phase === "rtspUrl") {
     return (
       <div className="dialog-backdrop">
@@ -140,6 +237,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     <div className="dialog-backdrop">
       <form className="dialog" onSubmit={submit}>
         <div className="dialog-title">{foundIt ? "Set up this camera" : "Add a camera by IP address"}</div>
+        {sourceSelector}
         <div className="dialog-body">
           {foundIt ? (
             <>
@@ -201,7 +299,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   const [configured, setConfigured] = useState([]);
   const [discovered, setDiscovered] = useState([]);
   const [sweepHits, setSweepHits] = useState([]);
-  const [statusByHostname, setStatusByHostname] = useState({});
+  const [statusById, setStatusById] = useState({});
   const [scanning, setScanning] = useState(false);
   const [scanPct, setScanPct] = useState(0);
   const [hasScanned, setHasScanned] = useState(false);
@@ -214,31 +312,29 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   const [bulkOpen, setBulkOpen] = useState(false);
   const scanTimer = useRef(null);
 
+  // Keyed by camera id, not hostname -- a sample-clip camera (2026-09-03)
+  // has no hostname at all, and two of them would otherwise collide under
+  // the same `undefined` key and show each other's status.
   const refreshConfigured = async () => {
     const cameras = await window.cameraAPI.list();
     setConfigured(cameras);
     for (const camera of cameras) {
-      setStatusByHostname((s) => ({ ...s, [camera.hostname]: "checking" }));
+      setStatusById((s) => ({ ...s, [camera.id]: "checking" }));
       window.cameraAPI
         .testConnection(camera)
-        .then(() => setStatusByHostname((s) => ({ ...s, [camera.hostname]: "ok" })))
-        .catch(() => setStatusByHostname((s) => ({ ...s, [camera.hostname]: "offline" })));
+        .then(() => setStatusById((s) => ({ ...s, [camera.id]: "ok" })))
+        .catch(() => setStatusById((s) => ({ ...s, [camera.id]: "offline" })));
     }
   };
 
-  useEffect(() => {
-    // Operator's call (2026-09-01), reversing the auto-rescan fix from
-    // moments earlier: don't throw away scan results just because the
-    // tab was switched away and back -- App.jsx now keeps this page
-    // mounted (hidden, not unmounted) instead, so this only ever runs
-    // once per app session, not once per visit. `refreshConfigured`
-    // still runs every time the tab becomes active again (see the
-    // `active` effect below) since that's a cheap local-store read, not
-    // a real network scan, and it needs to catch a camera renamed or
-    // removed from its own detail page while this tab was hidden.
-    startScan();
-  }, []);
-
+  // No automatic network scan on mount (operator's call, 2026-09-03,
+  // reversing the auto-scan-on-start behavior this page had before) --
+  // `startScan` now only ever runs from an explicit "Scan"/"Scan again"
+  // click. `refreshConfigured` still runs on mount and every time this
+  // tab becomes active again -- that's just a cheap local-store read
+  // (already-configured cameras + a connection-status check for each),
+  // not a real network scan, and it needs to catch a camera renamed or
+  // removed from its own detail page while this tab was hidden.
   useEffect(() => {
     if (active) refreshConfigured();
   }, [active]);
@@ -278,7 +374,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
 
   useEffect(() => () => clearInterval(scanTimer.current), []);
 
-  const cards = buildCards({ configured, discovered, sweepHits, statusByHostname });
+  const cards = buildCards({ configured, discovered, sweepHits, statusById });
   const isEmpty = !scanning && hasScanned === false && cards.length === 0;
   const needsAttentionCount = cards.filter((c) => c.kind !== "configured").length;
 
@@ -397,10 +493,10 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
             <div style={{ width: 104, height: 104, margin: "0 auto 18px", borderRadius: "50%", display: "grid", placeItems: "center", background: "radial-gradient(circle, var(--color-accent-900), transparent 70%)" }}>
               <i className="ph ph-radar" style={{ fontSize: 44, color: "var(--color-accent)" }} />
             </div>
-            <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, marginBottom: 6 }}>No cameras found yet</div>
+            <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, marginBottom: 6 }}>No cameras added yet</div>
             <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
-              picvision looks for cameras on your Wi-Fi network automatically — this usually takes just a few
-              seconds. If it doesn't find yours, you can add it yourself using its IP address instead.
+              picvision can look for cameras on your Wi-Fi network for you — usually takes just a few seconds. If it
+              doesn't find yours, you can add it yourself using its IP address instead.
             </p>
             <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
               <button className="btn btn-primary" onClick={startScan}><i className="ph ph-radar" style={{ fontSize: 16 }} />Scan this network</button>
