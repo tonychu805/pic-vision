@@ -629,17 +629,27 @@ pic-vision/
 │   │                              # webapp -> desktop or cloud_pipeline -> either)
 │   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> 1080p proxy -> R2 upload
 │   │                                # -> RunPod runs pod_infer.py unmodified, then pod_cut.py
-│   │                                # (ADR-074, 2026-09-04) -> R2 upload of the finished reel.
-│   │                                # predictions.csv never leaves the pod; only the ranked
-│   │                                # highlight mp4 + a small stats.json come back (ranked
-│   │                                # only, no chronological version at all -- same-day
-│   │                                # operator request, build_reel()'s new
-│   │                                # include_chronological=False)
-│   ├── pod_cut.py                     # ADR-074: runs ON the pod right after inference -- thin
-│   │                                # wrapper around scripts/rank_and_reel.py's build_reel(),
-│   │                                # deployed via a small tarball (run_cloud_job.py's
-│   │                                # POD_REEL_DEPS) since the pod has no other way to get
-│   │                                # src/'s modules
+│   │                                # (ADR-074, 2026-09-04) -> R2 upload of the finished reel(s).
+│   │                                # predictions.csv never leaves the pod; only the finished
+│   │                                # mp4(s) + a small stats.json come back (ranked only per
+│   │                                # reel, no chronological version at all -- same-day
+│   │                                # operator request, build_reel()'s include_chronological=
+│   │                                # False). ADR-076 (same day): mints THREE uuids now, not
+│   │                                # one -- reel_id (full), burst_reel_id, and share_id (the
+│   │                                # public grouping id both reels are reported under, see
+│   │                                # pod_cut.py/run_desktop_job.py below)
+│   ├── pod_cut.py                     # ADR-074, extended ADR-076 (2026-09-04): runs ON the pod
+│   │                                # right after inference -- thin wrapper around BOTH
+│   │                                # scripts/rank_and_reel.py's build_reel() (full rally,
+│   │                                # reel/full/) and scripts/burst_moment_reel.py's
+│   │                                # build_burst_reel() (each rally's peak-intensity moment
+│   │                                # only, "quick hits", reel/burst/, fixed 60s target --
+│   │                                # burst clips are ~5s each, the caller's own --target-sec
+│   │                                # is a full-reel number). stats.json is now
+│   │                                # {"full": {...}, "burst": {...}|null} -- null when
+│   │                                # burst's own candidate pool comes up empty. Deployed via a
+│   │                                # small tarball (run_cloud_job.py's POD_REEL_DEPS) since
+│   │                                # the pod has no other way to get src/'s modules
 │   ├── run_desktop_job.py            # PIC-68: CLI wrapper for desktop/'s pipeline.js --
 │   │                                # writes job.json then calls webapp.pipeline's
 │   │                                # run_cloud_job(job_dir) on a background thread so a
@@ -647,10 +657,11 @@ pic-vision/
 │   │                                # cancel_job(job_dir) (terminates any RunPod pod already
 │   │                                # created, not just this process); on success, with
 │   │                                # --console-url/--api-token (from cloud.js's stored
-│   │                                # pairing), POSTs the finished reel to the cloud
-│   │                                # console's /api/agents/reels (ADR-074, best-effort --
-│   │                                # a failure here doesn't fail the job, the reel already
-│   │                                # exists in R2 either way)
+│   │                                # pairing), _report_reels() (ADR-076, was _report_reel)
+│   │                                # POSTs each finished reel (1 or 2) to the cloud console's
+│   │                                # /api/agents/reels, all sharing one shareId -- best-effort
+│   │                                # per reel, a failure doesn't fail the job, the reel
+│   │                                # already exists in R2 either way
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
 │   │                                    # generate_presigned_url, ADR-074)
 │   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
@@ -984,14 +995,17 @@ pic-vision/
 │   │   │   │                             # mock) -- queries the real `reels`
 │   │   │   │                             # table (agent_id -> agents.venue_id,
 │   │   │   │                             # same scoping as every other agent-
-│   │   │   │                             # owned table), each row links to
-│   │   │   │                             # /api/reels/[id]/video for real
-│   │   │   │                             # playback (ranked only, 2026-09-04 --
-│   │   │   │                             # pod_cut.py doesn't cut a
-│   │   │   │                             # chronological version at all
-│   │   │   │                             # anymore, operator request, so
-│   │   │   │                             # there's only ever one video per
-│   │   │   │                             # reel and no [which] segment).
+│   │   │   │                             # owned table). ADR-076 (same day):
+│   │   │   │                             # rows are grouped by share_id into
+│   │   │   │                             # one card per SESSION (a session can
+│   │   │   │                             # have a "full" row and a "burst" row
+│   │   │   │                             # now, both showing their own stats
+│   │   │   │                             # on the card), one "Open reel page"
+│   │   │   │                             # link per card
+│   │   │   │                             # (share.picvisionai.com/r/[share_id],
+│   │   │   │                             # not /api/reels/[id]/video directly --
+│   │   │   │                             # see reel-page/ below, that's the
+│   │   │   │                             # actual venue-goer-facing artifact).
 │   │   │   │                             # No status filter (a reel row only
 │   │   │   │                             # exists once its job
 │   │   │   │                             # already finished, no partial state
@@ -1035,17 +1049,24 @@ pic-vision/
 │   │       │                            # deletes whatever's NOT in that payload
 │   │       │                            # anymore (handles a removed camera, or
 │   │       │                            # the whole list going empty)
-│   │       └── reels/route.ts             # ADR-074, 2026-09-04. Bearer-token
-│   │                                    # authenticated, same pattern as
-│   │                                    # heartbeat -- cloud_pipeline/
-│   │                                    # run_desktop_job.py posts here once
-│   │                                    # after a cloud job finishes (not
-│   │                                    # polled). Inserts one `reels` row
-│   │                                    # (agent_id from the token, camera_id/
-│   │                                    # cameraLabel/sessionId/bucket/rankedKey/
-│   │                                    # duration/rallyCount from the body --
-│   │                                    # ranked only, no chronologicalKey
-│   │                                    # field, same-day operator request)
+│   │       └── reels/route.ts             # ADR-074, extended ADR-076, 2026-09-04.
+│   │                                    # Bearer-token authenticated, same pattern
+│   │                                    # as heartbeat -- cloud_pipeline/
+│   │                                    # run_desktop_job.py's _report_reels()
+│   │                                    # posts here once PER REEL after a cloud
+│   │                                    # job finishes (1 or 2 calls, not polled).
+│   │                                    # Inserts one `reels` row (agent_id from
+│   │                                    # the token, camera_id/cameraLabel/
+│   │                                    # sessionId/bucket/rankedKey/duration/
+│   │                                    # rallyCount from the body -- ranked only,
+│   │                                    # no chronologicalKey field). kind
+│   │                                    # ('full'/'burst') and shareId now also
+│   │                                    # accepted -- shareId falls back to this
+│   │                                    # reel's own id (resolved server-side, not
+│   │                                    # left to a Postgres default) when
+│   │                                    # omitted, so an older caller or a
+│   │                                    # burst-less session still gets a working
+│   │                                    # single-reel share page at its own id
 │   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a stable
 │   │                                    # cdn.picvisionai.com R2 URL (lib/r2.ts,
 │   │                                    # ADR-075 -- no presigning) for the
@@ -1121,24 +1142,38 @@ pic-vision/
 │   │                              # v0.app mockup the operator built, wired to real
 │   │                              # data the same day, live on Netlify same day too.
 │   ├── netlify.toml                 # same minimal config as the console's -- Next.js
-│   │                              # Runtime plugin handles the app/r/[reelId] dynamic
+│   │                              # Runtime plugin handles the app/r/[shareId] dynamic
 │   │                              # route as a Netlify Function automatically
-│   ├── app/r/[reelId]/page.tsx      # server component -- fetches the reel via
-│   │                              # `reels`' new "anyone with the id can read" RLS
-│   │                              # policy (public, no session -- a share link is
+│   ├── app/r/[shareId]/page.tsx      # server component -- ADR-076 (2026-09-04):
+│   │                              # renamed from [reelId] -- one page per SESSION
+│   │                              # now, not per reel, since a session can produce
+│   │                              # two reels (full + burst-moments/"quick hits").
+│   │                              # Fetches every `reels` row sharing this share_id
+│   │                              # (up to 2, oldest-first) via the "anyone with the
+│   │                              # id can read" RLS policy (public, no session --
 │   │                              # unguessable-UUID access, same pattern as Notion/
-│   │                              # Figma/Loom links), builds its stable CDN video URL
-│   │                              # server-side (lib/r2.ts, ADR-075 -- no presigning,
-│   │                              # duplicated from the console rather than importing
-│   │                              # across the repo boundary), 404s on an unknown/
-│   │                              # wrong id
-│   ├── app/r/[reelId]/reel-share-client.tsx  # the real interactive page: video
-│   │   │                          # element (real stable cdn.picvisionai.com src,
-│   │   │                          # ADR-075, prefetched into a Blob on mount so
-│   │   │                          # navigator.share() can fire synchronously off
-│   │   │                          # the tap -- not the mockup's placeholder box),
-│   │   │                          # Copy link, Download (routes through the same
-│   │   │                          # share-sheet path as the app tiles). The
+│   │                              # Figma/Loom links; share_id is a THIRD id, not
+│   │                              # session_id -- that's built from camera label +
+│   │                              # recording timestamp, guessable, unsafe as a
+│   │                              # public gate), builds each one's stable CDN video
+│   │                              # URL server-side (lib/r2.ts, ADR-075 -- no
+│   │                              # presigning), 404s when none match
+│   ├── app/r/[shareId]/reel-share-client.tsx  # the real interactive page. Hero is a
+│   │   │                          # horizontal scroll-snap carousel (ADR-076) when
+│   │   │                          # 2 reels exist -- one slide per reel, badge
+│   │   │                          # ("Full reel"/"Quick hits"), dot indicators, an
+│   │   │                          # IntersectionObserver-driven activeIndex. Every
+│   │   │                          # slide's video is prefetched into a Blob on
+│   │   │                          # mount (not lazily per-slide -- would reintroduce
+│   │   │                          # the exact awaited-fetch-mid-gesture bug fixed
+│   │   │                          # the same day) so navigator.share() can fire
+│   │   │                          # synchronously off the tap. Instagram/TikTok/
+│   │   │                          # Download retarget to the active slide; Copy
+│   │   │                          # link and the link-based tiles below don't (one
+│   │   │                          # page URL regardless of slide). Download all
+│   │   │                          # (ADR-076, after Copy link) shares every slide's
+│   │   │                          # video via one multi-file navigator.share() call,
+│   │   │                          # falling back to sequential plain downloads. The
 │   │   │                          # "Repost it"/"Send to" tiles split into two
 │   │   │                          # genuinely different mechanisms, decided after
 │   │   │                          # verifying against Meta's own developer docs
@@ -1196,6 +1231,11 @@ pic-vision/
 │   ├── rank_and_reel.py                  # ranks candidates (src/select.py) + cuts a reel
 │   │                                      # in both chronological and rank order; its
 │   │                                      # build_reel() is also called by webapp/pipeline.py
+│   ├── burst_moment_reel.py               # ADR-076 (2026-09-04): cuts just each top-ranked
+│   │                                      # rally's own peak-intensity window (src/select.py's
+│   │                                      # peak_window), not the whole rally -- "quick hits".
+│   │                                      # Was dev-only until this ADR; build_burst_reel() is
+│   │                                      # now also called by cloud_pipeline/pod_cut.py
 │   ├── rank_and_reel_split.py             # same, for a session whose calibration is only
 │   │                                      # valid in pieces (e.g. IMG_7743's camera bump)
 │   ├── validate_ranking.py                 # checks rank_segments' score against real

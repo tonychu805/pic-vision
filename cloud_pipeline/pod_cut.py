@@ -15,14 +15,29 @@ Usage (on the pod):
     python3 pod_cut.py --video video_proxy.mp4 --csv predictions.csv \
         --calib calib.json --out-dir reel --target-sec 300 --session-id x
 
-Writes reel/highlight_by_rank.mp4 (build_reel's own output name) and
-reel/stats.json (n_candidates/n_chosen/total_duration_sec only -- the
-orchestrator scp's this one small file back rather than parsing stdout,
-since a print-format change elsewhere shouldn't silently break stats
-reporting here). No highlight.mp4 (chronological) -- operator request,
-2026-09-04: the console's Reels tab only ever offers the ranked cut, so
-build_reel() is called with include_chronological=False to skip cutting
-it at all, not just skip uploading it.
+Writes TWO reels now (2026-09-04, operator request: "two forms of
+content... one that only includes burst moments"): reel/full/highlight_by_rank.mp4
+(build_reel, same as before -- full rally length, ranked) and
+reel/burst/highlight.mp4 (scripts/burst_moment_reel.py's build_burst_reel --
+just each top rally's own peak-intensity window, not the whole rally).
+Both reuse the same detection pipeline independently (cheap CPU work,
+not worth threading shared state between two otherwise-separate,
+already-reviewed scripts for). burst_target_sec is fixed, not the
+caller's own --target-sec -- burst clips are ~5s each, so hitting a
+300s *full-reel* target would mean 50+ clips; burst_moment_reel.py's own
+CLI default (60s) is reused rather than inventing a new number.
+
+reel/stats.json now holds {"full": {...}, "burst": {...} | null} --
+burst is null when build_burst_reel's own candidate pool (identical
+detection to full, since gap_sec/min_crossings are unchanged) comes up
+empty, in which case there's no burst/highlight.mp4 to write or upload
+at all -- the orchestrator (run_cloud_job.py) checks for the file's
+existence rather than assuming it's always there.
+
+No chronological cut of either -- operator request, 2026-09-04: the
+console's Reels tab only ever offers the ranked cut, so build_reel() is
+called with include_chronological=False to skip cutting it at all, not
+just skip uploading it.
 
 Deployed flat (cloud_pipeline/run_cloud_job.py's POD_REEL_DEPS tarball
 extracts src/ and scripts/ as this file's own siblings, e.g.
@@ -38,6 +53,9 @@ import sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from scripts.rank_and_reel import build_reel, WEIGHTS
+from scripts.burst_moment_reel import build_burst_reel
+
+BURST_TARGET_SEC = 60.0  # scripts/burst_moment_reel.py's own CLI default
 
 
 def main():
@@ -50,14 +68,22 @@ def main():
     p.add_argument("--session-id", default="reel")
     args = p.parse_args()
 
-    result = build_reel(args.video, args.csv, args.calib, args.out_dir,
-                         args.target_sec, args.session_id, weights=WEIGHTS,
-                         include_chronological=False)
+    full_dir = os.path.join(args.out_dir, "full")
+    full_result = build_reel(args.video, args.csv, args.calib, full_dir,
+                              args.target_sec, args.session_id, weights=WEIGHTS,
+                              include_chronological=False)
 
+    burst_dir = os.path.join(args.out_dir, "burst")
+    burst_result = build_burst_reel(args.video, args.csv, args.calib, burst_dir,
+                                     BURST_TARGET_SEC, args.session_id)
+    # None when no candidates made the cut (empty manifest) -- see module docstring.
+    burst_stats = burst_result["stats"] if burst_result["chronological"] else None
+
+    stats = {"full": full_result["stats"], "burst": burst_stats}
     with open(os.path.join(args.out_dir, "stats.json"), "w") as f:
-        json.dump(result["stats"], f)
+        json.dump(stats, f)
 
-    print(f"[pod_cut] done: {result['stats']}")
+    print(f"[pod_cut] done: {stats}")
 
 
 if __name__ == "__main__":

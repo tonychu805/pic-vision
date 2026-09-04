@@ -1300,6 +1300,30 @@ Real timing measurements first, not assumed (see progress notes, same day): pres
 
 ---
 
+## ADR-076 — A session can produce two reels (full + burst-moments); one shared page groups them via a new `share_id`, not either reel's own id
+
+**Date:** 2026-09-04 · **Status:** accepted, implemented, not yet run against a real pod job
+
+**Context.** Operator: "provide two forms of content, one is the one we have, the other only includes burst moments." `scripts/burst_moment_reel.py` already existed as exactly this — cutting each top-ranked rally's own peak-intensity window (`src/select.py`'s `peak_window`) instead of the whole rally, weights already tuned to not reward length (`0, 0.5, 0.5`) — but it was dev-only tooling, never wired into `cloud_pipeline/pod_cut.py`, the console, or the share page.
+
+Two decisions were needed before touching code: (1) whether the burst reel should be a fully separate shareable artifact (own row, own page) or a second video bolted onto the existing single-reel-per-row shape — decided **separate row** (`kind` column, `'full'`/`'burst'`), since that's the shape `ADR-074`'s same-day "ranked-only reels" change had just simplified *to*, and every existing consumer's "one video per reel row" assumption stays true. (2) Where it runs — decided **cloud pipeline only** (`pod_cut.py`), not the local Flask webapp's route, since that's the actual product surface and the path already being tested end-to-end.
+
+A third question came from the operator wanting the *share page* itself to show both as one page: "one session id, one share page... hero section as a soft carousel." The obvious candidate for grouping them — the existing `session_id` field — turned out unsafe to expose publicly: `desktop/electron/main.js` builds it from the camera label plus the recording's own timestamp (`"Court_4-2026-09-04T13-01-09-341Z"`), which is guessable, not random — using it as the share page's sole access gate would have quietly undone `ADR-075`'s entire point ("the id has to be as unguessable as it already was"). Confirmed the `reels` table's public read policy is `USING (true)` (fully open, gated only by the app already knowing a value to query on) — so grouping by a *fresh*, separately-minted random UUID needs no RLS change, only a new column.
+
+**Decision.**
+
+1. **`reels` gets two new columns**: `kind text not null default 'full'` (check constraint `in ('full','burst')`) and `share_id uuid not null` (backfilled to each existing row's own `id`, so every pre-existing single-reel share link keeps working unchanged). Indexed for the grouped lookup.
+2. **`cloud_pipeline/run_cloud_job.py` mints a third UUID, `share_id`**, alongside the two reel ids (`reel_id` for full, a new `burst_reel_id`) — not reused from either reel's own id (that would make the page's identity depend on which kind happens to exist) and not `session_id` (unsafe, above).
+3. **`pod_cut.py` runs both `build_reel()` (full) and `build_burst_reel()` (burst) on the pod**, independently — each recomputes its own detection pass rather than sharing intermediate state with the other; cheap CPU work, not worth coupling two already-separately-reviewed scripts for. Burst's own target duration is fixed at 60s (`burst_moment_reel.py`'s own CLI default), not the caller's full-reel `--target-sec` — a 300s target would mean 50+ five-second clips. `reel/stats.json` becomes `{"full": {...}, "burst": {...} | null}` — `null` when burst's candidate pool (identical detection to full) comes up empty, in which case there's no `burst/highlight.mp4` to upload at all.
+4. **`run_desktop_job.py`'s `_report_reels()` (renamed from `_report_reel`) POSTs once per reel** in the result (1 or 2), all carrying the same `shareId`. The console's `/api/agents/reels` route accepts `shareId`/`kind`, falling back to `shareId = this reel's own id` and `kind = 'full'` when omitted (older callers).
+5. **`share.picvisionai.com/r/[shareId]`** (renamed from `[reelId]`) queries every `reels` row with that `share_id`, oldest-first (full is always reported before burst, so it's always the first slide when both exist), and renders them as a horizontal scroll-snap carousel — a small badge per slide ("Full reel"/"Quick hits"), dot indicators, an `IntersectionObserver`-driven `activeIndex`. The Instagram/TikTok/Download tiles retarget to whichever slide is centered; Facebook/X/Threads/WhatsApp/etc and **Copy link** are unaffected (they all carry the one page URL, not a specific video). A new **Download all** button (after Copy link, per the operator's placement) shares every slide's video at once via a multi-file `navigator.share()`, falling back to sequential plain downloads if the browser doesn't support that.
+6. Every slide's video is prefetched as a Blob **eagerly on mount, not lazily per-slide** — at most two short clips, cheap enough, and a lazy per-slide fetch would reintroduce the exact "awaited fetch mid-gesture misses Safari's activation window" bug this page's single-video version already hit and fixed the same day.
+7. The console's Reels tab groups rows by `share_id` into one card per session (was one card per row) — a session's full/burst stats both show, but one "Open reel page" link now, since it's one page.
+
+**Consequences.** Schema migration and all code changes (pipeline, console, share page) are in; `python3 -m pytest -q` (132 passed) and both Next.js apps' `tsc --noEmit`/`next build` are clean. **Not yet verified against a real pod run** — the next real cloud-pipeline test (sample-clip upload → calibrate → run) is what will confirm this end-to-end, including whether a real session's burst pool ever legitimately comes up empty in practice. `webapp/app.py`'s local dashboard preview route is deliberately untouched (still only ever shows the "full" reel) per the cloud-only scope decision above.
+
+---
+
 ## Template
 
 ```markdown

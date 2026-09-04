@@ -342,10 +342,21 @@ def run_cloud_job(job_dir):
         # reel is cut on the pod, never downloaded here) -- a different
         # result shape from run_job()'s local reel_chronological/reel_ranked
         # file paths above, so this reports bucket/key fields instead.
+        #
+        # Two reels now (full + burst, ADR-076) -- result["reels"] is a
+        # list of {kind, reel_id, key, stats}, burst entry absent if it had
+        # no qualifying candidates. reel_bucket/reel_ranked_key/reel_id/
+        # stats are kept as flat top-level fields too, sourced from the
+        # "full" entry, purely for webapp/app.py's own local preview route
+        # (_reel_presigned_url/preview_page) -- unchanged by this, still
+        # only ever shows the full reel. run_desktop_job.py's console
+        # report is the only reader of the new reels/share_id fields.
+        full = next(r for r in result["reels"] if r["kind"] == "full")
         _set_status(job_dir, stage="done", message="done", done=True, progress=None,
                     reel_bucket=result["bucket"],
-                    reel_ranked_key=result["ranked_key"], reel_id=result["reel_id"],
-                    stats=result["stats"])
+                    reel_ranked_key=full["key"], reel_id=full["reel_id"],
+                    stats=full["stats"],
+                    share_id=result["share_id"], reels=result["reels"])
     # (Exception, SystemExit), not just Exception -- cloud_pipeline.run_cloud_job's
     # own missing-calibration guard raises SystemExit (fine for its bare-CLI
     # use, where an uncaught SystemExit just prints one clean line and exits),

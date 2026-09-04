@@ -64,7 +64,7 @@ POD_CUT_SCRIPT = os.path.join(REPO_ROOT, "cloud_pipeline", "pod_cut.py")
 POD_REEL_DEPS = [
     "src/__init__.py", "src/job_log.py", "src/calib.py", "src/ball.py",
     "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
-    "scripts/rank_and_reel.py",
+    "scripts/rank_and_reel.py", "scripts/burst_moment_reel.py",
 ]
 
 # Same TF 2.15 pin as the local environment (EXPERIMENTS.md 2026-08-16) --
@@ -272,8 +272,20 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     # other venues' reels guessable; this same id is also handed to the
     # console below so the `reels` row's own primary key matches the R2
     # object, instead of Postgres minting an unrelated one.
+    #
+    # Two reels now (full + burst, 2026-09-04) share one page
+    # (share.picvisionai.com/r/<share_id>) but are still two independent
+    # R2 objects/DB rows -- share_id is a THIRD, separately-minted UUID,
+    # not session_id (desktop/electron/main.js builds that from the
+    # camera label + recording timestamp, which is predictable, not safe
+    # as the page's sole public access gate) and not reused from either
+    # reel_id (that would make the page's identity depend on which kind
+    # happens to exist, breaking once a session only ever gets one).
     reel_id = str(uuid.uuid4())
+    burst_reel_id = str(uuid.uuid4())
+    share_id = str(uuid.uuid4())
     ranked_key = f"reels/{reel_id}.mp4"
+    burst_key = f"reels/{burst_reel_id}.mp4"
 
     log(f"uploading video + calibration to R2 ({job_prefix})...", stage="r2_upload")
     r2_storage.upload_file(BUCKET, upload_video, video_key)
@@ -381,20 +393,31 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
         )
         runpod_pod.ssh_run(ip, port, keyfile, cut_cmd, timeout_sec=600, on_line=log)
 
-        log("uploading finished reel to R2...", stage="r2_download")
-        pod_r2("upload", ranked_key, "/workspace/reel/highlight_by_rank.mp4", timeout_sec=300)
-
         os.makedirs(reel_dir, exist_ok=True)
         stats_path = os.path.join(reel_dir, "stats.json")
         runpod_pod.scp_from(ip, port, keyfile, "/workspace/reel/stats.json", stats_path)
+        with open(stats_path) as f:
+            stats = json.load(f)
+
+        log("uploading finished reel(s) to R2...", stage="r2_download")
+        pod_r2("upload", ranked_key, "/workspace/reel/full/highlight_by_rank.mp4", timeout_sec=300)
+        # burst has no file at all when its own candidate pool came up
+        # empty (pod_cut.py's own docstring) -- checked here rather than
+        # attempting an upload that would just fail.
+        has_burst = stats.get("burst") is not None
+        if has_burst:
+            pod_r2("upload", burst_key, "/workspace/reel/burst/highlight.mp4", timeout_sec=300)
+        else:
+            log("no burst-moment candidates -- skipping burst reel")
     finally:
         log(f"terminating pod {pod_id}...")
         runpod_pod.terminate_pod(pod_id)
 
-    with open(stats_path) as f:
-        stats = json.load(f)
+    reels = [{"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]}]
+    if has_burst:
+        reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
-    result = {"ranked_key": ranked_key, "bucket": BUCKET, "stats": stats, "reel_id": reel_id}
+    result = {"bucket": BUCKET, "share_id": share_id, "reels": reels}
     log(f"done: {result}")
     return result
 
