@@ -77,11 +77,3 @@ contextBridge.exposeInMainWorld("cloudAPI", {
   status: () => ipcRenderer.invoke("cloud:status"),
   disconnect: () => ipcRenderer.invoke("cloud:disconnect"),
 });
-
-contextBridge.exposeInMainWorld("scheduleAPI", {
-  list: (cameraId) => ipcRenderer.invoke("schedule:list", cameraId),
-  add: (cameraId, session) => ipcRenderer.invoke("schedule:add", cameraId, session),
-  remove: (cameraId, sessionId) => ipcRenderer.invoke("schedule:remove", cameraId, sessionId),
-  rename: (cameraId, sessionId, label) => ipcRenderer.invoke("schedule:rename", cameraId, sessionId, label),
-  listAll: () => ipcRenderer.invoke("schedule:listAll"),
-});

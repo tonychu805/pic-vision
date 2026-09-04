@@ -745,14 +745,6 @@ pic-vision/
 │   │   │                              # agent's console-url/api-token (cloud.js's
 │   │   │                              # getCloudConnection()) so run_desktop_job.py
 │   │   │                              # can report the finished reel (ADR-074)
-│   │   ├── schedule.js                  # per-camera booked sessions (day + hour
-│   │   │                              # range, not a flat cell set -- two sessions
-│   │   │                              # that touch, e.g. 1-2pm then 2-4pm, stay
-│   │   │                              # distinct objects; overlap-safe add
-│   │   │                              # (trims/splits existing sessions), electron-
-│   │   │                              # store) -- config only; capture.js exists
-│   │   │                              # now (below) but isn't wired to sessions yet,
-│   │   │                              # still just a manual button
 │   │   ├── capture.js                   # manual start/stop recording -- spawns
 │   │   │                              # ffmpeg per TECH_SPEC §1.2's spec (RTSP pull,
 │   │   │                              # -c copy, 10-min segments, wallclock
@@ -859,11 +851,10 @@ pic-vision/
 │       ├── App.jsx                      # TitleBar + Sidebar + page switch
 │       ├── index.css                     # "Nocturne" design tokens, ported from
 │       │                                  # the handoff bundle's styles.css
-│       ├── components/                    # TitleBar, Sidebar, CameraCard, WeekGrid
-│       │                                    # (interactive 7x24 session booking grid
-│       │                                    # -- drag to book, click a booked
-│       │                                    # session to remove it), DayActivityStrip
-│       │                                    # (per-camera weekly summary bars)
+│       ├── components/                    # TitleBar, Sidebar, CameraCard (WeekGrid/
+│       │                                    # DayActivityStrip moved to the cloud
+│       │                                    # console 2026-09-04, see below -- Schedule
+│       │                                    # no longer lives here at all)
 │       ├── pages/                          # CamerasPage (real -- ManualAddDialog's
 │       │                                    # "Add" dropdown, 2026-09-03, offers "a
 │       │                                    # live camera" or "a sample clip" --
@@ -872,7 +863,10 @@ pic-vision/
 │       │                                    # connecting to anything), CameraDetailPage
 │       │                                    # (real -- incl. a real Start/Stop
 │       │                                    # recording control, capture.js, manual
-│       │                                    # button only, not tied to Schedule yet
+│       │                                    # button only, not triggered by the cloud
+│       │                                    # console's Schedule yet -- PIC-72, needs
+│       │                                    # the cloud->agent command channel
+│       │                                    # ADR-073 flagged as not yet built
 │       │                                    # (hidden for a sample-clip camera, which
 │       │                                    # has no live stream to record);
 │       │                                    # plus, PIC-68, a "Cloud pipeline" panel --
@@ -881,11 +875,11 @@ pic-vision/
 │       │                                    # calibration.js; a file-picker "import"
 │       │                                    # fallback stays available) + a "Send to
 │       │                                    # cloud" row per past recording, polling
-│       │                                    # pipeline.js's job status),
-│       │                                    # ScheduleOverviewPage + ScheduleEditorPage
-│       │                                    # (real -- session booking + rename/delete
-│       │                                    # list, schedule.js config only, still
-│       │                                    # not wired to capture.js),
+│       │                                    # pipeline.js's job status). Schedule
+│       │                                    # (ScheduleOverviewPage/ScheduleEditorPage)
+│       │                                    # migrated to the cloud console entirely
+│       │                                    # 2026-09-04 (ADR-071/PIC-73) -- removed
+│       │                                    # from here, not kept in both places.
 │       │                                    # Alerts/Credentials/Settings (mock data,
 │       │                                    # illustrative), CloudPage (2026-09-03,
 │       │                                    # real -- pairing-code input calling
@@ -963,6 +957,29 @@ pic-vision/
 │   │   │   │                             # than faked. A Calibration column
 │   │   │   │                             # too (2026-09-04) -- see below, Courts
 │   │   │   │                             # was merged in here, not kept separate
+│   │   │   ├── schedule/, schedule/[cameraId]/  # REAL as of 2026-09-04
+│   │   │   │                             # (ADR-071/PIC-73 -- migrated wholesale
+│   │   │   │                             # from desktop/, not rebuilt from
+│   │   │   │                             # scratch). Overview lists every camera's
+│   │   │   │                             # booked-session count + DayActivityStrip
+│   │   │   │                             # (components/app/), links to the per-
+│   │   │   │                             # camera editor (WeekGrid -- drag to book,
+│   │   │   │                             # click a booked session to remove it).
+│   │   │   │                             # lib/schedule.ts's createSession mirrors
+│   │   │   │                             # desktop's old schedule.js subtractRange
+│   │   │   │                             # exactly (overlap-safe: booking a new
+│   │   │   │                             # range trims/splits any existing session
+│   │   │   │                             # it overlaps). Runs client-side straight
+│   │   │   │                             # against Supabase (schedule_sessions
+│   │   │   │                             # table, RLS scoped to the venue owner --
+│   │   │   │                             # select+insert+delete, unlike reels/
+│   │   │   │                             # cameras' select-only policies, since this
+│   │   │   │                             # is edited directly in the browser, not
+│   │   │   │                             # agent-reported). Data/UI migration only --
+│   │   │   │                             # not wired to actually trigger local
+│   │   │   │                             # recording (PIC-72, needs the cloud->agent
+│   │   │   │                             # command channel ADR-073 flagged as not
+│   │   │   │                             # yet built)
 │   │   │   ├── reels/                      # REAL as of 2026-09-04 (ADR-074, was
 │   │   │   │                             # mock) -- queries the real `reels`
 │   │   │   │                             # table (agent_id -> agents.venue_id,
@@ -1045,7 +1062,10 @@ pic-vision/
 │   │   │                              # AppShell (client, wires the three above +
 │   │   │                              # usePathname()-derived page title),
 │   │   │                              # PageHeader, Pill (tone from
-│   │   │                              # lib/pillTone.ts), StatCard
+│   │   │                              # lib/pillTone.ts), StatCard, WeekGrid +
+│   │   │                              # DayActivityStrip (2026-09-04, ported
+│   │   │                              # from desktop/src/components/ -- see
+│   │   │                              # app/(app)/schedule/)
 │   ├── lib/
 │   │   ├── supabase/{client,server,admin}.ts  # browser (RLS), server-session (RLS),
 │   │   │                                    # and service-role (bypasses RLS -- only
@@ -1061,6 +1081,14 @@ pic-vision/
 │   │   │                                    # generate_presigned_url exactly,
 │   │   │                                    # same CLOUDFLARE_R2_* credentials
 │   │   │                                    # (.env.local, gitignored)
+│   │   ├── schedule.ts                        # ADR-071/PIC-73, 2026-09-04. Client-side
+│   │   │                                    # CRUD against schedule_sessions --
+│   │   │                                    # createSession's overlap-trim logic
+│   │   │                                    # ported from desktop/electron/schedule.js's
+│   │   │                                    # subtractRange. Runs straight from the
+│   │   │                                    # browser (not an API route) since RLS is
+│   │   │                                    # the access boundary and this is the
+│   │   │                                    # venue owner editing their own data
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented

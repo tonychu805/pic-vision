@@ -55,7 +55,6 @@ def _report_reel(console_url, api_token, session_id, camera_id, camera_label, st
                 "cameraId": camera_id,
                 "cameraLabel": camera_label,
                 "bucket": status["reel_bucket"],
-                "chronologicalKey": status["reel_chronological_key"],
                 "rankedKey": status["reel_ranked_key"],
                 "durationSec": (status.get("stats") or {}).get("total_duration_sec"),
                 "rallyCount": (status.get("stats") or {}).get("n_chosen"),

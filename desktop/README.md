@@ -357,67 +357,27 @@ shown there is fabricated:
 - **Remove camera** (camera detail page, 2026-09-01) -- the backend
   (`cameraAPI.remove`) existed from the start, but no button ever called
   it; a venue owner who added a camera by mistake had no way to take it
-  back out. Two-step (an inline "remove this camera and its schedule?"
-  confirm, not a first-click delete or the OS's native `window.confirm`
-  dialog, which would look out of place against this app's own custom
-  chrome) -- removing a camera also removes its schedule (`PIC-66`'s
-  `electron/schedule.js` sessions), same as it already did when this was
-  callable only via the IPC layer directly. Verified against a throwaway
-  dummy camera entry, not the operator's real one: added directly to the
-  on-disk store, removed through the new UI, confirmed gone from both the
-  list and disk, confirmed the real camera and its own schedule were
-  untouched throughout.
+  back out. Two-step (an inline "remove this camera?" confirm, not a
+  first-click delete or the OS's native `window.confirm` dialog, which
+  would look out of place against this app's own custom chrome).
+  Verified against a throwaway dummy camera entry, not the operator's
+  real one: added directly to the on-disk store, removed through the new
+  UI, confirmed gone from both the list and disk, confirmed the real
+  camera was untouched throughout.
 
-**Schedule page is real, but config-only** (`electron/schedule.js`,
-`src/pages/ScheduleOverviewPage.jsx` + `ScheduleEditorPage.jsx`,
-`src/components/WeekGrid.jsx` + `DayActivityStrip.jsx`, 2026-09-01,
-reworked same day from an earlier flat-cell version) -- per-camera
-**sessions**, not just "hours on/off": each is a distinct object (day of
-week + start/end hour, minimum block size one hour), so a 1-2pm booking
-and a back-to-back 2-4pm booking for someone else stay two separate
-sessions rather than merging into one indistinguishable 1-4pm block --
-the point being that each session is meant to become its own highlight
-job once real capture/detection exist, and a flat "is this hour active"
-set can't represent that boundary at all. Drag across the grid to book a
-session spanning exactly the hours dragged; click an existing session
-(on the grid, or its delete button in the list alongside the grid) to
-remove it. Each session renders as **one real rectangle**, not a stack
-of per-hour cells: `WeekGrid.jsx` splits an interaction layer (168
-plain, always-neutral cells handling all the click/drag hit-testing,
-unchanged) from a `pointer-events: none` visual overlay on top -- one
-absolutely-positioned `<div>` per session, sized to its full span
-(`spanRect()`: a 2-hour booking is one 34px-tall shape with its own
-single `border-radius`, not two 16px squares glued together). A stack
-of individually-rounded cells still reads as multiple pieces even with
-zero gap between them -- rounded corners repeat at every hour boundary
--- so a per-cell approach (tried twice: a border at each session's
-start/end hour, then a gap-closing "bridge" rect between same-session
-cells) could get the *spacing* right but never the *shape* right.
-Verified geometrically via `getBoundingClientRect`, not just eyeballed:
-a real continuous 2-hour booking measures as exactly one 34px element
-(not two 16px ones), two separate touching 1-hour bookings measure as
-two distinct 16px elements with a real 2px gap between them, and the
-hour-label gutter still lines up with its row. No per-session label/name
-in the UI yet (not needed yet) --
-`schedule.js`'s `label` field and rename IPC call still exist, just
-unused by this page for now. Booking a range that overlaps existing
-sessions trims or splits them rather than silently double-booking
-(`electron/schedule.js`'s `subtractRange`) -- verified directly, not
-just via the UI: a session added in the middle of an existing one
-correctly splits it into two independent remainders.
-**What this doesn't do yet: actually start or stop anything.** There's no
-real capture/recording process in this app at all (`PIC-66`,
-`STRATEGY.md` §5's "Local stream/footage management" bullet) -- this is
-the per-session boundary a future capture scheduler / highlight-job
-runner would read, built and verified now (real coordinate-based drags
-via CDP, persistence round-tripped through `scheduleAPI`, confirmed
-against the on-disk JSON) so it's ready to wire up rather than
-redesigned later. One real bug caught before shipping: the overview's
-per-day activity bars used a linear 0-24h height scale that rounded
-anything under ~6h/day to the same pixel height as 0h/day (color
-differed, height didn't) -- caught by reading the actual rendered
-`style.height` values via CDP, not just checking the numbers/colors
-looked right, fixed with a higher floor for any nonzero day.
+**Schedule moved to the cloud console entirely, 2026-09-04 (`ADR-071`/
+`PIC-73`).** Built here first 2026-09-01 (`electron/schedule.js`,
+`ScheduleOverviewPage.jsx`/`ScheduleEditorPage.jsx`,
+`WeekGrid.jsx`/`DayActivityStrip.jsx`) as the reference design, per
+`ADR-071`'s explicit plan -- migrated wholesale (data model, overlap-safe
+booking logic, and UI, all ported near-verbatim) rather than kept
+maintained in two places, and removed from this app entirely in the
+same change. See `pic-vision-cloud-console`'s own `TECH_SPEC.md` entry
+(`app/(app)/schedule/`) for what it looks like now. **Still not wired to
+actually start or stop a recording** (`PIC-72`) -- that gap didn't close
+with this move; it still needs the cloud->agent command channel
+`ADR-073` flagged as not yet built, so the local agent has a way to learn
+about a booked session at all.
 
 **Alerts, Credentials, and Scan Settings pages are pixel-matched but not
 functional** -- there's no alert monitoring, no stored/tried credential

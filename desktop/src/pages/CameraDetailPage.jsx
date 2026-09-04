@@ -534,10 +534,12 @@ function EditableCameraName({ camera, onRenamed }) {
 }
 
 // Two-step: "Remove camera" first shows an inline confirm rather than
-// removing on the first click (a real camera + its schedule are both
-// gone for good -- electron-store, no undo) or using window.confirm's
-// native OS dialog, which would look inconsistent against this app's own
-// custom-drawn chrome.
+// removing on the first click (a real camera is gone for good --
+// electron-store, no undo) or using window.confirm's native OS dialog,
+// which would look inconsistent against this app's own custom-drawn
+// chrome. Doesn't touch that camera's cloud schedule (ADR-071/PIC-73,
+// 2026-09-04) -- Schedule lives entirely in the cloud console now, not
+// something this local removal can or should reach into.
 function RemoveCameraControl({ camera, onRemoved }) {
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
@@ -558,7 +560,7 @@ function RemoveCameraControl({ camera, onRemoved }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
-      <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Remove this camera and its schedule?</span>
+      <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Remove this camera?</span>
       <button className="btn btn-secondary" style={{ fontSize: 12 }} disabled={removing} onClick={() => setConfirming(false)}>Cancel</button>
       <button className="btn btn-primary" style={{ fontSize: 12, color: "var(--color-accent-2-400)", borderColor: "var(--color-accent-2-400)" }} disabled={removing} onClick={remove}>
         {removing ? "Removing…" : "Remove"}

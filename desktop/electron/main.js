@@ -16,7 +16,6 @@ import {
   addCameraFromSampleClip,
 } from "./cameras/store.js";
 import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
-import { listSessions, addSession, removeSession, renameSession, listSchedules, removeSchedule } from "./schedule.js";
 import { startRecording, stopRecording, stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
@@ -44,9 +43,7 @@ function registerCameraHandlers() {
     return addCamera(config);
   });
   ipcMain.handle("cameras:remove", async (_event, id) => {
-    const cameras = removeCamera(id);
-    removeSchedule(id); // no orphaned schedule left behind for a deleted camera
-    return cameras;
+    return removeCamera(id);
   });
   ipcMain.handle("cameras:rename", async (_event, id, label) => {
     return renameCamera(id, label);
@@ -88,27 +85,6 @@ function registerCameraHandlers() {
   });
   ipcMain.handle("system:pickVideoFile", async () => {
     return pickVideoFile();
-  });
-}
-
-// Per-camera booked sessions (schedule.js) -- storage + UI only, see that
-// file's header for why nothing here actually starts/stops capture yet
-// (PIC-66 doesn't exist).
-function registerScheduleHandlers() {
-  ipcMain.handle("schedule:list", async (_event, cameraId) => {
-    return listSessions(cameraId);
-  });
-  ipcMain.handle("schedule:add", async (_event, cameraId, session) => {
-    return addSession(cameraId, session);
-  });
-  ipcMain.handle("schedule:remove", async (_event, cameraId, sessionId) => {
-    return removeSession(cameraId, sessionId);
-  });
-  ipcMain.handle("schedule:rename", async (_event, cameraId, sessionId, label) => {
-    return renameSession(cameraId, sessionId, label);
-  });
-  ipcMain.handle("schedule:listAll", async () => {
-    return listSchedules();
   });
 }
 
@@ -269,7 +245,6 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerCameraHandlers();
-  registerScheduleHandlers();
   registerCaptureHandlers();
   registerCalibrationHandlers();
   registerPipelineHandlers();

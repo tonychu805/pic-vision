@@ -4,8 +4,6 @@ import Sidebar from "./components/Sidebar.jsx";
 import CamerasPage from "./pages/CamerasPage.jsx";
 import CameraDetailPage from "./pages/CameraDetailPage.jsx";
 import { configuredCard } from "./lib/cameraView.js";
-import ScheduleOverviewPage from "./pages/ScheduleOverviewPage.jsx";
-import ScheduleEditorPage from "./pages/ScheduleEditorPage.jsx";
 import AlertsPage from "./pages/AlertsPage.jsx";
 import CredentialsPage from "./pages/CredentialsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
@@ -14,7 +12,6 @@ import CloudPage from "./pages/CloudPage.jsx";
 export default function App() {
   const [nav, setNav] = useState("cameras");
   const [selectedCard, setSelectedCard] = useState(null);
-  const [scheduleCamera, setScheduleCamera] = useState(null);
   const [cameraCount, setCameraCount] = useState(0);
 
   const openCamera = (card) => {
@@ -25,16 +22,6 @@ export default function App() {
   const backToGrid = () => {
     setSelectedCard(null);
     setNav("cameras");
-  };
-
-  const editSchedule = (camera) => {
-    setScheduleCamera(camera);
-    setNav("scheduleDetail");
-  };
-
-  const backToScheduleOverview = () => {
-    setScheduleCamera(null);
-    setNav("schedule");
   };
 
   return (
@@ -52,8 +39,8 @@ export default function App() {
       <TitleBar />
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <Sidebar
-          nav={nav === "detail" ? "cameras" : nav === "scheduleDetail" ? "schedule" : nav}
-          onNavigate={(k) => { setSelectedCard(null); setScheduleCamera(null); setNav(k); }}
+          nav={nav === "detail" ? "cameras" : nav}
+          onNavigate={(k) => { setSelectedCard(null); setNav(k); }}
           deviceCount={cameraCount}
         />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
@@ -80,10 +67,6 @@ export default function App() {
                 setSelectedCard((prev) => configuredCard(camera, prev.state));
               }}
             />
-          )}
-          {nav === "schedule" && <ScheduleOverviewPage onEditCamera={editSchedule} />}
-          {nav === "scheduleDetail" && scheduleCamera && (
-            <ScheduleEditorPage camera={scheduleCamera} onBack={backToScheduleOverview} />
           )}
           {nav === "alerts" && <AlertsPage />}
           {nav === "credentials" && <CredentialsPage />}

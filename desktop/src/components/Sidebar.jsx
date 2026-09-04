@@ -8,7 +8,6 @@ import logo from "../assets/pic-vision-logo-white.png";
 
 const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
-  { key: "schedule", label: "Schedule", icon: "ph-calendar" },
   { key: "alerts", label: "Alerts", icon: "ph-warning-circle" },
   { key: "credentials", label: "Credentials", icon: "ph-key" },
   { key: "settings", label: "Scan settings", icon: "ph-sliders-horizontal" },

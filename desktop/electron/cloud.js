@@ -1,9 +1,12 @@
 // First real outbound connectivity from the local agent to the cloud
 // console (ADR-071's "polls or a lightweight persistent connection for
 // commands/status, never an inbound port"). Pairing + a heartbeat that
-// also reports the real camera list (2026-09-03) -- no court/reel sync
-// yet, that's later work. Same electron-store-per-concern convention as
-// cameras/store.js and schedule.js.
+// also reports the real camera list (2026-09-03). Reel reporting (ADR-074,
+// 2026-09-04) is a separate one-shot POST from cloud_pipeline/
+// run_desktop_job.py, not part of this heartbeat. Schedule migrated to
+// the cloud console entirely the same day (ADR-071/PIC-73) -- no local
+// schedule.js left to report on. Same electron-store-per-concern
+// convention as cameras/store.js.
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings } from "./capture.js";
