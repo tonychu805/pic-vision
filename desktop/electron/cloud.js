@@ -232,9 +232,14 @@ async function processCommands() {
 export function startHeartbeatLoop() {
   if (heartbeatTimer) return; // already running
   if (!getCloudConnection()) return;
-  const tick = () => {
+  const tick = async () => {
+    // processCommands() first, not sendHeartbeat() -- a command executed
+    // this tick (e.g. start_recording) changes local state (isRecording())
+    // that cameraStatuses() reads; running the heartbeat first would report
+    // the *old* state and make the console wait a full extra cycle to see
+    // a change that already happened this tick.
+    await processCommands();
     sendHeartbeat(); // don't wait a full interval for the first "online" signal
-    processCommands();
   };
   tick();
   heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);
