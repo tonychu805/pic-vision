@@ -1243,6 +1243,24 @@ No hosted, multi-venue, authenticated web app exists anywhere in this repo today
 
 ---
 
+## ADR-073 — Cloud job API is vendor-neutral; RunPod and R2 are invisible on both sides of the product
+
+**Date:** 2026-09-04 · **Status:** accepted (design only — nothing in this ADR is built yet)
+
+**Context.** `PIC-71` flagged that `cloud_pipeline/r2_storage.py` and `cloud_pipeline/runpod_pod.py` authenticate with the operator's own raw account-level `RUNPOD_API_KEY`/`CLOUDFLARE_R2_*` keys, loaded from a local `.env` — fine for the operator's own CLI, not something that can be embedded in a desktop client distributed to external venues (anyone could extract full account access from the installed app). `pic-vision-cloud-console` already has the missing per-device credential primitive: a per-agent bearer token (`agents.api_token_hash`, issued once via a pairing code, checked on every `/api/agents/heartbeat` call) — real, working, in production. The design question was how to extend that existing mechanism to also cover job execution, without reintroducing raw account keys on the client.
+
+**Decision.**
+
+1. **A new vendor-neutral job API on the cloud console**, authenticated the same way as `/heartbeat` (`Authorization: Bearer <agent's apiToken>`): `POST /api/agents/jobs` → `{job_id}`, `GET /api/agents/jobs/:id` → `{status, output_url}`. The desktop client only ever talks to this contract.
+2. **R2 access is via short-lived presigned S3 URLs**, minted server-side by the job API using the real R2 keys (env vars on the Next.js deployment, never shipped to any client), scoped to that agent's own `venue_id` prefix (`venues/<venue_id>/jobs/<job_id>/...`). The desktop client uploads/downloads directly against the presigned URL — no raw R2 credential ever touches it, and a compromised client leaks at most one job's worth of access. **The prefix scoping is a server-side discipline, not an R2-enforced guarantee** — R2 doesn't know or care what prefix a presigned URL points to; the security boundary is entirely the job-API route correctly deriving the prefix from the authenticated agent's own `venue_id` before signing. A bug there defeats the whole point, so this needs a test that asserts an agent can never get a presigned URL outside its own venue's prefix.
+3. **RunPod is fully hidden inside the job API's own fulfillment logic** — never named, never exposed, anywhere in the desktop-client-facing or venue-owner-facing surface. Unlike R2, RunPod has no equivalent to a scoped/short-lived presigned URL, so there's no way to hand a venue-scoped credential to the client at all; the only safe shape is the console proxying the whole RunPod interaction server-side, holding the real `RUNPOD_API_KEY` itself. This also means the fulfillment vendor is swappable later without ever touching the desktop-facing contract.
+4. **Local GPU inference never touches this API at all.** Whether a venue's box runs detection locally or needs the cloud fallback is a decision the desktop client makes entirely on its own (does this machine have a usable GPU?); the job API exists purely for the cloud-fallback case.
+5. **Product-level principle, both surfaces:** a venue owner's mental model, whether they're looking at the desktop client or the cloud console, is "manage my cameras" and "watch my clips" — full stop. Cloudflare, RunPod, R2, presigned URLs, job IDs — none of it is ever visible to them. This is the processing-side extension of the project's existing "any camera, no vendor-specific setup" stance (`ADR-071`). Concretely: the desktop UI shows something like "processing your last session" → "ready to view," not a job-status screen full of infra jargon; the cloud console's Reels tab (already scaffolded, currently mock data) is where a venue owner actually sees output.
+
+**Consequences.** Nothing here is built — this is the target shape for `PIC-71` and a real prerequisite for `PIC-68` (cloud_pipeline wiring) ever running against anything but the operator's own footage. Explicitly out of scope for this ADR, flagged as a related-but-separate follow-up: **per-venue usage/cost limits.** The moment any paired venue can trigger a billed RunPod job through this proxy, "how much spend can one compromised or just-buggy desktop client generate" becomes a real question that this design doesn't answer — rate limits or a budget cap belong in the job API's fulfillment logic, but need their own design pass. Also flagged, not designed here: **an internal operator tool to manage multiple venues/agent instances** (view all paired venues, their job/usage history, revoke a compromised agent's token) — the cloud console built so far is entirely venue-owner-facing; nothing exists yet for the operator's own cross-venue view. Tracked as a new issue rather than folded into this one.
+
+---
+
 ## Template
 
 ```markdown
