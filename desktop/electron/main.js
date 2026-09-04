@@ -173,7 +173,10 @@ function registerPipelineHandlers() {
     // is passed straight through instead of looking for session-*.mkv
     // files that were never written for this camera.
     const videoPath = camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined;
-    return runCloudJob({ recordingDir, videoPath, calibPath: camera.calibPath, targetSec, sessionId });
+    return runCloudJob({
+      recordingDir, videoPath, calibPath: camera.calibPath, targetSec, sessionId,
+      cameraId: camera.id, cameraLabel: camera.label,
+    });
   });
   ipcMain.handle("pipeline:status", async (_event, jobDir) => {
     return pipelineStatus(jobDir);

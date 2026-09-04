@@ -627,15 +627,29 @@ pic-vision/
 │   │                              # inventing a second one, so desktop/'s the only new
 │   │                              # import direction (desktop -> webapp, still never
 │   │                              # webapp -> desktop or cloud_pipeline -> either)
-│   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> R2 upload -> RunPod runs
-│   │                                # pod_infer.py unmodified -> R2 -> local build_reel()
+│   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> 1080p proxy -> R2 upload
+│   │                                # -> RunPod runs pod_infer.py unmodified, then pod_cut.py
+│   │                                # (ADR-074, 2026-09-04) -> R2 upload of the finished reel.
+│   │                                # predictions.csv never leaves the pod; only the two
+│   │                                # highlight mp4s + a small stats.json come back
+│   ├── pod_cut.py                     # ADR-074: runs ON the pod right after inference -- thin
+│   │                                # wrapper around scripts/rank_and_reel.py's build_reel(),
+│   │                                # deployed via a small tarball (run_cloud_job.py's
+│   │                                # POD_REEL_DEPS) since the pod has no other way to get
+│   │                                # src/'s modules
 │   ├── run_desktop_job.py            # PIC-68: CLI wrapper for desktop/'s pipeline.js --
 │   │                                # writes job.json then calls webapp.pipeline's
 │   │                                # run_cloud_job(job_dir) on a background thread so a
 │   │                                # SIGINT/SIGTERM from the Electron parent can call its
 │   │                                # cancel_job(job_dir) (terminates any RunPod pod already
-│   │                                # created, not just this process)
-│   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2
+│   │                                # created, not just this process); on success, with
+│   │                                # --console-url/--api-token (from cloud.js's stored
+│   │                                # pairing), POSTs the finished reel to the cloud
+│   │                                # console's /api/agents/reels (ADR-074, best-effort --
+│   │                                # a failure here doesn't fail the job, the reel already
+│   │                                # exists in R2 either way)
+│   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
+│   │                                    # generate_presigned_url, ADR-074)
 │   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
 │   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
@@ -723,7 +737,11 @@ pic-vision/
 │   │   │                              # copy); polls/relays the same status.json
 │   │   │                              # contract webapp/pipeline.py's dashboard route
 │   │   │                              # already uses; cancel sends SIGINT, same
-│   │   │                              # "never a hard kill" convention as capture.js
+│   │   │                              # "never a hard kill" convention as capture.js;
+│   │   │                              # passes cameraId/cameraLabel + the paired
+│   │   │                              # agent's console-url/api-token (cloud.js's
+│   │   │                              # getCloudConnection()) so run_desktop_job.py
+│   │   │                              # can report the finished reel (ADR-074)
 │   │   ├── schedule.js                  # per-camera booked sessions (day + hour
 │   │   │                              # range, not a flat cell set -- two sessions
 │   │   │                              # that touch, e.g. 1-2pm then 2-4pm, stay
@@ -936,18 +954,35 @@ pic-vision/
 │   │   │   │                             # as of this date, sourced from
 │   │   │   │                             # cameras/store.js + capture.js via
 │   │   │   │                             # cloud.js's heartbeat. Still no
-│   │   │   │                             # Court/Buffer/Queued/pipeline-stage --
-│   │   │   │                             # none of those correspond to any real
+│   │   │   │                             # Buffer/Queued/pipeline-stage -- none
+│   │   │   │                             # of those correspond to any real
 │   │   │   │                             # per-camera state yet, dropped rather
-│   │   │   │                             # than faked
-│   │   │   ├── courts/, reels/, members/, team/  # still mock data
-│   │   │   │                             # (lib/mockData.ts), disabled action
-│   │   │   │                             # buttons with a title tooltip explaining
-│   │   │   │                             # why (same PreviewBanner-style honesty
-│   │   │   │                             # convention as desktop/'s mock pages);
-│   │   │   │                             # reels/page.tsx's All/Ready/Processing
-│   │   │   │                             # filter is real client-side filtering,
-│   │   │   │                             # trivial enough not to leave inert
+│   │   │   │                             # than faked. A Calibration column
+│   │   │   │                             # too (2026-09-04) -- see below, Courts
+│   │   │   │                             # was merged in here, not kept separate
+│   │   │   ├── reels/                      # REAL as of 2026-09-04 (ADR-074, was
+│   │   │   │                             # mock) -- queries the real `reels`
+│   │   │   │                             # table (agent_id -> agents.venue_id,
+│   │   │   │                             # same scoping as every other agent-
+│   │   │   │                             # owned table), each row links to
+│   │   │   │                             # /api/reels/[id]/video/[which] for
+│   │   │   │                             # real playback. No status filter (a
+│   │   │   │                             # reel row only exists once its job
+│   │   │   │                             # already finished, no partial state
+│   │   │   │                             # to filter on) and no thumbnail (no
+│   │   │   │                             # frame capture exists anywhere in
+│   │   │   │                             # the pipeline) -- dropped rather than
+│   │   │   │                             # faked, same as Courts/Cameras above.
+│   │   │   │                             # Courts itself (real as of 09-04
+│   │   │   │                             # morning, then merged into Cameras
+│   │   │   │                             # that afternoon -- one camera is one
+│   │   │   │                             # court in this system, a separate
+│   │   │   │                             # page was redundant) no longer exists
+│   │   │   ├── members/, team/             # still mock data (lib/mockData.ts),
+│   │   │   │                             # disabled action buttons with a title
+│   │   │   │                             # tooltip explaining why (same
+│   │   │   │                             # PreviewBanner-style honesty
+│   │   │   │                             # convention as desktop/'s mock pages)
 │   │   │   └── settings/page.tsx          # mostly mock form fields, EXCEPT the
 │   │   │                                 # "Pairing code" tab under Desktop
 │   │   │                                 # utility -- the real pairing flow
@@ -961,19 +996,33 @@ pic-vision/
 │   │       ├── pair/route.ts            # unauthenticated (the auth bootstrap itself)
 │   │       │                          # -- exchanges a valid pairing code for a
 │   │       │                          # long-lived API token (stored as a hash only)
-│   │       └── heartbeat/route.ts        # Bearer-token authenticated -- updates
-│   │                                    # status/camera_count/last_seen_at; as of
-│   │                                    # 2026-09-03 also upserts a `cameras` array
-│   │                                    # if the desktop agent sent one (label/
-│   │                                    # connectionType/manufacturer/model/status/
-│   │                                    # firmwareVersion/serialNumber/addedAt/
-│   │                                    # isRecording/isCalibrated/recordingCount/
-│   │                                    # lastRecordingAt -- hostname/port/
-│   │                                    # username/password/streamUri never leave
-│   │                                    # the agent) into public.cameras, then
-│   │                                    # deletes whatever's NOT in that payload
-│   │                                    # anymore (handles a removed camera, or
-│   │                                    # the whole list going empty)
+│   │       ├── heartbeat/route.ts        # Bearer-token authenticated -- updates
+│   │       │                            # status/camera_count/last_seen_at; as of
+│   │       │                            # 2026-09-03 also upserts a `cameras` array
+│   │       │                            # if the desktop agent sent one (label/
+│   │       │                            # connectionType/manufacturer/model/status/
+│   │       │                            # firmwareVersion/serialNumber/addedAt/
+│   │       │                            # isRecording/isCalibrated/recordingCount/
+│   │       │                            # lastRecordingAt -- hostname/port/
+│   │       │                            # username/password/streamUri never leave
+│   │       │                            # the agent) into public.cameras, then
+│   │       │                            # deletes whatever's NOT in that payload
+│   │       │                            # anymore (handles a removed camera, or
+│   │       │                            # the whole list going empty)
+│   │       └── reels/route.ts             # ADR-074, 2026-09-04. Bearer-token
+│   │                                    # authenticated, same pattern as
+│   │                                    # heartbeat -- cloud_pipeline/
+│   │                                    # run_desktop_job.py posts here once
+│   │                                    # after a cloud job finishes (not
+│   │                                    # polled). Inserts one `reels` row
+│   │                                    # (agent_id from the token, camera_id/
+│   │                                    # cameraLabel/sessionId/bucket/keys/
+│   │                                    # duration/rallyCount from the body)
+│   ├── api/reels/[id]/video/[which]/route.ts  # ADR-074. Redirects to a
+│   │                                    # presigned R2 URL (lib/r2.ts) --
+│   │                                    # user-session Supabase client, not
+│   │                                    # admin, so `reels`' own RLS policy
+│   │                                    # is the actual access boundary
 │   ├── components/app/                 # Sidebar (nav groups matching the mockup,
 │   │   │                              # real collapse toggle), TopBar (title +
 │   │   │                              # real Sign out), AlertBanner (REAL --
@@ -992,6 +1041,13 @@ pic-vision/
 │   │   │                                    # api_token_hash, not a Supabase session)
 │   │   ├── agentToken.ts                     # pairing-code + API-token generation/
 │   │   │                                    # hashing, shared by pair.ts/heartbeat.ts
+│   │   ├── r2.ts                              # ADR-074, 2026-09-04. Server-only
+│   │   │                                    # R2 client (@aws-sdk/client-s3 +
+│   │   │                                    # s3-request-presigner) -- mirrors
+│   │   │                                    # cloud_pipeline/r2_storage.py's
+│   │   │                                    # generate_presigned_url exactly,
+│   │   │                                    # same CLOUDFLARE_R2_* credentials
+│   │   │                                    # (.env.local, gitignored)
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented

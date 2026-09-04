@@ -15,6 +15,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PYTHON_BIN } from "./pythonBin.js";
+import { getCloudConnection } from "./cloud.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -77,7 +78,14 @@ function concatSegments(recordingDir) {
 // camera (2026-09-03) already has a single, real video file (no segments
 // to join), so main.js passes its path straight through rather than
 // looking for session-*.mkv files that were never written.
-export function runCloudJob({ recordingDir, calibPath, targetSec, sessionId, videoPath: explicitVideoPath }) {
+//
+// cameraId/cameraLabel (ADR-074) let run_desktop_job.py report the
+// finished reel to the cloud console once the job succeeds -- only
+// possible when this agent is actually paired (getCloudConnection()
+// returns something); an unpaired desktop still runs the job fine, it
+// just has nowhere to report to, same as heartbeat already no-ops
+// unpaired (cloud.js's own sendHeartbeat).
+export function runCloudJob({ recordingDir, calibPath, targetSec, sessionId, videoPath: explicitVideoPath, cameraId, cameraLabel }) {
   if (active.has(recordingDir)) throw new Error("A cloud job is already running for this recording");
   if (!calibPath || !existsSync(calibPath)) throw new Error(`No calibration file at ${calibPath}`);
   if (explicitVideoPath && !existsSync(explicitVideoPath)) throw new Error(`No video file at ${explicitVideoPath}`);
@@ -94,6 +102,12 @@ export function runCloudJob({ recordingDir, calibPath, targetSec, sessionId, vid
     "--session-id", sessionId,
     "--out-dir", jobDir,
   ];
+  if (cameraId) args.push("--camera-id", cameraId);
+  if (cameraLabel) args.push("--camera-label", cameraLabel);
+  const connection = getCloudConnection();
+  if (connection) {
+    args.push("--console-url", connection.consoleUrl, "--api-token", connection.apiToken);
+  }
   const proc = spawn(PYTHON_BIN, args, { cwd: REPO_ROOT, stdio: "ignore" });
   active.set(recordingDir, { proc, jobDir });
   proc.on("exit", () => active.delete(recordingDir));

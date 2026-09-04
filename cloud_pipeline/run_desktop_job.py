@@ -36,6 +36,43 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
 
+def _report_reel(console_url, api_token, session_id, camera_id, camera_label, status):
+    """POSTs a finished cloud job's reel to the cloud console (ADR-074) --
+    console_url/api_token come from desktop/electron/cloud.js's stored
+    pairing connection (pipeline.js passes them through as CLI args), so
+    this only runs at all for a paired agent. Best-effort: a failure here
+    doesn't fail the job itself -- the reel already exists in R2 either
+    way, this is just the cloud console finding out about it. If it's
+    missed, the reel is still recoverable by hand from R2's jobs/<session_id>/
+    prefix; nothing unrecoverable is lost."""
+    import requests
+    try:
+        resp = requests.post(
+            f"{console_url}/api/agents/reels",
+            headers={"Authorization": f"Bearer {api_token}"},
+            json={
+                "sessionId": session_id,
+                "cameraId": camera_id,
+                "cameraLabel": camera_label,
+                "bucket": status["reel_bucket"],
+                "chronologicalKey": status["reel_chronological_key"],
+                "rankedKey": status["reel_ranked_key"],
+                "durationSec": (status.get("stats") or {}).get("total_duration_sec"),
+                "rallyCount": (status.get("stats") or {}).get("n_chosen"),
+            },
+            timeout=30,
+        )
+        if resp.ok:
+            print(f"[run_desktop_job] reported finished reel to cloud console "
+                  f"(reel {resp.json().get('reelId')})")
+        else:
+            print(f"[run_desktop_job] WARNING: cloud console rejected the reel "
+                  f"report (HTTP {resp.status_code}): {resp.text[:500]}")
+    except Exception as e:
+        print(f"[run_desktop_job] WARNING: couldn't report finished reel to "
+              f"cloud console: {e}")
+
+
 def main():
     p = argparse.ArgumentParser(description="Run one cloud-pipeline job for the desktop agent")
     p.add_argument("--video", required=True)
@@ -43,6 +80,10 @@ def main():
     p.add_argument("--target-sec", type=float, default=300.0)
     p.add_argument("--session-id", required=True)
     p.add_argument("--out-dir", required=True)
+    p.add_argument("--camera-id", default=None)
+    p.add_argument("--camera-label", default=None)
+    p.add_argument("--console-url", default=None)
+    p.add_argument("--api-token", default=None)
     args = p.parse_args()
 
     job_dir = args.out_dir
@@ -70,6 +111,11 @@ def main():
 
     with open(os.path.join(job_dir, "status.json")) as f:
         status = json.load(f)
+
+    if status.get("stage") not in ("error", "cancelled") and args.console_url and args.api_token:
+        _report_reel(args.console_url, args.api_token, args.session_id,
+                     args.camera_id, args.camera_label, status)
+
     sys.exit(1 if status.get("stage") in ("error", "cancelled") else 0)
 
 
