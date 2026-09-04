@@ -463,9 +463,27 @@ def _reel_path(job_dir, which):
     return status.get("reel_ranked" if which == "ranked" else "reel_chronological")
 
 
+def _reel_presigned_url(job_dir, which):
+    # A cloud job's reel lives only in R2 since ADR-074 (cut on the pod,
+    # never downloaded locally) -- status.json carries a bucket/key pair
+    # instead of a local path for that case. A local job's reel keeps using
+    # the plain local-file route above; this is checked first only because
+    # a cloud job's status has no reel_chronological/reel_ranked path at all.
+    status = _read_status(job_dir)
+    bucket = status.get("reel_bucket")
+    key = status.get("reel_ranked_key" if which == "ranked" else "reel_chronological_key")
+    if not bucket or not key:
+        return None
+    from cloud_pipeline import r2_storage
+    return r2_storage.generate_presigned_url(bucket, key)
+
+
 @app.route("/job/<job_id>/video/<which>")
 def serve_video(job_id, which):
     job_dir = _job_dir(job_id)
+    url = _reel_presigned_url(job_dir, which)
+    if url:
+        return redirect(url)
     path = _reel_path(job_dir, which)
     if not path or not os.path.exists(path):
         abort(404)
@@ -475,6 +493,9 @@ def serve_video(job_id, which):
 @app.route("/job/<job_id>/download/<which>")
 def download_video(job_id, which):
     job_dir = _job_dir(job_id)
+    url = _reel_presigned_url(job_dir, which)
+    if url:
+        return redirect(url)
     path = _reel_path(job_dir, which)
     if not path or not os.path.exists(path):
         abort(404)

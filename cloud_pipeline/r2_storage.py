@@ -40,3 +40,12 @@ def object_exists(bucket, key):
         return True
     except Exception:
         return False
+
+
+def generate_presigned_url(bucket, key, expires_in=3600):
+    """A short-lived GET URL, scoped to this one object -- how a cloud-path
+    reel (R2-only since ADR-074, never downloaded locally) gets served to a
+    browser without exposing the account's real R2 credentials. expires_in
+    is seconds (default 1hr, plenty for one viewing/download session)."""
+    return _client().generate_presigned_url(
+        "get_object", Params={"Bucket": bucket, "Key": key}, ExpiresIn=expires_in)

@@ -50,14 +50,14 @@ except ImportError:
     CLOUD_STAGES = [
         ("drift_check", "Checking camera drift"),
         ("convert", "Converting to 30fps CFR"),
-        ("proxy", "Creating 720p upload proxy"),
+        ("proxy", "Creating 1080p upload proxy"),
         ("r2_upload", "Uploading video to cloud storage"),
         ("pod_create", "Creating RunPod GPU pod"),
         ("pod_install", "Installing dependencies on pod"),
         ("pod_download", "Downloading video onto pod"),
         ("inference", "Running TrackNet inference (RunPod GPU)"),
-        ("r2_download", "Uploading results, downloading locally"),
-        ("reel", "Detecting rallies, ranking, cutting reel"),
+        ("cut", "Detecting rallies, ranking, cutting reel (on pod)"),
+        ("r2_download", "Uploading finished reel to cloud storage"),
     ]
 
 # pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min".
@@ -338,9 +338,14 @@ def run_cloud_job(job_dir):
                              progress_fn=progress, pod_id_fn=on_pod_id,
                              should_cancel_fn=lambda: _is_cancelled(job_id))
 
+        # Cloud path returns R2 keys, not local file paths (ADR-074 -- the
+        # reel is cut on the pod, never downloaded here) -- a different
+        # result shape from run_job()'s local reel_chronological/reel_ranked
+        # file paths above, so this reports bucket/key fields instead.
         _set_status(job_dir, stage="done", message="done", done=True, progress=None,
-                    reel_chronological=result["chronological"],
-                    reel_ranked=result["ranked"], stats=result["stats"])
+                    reel_bucket=result["bucket"],
+                    reel_chronological_key=result["chronological_key"],
+                    reel_ranked_key=result["ranked_key"], stats=result["stats"])
     # (Exception, SystemExit), not just Exception -- cloud_pipeline.run_cloud_job's
     # own missing-calibration guard raises SystemExit (fine for its bare-CLI
     # use, where an uncaught SystemExit just prints one clean line and exits),
