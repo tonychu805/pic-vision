@@ -7,6 +7,8 @@
 // the cloud console entirely the same day (ADR-071/PIC-73) -- no local
 // schedule.js left to report on. Same electron-store-per-concern
 // convention as cameras/store.js.
+import { randomUUID } from "node:crypto";
+import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings } from "./capture.js";
@@ -26,6 +28,43 @@ export function getCloudConnection() {
   return store.get("connection", null);
 }
 
+// A stable identity for this machine, independent of pairing state --
+// generated once and kept even across disconnectCloud() (unlike
+// "connection", which is cleared there). Without this, every re-pair
+// (including a retried/failed attempt against the wrong URL) minted a
+// brand-new `agents` row server-side with no way to recognize "this is
+// the same desktop as before" -- duplicate agents *and* duplicate
+// cameras, since camera-heartbeat sync just re-inserts under whatever
+// agent_id the current token maps to. The pair endpoint uses this to
+// reclaim the existing row for this device instead.
+function getOrCreateDeviceId() {
+  let id = store.get("deviceId");
+  if (!id) {
+    id = randomUUID();
+    store.set("deviceId", id);
+  }
+  return id;
+}
+
+// Operator-editable label for this machine on the console's "Connected
+// agents" table (Overview page) -- every agent row otherwise shows the
+// same DB default ("Desktop agent"), useless once a venue has more than
+// one. Defaults to the machine's hostname so it's not blank before the
+// operator ever visits the Cloud console page. Synced on every heartbeat
+// rather than only at pairing time, so a rename takes effect within one
+// interval without needing to re-pair.
+export function getAgentName() {
+  return store.get("agentName", hostname());
+}
+
+export function setAgentName(name) {
+  const trimmed = String(name ?? "").trim();
+  if (!trimmed) return getAgentName();
+  store.set("agentName", trimmed);
+  sendHeartbeat(); // push the rename immediately rather than waiting for the next interval
+  return trimmed;
+}
+
 // Exchanges a short-lived pairing code (typed in from the console's
 // dashboard) for a long-lived API token, stored locally the same way
 // camera passwords already are (cameras/store.js's electron-store JSON --
@@ -35,7 +74,7 @@ export async function pairAgent(pairingCode, consoleUrl = DEFAULT_CONSOLE_URL) {
   const res = await fetch(`${consoleUrl}/api/agents/pair`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pairingCode }),
+    body: JSON.stringify({ pairingCode, deviceId: getOrCreateDeviceId() }),
   });
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `pairing failed (HTTP ${res.status})`);
@@ -110,7 +149,7 @@ async function sendHeartbeat() {
     const res = await fetch(`${connection.consoleUrl}/api/agents/heartbeat`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
-      body: JSON.stringify({ cameraCount: cameras.length, cameras }),
+      body: JSON.stringify({ cameraCount: cameras.length, cameras, agentName: getAgentName() }),
     });
     if (!res.ok) {
       // A rejected token (e.g. the agent row was deleted server-side)

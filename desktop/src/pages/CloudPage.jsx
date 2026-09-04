@@ -22,11 +22,34 @@ export default function CloudPage() {
   const [code, setCode] = useState("");
   const [pairing, setPairing] = useState(false);
   const [error, setError] = useState("");
+  const [agentName, setAgentNameField] = useState("");
+  const [savedName, setSavedName] = useState("");
+  const [savingName, setSavingName] = useState(false);
 
   const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(err.message));
   useEffect(() => {
-    if (!CLOUD_API_MISSING) refresh();
+    if (!CLOUD_API_MISSING) {
+      refresh();
+      window.cloudAPI.getAgentName().then((name) => {
+        setAgentNameField(name);
+        setSavedName(name);
+      });
+    }
   }, []);
+
+  const saveAgentName = async () => {
+    const trimmed = agentName.trim();
+    if (!trimmed || trimmed === savedName) return;
+    setSavingName(true);
+    try {
+      const saved = await window.cloudAPI.setAgentName(trimmed);
+      setAgentNameField(saved);
+      setSavedName(saved);
+    } catch (err) {
+      setError(err.message);
+    }
+    setSavingName(false);
+  };
 
   const connect = async (e) => {
     e.preventDefault();
@@ -65,6 +88,30 @@ export default function CloudPage() {
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "16px 22px 26px" }}>
       <div style={{ fontFamily: "var(--font-heading)", fontSize: 20, lineHeight: 1.2, marginBottom: 14 }}>Cloud console</div>
+
+      <div style={{ maxWidth: 420, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", marginBottom: 12 }}>
+        <label style={{ display: "block", fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", marginBottom: 8 }}>
+          Agent name <span style={{ opacity: 0.7 }}>— shown on the console's "Connected agents" list</span>
+        </label>
+        <div style={{ display: "flex", gap: 8 }}>
+          <input
+            className="input"
+            value={agentName}
+            onChange={(e) => setAgentNameField(e.target.value)}
+            onBlur={saveAgentName}
+            onKeyDown={(e) => e.key === "Enter" && saveAgentName()}
+            style={{ flex: 1 }}
+          />
+          <button
+            type="button"
+            className="btn btn-secondary"
+            onClick={saveAgentName}
+            disabled={savingName || !agentName.trim() || agentName.trim() === savedName}
+          >
+            {savingName ? "Saving…" : "Save"}
+          </button>
+        </div>
+      </div>
 
       <div style={{ maxWidth: 420, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
         {connection === undefined ? (

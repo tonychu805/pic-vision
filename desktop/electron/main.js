@@ -19,7 +19,7 @@ import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
 import { startRecording, stopRecording, stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
-import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop } from "./cloud.js";
+import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName } from "./cloud.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -180,6 +180,12 @@ function registerCloudHandlers() {
   ipcMain.handle("cloud:disconnect", async () => {
     disconnectCloud();
     return null;
+  });
+  ipcMain.handle("cloud:getAgentName", async () => {
+    return getAgentName();
+  });
+  ipcMain.handle("cloud:setAgentName", async (_event, name) => {
+    return setAgentName(name);
   });
 }
 
