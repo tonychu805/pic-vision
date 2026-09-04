@@ -1261,6 +1261,26 @@ No hosted, multi-venue, authenticated web app exists anywhere in this repo today
 
 ---
 
+## ADR-074 — Cut the final reel cloud-side, from a 1080p proxy, not locally from full-res
+
+**Date:** 2026-09-04 · **Status:** accepted (amends `ADR-043`/`ADR-071`; not yet implemented)
+
+**Context.** The shipped pipeline (`cloud_pipeline/run_cloud_job.py`) uploads a 720p proxy for RunPod inference only, downloads back a small `predictions.csv`, and cuts the actual highlight reel locally from the untouched full-resolution original — a design `ADR-071` explicitly attributed to `ADR-043`'s privacy reasoning ("full-res video stays local"), and listed as a reason the local agent has to keep this step. Two things reopened it: the actual delivery target is social sharing (Instagram), where 720p is below Meta's own recommended 1080p baseline — verified live, not assumed (Instagram compresses everything toward a 1080p target, not from a 720p floor, so a 720p source stays visibly softer after their re-encode); and once that's true, keeping the cut local stops being free — it exists only to avoid re-uploading full-res, which was never the actual privacy line. `ADR-043`'s real rule is narrower than "no video leaves the venue": it's "full-resolution original stays local." A 720p (or 1080p) proxy already leaves for inference either way, so cutting the final reel from that same already-uploaded proxy exposes nothing new.
+
+Checked before deciding, not assumed: `predictions.csv` timestamps are seconds, not pixels — rally detection/ranking/cutting is resolution-independent, so cutting from a proxy instead of full-res changes nothing about which segments get chosen. Also measured on real footage (`IMG_7893_930-1110s`, native 1080p): GPU inference throughput is barely affected by proxy resolution (65.4fps at 1080p vs 71.8fps at 720p, ~9%) because `pod_infer.py` resizes every frame to a fixed 512x288 before the model sees it regardless of source resolution — the real cost of 1080p over 720p is upload bandwidth (~2.4x the data), not compute.
+
+**Decision.**
+
+1. **Upload a 1080p proxy** (not 720p) — for a camera whose native resolution is already ≤1080p (true of every camera in this system so far), this is just the CFR-converted file as-is, no separate downscale step. A higher-res source (4K) still gets downscaled to 1080p, same mechanism as the old 720p step.
+2. **Cut the reel on the RunPod pod itself, right after inference, from the uploaded 1080p proxy** — `build_reel()`'s detection/ranking/cutting logic is pure CPU/ffmpeg work with no GPU dependency, so it runs on the same pod before it terminates, not as a separate local step.
+3. **Upload the finished reel files (`highlight.mp4`/`highlight_by_rank.mp4`) to R2**, not `predictions.csv` — the desktop client never downloads detection data or runs a local cut again. It polls until the job is done and gets a reference to where the finished reel lives.
+4. **The cloud console's Reels tab reads the finished reel directly from that R2 reference** — no separate delivery mechanism needed beyond what the job pipeline already produces.
+5. **Superseded from `ADR-071`:** "cutting the final reel from local full-res footage" is no longer something the local agent does. The full-res original still never leaves the venue — that part of `ADR-043` is untouched — but the *finished, shareable* reel is now a 1080p cloud-side artifact, not a full-res local one.
+
+**Consequences.** A venue that later wants a true full-resolution cut of a specific rally (a paying member request, archival, etc.) isn't served by this — the full-res original stays local and untouched, so that's still possible in principle, but nothing in this pipeline produces it automatically anymore. Not designed here, flagged as a future need if it comes up. This also strengthens `ADR-073`'s job-API design (its `output_url` now points at an actual finished reel, not something the client still has to act on) and shrinks `PIC-69`'s scope considerably (per a stale-ticket check the same day, its original scope — "cut from local full-res" — already existed in the code before this ADR; what's left of it after this ADR is much smaller: receive a finished-reel reference, not raw detection output). R2 storage cost grows with reel count now (finished reels persist in R2 for delivery, not just transient job scratch data) — worth watching now that the bucket was just found at 89% of its free tier before a cleanup (see `progress/09.04 progress overview.md`).
+
+---
+
 ## Template
 
 ```markdown
