@@ -967,7 +967,14 @@ pic-vision/
 │   │   │   │                             # per-camera state yet, dropped rather
 │   │   │   │                             # than faked. A Calibration column
 │   │   │   │                             # too (2026-09-04) -- see below, Courts
-│   │   │   │                             # was merged in here, not kept separate
+│   │   │   │                             # was merged in here, not kept separate.
+│   │   │   │                             # Detail sheet also gets a Start/Stop
+│   │   │   │                             # recording button (ADR-077, 2026-09-05,
+│   │   │   │                             # disabled for sampleClip cameras) --
+│   │   │   │                             # posts to api/commands/route.ts, waits
+│   │   │   │                             # for is_recording to flip on the next
+│   │   │   │                             # heartbeat sync like every other field
+│   │   │   │                             # here, no faster poll invented for it
 │   │   │   ├── schedule/, schedule/[cameraId]/  # REAL as of 2026-09-04
 │   │   │   │                             # (ADR-071/PIC-73 -- migrated wholesale
 │   │   │   │                             # from desktop/, not rebuilt from
@@ -1067,6 +1074,24 @@ pic-vision/
 │   │                                    # omitted, so an older caller or a
 │   │                                    # burst-less session still gets a working
 │   │                                    # single-reel share page at its own id
+│   │       ├── commands/route.ts            # ADR-077 (2026-09-05), Bearer-token --
+│   │       │                             # GET returns an agent's pending
+│   │       │                             # agent_commands rows; the desktop
+│   │       │                             # agent's heartbeat loop polls this on
+│   │       │                             # its own existing ~30s cadence, no new
+│   │       │                             # timer/connection
+│   │       └── commands/[id]/route.ts        # ADR-077, Bearer-token -- the agent
+│   │                                     # reports a command's done/error result
+│   │                                     # here right after executing it locally
+│   ├── api/commands/route.ts               # ADR-077 (2026-09-05), venue-owner
+│   │                                    # session -- first real cloud->agent
+│   │                                    # command (the gap ADR-071/ADR-073 both
+│   │                                    # flagged as missing). Cameras page's
+│   │                                    # Start/Stop recording button POSTs here;
+│   │                                    # only inserts an agent_commands row,
+│   │                                    # never runs anything itself -- recording
+│   │                                    # (ffmpeg pulling RTSP) still has to
+│   │                                    # execute wherever the camera actually is
 │   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a stable
 │   │                                    # cdn.picvisionai.com R2 URL (lib/r2.ts,
 │   │                                    # ADR-075 -- no presigning) for the

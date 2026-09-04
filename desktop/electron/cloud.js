@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
-import { isRecording, listRecordings } from "./capture.js";
+import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
 
 const store = new Store({ name: "cloud" });
 
@@ -165,11 +165,79 @@ async function sendHeartbeat() {
   }
 }
 
+// First real use of the cloud->agent command channel (ADR-071/ADR-073's
+// long-flagged missing piece): the console can now create a row in
+// `agent_commands` (POST /api/commands, e.g. the Cameras page's Start/
+// Stop recording button) and this picks it up here, on the *same*
+// heartbeat cadence -- no separate timer, no persistent connection,
+// consistent with ADR-071's "polling is fine, none of this is
+// latency-sensitive like live video" call. Recording itself still has to
+// run wherever the camera actually is, so this just calls the exact same
+// capture.js functions the desktop app's own Start/Stop button already
+// calls -- only the trigger moved, not the action.
+async function fetchPendingCommands(connection) {
+  try {
+    const res = await fetch(`${connection.consoleUrl}/api/agents/commands`, {
+      headers: { Authorization: `Bearer ${connection.apiToken}` },
+    });
+    if (!res.ok) return [];
+    const body = await res.json().catch(() => ({}));
+    return Array.isArray(body.commands) ? body.commands : [];
+  } catch (err) {
+    console.error(`[cloud] fetching commands failed: ${err.message}`);
+    return [];
+  }
+}
+
+async function completeCommand(connection, commandId, status, result) {
+  try {
+    await fetch(`${connection.consoleUrl}/api/agents/commands/${commandId}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
+      body: JSON.stringify({ status, result: result ?? null }),
+    });
+  } catch (err) {
+    console.error(`[cloud] reporting command result failed: ${err.message}`);
+  }
+}
+
+async function runCommand(command) {
+  const camera = listCameras().find((c) => c.id === command.camera_id);
+  if (!camera) throw new Error("camera not found");
+  if (camera.connectionType === "sampleClip") {
+    throw new Error("sample-clip cameras have no live stream to record");
+  }
+  if (command.type === "start_recording") return await startRecording(camera);
+  if (command.type === "stop_recording") return await stopRecording(camera.id);
+  throw new Error(`unknown command type: ${command.type}`);
+}
+
+async function processCommands() {
+  const connection = getCloudConnection();
+  if (!connection) return;
+  const commands = await fetchPendingCommands(connection);
+  // Sequential, not Promise.all -- two commands for the same camera
+  // arriving in one batch (e.g. a fast double-click before the console's
+  // own button re-renders) should apply in order, not race.
+  for (const command of commands) {
+    try {
+      const result = await runCommand(command);
+      await completeCommand(connection, command.id, "done", result);
+    } catch (err) {
+      await completeCommand(connection, command.id, "error", { error: err.message });
+    }
+  }
+}
+
 export function startHeartbeatLoop() {
   if (heartbeatTimer) return; // already running
   if (!getCloudConnection()) return;
-  sendHeartbeat(); // don't wait a full interval for the first "online" signal
-  heartbeatTimer = setInterval(sendHeartbeat, HEARTBEAT_INTERVAL_MS);
+  const tick = () => {
+    sendHeartbeat(); // don't wait a full interval for the first "online" signal
+    processCommands();
+  };
+  tick();
+  heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);
 }
 
 export function stopHeartbeatLoop() {

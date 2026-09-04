@@ -1324,6 +1324,24 @@ A third question came from the operator wanting the *share page* itself to show 
 
 ---
 
+## ADR-077 — First real cloud→agent command channel: piggybacked on the existing heartbeat poll, not a new connection
+
+**Date:** 2026-09-05 · **Status:** accepted, implemented, not yet run against a real camera
+
+**Context.** `ADR-071` (2026-09-02) flagged this as the biggest concrete gap in the local-agent/cloud-console split: "nothing external can drive `desktop/`'s Node backend today — only its own Electron renderer can, via IPC." Everything built since (heartbeat, camera sync, reel reporting) is agent→cloud only. Operator, today: "the desktop client only allows to add/remove cameras/sample clip, everything else (calibrate, recording, etc) should be on the console." That's a partial reversal of `ADR-071`'s own "local agent keeps... recording... court calibration... can't move" list — worth being explicit about why part of that reasoning no longer holds: `ADR-071` said calibration "needs a live/local frame to click points on," but `PIC-75` (built the very next day) changed the flow to grab a snapshot first and click points on that static image — only the snapshot *grab* is LAN-bound now, not the point-clicking UI. Recording is a genuine split, not fully movable either way: the capture itself (ffmpeg pulling RTSP) can never leave the venue machine, but the start/stop *trigger* has no such constraint.
+
+**Decision.** Built the recording half first (calibration's command types are a designed, not-yet-built follow-on — needs a second round-trip, see below).
+
+1. **New table `agent_commands`** (`id`, `agent_id`, `camera_id`, `type` — `'start_recording'`/`'stop_recording'` for now, `status` — `'pending'`/`'done'`/`'error'`, `result` jsonb, timestamps). RLS: venue owners get `select`+`insert` scoped through the same `agents`→`venues.owner_user_id` chain every other agent-owned table uses; the agent side always goes through the admin/service-role client, same as `heartbeat`/`reels`.
+2. **`POST /api/commands`** (venue-owner session) creates a command — looks up the camera's `agent_id` via `cameras`' own "venue owner reads own cameras" RLS (a camera_id belonging to someone else 404s naturally, no separate ownership check needed), inserts through the session client so `agent_commands`' own insert policy re-validates the same chain.
+3. **`GET /api/agents/commands`** (bearer token) returns an agent's `pending` rows. **`POST /api/agents/commands/[id]`** (bearer token) reports `done`/`error` + a result, checked against the calling agent's own id (the admin client bypasses RLS, so this route enforces that by hand).
+4. **No new connection or timer** — `desktop/electron/cloud.js`'s existing 30s heartbeat loop also calls `GET /api/agents/commands` on the same tick, executes anything pending by calling the *same* `capture.js` `startRecording`/`stopRecording` functions the desktop app's own button already calls, then reports the result. Consistent with `ADR-071`'s explicit "polling is fine, none of this is latency-sensitive like live video" call — not revisited here.
+5. **Console UI**: the Cameras page's detail sheet gets a Start/Stop button (disabled for `sampleClip` cameras, which have no live stream). It just posts a command and waits for `is_recording` to flip on the camera's own next heartbeat sync — no separate faster poll invented just for this button.
+
+**Consequences.** `python3 -m pytest -q` unaffected (no Python touched); both Next.js apps' `tsc --noEmit`/`next build` clean. **Not yet run against a real camera** — the next real test is clicking Start on a live (non-sample-clip) camera from the console and confirming the desktop agent actually starts `ffmpeg` within one heartbeat cycle. Calibration's two-round-trip flow (`grab_calibration_snapshot` / `apply_calibration`, keeping the RMSE-fit math in `save_calibration.py` rather than porting it to TypeScript) is designed but deliberately not built in this pass. Once both are verified working from the console, the desktop app's own recording button and calibration modal should come out of `desktop/` — same precedent as Schedule's migration (`ADR-071`) — not kept in both places; not done yet, pending that verification.
+
+---
+
 ## Template
 
 ```markdown
