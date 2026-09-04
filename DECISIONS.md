@@ -1231,6 +1231,18 @@ No hosted, multi-venue, authenticated web app exists anywhere in this repo today
 
 ---
 
+## ADR-072 — `track_ball` re-acquisition checks a velocity-predicted position too, not radius-widening
+
+**Date:** 2026-09-04 · **Status:** accepted
+
+**Context.** Real footage (`brickwall-SEMI` rally_id 1) exposed a fragmentation mechanism a flat `max_jump` re-check can't handle: near-net dink exchanges have short raw-detection dropouts (likely occlusion/small apparent size), and by the time detection resumes the ball's real elapsed distance from `last` has grown past `max_jump`, even though it's the same ball continuing along its path. See `EXPERIMENTS.md`, 2026-09-04.
+
+**Decision.** `track_ball`'s re-check now accepts a candidate within `max_jump` of *either* the last confirmed position *or* a position predicted from the last confirmed position plus a two-point velocity estimate (no smoothing) times elapsed frames — not a wider flat radius. A radius-scaling alternative (`max_jump * scale_fn(elapsed)`, several scale functions swept) was tried first, recovered `brickwall-SEMI` as well or better, but silently dropped a real `quality:1` rally on `pb_draft_cup_30fps` (rally_id 9) — a wider radius can't distinguish "the ball, further along its real path" from "background clutter merely within range," and clutter inside the widened radius anchors `last` onto itself, after which the real ball falls outside the (now wrongly anchored) radius for good. Prediction avoids this because it uses direction, not just distance: real ball motion continues near its established trajectory through a short gap, and clutter doesn't line up with it. Velocity is unavailable (falls back to last-position-only) for one point after a cold start or reset, since a direction needs two points.
+
+**Consequences.** Re-verified against the full locked dev set (`IMG_7744`/`brickwall_30fps`/`pb_draft_cup_30fps`) and `pb_draft_cup_30fps` rally_id 9/27 specifically — no regressions, one net gain on `IMG_7744` (14→15/75 matched, fp/10min 2.57→2.06). `brickwall-SEMI` rally_id 1 improves (best-overlap 9.8s→14.57s of a 20.02s label window) but is not fully recovered — the remaining gap stays open under `PIC-33`, distinct from the label lead-in issue tracked as `PIC-55`. The post-reset re-acquisition confirmation path (separate from this main-track re-check) still does no prediction — it only ever has one point before a candidate is confirmed, so there's nothing to predict from yet.
+
+---
+
 ## Template
 
 ```markdown

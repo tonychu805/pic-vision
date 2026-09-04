@@ -2249,3 +2249,35 @@ Scored through the shipped pipeline (`scripts/tv3_bench_pb_and_7744.py`'s `score
 **720p is not worse on raw precision/recall — it's marginally better.** The one `quality:1` rally 720p "misses" that native catches (rally at 33.9–40.7s) isn't a missed detection: both runs found the same 10 crossings inside the rally window (timings within 1s of each other). 720p additionally picked up 2 extra crossings ~5s earlier (28.6s) that `gap_sec=3.0` merged into the same cluster, widening the predicted segment from native's [30.4, 41.7] (IoU 0.602 vs. the label) to [28.6, 42.3] (IoU 0.491) — 0.009 under the 0.5 cutoff. A boundary-threshold artifact, not lost content. The other 3 `quality:1` misses (rallies at 2.4s, 290.5s, 431.4s) are identical between native and 720p — a pre-existing detection ceiling unrelated to resolution.
 
 **Conclusion.** On this one video, 720p detection accuracy holds up — no evidence of degradation, and the single `quality:1` discrepancy traces to an IoU-threshold boundary effect, not a real miss. **Caveats, stated honestly:** n=1 video, one clip; the newly-found run-to-run non-determinism means a second same-resolution rerun might itself land a rally or two differently, so this isn't a zero-noise comparison; and this doesn't test lower-visibility conditions (greater camera distance, worse lighting) where downscaling could plausibly matter more. Good enough to keep trusting `ADR-069`'s shipped 720p proxy for now; not exhaustive enough to declare the resolution question permanently closed.
+
+## 2026-09-04 — `track_ball` re-acquisition: predicted-position matching beats radius-scaling for bridging real detection dropouts
+
+**Hypothesis.** `brickwall-SEMI` rally_id 1 (`quality:1`, labeled `[12.93s, 32.95s]`) was fragmenting under the shipped pipeline. Near-net dink exchanges have short raw-detection dropouts (likely occlusion/small apparent size) that a flat `max_jump` re-check can't bridge, losing the rally's lead-in. Widening the acceptance radius by elapsed gap frames should recover it without hurting anything else.
+
+**Setup.** `cache/brickwall_semi_predictions_k14.csv` + `calib/brickwall_semi_calib.json`, shipped pipeline params (`max_jump=150`, `reset_after=15`, `gap_sec=3.0`, `min_crossings=6`, IoU≥0.5), scored against the 36 in-window (0–900s) hand labels in `eval/labels/brickwall-SEMI.jsonl`.
+
+**Attempt 1 (rejected) — scale the acceptance radius by elapsed gap frames.** Swept `max_jump * scale_fn(gap+1)` for flat/linear/sqrt/capped-linear@3/capped-linear@5/log2+1:
+
+| scale | recall | fp/10min | boundary (s) | n_pred | rally_id 1 best overlap |
+|---|---|---|---|---|---|
+| flat (old, shipped) | 0.639 (23/36) | 5.33 | 1.47 | 31 | `[19.63,29.43]` ×10, 9.8s |
+| linear | 0.694 (25/36) | 6.67 | 1.52 | 35 | `[14.87,29.43]` ×20, 14.6s |
+| **sqrt** | **0.694 (25/36)** | **4.67** | 1.40 | 32 | `[14.87,29.43]` ×18, 14.6s |
+| capped-linear@3 | 0.694 | 5.33 | 1.49 | 33 | 14.6s |
+| capped-linear@5 | 0.694 | 6.00 | 1.49 | 34 | 14.6s |
+| log2+1 | 0.694 | 5.33 | 1.49 | 33 | 14.6s |
+
+`sqrt` looked like the winner on `brickwall-SEMI` — best fp rate and boundary error of the scaled family. **But checked against `pb_draft_cup_30fps`'s rally_id 9 (`quality:1`, `[133.86, 144.03]`) before trusting it: `sqrt` drops the rally outright** (no candidate within 5s of the label window), while `flat` and `linear` both still catch it (candidate `[137.17,142.33]`, 7 crossings). A wider radius, however tuned, can't distinguish "the ball, further along its real path" from "something else merely within range" — a few frames of background clutter inside the widened radius pull `last` onto the clutter, and the real ball then falls outside the now-wrongly-anchored radius. Rejected.
+
+**Attempt 2 (shipped) — accept a candidate within `max_jump` of EITHER the last confirmed position OR a velocity-predicted position** (last position + a two-point velocity estimate × elapsed frames), instead of widening the radius at all. Real ball motion does two things a single check can't cover: it reverses direction sharply at every net crossing (breaks a predict-only check, since the first prediction after a reversal points the wrong way), and it also needs re-acquisition further along a straight path after an occlusion dropout (breaks a last-position-only check, since real elapsed distance grows with the gap). Checking both and taking whichever is closer covers both without preferring one.
+
+| | recall | fp/10min | boundary (s) | n_pred | rally_id 1 best overlap |
+|---|---|---|---|---|---|
+| OLD (shipped, flat) | 0.639 (23/36) | 5.33 | 1.47 | 31 | 9.8s of 20.02s |
+| **NEW (predicted-position)** | **0.667 (24/36)** | **4.67** | 1.50 | 31 | **14.57s of 20.02s** |
+
+Matches `sqrt`'s fp/10min improvement without its regression: **re-ran `pb_draft_cup_30fps` rally_id 9 and rally_id 27 against the shipped fix — both identical to the old behavior, byte-for-byte candidate boundaries.** Also re-ran the full locked dev set (`IMG_7744`, `brickwall_30fps`, `pb_draft_cup_30fps`): `IMG_7744` gained one match (14→15/75, fp/10min 2.57→2.06), `brickwall_30fps` and `pb_draft_cup_30fps` unchanged — no regressions anywhere in the locked dev set.
+
+**Not fully closed.** `rally_id 1`'s best-overlapping candidate still only covers 14.57s of its 20.02s label window — real improvement, not a full fix. The dropout-driven fragmentation mechanism (`PIC-33`) is measurably reduced but not eliminated; the remaining gap needs its own investigation, separate from the label lead-in issue already tracked as `PIC-55`.
+
+**Conclusion → `DECISIONS.md` ADR-072.**
