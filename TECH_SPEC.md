@@ -1046,13 +1046,14 @@ pic-vision/
 │   │                                    # duration/rallyCount from the body --
 │   │                                    # ranked only, no chronologicalKey
 │   │                                    # field, same-day operator request)
-│   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a presigned
-│   │                                    # R2 URL (lib/r2.ts) for the reel's
-│   │                                    # one video (ranked -- no [which]
-│   │                                    # segment, 2026-09-04) -- user-session
-│   │                                    # Supabase client, not admin, so
-│   │                                    # `reels`' own RLS policy is the
-│   │                                    # actual access boundary
+│   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a stable
+│   │                                    # cdn.picvisionai.com R2 URL (lib/r2.ts,
+│   │                                    # ADR-075 -- no presigning) for the
+│   │                                    # reel's one video (ranked -- no
+│   │                                    # [which] segment, 2026-09-04) --
+│   │                                    # user-session Supabase client, not
+│   │                                    # admin, so `reels`' own RLS policy
+│   │                                    # is the actual access boundary
 │   ├── components/app/                 # Sidebar (nav groups matching the mockup,
 │   │   │                              # real collapse toggle), TopBar (title +
 │   │   │                              # real Sign out), AlertBanner (REAL --
@@ -1074,13 +1075,13 @@ pic-vision/
 │   │   │                                    # api_token_hash, not a Supabase session)
 │   │   ├── agentToken.ts                     # pairing-code + API-token generation/
 │   │   │                                    # hashing, shared by pair.ts/heartbeat.ts
-│   │   ├── r2.ts                              # ADR-074, 2026-09-04. Server-only
-│   │   │                                    # R2 client (@aws-sdk/client-s3 +
-│   │   │                                    # s3-request-presigner) -- mirrors
-│   │   │                                    # cloud_pipeline/r2_storage.py's
-│   │   │                                    # generate_presigned_url exactly,
-│   │   │                                    # same CLOUDFLARE_R2_* credentials
-│   │   │                                    # (.env.local, gitignored)
+│   │   ├── r2.ts                              # ADR-074, 2026-09-04; rewritten same
+│   │   │                                    # day for ADR-075. reelVideoUrl(bucket,
+│   │   │                                    # key) -> stable cdn.picvisionai.com
+│   │   │                                    # URL -- no signing, no SDK client,
+│   │   │                                    # no CLOUDFLARE_R2_* credentials
+│   │   │                                    # needed here anymore (the presigned-
+│   │   │                                    # URL version this replaced did)
 │   │   ├── schedule.ts                        # ADR-071/PIC-73, 2026-09-04. Client-side
 │   │   │                                    # CRUD against schedule_sessions --
 │   │   │                                    # createSession's overlap-trim logic
@@ -1097,9 +1098,13 @@ pic-vision/
 │   │                                          # Pill's neutral/progress/alert tone
 │   ├── netlify.toml                    # Next.js Runtime plugin -- v0.app's own
 │   │                                  # auto-deploy-on-merge is Vercel-only, doesn't
-│   │                                  # apply here; operator still has to do the
-│   │                                  # one-time "link this repo" step in Netlify's
-│   │                                  # own dashboard (no Netlify MCP tool available)
+│   │                                  # apply here. Live 2026-09-04 at
+│   │                                  # console.picvisionai.com (Netlify CLI --
+│   │                                  # site created/deployed/env vars set from
+│   │                                  # here, no dashboard needed; custom domain
+│   │                                  # set via the Netlify API, DNS CNAME added
+│   │                                  # by hand in Cloudflare since no Netlify MCP
+│   │                                  # tool exists to drive that piece either)
 │   └── .env.local.example              # NEXT_PUBLIC_SUPABASE_URL/ANON_KEY pre-filled
 │                                      # (from the provisioned project); SUPABASE_
 │                                      # SERVICE_ROLE_KEY deliberately blank -- has to
@@ -1110,22 +1115,30 @@ pic-vision/
 │   │                              # promise's actual delivery surface) -- its OWN
 │   │                              # separate git repo, same reasoning as
 │   │                              # pic-vision-cloud-console/: different domain
-│   │                              # (share.picvision.ai), different audience (public,
-│   │                              # unauthenticated venue-goers, not venue owners).
-│   │                              # Received 2026-09-04 via Taildrop as a v0.app mockup
-│   │                              # the operator built, then wired to real data the
-│   │                              # same day.
+│   │                              # (share.picvisionai.com), different audience
+│   │                              # (public, unauthenticated venue-goers, not venue
+│   │                              # owners). Received 2026-09-04 via Taildrop as a
+│   │                              # v0.app mockup the operator built, wired to real
+│   │                              # data the same day, live on Netlify same day too.
+│   ├── netlify.toml                 # same minimal config as the console's -- Next.js
+│   │                              # Runtime plugin handles the app/r/[reelId] dynamic
+│   │                              # route as a Netlify Function automatically
 │   ├── app/r/[reelId]/page.tsx      # server component -- fetches the reel via
 │   │                              # `reels`' new "anyone with the id can read" RLS
 │   │                              # policy (public, no session -- a share link is
 │   │                              # unguessable-UUID access, same pattern as Notion/
-│   │                              # Figma/Loom links), presigns its R2 video URL
-│   │                              # server-side (lib/r2.ts, duplicated from the
-│   │                              # console rather than importing across the repo
-│   │                              # boundary), 404s on an unknown/wrong id
+│   │                              # Figma/Loom links), builds its stable CDN video URL
+│   │                              # server-side (lib/r2.ts, ADR-075 -- no presigning,
+│   │                              # duplicated from the console rather than importing
+│   │                              # across the repo boundary), 404s on an unknown/
+│   │                              # wrong id
 │   ├── app/r/[reelId]/reel-share-client.tsx  # the real interactive page: video
-│   │   │                          # element (real presigned src, not the mockup's
-│   │   │                          # placeholder box), Copy link, Download. The
+│   │   │                          # element (real stable cdn.picvisionai.com src,
+│   │   │                          # ADR-075, prefetched into a Blob on mount so
+│   │   │                          # navigator.share() can fire synchronously off
+│   │   │                          # the tap -- not the mockup's placeholder box),
+│   │   │                          # Copy link, Download (routes through the same
+│   │   │                          # share-sheet path as the app tiles). The
 │   │   │                          # "Repost it"/"Send to" tiles split into two
 │   │   │                          # genuinely different mechanisms, decided after
 │   │   │                          # verifying against Meta's own developer docs
@@ -1150,7 +1163,9 @@ pic-vision/
 │   │                              # handling at all (unlike the console's
 │   │                              # lib/supabase/{client,server}.ts) -- this page has
 │   │                              # no logged-in user, ever
-│   └── lib/r2.ts                     # same presign helper as the console's, copied
+│   └── lib/r2.ts                     # reelVideoUrl(bucket, key) -> stable
+│                                    # cdn.picvisionai.com URL (ADR-075, no signing/
+│                                    # expiry) -- same helper as the console's, copied
 │                                    # not imported (genuinely separate deployable app)
 │
 

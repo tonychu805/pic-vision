@@ -1281,6 +1281,25 @@ Checked before deciding, not assumed: `predictions.csv` timestamps are seconds, 
 
 ---
 
+## ADR-075 — Reel videos served from a stable Cloudflare-fronted CDN URL, not a presigned one; R2 key is the reel's own UUID
+
+**Date:** 2026-09-04 · **Status:** accepted, implemented and deployed
+
+**Context.** The public reel-share page (`reel-page/`, new this session) and the cloud console's authenticated reel-video route both served the finished reel via a short-lived presigned R2 URL (`lib/r2.ts`'s `presignedReelUrl`, mirroring `cloud_pipeline/r2_storage.py`). That made sense for a page requiring its own access check, but neither actually does: the public share page's whole security boundary is already "know the reelId" (the `reels` table's public-SELECT RLS policy, added this session), and the console route's real check happens one step earlier, in its own RLS-scoped `select()` — the presigned URL was solving a problem neither page has. It also actively worked against this page's purpose: a uniquely-signed query string on every request defeats both browser and CDN caching, on a page whose entire point is getting reshared and reopened repeatedly (that's what the "Repost it"/"Send to" sections exist for).
+
+Real timing measurements first, not assumed (see progress notes, same day): presigned-origin fetch showed ~285-337ms TTFB; the R2 object's own `Content-Type`/`ContentLength` were already correct (ruled out as a cause of an unrelated share-sheet icon question the same day). Once `cdn.picvisionai.com` was live as an R2 custom domain with a Cloudflare cache rule, repeat fetches confirmed `cf-cache-status: HIT` — but a controlled comparison from one dev machine (Singapore PoP) showed no clear win over the origin path from that specific vantage point (both ~1-1.3s for the same 8.35MB file) — logged plainly rather than oversold, since R2 itself already rides Cloudflare's network and this dev box's path to both was already short.
+
+**Decision.**
+
+1. **`cloud_pipeline/run_cloud_job.py` mints the reel's UUID before uploading**, not after — `reel_id = str(uuid.uuid4())`, and the R2 object key becomes `reels/<reel_id>.mp4` (previously `jobs/<session_id>/highlight_by_rank.mp4`). Once presigning is gone, the object key *is* the entire access boundary, so it has to be exactly as unguessable as the reelId the share page is already gated on — a job/session-based key would let someone enumerate other venues' reels by guessing court/session names.
+2. **That same id is threaded through unchanged**: `webapp/pipeline.py`'s `run_cloud_job` status wrapper carries `reel_id` into `status.json`; `cloud_pipeline/run_desktop_job.py`'s `_report_reel()` sends it as `id` in the `POST /api/agents/reels` body; the console's route accepts an optional client-supplied `id` and uses it as the row's own primary key instead of letting Postgres mint an unrelated one, falling back to the default when omitted (keeps the route working for anything still reporting the old way).
+3. **`cdn.picvisionai.com`** is a Cloudflare custom domain bound to the `test-ingest-runpod` R2 bucket, with a Cache Rule (cache eligible, ignore query string, edge TTL). `reel-page/lib/r2.ts` and `pic-vision-cloud-console/lib/r2.ts` both replaced `presignedReelUrl()` with a plain `reelVideoUrl(bucket, key)` → `https://cdn.picvisionai.com/${key}`, no signing, no expiry, no SDK client. (`bucket` is unused inside the function for now — kept in the signature since only one bucket is bound to this domain today, not because a second is imminent.)
+4. Both `lib/r2.ts` files still exist as separate per-repo copies (not shared across the repo boundary — an existing, deliberate choice, not new here).
+
+**Consequences.** Verified end-to-end after deploy: `cf-cache-status` flips MISS→HIT on repeat fetch, CORS (`access-control-allow-origin: *`, set on the bucket earlier this session) carries over to the custom domain without extra config, and both `reel-page` and the console's video-redirect route serve the real reel through it. The Cloudflare-side setup (R2 custom domain attach, the cache rule, and both `console.picvisionai.com`/`share.picvisionai.com` DNS records for the same-day Netlify deploy) all had to be done by hand in the dashboard — every write attempted through the Cloudflare API in-session was blocked, either by Claude Code's own auto-mode classifier (the R2 domain attach) or by the API token's own read-only zone-write scope (the cache rule, the DNS records). A reel can no longer be "taken down" by revoking a signed URL's expiry (there wasn't a meaningful revocation story before this either, just a shorter unintentional window — deleting the `reels` row 404s the share page either way, but the R2 object itself was always fetchable by anyone holding a live presigned URL for up to its 1-hour window; a stable URL just removes that cap). Deliberately not addressed here: multiple buckets sharing one CDN domain, if that's ever needed.
+
+---
+
 ## Template
 
 ```markdown

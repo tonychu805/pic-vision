@@ -30,6 +30,7 @@ import subprocess
 import sys
 import tarfile
 import tempfile
+import uuid
 
 from dotenv import load_dotenv
 
@@ -262,7 +263,17 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     # back -- ranked only, not chronological too (operator request, same
     # day: the console only ever offers the ranked cut, and pod_cut.py
     # doesn't even build a chronological one anymore).
-    ranked_key = f"{job_prefix}/highlight_by_rank.mp4"
+    #
+    # Keyed by a UUID minted here, not job_prefix -- ADR-075: the reel
+    # share page serves this straight off a Cloudflare-fronted CDN domain
+    # (stable, unsigned, cacheable URL), not a presigned one, so this
+    # object key IS the entire access boundary once it leaves the pipeline.
+    # A job/session-based key (predictable court/venue naming) would make
+    # other venues' reels guessable; this same id is also handed to the
+    # console below so the `reels` row's own primary key matches the R2
+    # object, instead of Postgres minting an unrelated one.
+    reel_id = str(uuid.uuid4())
+    ranked_key = f"reels/{reel_id}.mp4"
 
     log(f"uploading video + calibration to R2 ({job_prefix})...", stage="r2_upload")
     r2_storage.upload_file(BUCKET, upload_video, video_key)
@@ -383,7 +394,7 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     with open(stats_path) as f:
         stats = json.load(f)
 
-    result = {"ranked_key": ranked_key, "bucket": BUCKET, "stats": stats}
+    result = {"ranked_key": ranked_key, "bucket": BUCKET, "stats": stats, "reel_id": reel_id}
     log(f"done: {result}")
     return result
 

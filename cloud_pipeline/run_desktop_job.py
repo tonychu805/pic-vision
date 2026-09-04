@@ -43,14 +43,17 @@ def _report_reel(console_url, api_token, session_id, camera_id, camera_label, st
     this only runs at all for a paired agent. Best-effort: a failure here
     doesn't fail the job itself -- the reel already exists in R2 either
     way, this is just the cloud console finding out about it. If it's
-    missed, the reel is still recoverable by hand from R2's jobs/<session_id>/
-    prefix; nothing unrecoverable is lost."""
+    missed, the reel is still recoverable by hand from R2's reels/<reel_id>.mp4
+    key (status["reel_id"], same id passed as this report's "id" field so
+    the console's row gets that same id rather than minting an unrelated
+    one -- ADR-075, the id IS the object key); nothing unrecoverable is lost."""
     import requests
     try:
         resp = requests.post(
             f"{console_url}/api/agents/reels",
             headers={"Authorization": f"Bearer {api_token}"},
             json={
+                "id": status["reel_id"],
                 "sessionId": session_id,
                 "cameraId": camera_id,
                 "cameraLabel": camera_label,
