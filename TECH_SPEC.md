@@ -643,7 +643,7 @@ pic-vision/
 │   │                                # scripts/rank_and_reel.py's build_reel() (full rally,
 │   │                                # reel/full/) and scripts/burst_moment_reel.py's
 │   │                                # build_burst_reel() (each rally's peak-intensity moment
-│   │                                # only, "quick hits", reel/burst/, fixed 60s target --
+│   │                                # only, "quick hits", reel/burst/, fixed 30s target --
 │   │                                # burst clips are ~5s each, the caller's own --target-sec
 │   │                                # is a full-reel number). stats.json is now
 │   │                                # {"full": {...}, "burst": {...}|null} -- null when

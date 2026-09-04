@@ -22,10 +22,12 @@ reel/burst/highlight.mp4 (scripts/burst_moment_reel.py's build_burst_reel --
 just each top rally's own peak-intensity window, not the whole rally).
 Both reuse the same detection pipeline independently (cheap CPU work,
 not worth threading shared state between two otherwise-separate,
-already-reviewed scripts for). burst_target_sec is fixed, not the
+already-reviewed scripts for). BURST_TARGET_SEC is fixed, not the
 caller's own --target-sec -- burst clips are ~5s each, so hitting a
-300s *full-reel* target would mean 50+ clips; burst_moment_reel.py's own
-CLI default (60s) is reused rather than inventing a new number.
+300s *full-reel* target would mean 50+ clips. Set to 30s (2026-09-04,
+operator request, down from an initial 60s reused from
+burst_moment_reel.py's own CLI default -- 30s reads as a tighter "quick
+hits" clip once real output was seen).
 
 reel/stats.json now holds {"full": {...}, "burst": {...} | null} --
 burst is null when build_burst_reel's own candidate pool (identical
@@ -55,7 +57,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from scripts.rank_and_reel import build_reel, WEIGHTS
 from scripts.burst_moment_reel import build_burst_reel
 
-BURST_TARGET_SEC = 60.0  # scripts/burst_moment_reel.py's own CLI default
+BURST_TARGET_SEC = 30.0  # operator request, 2026-09-04 -- see module docstring
 
 
 def main():
