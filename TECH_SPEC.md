@@ -630,8 +630,11 @@ pic-vision/
 │   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> 1080p proxy -> R2 upload
 │   │                                # -> RunPod runs pod_infer.py unmodified, then pod_cut.py
 │   │                                # (ADR-074, 2026-09-04) -> R2 upload of the finished reel.
-│   │                                # predictions.csv never leaves the pod; only the two
-│   │                                # highlight mp4s + a small stats.json come back
+│   │                                # predictions.csv never leaves the pod; only the ranked
+│   │                                # highlight mp4 + a small stats.json come back (ranked
+│   │                                # only, no chronological version at all -- same-day
+│   │                                # operator request, build_reel()'s new
+│   │                                # include_chronological=False)
 │   ├── pod_cut.py                     # ADR-074: runs ON the pod right after inference -- thin
 │   │                                # wrapper around scripts/rank_and_reel.py's build_reel(),
 │   │                                # deployed via a small tarball (run_cloud_job.py's
@@ -965,9 +968,15 @@ pic-vision/
 │   │   │   │                             # table (agent_id -> agents.venue_id,
 │   │   │   │                             # same scoping as every other agent-
 │   │   │   │                             # owned table), each row links to
-│   │   │   │                             # /api/reels/[id]/video/[which] for
-│   │   │   │                             # real playback. No status filter (a
-│   │   │   │                             # reel row only exists once its job
+│   │   │   │                             # /api/reels/[id]/video for real
+│   │   │   │                             # playback (ranked only, 2026-09-04 --
+│   │   │   │                             # pod_cut.py doesn't cut a
+│   │   │   │                             # chronological version at all
+│   │   │   │                             # anymore, operator request, so
+│   │   │   │                             # there's only ever one video per
+│   │   │   │                             # reel and no [which] segment).
+│   │   │   │                             # No status filter (a reel row only
+│   │   │   │                             # exists once its job
 │   │   │   │                             # already finished, no partial state
 │   │   │   │                             # to filter on) and no thumbnail (no
 │   │   │   │                             # frame capture exists anywhere in
@@ -1016,13 +1025,17 @@ pic-vision/
 │   │                                    # after a cloud job finishes (not
 │   │                                    # polled). Inserts one `reels` row
 │   │                                    # (agent_id from the token, camera_id/
-│   │                                    # cameraLabel/sessionId/bucket/keys/
-│   │                                    # duration/rallyCount from the body)
-│   ├── api/reels/[id]/video/[which]/route.ts  # ADR-074. Redirects to a
-│   │                                    # presigned R2 URL (lib/r2.ts) --
-│   │                                    # user-session Supabase client, not
-│   │                                    # admin, so `reels`' own RLS policy
-│   │                                    # is the actual access boundary
+│   │                                    # cameraLabel/sessionId/bucket/rankedKey/
+│   │                                    # duration/rallyCount from the body --
+│   │                                    # ranked only, no chronologicalKey
+│   │                                    # field, same-day operator request)
+│   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a presigned
+│   │                                    # R2 URL (lib/r2.ts) for the reel's
+│   │                                    # one video (ranked -- no [which]
+│   │                                    # segment, 2026-09-04) -- user-session
+│   │                                    # Supabase client, not admin, so
+│   │                                    # `reels`' own RLS policy is the
+│   │                                    # actual access boundary
 │   ├── components/app/                 # Sidebar (nav groups matching the mockup,
 │   │   │                              # real collapse toggle), TopBar (title +
 │   │   │                              # real Sign out), AlertBanner (REAL --
