@@ -15,11 +15,14 @@ Usage (on the pod):
     python3 pod_cut.py --video video_proxy.mp4 --csv predictions.csv \
         --calib calib.json --out-dir reel --target-sec 300 --session-id x
 
-Writes reel/highlight.mp4, reel/highlight_by_rank.mp4 (build_reel's own
-output names) and reel/stats.json (n_candidates/n_chosen/total_duration_sec
-only -- the orchestrator scp's this one small file back rather than
-parsing stdout, since a print-format change elsewhere shouldn't silently
-break stats reporting here).
+Writes reel/highlight_by_rank.mp4 (build_reel's own output name) and
+reel/stats.json (n_candidates/n_chosen/total_duration_sec only -- the
+orchestrator scp's this one small file back rather than parsing stdout,
+since a print-format change elsewhere shouldn't silently break stats
+reporting here). No highlight.mp4 (chronological) -- operator request,
+2026-09-04: the console's Reels tab only ever offers the ranked cut, so
+build_reel() is called with include_chronological=False to skip cutting
+it at all, not just skip uploading it.
 
 Deployed flat (cloud_pipeline/run_cloud_job.py's POD_REEL_DEPS tarball
 extracts src/ and scripts/ as this file's own siblings, e.g.
@@ -48,7 +51,8 @@ def main():
     args = p.parse_args()
 
     result = build_reel(args.video, args.csv, args.calib, args.out_dir,
-                         args.target_sec, args.session_id, weights=WEIGHTS)
+                         args.target_sec, args.session_id, weights=WEIGHTS,
+                         include_chronological=False)
 
     with open(os.path.join(args.out_dir, "stats.json"), "w") as f:
         json.dump(result["stats"], f)

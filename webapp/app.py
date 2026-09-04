@@ -468,10 +468,16 @@ def _reel_presigned_url(job_dir, which):
     # never downloaded locally) -- status.json carries a bucket/key pair
     # instead of a local path for that case. A local job's reel keeps using
     # the plain local-file route above; this is checked first only because
-    # a cloud job's status has no reel_chronological/reel_ranked path at all.
+    # a cloud job's status has no reel_ranked path at all.
+    #
+    # Cloud jobs only ever have a ranked key (2026-09-04: pod_cut.py stopped
+    # cutting a chronological version at all) -- which="chronological" on a
+    # cloud job falls through to `key = None` below and this function
+    # returns None, same as a local job's reel not existing yet; the caller
+    # already 404s on that, nothing cloud-specific needed here.
     status = _read_status(job_dir)
     bucket = status.get("reel_bucket")
-    key = status.get("reel_ranked_key" if which == "ranked" else "reel_chronological_key")
+    key = status.get("reel_ranked_key") if which == "ranked" else None
     if not bucket or not key:
         return None
     from cloud_pipeline import r2_storage

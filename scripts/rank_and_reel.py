@@ -36,21 +36,33 @@ WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # (duration, peak_crossing_rate, n_spikes) -- c
 
 
 def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path=None,
-                weights=WEIGHTS):
+                weights=WEIGHTS, include_chronological=True):
     """Detect rally candidates, rank them, and cut a highlight reel.
 
-    Writes highlight.mp4 (chronological) and highlight_by_rank.mp4 (best-scored
-    first) to out_dir. log_path, if given, gets the same progress lines as
-    stderr appended to it too -- webapp/pipeline.py passes its job's log.txt so
-    a job run through the web UI is tailable there; plain CLI usage leaves it
-    None and relies on stderr alone.
+    Writes highlight_by_rank.mp4 (best-scored first) to out_dir, plus
+    highlight.mp4 (chronological) unless include_chronological=False --
+    the cloud path (cloud_pipeline/pod_cut.py) passes False (operator
+    request, 2026-09-04: the console's Reels tab should only ever offer
+    the ranked cut, and every byte not uploaded is one less against R2's
+    storage limit). Local/CLI callers (webapp/pipeline.py's run_job,
+    this file's own CLI) are unaffected -- both cuts are cheap either way
+    (cut_clips() does the real per-rally cutting once; each concat is
+    just a `-c copy` re-ordering of the same already-cut clips), this
+    flag only controls whether the chronological one gets built and
+    returned at all.
+
+    log_path, if given, gets the same progress lines as stderr appended to
+    it too -- webapp/pipeline.py passes its job's log.txt so a job run
+    through the web UI is tailable there; plain CLI usage leaves it None
+    and relies on stderr alone.
 
     weights: (w_duration, w_peak_crossing_rate, w_n_spikes) passed to
     src/select.py's rank_segments -- defaults to the shipped config.yaml
     formula (ADR-063). Overriding this changes what gets ranked highest but
     not the candidate segments themselves or how they're cut.
 
-    Returns {"manifest", "chronological", "ranked", "stats"} -- stats is
+    Returns {"manifest", "chronological", "ranked", "stats"} -- "chronological"
+    is None when include_chronological=False. stats is
     {"n_candidates", "n_chosen", "total_duration_sec"}.
     """
     def report(msg):
@@ -111,7 +123,10 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
     scored = [{**r, "score": r["score"]} for r in chosen]
     manifest = cut_clips(video, scored, out_dir, court_id=session_id,
                           session_id=session_id, pad_sec=PAD_SEC)
-    chrono_path = concat_clips(manifest, out_dir)  # chronological -> out_dir/highlight.mp4
+    if include_chronological:
+        chrono_path = concat_clips(manifest, out_dir)  # chronological -> out_dir/highlight.mp4
+    else:
+        chrono_path = None
 
     # second concat, same clips, best-score-first
     clips_by_rank = sorted(manifest, key=lambda c: -c["score"])
@@ -123,7 +138,8 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
     subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
                      "-i", filelist, "-c", "copy", ranked_path], check=True)
     os.remove(filelist)
-    report(f"chronological -> {chrono_path}")
+    if include_chronological:
+        report(f"chronological -> {chrono_path}")
     report(f"ranked        -> {ranked_path}")
 
     return {

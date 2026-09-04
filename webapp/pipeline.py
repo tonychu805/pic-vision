@@ -344,7 +344,6 @@ def run_cloud_job(job_dir):
         # file paths above, so this reports bucket/key fields instead.
         _set_status(job_dir, stage="done", message="done", done=True, progress=None,
                     reel_bucket=result["bucket"],
-                    reel_chronological_key=result["chronological_key"],
                     reel_ranked_key=result["ranked_key"], stats=result["stats"])
     # (Exception, SystemExit), not just Exception -- cloud_pipeline.run_cloud_job's
     # own missing-calibration guard raises SystemExit (fine for its bare-CLI

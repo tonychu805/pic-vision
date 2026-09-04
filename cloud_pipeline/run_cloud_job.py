@@ -259,8 +259,9 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     # predictions.csv never leaves the pod (ADR-074) -- cut on the pod right
     # after inference, from the same proxy already sitting there, instead of
     # round-tripped through R2 for a local cut. Only the finished reel comes
-    # back.
-    chrono_key = f"{job_prefix}/highlight.mp4"
+    # back -- ranked only, not chronological too (operator request, same
+    # day: the console only ever offers the ranked cut, and pod_cut.py
+    # doesn't even build a chronological one anymore).
     ranked_key = f"{job_prefix}/highlight_by_rank.mp4"
 
     log(f"uploading video + calibration to R2 ({job_prefix})...", stage="r2_upload")
@@ -370,7 +371,6 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
         runpod_pod.ssh_run(ip, port, keyfile, cut_cmd, timeout_sec=600, on_line=log)
 
         log("uploading finished reel to R2...", stage="r2_download")
-        pod_r2("upload", chrono_key, "/workspace/reel/highlight.mp4", timeout_sec=300)
         pod_r2("upload", ranked_key, "/workspace/reel/highlight_by_rank.mp4", timeout_sec=300)
 
         os.makedirs(reel_dir, exist_ok=True)
@@ -383,8 +383,7 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     with open(stats_path) as f:
         stats = json.load(f)
 
-    result = {"chronological_key": chrono_key, "ranked_key": ranked_key,
-              "bucket": BUCKET, "stats": stats}
+    result = {"ranked_key": ranked_key, "bucket": BUCKET, "stats": stats}
     log(f"done: {result}")
     return result
 
