@@ -1105,6 +1105,54 @@ pic-vision/
 │                                      # SERVICE_ROLE_KEY deliberately blank -- has to
 │                                      # be pulled from the Supabase dashboard by hand
 │
+├── reel-page/                    # Public share page a venue-goer gets once their
+│   │                              # highlight is ready (ADR-074's "watch my clips"
+│   │                              # promise's actual delivery surface) -- its OWN
+│   │                              # separate git repo, same reasoning as
+│   │                              # pic-vision-cloud-console/: different domain
+│   │                              # (share.picvision.ai), different audience (public,
+│   │                              # unauthenticated venue-goers, not venue owners).
+│   │                              # Received 2026-09-04 via Taildrop as a v0.app mockup
+│   │                              # the operator built, then wired to real data the
+│   │                              # same day.
+│   ├── app/r/[reelId]/page.tsx      # server component -- fetches the reel via
+│   │                              # `reels`' new "anyone with the id can read" RLS
+│   │                              # policy (public, no session -- a share link is
+│   │                              # unguessable-UUID access, same pattern as Notion/
+│   │                              # Figma/Loom links), presigns its R2 video URL
+│   │                              # server-side (lib/r2.ts, duplicated from the
+│   │                              # console rather than importing across the repo
+│   │                              # boundary), 404s on an unknown/wrong id
+│   ├── app/r/[reelId]/reel-share-client.tsx  # the real interactive page: video
+│   │   │                          # element (real presigned src, not the mockup's
+│   │   │                          # placeholder box), Copy link, Download. The
+│   │   │                          # "Repost it"/"Send to" tiles split into two
+│   │   │                          # genuinely different mechanisms, decided after
+│   │   │                          # verifying against Meta's own developer docs
+│   │   │                          # (not assumed): Facebook/X/WhatsApp/LINE/SMS have
+│   │   │                          # real web share-intent URLs (plain links, filled
+│   │   │                          # in with the real share URL); Instagram/TikTok do
+│   │   │                          # NOT -- Meta's real "Sharing to Reels/Stories" API
+│   │   │                          # passes content via native UIPasteboard keys
+│   │   │                          # (`com.instagram.sharedSticker.*`) that only
+│   │   │                          # compiled native app code can write, confirmed
+│   │   │                          # directly from developers.facebook.com, not
+│   │   │                          # assumed -- no browser, on any platform, can do
+│   │   │                          # this. Built instead: `navigator.share()` with the
+│   │   │                          # actual video attached as a File (surfaces "Save
+│   │   │                          # Video" in the OS's own native share sheet), then
+│   │   │                          # best-effort opens the app right after -- one
+│   │   │                          # extra tap instead of zero, everything else
+│   │   │                          # automatic. Needs R2 bucket CORS (set 2026-09-04)
+│   │   │                          # since attaching a File means fetching the bytes
+│   │   │                          # first, not just linking to them
+│   ├── lib/supabase.ts              # public anon-key client, no session/cookie
+│   │                              # handling at all (unlike the console's
+│   │                              # lib/supabase/{client,server}.ts) -- this page has
+│   │                              # no logged-in user, ever
+│   └── lib/r2.ts                     # same presign helper as the console's, copied
+│                                    # not imported (genuinely separate deployable app)
+│
 
 ├── src/                        # the production pipeline
 │   ├── cut.py                    # entry point: `python3 -m src.cut` (see Makefile)
