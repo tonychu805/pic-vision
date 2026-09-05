@@ -8,18 +8,28 @@ import AlertsPage from "./pages/AlertsPage.jsx";
 import CredentialsPage from "./pages/CredentialsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import CloudPage from "./pages/CloudPage.jsx";
+import SignInPage from "./pages/SignInPage.jsx";
 
 export default function App() {
   const [nav, setNav] = useState("cameras");
   const [selectedCard, setSelectedCard] = useState(null);
   const [cameraCount, setCameraCount] = useState(0);
+  // undefined = still checking for a saved session; null = signed out;
+  // an object = signed in. Gates everything below the title bar until
+  // resolved, so a fresh launch never flashes the main UI before falling
+  // back to sign-in.
+  const [session, setSession] = useState(undefined);
+
+  useEffect(() => {
+    window.authAPI?.getSession().then(setSession).catch(() => setSession(null));
+  }, []);
 
   // Desktop's equivalent of a web pageview -- this app never navigates
   // by URL, so "page" is just the nav key already driving which page
   // component renders below.
   useEffect(() => {
-    window.analyticsAPI?.capture("$pageview", { page: nav });
-  }, [nav]);
+    if (session) window.analyticsAPI?.capture("$pageview", { page: nav });
+  }, [nav, session]);
 
   const openCamera = (card) => {
     setSelectedCard(card);
@@ -44,6 +54,12 @@ export default function App() {
       }}
     >
       <TitleBar />
+      {!session ? (
+        // undefined (still checking) renders the same empty pane as null
+        // (signed out) would flash into a moment later -- not worth a
+        // separate spinner state for a local electron-store read.
+        session === null && <SignInPage onSignedIn={setSession} />
+      ) : (
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <Sidebar
           nav={nav === "detail" ? "cameras" : nav}
@@ -78,9 +94,10 @@ export default function App() {
           {nav === "alerts" && <AlertsPage />}
           {nav === "credentials" && <CredentialsPage />}
           {nav === "settings" && <SettingsPage />}
-          {nav === "cloud" && <CloudPage />}
+          {nav === "cloud" && <CloudPage session={session} onSignedOut={() => setSession(null)} />}
         </div>
       </div>
+      )}
     </div>
   );
 }

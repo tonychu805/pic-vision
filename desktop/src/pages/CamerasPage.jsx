@@ -518,7 +518,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "0 22px 22px" }}>
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 14 }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
             {cards.map((card) => (
               <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
             ))}

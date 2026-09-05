@@ -46,7 +46,14 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
   // reads that local cache, no network call of its own.
   useEffect(() => {
     if (typeof window.cloudAPI?.status !== "function") return;
-    const poll = () => window.cloudAPI.status().then((c) => setBrandName(c?.brandName ?? null)).catch(() => {});
+    const poll = () =>
+      window.cloudAPI.status().then((c) => {
+        if (c?.brandName) return setBrandName(c.brandName);
+        // Not paired to a location yet -- fall back to the signed-in
+        // account's own brand (electron/auth.js's getBrand) so the
+        // sidebar isn't blank between sign-in and pairing this device.
+        window.authAPI?.getBrand().then((b) => setBrandName(b?.name ?? null)).catch(() => {});
+      }).catch(() => {});
     poll();
     const id = setInterval(poll, 30_000);
     return () => clearInterval(id);

@@ -73,12 +73,19 @@ contextBridge.exposeInMainWorld("pipelineAPI", {
 });
 
 contextBridge.exposeInMainWorld("cloudAPI", {
-  pair: (pairingCode) => ipcRenderer.invoke("cloud:pair", pairingCode),
+  register: () => ipcRenderer.invoke("cloud:register"),
   status: () => ipcRenderer.invoke("cloud:status"),
   disconnect: () => ipcRenderer.invoke("cloud:disconnect"),
   getAgentName: () => ipcRenderer.invoke("cloud:getAgentName"),
   setAgentName: (name) => ipcRenderer.invoke("cloud:setAgentName", name),
   getDeviceId: () => ipcRenderer.invoke("cloud:getDeviceId"),
+});
+
+contextBridge.exposeInMainWorld("authAPI", {
+  signIn: (email, password) => ipcRenderer.invoke("auth:signIn", email, password),
+  signOut: () => ipcRenderer.invoke("auth:signOut"),
+  getSession: () => ipcRenderer.invoke("auth:getSession"),
+  getBrand: () => ipcRenderer.invoke("auth:getBrand"),
 });
 
 contextBridge.exposeInMainWorld("analyticsAPI", {

@@ -28,15 +28,15 @@ export function getCloudConnection() {
   return store.get("connection", null);
 }
 
-// A stable identity for this machine, independent of pairing state --
+// A stable identity for this machine, independent of connection state --
 // generated once and kept even across disconnectCloud() (unlike
-// "connection", which is cleared there). Without this, every re-pair
-// (including a retried/failed attempt against the wrong URL) minted a
-// brand-new `agents` row server-side with no way to recognize "this is
-// the same desktop as before" -- duplicate agents *and* duplicate
-// cameras, since camera-heartbeat sync just re-inserts under whatever
-// agent_id the current token maps to. The pair endpoint uses this to
-// reclaim the existing row for this device instead.
+// "connection", which is cleared there). Without this, every
+// re-registration (including a retried/failed attempt against the wrong
+// URL) minted a brand-new `agents` row server-side with no way to
+// recognize "this is the same desktop as before" -- duplicate agents
+// *and* duplicate cameras, since camera-heartbeat sync just re-inserts
+// under whatever agent_id the current token maps to. The register
+// endpoint uses this to reclaim the existing row for this device instead.
 export function getOrCreateDeviceId() {
   let id = store.get("deviceId");
   if (!id) {
@@ -51,8 +51,8 @@ export function getOrCreateDeviceId() {
 // same DB default ("Desktop agent"), useless once a brand has more than
 // one. Defaults to the machine's hostname so it's not blank before the
 // operator ever visits the Cloud console page. Synced on every heartbeat
-// rather than only at pairing time, so a rename takes effect within one
-// interval without needing to re-pair.
+// rather than only at registration time, so a rename takes effect within
+// one interval without needing to re-register.
 export function getAgentName() {
   return store.get("agentName", hostname());
 }
@@ -65,26 +65,36 @@ export function setAgentName(name) {
   return trimmed;
 }
 
-// Exchanges a short-lived pairing code (typed in from the console's
-// dashboard) for a long-lived API token, stored locally the same way
-// camera passwords already are (cameras/store.js's electron-store JSON --
-// see that file's header for why this is a known, already-flagged POC
-// gap, not a new one introduced here).
-export async function pairAgent(pairingCode, consoleUrl = DEFAULT_CONSOLE_URL) {
-  const res = await fetch(`${consoleUrl}/api/agents/pair`, {
+// Registers this machine as its own agent row, using the signed-in
+// operator's own Supabase session instead of a manually-typed pairing
+// code (DECISIONS.md ADR-079, superseding ADR-078's "keep both" -- since
+// one account owns exactly one brand, signing in already identifies which
+// brand this device belongs to, so there's nothing left for a code to
+// prove). Called automatically right after a successful sign-in
+// (auth.js's `registerDevice`), not something the operator triggers by
+// hand. `accessToken` is the caller's problem to keep valid -- this
+// function doesn't refresh it, same as it never touched the pairing code
+// it replaced.
+//
+// The returned long-lived API token is stored locally the same way camera
+// passwords already are (cameras/store.js's electron-store JSON -- see
+// that file's header for why this is a known, already-flagged POC gap,
+// not a new one introduced here).
+export async function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_URL) {
+  const res = await fetch(`${consoleUrl}/api/agents/register`, {
     method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ pairingCode, deviceId: getOrCreateDeviceId() }),
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+    body: JSON.stringify({ deviceId: getOrCreateDeviceId(), agentName: getAgentName() }),
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `pairing failed (HTTP ${res.status})`);
+  if (!res.ok) throw new Error(body.error || `device registration failed (HTTP ${res.status})`);
 
   const connection = {
     consoleUrl,
     agentId: body.agentId,
     apiToken: body.apiToken,
     brandName: body.brandName,
-    pairedAt: new Date().toISOString(),
+    connectedAt: new Date().toISOString(),
   };
   store.set("connection", connection);
   startHeartbeatLoop();

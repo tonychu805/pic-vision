@@ -9,11 +9,18 @@ that's just data (scheduling, court/venue management, delivery to
 players). See `STRATEGY.md` §5 for the full split and `progress/09.02
 progress overview.md` for how it was decided. Built so far: camera
 discovery/management, recording (`electron/capture.js`), calibration
-(`electron/calibration.js`, 2026-09-03), and triggering transcode/upload/
+(`electron/calibration.js`, 2026-09-03), triggering transcode/upload/
 inference/reel-cutting by invoking the existing Python as a subprocess
-(`electron/pipeline.js`, PIC-68). Not yet built: receiving the cloud
-pipeline's output back for local review, or any connection to the (not
-yet existing) web app.
+(`electron/pipeline.js`, PIC-68), and — as of 2026-09-05 — a mandatory
+account sign-in gate (`electron/auth.js`, `src/pages/SignInPage.jsx`) in
+front of the rest of the app, using the same Supabase-auth accounts as
+`pic-vision-cloud-console`. Signing in also registers this device with
+the console automatically (`DECISIONS.md` ADR-079) — since one account
+owns exactly one brand, there's no separate pairing code to generate or
+type anymore; each machine still gets its own agent row (keyed by its
+own local device id), which is what lets one brand account cover
+multiple venues, each running its own signed-in desktop. Not yet built:
+receiving the cloud pipeline's output back for local review.
 
 Electron + React (Vite), chosen over Tauri for the POC because v1's actual
 feature -- ONVIF discovery and RTSP handling -- is Node's ecosystem, not

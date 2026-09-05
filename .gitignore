@@ -68,3 +68,6 @@ eval/labels/*_gaps.jsonl
 eval/labels/*_gaps_all.jsonl
 ._*
 .DS_Store
+
+# Local Netlify folder
+.netlify

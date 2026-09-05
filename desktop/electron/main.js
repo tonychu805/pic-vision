@@ -19,7 +19,8 @@ import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
 import { startRecording, stopRecording, stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
-import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
+import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 
@@ -167,14 +168,16 @@ function registerPipelineHandlers() {
   });
 }
 
-// Pairing + heartbeat (cloud.js) -- the desktop agent's first outbound
-// connection to pic-vision-cloud-console, ADR-071's "polls or a
+// Device registration + heartbeat (cloud.js) -- the desktop agent's first
+// outbound connection to pic-vision-cloud-console, ADR-071's "polls or a
 // lightweight persistent connection for commands/status, never an inbound
-// port" directive. No camera-facing data crosses this yet, just pairing
-// and an online/last-seen signal.
+// port" directive. Registration itself now happens automatically right
+// after sign-in (auth.js's `registerDevice`, called from `auth:signIn`
+// and at startup below) -- `cloud:register` here is just the manual retry
+// CloudPage.jsx offers if that didn't succeed the first time.
 function registerCloudHandlers() {
-  ipcMain.handle("cloud:pair", async (_event, pairingCode) => {
-    return pairAgent(pairingCode);
+  ipcMain.handle("cloud:register", async () => {
+    return registerDevice();
   });
   ipcMain.handle("cloud:status", async () => {
     return getCloudConnection();
@@ -191,6 +194,25 @@ function registerCloudHandlers() {
   });
   ipcMain.handle("cloud:getDeviceId", async () => {
     return getOrCreateDeviceId();
+  });
+}
+
+// Account sign-in (auth.js) -- gates App.jsx's own render. `auth:signIn`
+// also triggers registerCloudHandlers()'s device registration internally
+// (auth.js's `registerDevice`), so a successful sign-in is what actually
+// connects this device to the console.
+function registerAuthHandlers() {
+  ipcMain.handle("auth:signIn", async (_event, email, password) => {
+    return signIn(email, password);
+  });
+  ipcMain.handle("auth:signOut", async () => {
+    return signOut();
+  });
+  ipcMain.handle("auth:getSession", async () => {
+    return getSession();
+  });
+  ipcMain.handle("auth:getBrand", async () => {
+    return getBrand();
   });
 }
 
@@ -285,11 +307,20 @@ app.whenReady().then(() => {
   registerCalibrationHandlers();
   registerPipelineHandlers();
   registerCloudHandlers();
+  registerAuthHandlers();
   registerAnalyticsHandlers();
   registerLiveViewHandlers();
   registerWindowControlHandlers();
   createWindow();
-  startHeartbeatLoop(); // no-op if never paired; resumes automatically if it was
+  startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
+  // Catches the case where a device is signed in but registration never
+  // succeeded (console unreachable the first time, or this is a relaunch
+  // right after that failure) -- signIn() only tries once, at sign-in
+  // time, so a launch that skips signIn() entirely (an existing session)
+  // needs its own chance to retry.
+  if (getSession() && !getCloudConnection()) {
+    registerDevice().catch((err) => console.error(`[auth] device registration retry failed: ${err.message}`));
+  }
   capture("app_launched");
 
   app.on("activate", () => {

@@ -657,7 +657,7 @@ pic-vision/
 │   │                                # cancel_job(job_dir) (terminates any RunPod pod already
 │   │                                # created, not just this process); on success, with
 │   │                                # --console-url/--api-token (from cloud.js's stored
-│   │                                # pairing), _report_reels() (ADR-076, was _report_reel)
+│   │                                # connection), _report_reels() (ADR-076, was _report_reel)
 │   │                                # POSTs each finished reel (1 or 2) to the cloud console's
 │   │                                # /api/agents/reels, all sharing one shareId -- best-effort
 │   │                                # per reel, a failure doesn't fail the job, the reel
@@ -795,10 +795,14 @@ pic-vision/
 │   │   │                              # save calibration" report
 │   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
 │   │   │                              # to pic-vision-cloud-console (ADR-071) --
-│   │   │                              # pairAgent (exchanges a short-lived
-│   │   │                              # pairing code for a long-lived API
-│   │   │                              # token, electron-store) + a 30s
-│   │   │                              # heartbeat loop reporting online status.
+│   │   │                              # registerAgent (2026-09-05, ADR-079 --
+│   │   │                              # takes the signed-in operator's own
+│   │   │                              # access token, exchanges it for a
+│   │   │                              # long-lived API token, electron-store;
+│   │   │                              # replaced the original pairAgent/
+│   │   │                              # pairing-code exchange the same day) +
+│   │   │                              # a 30s heartbeat loop reporting online
+│   │   │                              # status.
 │   │   │                              # Same day: also reports the real camera
 │   │   │                              # list -- cameraStatuses() runs
 │   │   │                              # cameras/store.js's testConnection
@@ -819,6 +823,14 @@ pic-vision/
 │   │   │                              # streamUri, nor the raw calibPath/
 │   │   │                              # sampleClipPath (local filesystem paths).
 │   │   │                              # Court/reel data still doesn't cross this.
+│   │   ├── auth.js                     # 2026-09-05: account sign-in (Supabase Auth
+│   │   │                              # REST, same project as the console) --
+│   │   │                              # signIn/signOut/getSession/getBrand, plus
+│   │   │                              # registerDevice(), which calls cloud.js's
+│   │   │                              # registerAgent() right after a successful
+│   │   │                              # sign-in (ADR-079) -- there is no separate
+│   │   │                              # pairing-code step anymore; signing in IS
+│   │   │                              # what connects this device to the console.
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
@@ -893,9 +905,18 @@ pic-vision/
 │       │                                    # from here, not kept in both places.
 │       │                                    # Alerts/Credentials/Settings (mock data,
 │       │                                    # illustrative), CloudPage (2026-09-03,
-│       │                                    # real -- pairing-code input calling
-│       │                                    # cloud.js's cloudAPI.pair, "Connected
-│       │                                    # as <venue>" status, Disconnect)
+│       │                                    # real -- shows connection status +
+│       │                                    # cloudAPI.register retry (ADR-079,
+│       │                                    # 2026-09-05 -- registration itself
+│       │                                    # now happens automatically right
+│       │                                    # after sign-in, this page just
+│       │                                    # reports the result), "Connected
+│       │                                    # as <brand>" status, Disconnect,
+│       │                                    # account email + Sign out),
+│       │                                    # SignInPage (2026-09-05, real --
+│       │                                    # gates App.jsx's whole render;
+│       │                                    # mirrors pic-vision-cloud-console's
+│       │                                    # own sign-in page's layout/copy)
 │       ├── lib/cameraView.js                # real-camera -> mockup card/detail
 │       │                                    # view-model (STATE_META, buildCards)
 │       └── data/mockData.js                  # sample data for the 3 mock pages,
@@ -1030,19 +1051,24 @@ pic-vision/
 │   │   │   │                             # tooltip explaining why (same
 │   │   │   │                             # PreviewBanner-style honesty
 │   │   │   │                             # convention as desktop/'s mock pages)
-│   │   │   └── settings/page.tsx          # mostly mock form fields, EXCEPT the
-│   │   │                                 # "Pairing code" tab under Desktop
-│   │   │                                 # utility -- the real pairing flow
-│   │   │                                 # (moved here from the old /dashboard
-│   │   │                                 # page to match where the mockup itself
-│   │   │                                 # puts it, confirmed by screenshotting
-│   │   │                                 # that screen, not guessed)
+│   │   │   └── settings/page.tsx          # mostly mock form fields, EXCEPT brand
+│   │   │                                 # name/timezone (PATCH /api/brand) --
+│   │   │                                 # the "Pairing code" tab that used to
+│   │   │                                 # live under Desktop utility here is
+│   │   │                                 # gone (ADR-079, 2026-09-05): a device
+│   │   │                                 # registers itself automatically on
+│   │   │                                 # sign-in now, nothing left to generate
 │   │   └── api/agents/
-│   │       ├── pairing-code/route.ts   # authenticated (venue session) -- creates an
-│   │       │                          # unpaired agent row + a 10-min pairing code
-│   │       ├── pair/route.ts            # unauthenticated (the auth bootstrap itself)
-│   │       │                          # -- exchanges a valid pairing code for a
-│   │       │                          # long-lived API token (stored as a hash only)
+│   │       ├── register/route.ts       # ADR-079 (2026-09-05) -- Bearer-token
+│   │       │                          # authenticated, but the token is a raw
+│   │       │                          # Supabase session access token (the
+│   │       │                          # signed-in operator's own), not an
+│   │       │                          # agent apiToken; find-or-creates this
+│   │       │                          # device's own agents row (by deviceId)
+│   │       │                          # under that account's brand and returns
+│   │       │                          # a long-lived API token (hash stored
+│   │       │                          # only). Replaced pairing-code/route.ts
+│   │       │                          # + pair/route.ts, both deleted.
 │   │       ├── heartbeat/route.ts        # Bearer-token authenticated -- updates
 │   │       │                            # status/camera_count/last_seen_at; as of
 │   │       │                            # 2026-09-03 also upserts a `cameras` array
@@ -1116,11 +1142,19 @@ pic-vision/
 │   ├── lib/
 │   │   ├── supabase/{client,server,admin}.ts  # browser (RLS), server-session (RLS),
 │   │   │                                    # and service-role (bypasses RLS -- only
-│   │   │                                    # for the pair/heartbeat routes, which
-│   │   │                                    # authenticate via pairing_code/
-│   │   │                                    # api_token_hash, not a Supabase session)
-│   │   ├── agentToken.ts                     # pairing-code + API-token generation/
-│   │   │                                    # hashing, shared by pair.ts/heartbeat.ts
+│   │   │                                    # for heartbeat/reels/commands routes,
+│   │   │                                    # which authenticate via api_token_hash,
+│   │   │                                    # not a Supabase session)
+│   │   ├── supabase/bearer.ts                 # 2026-09-05 (ADR-079) -- RLS-scoped
+│   │   │                                    # client for a raw Supabase access
+│   │   │                                    # token arriving as a bearer header
+│   │   │                                    # instead of a cookie session; used
+│   │   │                                    # only by api/agents/register (the
+│   │   │                                    # desktop agent's own sign-in session)
+│   │   ├── agentToken.ts                     # API-token generation/hashing, shared
+│   │   │                                    # by register.ts/heartbeat.ts (the
+│   │   │                                    # pairing-code generator that used to
+│   │   │                                    # live here was removed with ADR-079)
 │   │   ├── r2.ts                              # ADR-074, 2026-09-04; rewritten same
 │   │   │                                    # day for ADR-075. reelVideoUrl(bucket,
 │   │   │                                    # key) -> stable cdn.picvisionai.com
