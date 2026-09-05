@@ -30,8 +30,11 @@ const DEFAULT_PORTS = [554];
 const DEFAULT_TIMEOUT_MS = 400;
 const RTSP_HANDSHAKE_TIMEOUT_MS = 300;
 const DEFAULT_CONCURRENCY = 48;
-const MAX_HOSTS = 512; // safety cap -- refuses to sweep something absurd
-                        // like a misdetected /8 rather than hang for ages
+export const MAX_HOSTS = 512; // safety cap -- refuses to sweep something absurd
+                               // like a misdetected /8 rather than hang for
+                               // ages. Exported so scanSettings.js can reject
+                               // a too-big range when it's added, not only
+                               // when a scan actually tries to run it.
 
 function ipToInt(ip) {
   return ip.split(".").reduce((acc, octet) => acc * 256 + Number(octet), 0);

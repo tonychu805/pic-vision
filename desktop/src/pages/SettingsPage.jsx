@@ -16,12 +16,36 @@ import { useEffect, useState } from "react";
 // kept at first (it was already accurate static text, not a mock
 // control) but removed 2026-09-06, operator's call -- it didn't do
 // anything a setting page needs to do, just pointed elsewhere.
+// Mirrors scanSettings.js's own validation (bare IP -> /24, MAX_HOSTS cap)
+// just enough to give live feedback as someone types, before they ever hit
+// Add -- the real, authoritative check still happens in the main process;
+// this only avoids a submit-fail-retry loop for the common cases.
+const BARE_IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
+const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/(\d{1,2})$/;
+const MAX_HOSTS = 512; // must match networkSweep.js's MAX_HOSTS
+
+function describeRange(input) {
+  const trimmed = input.trim();
+  if (BARE_IP_RE.test(trimmed)) {
+    const base = trimmed.replace(/\.\d{1,3}$/, ".0");
+    return { ok: true, text: `Will add ${base}/24 — 254 addresses` };
+  }
+  const match = trimmed.match(CIDR_RE);
+  if (!match) return null;
+  const prefix = Number(match[2]);
+  if (prefix > 32) return null;
+  const count = Math.max(0, 2 ** (32 - prefix) - 2);
+  if (count > MAX_HOSTS) return { ok: false, text: `= ${count} addresses — too many (cap is ${MAX_HOSTS}), narrow this` };
+  return { ok: true, text: `= ${count} addresses` };
+}
+
 export default function SettingsPage() {
   const [primaryCidr, setPrimaryCidr] = useState(null);
   const [extraRanges, setExtraRanges] = useState([]);
   const [newRange, setNewRange] = useState("");
   const [rangeError, setRangeError] = useState("");
   const [addingRange, setAddingRange] = useState(false);
+  const rangeHint = newRange.trim() ? describeRange(newRange) : null;
 
   const [timeoutMs, setTimeoutMsField] = useState("");
   const [savedTimeoutMs, setSavedTimeoutMs] = useState(null);
@@ -97,15 +121,20 @@ export default function SettingsPage() {
           <form onSubmit={addRange} style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <input
               className="input"
-              placeholder="192.168.1.0/24"
+              placeholder="192.168.1.50 or 192.168.1.0/24"
               value={newRange}
               onChange={(e) => setNewRange(e.target.value)}
               style={{ flex: 1, fontFamily: "ui-monospace, Menlo, monospace" }}
             />
-            <button className="btn btn-secondary" disabled={addingRange || !newRange.trim()}>
+            <button className="btn btn-secondary" disabled={addingRange || !newRange.trim() || rangeHint?.ok === false}>
               {addingRange ? "Adding…" : "Add"}
             </button>
           </form>
+          {rangeHint && (
+            <p style={{ color: rangeHint.ok ? "color-mix(in srgb, var(--color-text) 50%, transparent)" : "var(--color-accent-2-400)", fontSize: 11.5, margin: "6px 0 0" }}>
+              {rangeHint.text}
+            </p>
+          )}
           {rangeError && <p style={{ color: "var(--color-accent-2-400)", fontSize: 12, margin: "8px 0 0" }}>{rangeError}</p>}
           <p style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", margin: "10px 0 0", lineHeight: 1.5 }}>
             Only extends the RTSP port sweep — useful if your cameras sit on a separate VLAN from this machine.
