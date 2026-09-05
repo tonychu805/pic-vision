@@ -20,6 +20,7 @@ import { startRecording, stopRecording, stopAllRecordings, recordingStatus, list
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
 import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
+import { capture, shutdownAnalytics } from "./analytics.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -192,6 +193,17 @@ function registerCloudHandlers() {
   });
 }
 
+// One handler, not one per event type -- renderer calls
+// window.analyticsAPI.capture(event, properties) for anything it wants
+// to log (currently just $pageview on nav change), same shape
+// posthog-js's own .capture() takes so call sites read the same either
+// way.
+function registerAnalyticsHandlers() {
+  ipcMain.handle("analytics:capture", (_event, event, properties) => {
+    capture(event, properties);
+  });
+}
+
 // Registered once against whichever window is currently focused -- a single
 // -window POC, but avoids the "second handler for window:minimize" crash
 // that registering inside createWindow() would hit on a second
@@ -258,9 +270,11 @@ app.whenReady().then(() => {
   registerCalibrationHandlers();
   registerPipelineHandlers();
   registerCloudHandlers();
+  registerAnalyticsHandlers();
   registerWindowControlHandlers();
   createWindow();
   startHeartbeatLoop(); // no-op if never paired; resumes automatically if it was
+  capture("app_launched");
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) createWindow();
@@ -285,5 +299,6 @@ app.on("before-quit", async (e) => {
   // indefinitely -- real gap found 2026-09-03, where one such leftover
   // was a live, private frame from a real camera.
   discardAllSnapshots();
+  await shutdownAnalytics(); // flushes posthog-node's batched queue before the process actually exits
   app.exit(0);
 });

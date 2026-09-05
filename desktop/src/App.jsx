@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import TitleBar from "./components/TitleBar.jsx";
 import Sidebar from "./components/Sidebar.jsx";
 import CamerasPage from "./pages/CamerasPage.jsx";
@@ -13,6 +13,13 @@ export default function App() {
   const [nav, setNav] = useState("cameras");
   const [selectedCard, setSelectedCard] = useState(null);
   const [cameraCount, setCameraCount] = useState(0);
+
+  // Desktop's equivalent of a web pageview -- this app never navigates
+  // by URL, so "page" is just the nav key already driving which page
+  // component renders below.
+  useEffect(() => {
+    window.analyticsAPI?.capture("$pageview", { page: nav });
+  }, [nav]);
 
   const openCamera = (card) => {
     setSelectedCard(card);

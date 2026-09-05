@@ -33,7 +33,8 @@
     "@phosphor-icons/web": "^2.1.2",
     "electron-store": "^10.0.0",
     "onvif": "^0.8.2",
-    "oui-data": "^2.1.12"
+    "oui-data": "^2.1.12",
+    "posthog-node": "^5.51.6"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",

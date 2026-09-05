@@ -80,3 +80,7 @@ contextBridge.exposeInMainWorld("cloudAPI", {
   setAgentName: (name) => ipcRenderer.invoke("cloud:setAgentName", name),
   getDeviceId: () => ipcRenderer.invoke("cloud:getDeviceId"),
 });
+
+contextBridge.exposeInMainWorld("analyticsAPI", {
+  capture: (event, properties) => ipcRenderer.invoke("analytics:capture", event, properties),
+});
