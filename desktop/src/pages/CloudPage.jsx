@@ -129,7 +129,7 @@ export default function CloudPage() {
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
               <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-accent)" }} />
-              <span style={{ fontWeight: 500 }}>Connected as {connection.venueName}</span>
+              <span style={{ fontWeight: 500 }}>Connected as {connection.brandName}</span>
             </div>
             <p style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: "0 0 12px" }}>
               Paired {new Date(connection.pairedAt).toLocaleString()} · reporting status to {connection.consoleUrl}

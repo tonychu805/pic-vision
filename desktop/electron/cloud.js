@@ -48,7 +48,7 @@ export function getOrCreateDeviceId() {
 
 // Operator-editable label for this machine on the console's "Connected
 // agents" table (Overview page) -- every agent row otherwise shows the
-// same DB default ("Desktop agent"), useless once a venue has more than
+// same DB default ("Desktop agent"), useless once a brand has more than
 // one. Defaults to the machine's hostname so it's not blank before the
 // operator ever visits the Cloud console page. Synced on every heartbeat
 // rather than only at pairing time, so a rename takes effect within one
@@ -83,7 +83,7 @@ export async function pairAgent(pairingCode, consoleUrl = DEFAULT_CONSOLE_URL) {
     consoleUrl,
     agentId: body.agentId,
     apiToken: body.apiToken,
-    venueName: body.venueName,
+    brandName: body.brandName,
     pairedAt: new Date().toISOString(),
   };
   store.set("connection", connection);
