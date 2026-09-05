@@ -83,4 +83,10 @@ contextBridge.exposeInMainWorld("cloudAPI", {
 
 contextBridge.exposeInMainWorld("analyticsAPI", {
   capture: (event, properties) => ipcRenderer.invoke("analytics:capture", event, properties),
+  isFeatureEnabled: (key) => ipcRenderer.invoke("analytics:isFeatureEnabled", key),
+});
+
+contextBridge.exposeInMainWorld("liveViewAPI", {
+  start: (cameraId) => ipcRenderer.invoke("liveview:start", cameraId),
+  stop: () => ipcRenderer.invoke("liveview:stop"),
 });

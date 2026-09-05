@@ -312,6 +312,16 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   const [bulkOpen, setBulkOpen] = useState(false);
   const scanTimer = useRef(null);
 
+  // Bulk select (Sign in / Sync time / Update firmware) isn't wired up
+  // to anything real yet -- see the "aren't wired up yet" dialog below.
+  // Gated behind a PostHog feature flag rather than deleted, so it can
+  // be turned on later without a code deploy once it's built. Fails
+  // closed: defaults to hidden until the flag resolves true.
+  const [selectFeatureEnabled, setSelectFeatureEnabled] = useState(false);
+  useEffect(() => {
+    window.analyticsAPI?.isFeatureEnabled("desktop-camera-bulk-select").then(setSelectFeatureEnabled);
+  }, []);
+
   // Keyed by camera id, not hostname -- a sample-clip camera (2026-09-03)
   // has no hostname at all, and two of them would otherwise collide under
   // the same `undefined` key and show each other's status.
@@ -438,9 +448,11 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
-          <button className="btn btn-secondary" onClick={() => setSelectMode((v) => !v)}>
-            <i className="ph ph-check-square-offset" style={{ fontSize: 15 }} />Select
-          </button>
+          {selectFeatureEnabled && (
+            <button className="btn btn-secondary" onClick={() => setSelectMode((v) => !v)}>
+              <i className="ph ph-check-square-offset" style={{ fontSize: 15 }} />Select
+            </button>
+          )}
           <button className="btn btn-secondary" onClick={() => openManual()}>
             <i className="ph ph-plus" style={{ fontSize: 15 }} />Add manually
           </button>

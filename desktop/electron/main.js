@@ -20,7 +20,8 @@ import { startRecording, stopRecording, stopAllRecordings, recordingStatus, list
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
 import { pairAgent, disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
-import { capture, shutdownAnalytics } from "./analytics.js";
+import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
+import { startLiveView, stopLiveView } from "./liveview.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -202,6 +203,20 @@ function registerAnalyticsHandlers() {
   ipcMain.handle("analytics:capture", (_event, event, properties) => {
     capture(event, properties);
   });
+  ipcMain.handle("analytics:isFeatureEnabled", async (_event, key) => {
+    return isFeatureEnabled(key);
+  });
+}
+
+function registerLiveViewHandlers() {
+  ipcMain.handle("liveview:start", async (_event, cameraId) => {
+    const camera = listCameras().find((c) => c.id === cameraId);
+    if (!camera) throw new Error("camera not found");
+    return startLiveView(camera);
+  });
+  ipcMain.handle("liveview:stop", async () => {
+    await stopLiveView();
+  });
 }
 
 // Registered once against whichever window is currently focused -- a single
@@ -271,6 +286,7 @@ app.whenReady().then(() => {
   registerPipelineHandlers();
   registerCloudHandlers();
   registerAnalyticsHandlers();
+  registerLiveViewHandlers();
   registerWindowControlHandlers();
   createWindow();
   startHeartbeatLoop(); // no-op if never paired; resumes automatically if it was
@@ -294,6 +310,7 @@ app.on("window-all-closed", () => {
 app.on("before-quit", async (e) => {
   e.preventDefault();
   await stopAllRecordings();
+  await stopLiveView(); // no-op if no live-view popup was open
   // A calibration snapshot left over from a modal closed mid-flow
   // (window closed without Save or Cancel) shouldn't linger in /tmp
   // indefinitely -- real gap found 2026-09-03, where one such leftover

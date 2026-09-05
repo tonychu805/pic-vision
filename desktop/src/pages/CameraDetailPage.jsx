@@ -76,6 +76,82 @@ function RecordingControl({ camera }) {
   );
 }
 
+// On-demand live view (operator's proposal, 2026-09-05): a popup showing
+// the real RTSP stream, started only while this modal is open and
+// stopped the moment it closes -- deliberately not an always-on preview,
+// to keep the bandwidth/CPU cost occasional rather than continuous. The
+// <img> tag itself is what actually renders the MJPEG-over-HTTP stream
+// (see electron/liveview.js); this component just owns start/stop and
+// the connecting/error states around it.
+function LiveViewButton({ camera }) {
+  const [open, setOpen] = useState(false);
+  const [url, setUrl] = useState(null);
+  const [error, setError] = useState("");
+  const [starting, setStarting] = useState(false);
+
+  const openLiveView = async () => {
+    setOpen(true);
+    setStarting(true);
+    setError("");
+    // A main-process/preload change (like liveViewAPI itself) only takes
+    // effect after a full quit-and-relaunch, not a renderer reload/hot-
+    // reload -- same gap CloudPage.jsx's CLOUD_API_MISSING already had to
+    // learn from once. Checked here, not just left to throw, so a stale
+    // build says so instead of a bare "cannot read properties of
+    // undefined".
+    if (typeof window.liveViewAPI?.start !== "function") {
+      setError("This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).");
+      setStarting(false);
+      return;
+    }
+    try {
+      const { url: liveUrl } = await window.liveViewAPI.start(camera.id);
+      setUrl(liveUrl);
+    } catch (err) {
+      setError(err.message);
+    }
+    setStarting(false);
+  };
+
+  const close = () => {
+    setOpen(false);
+    setUrl(null);
+    window.liveViewAPI?.stop();
+  };
+
+  return (
+    <>
+      <button className="btn btn-secondary" style={{ fontSize: 12.5 }} onClick={openLiveView}>
+        <i className="ph ph-play-circle" style={{ fontSize: 15 }} />Live view
+      </button>
+      {open && (
+        <div className="dialog-backdrop" onClick={close}>
+          <div className="dialog" style={{ width: "min(720px, 100%)" }} onClick={(e) => e.stopPropagation()}>
+            <div className="dialog-title">{camera.label} -- live</div>
+            <div className="dialog-body" style={{ padding: 0 }}>
+              {error ? (
+                <p style={{ padding: 16, fontSize: 13, color: "var(--color-accent-2-400)" }}>{error}</p>
+              ) : starting ? (
+                <p style={{ padding: 16, fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Connecting…</p>
+              ) : (
+                <img
+                  src={url}
+                  alt={`${camera.label} live view`}
+                  style={{ display: "block", width: "100%", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
+                  onError={() => setError("Lost connection to the camera's stream.")}
+                />
+              )}
+            </div>
+            <div className="dialog-actions">
+              <button className="btn btn-secondary" onClick={close}>Close</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 // Literal copy of calibrate.py's POINTS names (order matters -- this is
 // the click order cloud_pipeline/save_calibration.py expects on stdin)
 // plus its NET_PROMPTS, same "kept in sync by hand" convention as
@@ -603,6 +679,7 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
             {v.subtitle}{v.ip ? ` · ${v.ip}` : ""}
           </div>
         </div>
+        {!isSampleClip(card.camera) && <LiveViewButton camera={card.camera} />}
         <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />
       </div>
 

@@ -27,6 +27,22 @@ export function capture(event, properties = {}) {
   getClient().capture({ distinctId: getOrCreateDeviceId(), event, properties });
 }
 
+// Fails closed (hidden/off), not open -- a network hiccup or a flag that
+// doesn't exist yet in the PostHog project should never accidentally
+// reveal an unfinished feature. Flags are created/toggled in PostHog's
+// own dashboard (Feature flags > New), not from this code.
+// evaluateFlags(...).isEnabled(), not the deprecated single-flag
+// isFeatureEnabled() -- confirmed against the live project (no
+// deprecation warning, correct false for a not-yet-created flag).
+export async function isFeatureEnabled(key) {
+  try {
+    const flags = await getClient().evaluateFlags(getOrCreateDeviceId());
+    return flags.isEnabled(key) === true;
+  } catch {
+    return false;
+  }
+}
+
 // posthog-node batches and flushes on an interval -- call this from
 // main.js's before-quit so a capture right before exit isn't dropped.
 export function shutdownAnalytics() {
