@@ -708,6 +708,62 @@ all nullable/defaulted so existing rows aren't broken); verified via a
 throwaway agent + direct heartbeat POST (test data deleted after,
 confirmed the real account's 3 cameras/2 agents were untouched).
 
+## Cameras on a different network than this computer (2026-09-06)
+
+If a venue puts its cameras on a separate subnet or VLAN from the
+machine running this app (a common, reasonable setup -- keeps camera
+traffic off the same network as guest Wi-Fi/point-of-sale systems),
+here's what does and doesn't reach across that boundary, and what to do
+about it.
+
+**The short version:** add the camera by its known IP address (see
+"Manual add" on the Cameras page, or Scan settings' "Ranges" panel for
+the port sweep) -- this always works regardless of network segmentation,
+and is how a commercial camera install is normally configured anyway
+(a small, known set of cameras on static IPs, not something meant to be
+auto-discovered fresh every time). Automatic discovery (the "Scan"
+button's ONVIF half) is a nice-to-have for cameras on the *same* network
+segment as this computer; it doesn't have to work across subnets for a
+real install to succeed.
+
+**Why automatic discovery doesn't cross subnets, if you want to actually
+fix it instead of working around it:** ONVIF's "find cameras
+automatically" mechanism works by sending one broadcast message on the
+local network and listening for replies. Broadcast/multicast traffic
+does not cross routers or VLANs by default -- this is true of any
+network, for any device or software, not something specific to this
+app. The other half of Scan ("Scan settings" > Ranges), which checks a
+specific IP range for an open camera port, *does* cross subnets fine
+(it's ordinary routed traffic, not a broadcast) -- that's why adding an
+extra range there helps for one half of scanning but not the other.
+
+**If you want automatic (ONVIF) discovery to reach a separate VLAN
+anyway**, that's a network configuration change, not something this app
+can do from software -- ask whoever manages the venue's network
+(installer, IT provider, or the router/switch's own admin page) to:
+
+1. Check whether the router/switch separating the two networks supports
+   **IGMP Proxy**, **Multicast Routing**, or **PIM** -- look for one of
+   those terms in its admin interface, usually under a
+   "Routing"/"Advanced"/"Multicast" section. Enabling it between the
+   specific VLANs the cameras and this computer are on lets the
+   broadcast discovery message cross between them.
+2. This is typically only available on prosumer/enterprise-grade gear
+   (e.g. Ubiquiti, pfSense, small-business Cisco/Netgear switches) --
+   most basic consumer routers don't expose this at all. If the
+   hardware doesn't support it, a small dedicated relay device (even a
+   Raspberry Pi running an open-source multicast-relay tool, sitting on
+   both networks) can rebroadcast the discovery traffic between them
+   instead -- a hardware/networking purchase, not a setting.
+3. Confirm the fix worked by clicking "Scan" again after the network
+   change -- no app restart or setting change needed on this side.
+
+Realistically, for a venue at this product's scale, most installers
+will find it faster to just add each camera by its known IP once (the
+"short version" above) than to configure multicast routing -- this
+section exists for the case where automatic discovery specifically
+matters (e.g. camera IPs aren't fixed/known ahead of time).
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
