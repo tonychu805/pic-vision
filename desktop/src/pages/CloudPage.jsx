@@ -25,6 +25,7 @@ export default function CloudPage() {
   const [agentName, setAgentNameField] = useState("");
   const [savedName, setSavedName] = useState("");
   const [savingName, setSavingName] = useState(false);
+  const [deviceId, setDeviceId] = useState("");
 
   const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(err.message));
   useEffect(() => {
@@ -34,6 +35,7 @@ export default function CloudPage() {
         setAgentNameField(name);
         setSavedName(name);
       });
+      window.cloudAPI.getDeviceId().then(setDeviceId);
     }
   }, []);
 
@@ -88,6 +90,13 @@ export default function CloudPage() {
   return (
     <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "16px 22px 26px" }}>
       <div style={{ fontFamily: "var(--font-heading)", fontSize: 20, lineHeight: 1.2, marginBottom: 14 }}>Cloud console</div>
+
+      <div style={{ maxWidth: 420, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", marginBottom: 12 }}>
+        <label style={{ display: "block", fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", marginBottom: 8 }}>
+          Device ID <span style={{ opacity: 0.7 }}>— fixed, identifies this machine to the console across re-pairs</span>
+        </label>
+        <input className="input" value={deviceId} readOnly style={{ fontFamily: "ui-monospace, Menlo, monospace", opacity: 0.85 }} />
+      </div>
 
       <div style={{ maxWidth: 420, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", marginBottom: 12 }}>
         <label style={{ display: "block", fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", marginBottom: 8 }}>

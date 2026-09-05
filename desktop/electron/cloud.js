@@ -37,7 +37,7 @@ export function getCloudConnection() {
 // cameras, since camera-heartbeat sync just re-inserts under whatever
 // agent_id the current token maps to. The pair endpoint uses this to
 // reclaim the existing row for this device instead.
-function getOrCreateDeviceId() {
+export function getOrCreateDeviceId() {
   let id = store.get("deviceId");
   if (!id) {
     id = randomUUID();
