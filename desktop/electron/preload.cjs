@@ -23,13 +23,23 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   remove: (id) => ipcRenderer.invoke("cameras:remove", id),
   rename: (id, label) => ipcRenderer.invoke("cameras:rename", id, label),
   testConnection: (config) => ipcRenderer.invoke("cameras:testConnection", config),
-  sweep: (options) => ipcRenderer.invoke("cameras:sweep", options),
+  // No options anymore -- scanSettings.js (extra ranges + timeout) is the
+  // single source of truth main.js's own handler reads internally now,
+  // same pattern as getNetworkInfo() already being computed server-side.
+  sweep: () => ipcRenderer.invoke("cameras:sweep"),
   probeRtspFallback: (config) => ipcRenderer.invoke("cameras:probeRtspFallback", config),
   addRtsp: (config) => ipcRenderer.invoke("cameras:addRtsp", config),
   parseRtspUrl: (raw, fallbackUsername, fallbackPassword) =>
     ipcRenderer.invoke("cameras:parseRtspUrl", raw, fallbackUsername, fallbackPassword),
   setCalibPath: (id, calibPath) => ipcRenderer.invoke("cameras:setCalibPath", id, calibPath),
   addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
+});
+
+contextBridge.exposeInMainWorld("scanSettingsAPI", {
+  get: () => ipcRenderer.invoke("scanSettings:get"),
+  addRange: (cidr) => ipcRenderer.invoke("scanSettings:addRange", cidr),
+  removeRange: (cidr) => ipcRenderer.invoke("scanSettings:removeRange", cidr),
+  setTimeout: (ms) => ipcRenderer.invoke("scanSettings:setTimeout", ms),
 });
 
 // process.platform is a value, not a function -- safe to expose directly
@@ -83,6 +93,11 @@ contextBridge.exposeInMainWorld("authAPI", {
 contextBridge.exposeInMainWorld("analyticsAPI", {
   capture: (event, properties) => ipcRenderer.invoke("analytics:capture", event, properties),
   isFeatureEnabled: (key) => ipcRenderer.invoke("analytics:isFeatureEnabled", key),
+});
+
+contextBridge.exposeInMainWorld("logAPI", {
+  list: () => ipcRenderer.invoke("log:list"),
+  clear: () => ipcRenderer.invoke("log:clear"),
 });
 
 contextBridge.exposeInMainWorld("liveViewAPI", {

@@ -13,6 +13,7 @@
 // arrived via a cookie session (the console) or a bearer header (here).
 import Store from "electron-store";
 import { registerAgent, getCloudConnection } from "./cloud.js";
+import { logEvent } from "./activityLog.js";
 
 const store = new Store({ name: "auth" });
 
@@ -54,6 +55,7 @@ export async function signIn(email, password) {
     user: { id: data.user.id, email: data.user.email },
   };
   store.set("session", session);
+  logEvent("signed_in", `Signed in as ${session.user.email}`);
 
   // Only register if this machine isn't already connected to some brand --
   // re-signing in on an already-registered device shouldn't mint a new
@@ -95,6 +97,8 @@ export async function signOut() {
       headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.accessToken}` },
     }).catch(() => {});
   }
+  // Logged before clearing -- session.user.email won't exist to read afterward.
+  if (session?.user?.email) logEvent("signed_out", `Signed out (${session.user.email})`);
   store.delete("session");
   return null;
 }

@@ -4,8 +4,7 @@ import Sidebar from "./components/Sidebar.jsx";
 import CamerasPage from "./pages/CamerasPage.jsx";
 import CameraDetailPage from "./pages/CameraDetailPage.jsx";
 import { configuredCard } from "./lib/cameraView.js";
-import AlertsPage from "./pages/AlertsPage.jsx";
-import CredentialsPage from "./pages/CredentialsPage.jsx";
+import LogPage from "./pages/LogPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import CloudPage from "./pages/CloudPage.jsx";
 import SignInPage from "./pages/SignInPage.jsx";
@@ -91,8 +90,7 @@ export default function App() {
               }}
             />
           )}
-          {nav === "alerts" && <AlertsPage />}
-          {nav === "credentials" && <CredentialsPage />}
+          {nav === "log" && <LogPage />}
           {nav === "settings" && <SettingsPage />}
           {nav === "cloud" && <CloudPage session={session} onSignedOut={() => setSession(null)} />}
         </div>

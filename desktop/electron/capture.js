@@ -18,6 +18,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
+import { logEvent } from "./activityLog.js";
 
 export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 
@@ -197,14 +198,25 @@ export function startRecording(camera) {
   active.set(camera.id, record);
 
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(() => resolve({ outDir, startedAt }), STARTUP_GRACE_MS);
+    let started = false;
+    const timer = setTimeout(() => {
+      started = true;
+      logEvent("recording_started", `Started recording ${camera.label}`, outDir);
+      resolve({ outDir, startedAt });
+    }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
       // Only clear if this is still the tracked process for this camera --
       // a fast stop-then-restart could otherwise let a late exit event
       // from the OLD process clobber the NEW one's tracked state.
       if (active.get(camera.id) === record) active.delete(camera.id);
       clearTimeout(timer);
-      reject(new Error(stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`));
+      // An exit after the grace period is stopRecording's own SIGINT --
+      // expected, already logged there, not a failure. Only an exit
+      // *before* the grace period ever resolved is a real start failure.
+      if (started) return;
+      const reason = stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
+      logEvent("recording_failed", `${camera.label} recording failed to start`, reason);
+      reject(new Error(reason));
     });
   });
 }
@@ -217,7 +229,10 @@ export function stopRecording(cameraId) {
   const rec = active.get(cameraId);
   if (!rec) return Promise.resolve({ stopped: false });
   return new Promise((resolve) => {
-    rec.proc.once("exit", () => resolve({ stopped: true, outDir: rec.outDir }));
+    rec.proc.once("exit", () => {
+      logEvent("recording_stopped", "Stopped recording", rec.outDir);
+      resolve({ stopped: true, outDir: rec.outDir });
+    });
     rec.proc.kill("SIGINT");
   });
 }

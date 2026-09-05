@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
-// mockup like SettingsPage.jsx/CredentialsPage.jsx. Registration itself
+// mockup like SettingsPage.jsx. Registration itself
 // now happens automatically right after sign-in (ADR-079's replacement
 // for the pairing-code flow this page used to host); this page just shows
 // the result and offers a manual retry if that didn't succeed.

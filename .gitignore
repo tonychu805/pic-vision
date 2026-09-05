@@ -50,6 +50,7 @@ debug_frames/
 *.jpg
 # ...except real, committed UI assets (not regenerable analysis output)
 !desktop/src/assets/*.png
+!desktop/build/icon.png
 
 # Ad hoc reference material (chat exports, etc.) — not project docs, don't belong in history
 *.pdf

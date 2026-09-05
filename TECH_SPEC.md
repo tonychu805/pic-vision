@@ -725,14 +725,23 @@ pic-vision/
 │   │                              # itself). CDN
 │   │                              # delivery is NOT this app's scope -- ADR-071
 │   │                              # moved it to the (also unbuilt) cloud web app.
-│   │                              # Visual design (all 5
+│   │                              # Visual design (originally 5
 │   │                              # pages, "Nocturne" design system) implemented
 │   │                              # from a Claude Design handoff bundle
 │   │                              # (desktop-utility-by-claude-design.zip, repo
 │   │                              # root) -- real backend wired only for the
-│   │                              # Cameras page; Alerts/Credentials/Settings are
-│   │                              # pixel-matched but illustrative. See
-│   │                              # desktop/README.md.
+│   │                              # Cameras page and, as of 2026-09-05, Log
+│   │                              # (electron/activityLog.js -- real event
+│   │                              # history, replacing the mock "Alerts" page
+│   │                              # of the same name) and Settings (renamed
+│   │                              # "Scan settings," electron/scanSettings.js
+│   │                              # -- real custom RTSP-sweep ranges + real
+│   │                              # per-address timeout, dropping the
+│   │                              # protocol-checkbox and scan-cadence panels
+│   │                              # that had no real capability behind them).
+│   │                              # Credentials removed entirely 2026-09-05,
+│   │                              # operator's call -- not necessary on
+│   │                              # desktop. See desktop/README.md.
 │   ├── electron/
 │   │   ├── main.js                  # frameless BrowserWindow (custom HTML title
 │   │   │                              # bar, mockup-driven) + the ipcMain.handle
@@ -742,11 +751,40 @@ pic-vision/
 │   │   │                              # package.json's "type": "module"; see
 │   │   │                              # the file's own comment for how this was
 │   │   │                              # found -- CDP against the real renderer,
-│   │   │                              # not guessed)
+│   │   │                              # not guessed). logAPI (2026-09-05) is the
+│   │   │                              # newest bridge here -- list()/clear()
+│   │   │                              # over activityLog.js
+│   │   ├── activityLog.js               # 2026-09-05: real event history for the
+│   │   │                              # Log tab (replaced the mock "Alerts"
+│   │   │                              # page). Deliberately dependency-free
+│   │   │                              # (only electron-store) so cloud.js/
+│   │   │                              # capture.js/calibration.js/pipeline.js/
+│   │   │                              # auth.js can all import logEvent()
+│   │   │                              # without any circular-import risk between
+│   │   │                              # them -- every event type is a real
+│   │   │                              # signal already computed somewhere in
+│   │   │                              # the app, this module is purely
+│   │   │                              # persistence (capped at 200, electron-
+│   │   │                              # store JSON, same per-concern convention
+│   │   │                              # as cameras.json/cloud.json/auth.json)
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel, plus (PIC-68)
 │   │   │                              # pickCalibFile -- native file dialog, now the
 │   │   │                              # secondary "import an existing calib.json" path
+│   │   ├── scanSettings.js              # 2026-09-05: real scan config --
+│   │   │                              # extra RTSP-sweep ranges (persisted CIDR
+│   │   │                              # list) + per-address timeout, both
+│   │   │                              # already-real networkSweep.js
+│   │   │                              # parameters that were previously
+│   │   │                              # hardcoded (a single auto-detected
+│   │   │                              # cidr, a literal 400ms in
+│   │   │                              # CamerasPage.jsx). cameras:sweep's
+│   │   │                              # main.js handler now reads both
+│   │   │                              # internally and merges the primary
+│   │   │                              # range's hits with every extra range's
+│   │   │                              # (best-effort -- one bad/oversized
+│   │   │                              # extra range is logged and skipped,
+│   │   │                              # not allowed to fail the whole scan)
 │   │   ├── calibration.js               # 2026-09-03: live-camera calibration --
 │   │   │                              # takes a snapshot (capture.js's grabSnapshot),
 │   │   │                              # spawns cloud_pipeline/save_calibration.py with
@@ -888,6 +926,22 @@ pic-vision/
 │   │                                       # pipeline without a real camera
 │   │                                       # (electron-store; POC stores camera
 │   │                                       # passwords in plaintext, see README)
+│   ├── build/
+│   │   └── icon.png                      # 2026-09-05: app icon (1024x1024,
+│   │                                       # provided by the operator, cropped/
+│   │                                       # cleaned up from a screenshot).
+│   │                                       # electron-builder's own default
+│   │                                       # convention (package.json's
+│   │                                       # build.icon points here explicitly)
+│   │                                       # -- generates .icns/.ico for
+│   │                                       # packaged mac/win builds from this
+│   │                                       # one source. Also passed directly
+│   │                                       # to main.js's BrowserWindow (and
+│   │                                       # app.dock.setIcon on macOS) so the
+│   │                                       # dev-mode window/taskbar icon isn't
+│   │                                       # just Electron's default, since
+│   │                                       # electron-builder's config is never
+│   │                                       # read by a plain `electron .` launch
 │   ├── scripts/
 │   │   └── benchmark-decode.sh            # real N-camera decode/proxy-encode
 │   │                                       # capacity test for target hardware
@@ -925,8 +979,21 @@ pic-vision/
 │       │                                    # migrated to the cloud console entirely
 │       │                                    # 2026-09-04 (ADR-071/PIC-73) -- removed
 │       │                                    # from here, not kept in both places.
-│       │                                    # Alerts/Credentials/Settings (mock data,
-│       │                                    # illustrative), CloudPage (2026-09-03,
+│       │                                    # LogPage (2026-09-05, real -- replaced
+│       │                                    # the mock "Alerts" page; polls
+│       │                                    # logAPI.list() for activityLog.js's
+│       │                                    # real event history, "Clear log"
+│       │                                    # button), SettingsPage (2026-09-05,
+│       │                                    # real -- renamed "Scan settings";
+│       │                                    # scanSettingsAPI-backed real extra
+│       │                                    # RTSP-sweep ranges + per-address
+│       │                                    # timeout, replacing the mock
+│       │                                    # protocol-checkbox/scan-cadence
+│       │                                    # panels that had no real capability
+│       │                                    # behind them. Credentials removed
+│       │                                    # entirely the same day, not
+│       │                                    # necessary on desktop), CloudPage
+│       │                                    # (2026-09-03,
 │       │                                    # real -- shows connection status +
 │       │                                    # cloudAPI.register retry (ADR-079,
 │       │                                    # 2026-09-05 -- registration itself
@@ -939,10 +1006,14 @@ pic-vision/
 │       │                                    # gates App.jsx's whole render;
 │       │                                    # mirrors pic-vision-cloud-console's
 │       │                                    # own sign-in page's layout/copy)
-│       ├── lib/cameraView.js                # real-camera -> mockup card/detail
-│       │                                    # view-model (STATE_META, buildCards)
-│       └── data/mockData.js                  # sample data for the 3 mock pages,
-│                                              # ported verbatim from the handoff
+│       └── lib/cameraView.js                # real-camera -> mockup card/detail
+│                                            # view-model (STATE_META, buildCards).
+│                                            # data/mockData.js and components/
+│                                            # PreviewBanner.jsx both deleted
+│                                            # 2026-09-05 -- Alerts/Credentials/
+│                                            # Settings, the last mock-data
+│                                            # consumers, are all gone or real
+│                                            # now; nothing left imports either
 │
 ├── pic-vision-cloud-console/     # ADR-071's "cloud web app" side, first real code
 │   │                              # 2026-09-03 -- its OWN separate git repo (github.com/

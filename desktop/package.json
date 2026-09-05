@@ -15,6 +15,7 @@
   "build": {
     "appId": "com.picvisionai.desktop",
     "productName": "Pic Vision Camera Manager",
+    "icon": "build/icon.png",
     "files": [
       "dist/**/*",
       "electron/**/*"

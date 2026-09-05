@@ -390,15 +390,46 @@ with this move; it still needs the cloud->agent command channel
 `ADR-073` flagged as not yet built, so the local agent has a way to learn
 about a booked session at all.
 
-**Alerts, Credentials, and Scan Settings pages are pixel-matched but not
-functional** -- there's no alert monitoring, no stored/tried credential
-sets, and no multi-protocol (mDNS/UPnP/vendor-specific) or multi-range
-scanning built. Each shows the mockup's own sample data with an honest
-"Illustrative" subtitle, and every disabled input/button reflects that
-directly rather than silently doing nothing. The Cameras page's bulk
-sign-in/sync-time/firmware-update dialog (select mode) is the same --
-UI-only, says so in the dialog body, because it depends on the Credentials
-page's stored sets which aren't real yet.
+**Scan Settings page is real as of 2026-09-05** (`electron/scanSettings.js`)
+-- but only the two panels that actually mapped onto an existing
+capability: custom extra ranges (`networkSweep.js`'s `sweepNetwork`
+already took an arbitrary `cidr`, only the auto-detected one was ever
+passed in) and the per-address timeout (already a real `sweepNetwork`
+parameter, previously hardcoded to `400` in `CamerasPage.jsx`). Extra
+ranges only extend the RTSP port sweep -- ONVIF WS-Discovery is multicast
+and can't reach a genuinely separate subnet no matter what's configured.
+Two panels from the original mockup were dropped entirely, not left
+disabled: the protocol checkboxes (4 of 7 -- mDNS/Bonjour, SSDP/UPnP,
+vendor probes, RTSP stream probe -- don't exist in code at all, and the 3
+real ones already run unconditionally with nothing to toggle) and the
+scan-cadence radios (auto-scan-on-launch was already explicitly removed
+once, 2026-09-03, "operator's call" -- rebuilding it as a setting would
+quietly reopen that decision). The Cameras page's bulk sign-in/sync-time/
+firmware-update dialog (select mode) is still UI-only, says so in the
+dialog body, because it depends on stored credential sets that don't
+exist anywhere in this app. (The Credentials page itself, which would
+have held those, was removed entirely 2026-09-05 -- operator's call, not
+necessary on desktop.)
+
+**The "Alerts" page is gone, replaced by a real "Log" tab the same day.**
+`AlertsPage.jsx` was 100% mockup (`MOCK_ALERTS`) with no real backend at
+all; `LogPage.jsx`/`electron/activityLog.js` replace it with an actual
+event history -- camera online/offline transitions, recording started/
+stopped/failed, calibration completed/failed (with the real reprojection
+error), cloud pipeline jobs started/finished/failed, cloud console
+connect/disconnect, sign-in/out. Every event type is a real signal
+already computed somewhere else in the app (mostly inside `cloud.js`'s
+existing 30s heartbeat tick, or right at the point a real action
+succeeds/fails) -- this is a persistence layer, not new detection.
+Deliberately narrower than the mockup's 5 sample alerts: gone through one
+by one, 2 mapped onto a real signal (camera down/recovered), 1 depended
+on the just-removed Credentials feature (saved credential sets), 1 needed
+a per-vendor capability nothing here has or could get generically
+(firmware-update checking), and 1 named a real but *different* existing
+concept (`scripts/check_drift.py` detects the camera's mount physically
+moving, not the mockup's NTP clock-sync idea) -- left out of this pass,
+since automating that script is itself new scope (deciding when to run a
+minutes-long, whole-video analysis), not just wiring an existing signal.
 
 Configured cameras persist via `electron-store` (plain JSON,
 `~/.config/pic-vision-desktop/cameras.json` on Linux) -- including the
@@ -685,8 +716,11 @@ confirmed the real account's 3 cameras/2 agents were untouched).
   every session -- 10-minute segmentation bounds the damage, per that
   ADR's own conclusion, but nothing here retries a dropped connection or
   alerts if one segment comes back short.
-- No packaging/signing configured beyond the bare `electron-builder`
-  target list in `package.json`.
+- No signing configured beyond the bare `electron-builder` target list in
+  `package.json`. An app icon (`build/icon.png`, 2026-09-05) is now
+  configured -- electron-builder generates `.icns`/`.ico` from it for a
+  packaged mac/win build; the dev-mode window/taskbar icon uses it too
+  (`main.js`'s `BrowserWindow` icon + `app.dock.setIcon` on macOS).
 - Court calibration's flow (`electron/calibration.js`, 2026-09-03) has its
   homography math verified (reproduces a real prior calibration's exact
   RMSE) and its snapshot mechanisms verified for both sources (a real

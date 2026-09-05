@@ -365,9 +365,13 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
     // with RTSP open regardless of whether it cooperates with discovery
     // protocols -- built 2026-09-01 after a real camera on this network
     // did the latter and not the former.
+    // sweep() takes no options anymore -- Scan settings (extra ranges,
+    // per-address timeout) is the single source of truth main.js's own
+    // handler reads internally, same as it already does for the
+    // auto-detected network range.
     const [discoverResult, sweepResult] = await Promise.allSettled([
       window.cameraAPI.discover({ timeout: SCAN_TIMEOUT_MS }),
-      window.cameraAPI.sweep({ timeoutMs: 400 }),
+      window.cameraAPI.sweep(),
     ]);
 
     if (discoverResult.status === "fulfilled") setDiscovered(discoverResult.value);
@@ -541,8 +545,8 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
           <div className="dialog" style={{ width: "min(520px, 100%)" }}>
             <div className="dialog-title">Apply to {picked.size} camera{picked.size === 1 ? "" : "s"}</div>
             <div className="dialog-body">
-              Bulk sign-in / sync-time / firmware-update aren't wired up yet — this needs the Credentials page's
-              stored credential sets to actually run against real cameras.
+              Bulk sign-in / sync-time / firmware-update aren't wired up yet — this needs stored credential sets
+              to actually run against real cameras, which doesn't exist here.
             </div>
             <div className="dialog-actions">
               <button className="btn btn-secondary" onClick={() => setBulkOpen(false)}>Close</button>

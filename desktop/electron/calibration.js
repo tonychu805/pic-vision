@@ -23,6 +23,7 @@ import { fileURLToPath } from "node:url";
 import { grabSnapshot, grabFrameFromFile, probeDuration, discardSnapshot, RECORDINGS_ROOT, sanitizeForPath } from "./capture.js";
 import { setCalibPath } from "./cameras/store.js";
 import { PYTHON_BIN } from "./pythonBin.js";
+import { logEvent } from "./activityLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -159,8 +160,19 @@ export function applyPendingCalibration(camera, points) {
   // saveCalibration only discards the snapshot file on its own success
   // path, so a thrown error here leaves `pending` still valid for a retry
   // -- only clear it once the save actually succeeded.
-  const result = saveCalibration(camera, pending.path, points);
+  let result;
+  try {
+    result = saveCalibration(camera, pending.path, points);
+  } catch (err) {
+    logEvent("calibration_failed", `${camera.label} calibration failed`, err.message);
+    throw err;
+  }
   pendingSnapshots.delete(camera.id);
+  logEvent(
+    "calibration_done",
+    `Calibrated ${camera.label}`,
+    `reprojection error ${result.rmseFt.toFixed(3)} ft${result.rmseFt > 0.5 ? ` (worst: ${result.worst})` : ""}`,
+  );
 
   try {
     uploadToR2(result.calibPath, `calibration-backups/${camera.id}.json`);

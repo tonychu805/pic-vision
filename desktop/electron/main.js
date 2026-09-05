@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverCameras } from "./cameras/discovery.js";
 import { sweepNetwork } from "./cameras/networkSweep.js";
+import { getExtraRanges, addExtraRange, removeExtraRange, getTimeoutMs, setTimeoutMs } from "./scanSettings.js";
 import {
   listCameras,
   addCamera,
@@ -22,6 +23,7 @@ import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, 
 import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
+import { getEvents, clearEvents } from "./activityLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -56,9 +58,36 @@ function registerCameraHandlers() {
   ipcMain.handle("system:networkInfo", async () => {
     return getNetworkInfo();
   });
-  ipcMain.handle("cameras:sweep", async (_event, options) => {
+  // Sweeps the auto-detected primary subnet (unchanged, real-error-on-
+  // failure behavior kept exactly as before) plus any operator-added
+  // extra ranges (scanSettings.js) -- those are best-effort: a bad or
+  // oversized extra range (sweepNetwork's own MAX_HOSTS guard) is logged
+  // and skipped rather than failing the whole scan, since the primary
+  // range may have found real cameras already.
+  ipcMain.handle("cameras:sweep", async () => {
     const { cidr, address } = getNetworkInfo();
-    return sweepNetwork({ ...options, cidr, excludeHost: address });
+    const timeoutMs = getTimeoutMs();
+    const primaryHits = await sweepNetwork({ cidr, timeoutMs, excludeHost: address });
+
+    const extraRanges = getExtraRanges().filter((r) => r !== cidr);
+    const extraResults = await Promise.allSettled(
+      extraRanges.map((r) => sweepNetwork({ cidr: r, timeoutMs, excludeHost: address })),
+    );
+
+    const seen = new Set(primaryHits.map((h) => h.hostname));
+    const merged = [...primaryHits];
+    extraResults.forEach((result, i) => {
+      if (result.status !== "fulfilled") {
+        console.error(`[scan] extra range ${extraRanges[i]} failed: ${result.reason?.message}`);
+        return;
+      }
+      for (const hit of result.value) {
+        if (seen.has(hit.hostname)) continue;
+        seen.add(hit.hostname);
+        merged.push(hit);
+      }
+    });
+    return merged;
   });
   // RTSP-direct fallback (2026-09-01) -- for cameras where ONVIF doesn't
   // work at all but a real stream exists anyway. See store.js's own
@@ -87,6 +116,23 @@ function registerCameraHandlers() {
   });
   ipcMain.handle("system:pickVideoFile", async () => {
     return pickVideoFile();
+  });
+}
+
+// Real scan configuration (scanSettings.js) -- 2026-09-05, replacing
+// SettingsPage.jsx's mock "Ranges"/"Behaviour" panels.
+function registerScanSettingsHandlers() {
+  ipcMain.handle("scanSettings:get", async () => {
+    return { extraRanges: getExtraRanges(), timeoutMs: getTimeoutMs() };
+  });
+  ipcMain.handle("scanSettings:addRange", async (_event, cidr) => {
+    return addExtraRange(cidr);
+  });
+  ipcMain.handle("scanSettings:removeRange", async (_event, cidr) => {
+    return removeExtraRange(cidr);
+  });
+  ipcMain.handle("scanSettings:setTimeout", async (_event, ms) => {
+    return setTimeoutMs(ms);
   });
 }
 
@@ -201,6 +247,19 @@ function registerAnalyticsHandlers() {
   });
 }
 
+// Real activity history for the Log tab (2026-09-05, replacing the mock
+// "Alerts" page) -- activityLog.js is the only source of truth, this is
+// just the IPC bridge to it.
+function registerActivityLogHandlers() {
+  ipcMain.handle("log:list", async () => {
+    return getEvents();
+  });
+  ipcMain.handle("log:clear", async () => {
+    clearEvents();
+    return null;
+  });
+}
+
 function registerLiveViewHandlers() {
   ipcMain.handle("liveview:start", async (_event, cameraId) => {
     const camera = listCameras().find((c) => c.id === cameraId);
@@ -237,6 +296,12 @@ function createWindow() {
     width: 1280,
     height: 840,
     frame: false,
+    // Taskbar/dock icon while running from source (npm run dev) -- a
+    // packaged build gets its icon from package.json's build.icon instead,
+    // but that config is only ever read by electron-builder, never by a
+    // plain `electron .` launch, so without this the dev window shows
+    // Electron's own default icon regardless of what's set there.
+    icon: path.join(__dirname, "..", "build", "icon.png"),
     // App.jsx's root div already draws borderRadius:12 + overflow:hidden
     // (the mockup's own rounded window) -- but that only clips this
     // window's OWN content. Without the window itself being transparent,
@@ -274,13 +339,23 @@ function createWindow() {
 
 app.whenReady().then(() => {
   registerCameraHandlers();
+  registerScanSettingsHandlers();
   registerCaptureHandlers();
   registerPipelineHandlers();
   registerCloudHandlers();
   registerAuthHandlers();
   registerAnalyticsHandlers();
+  registerActivityLogHandlers();
   registerLiveViewHandlers();
   registerWindowControlHandlers();
+  // BrowserWindow's icon option (createWindow) only ever reaches the
+  // taskbar on Windows/Linux -- macOS's Dock icon for an unpackaged
+  // `electron .` run needs setting separately, or it shows Electron's own
+  // default regardless. A packaged build doesn't need this (its Dock icon
+  // comes from the .app bundle's Info.plist, built from build.icon).
+  if (process.platform === "darwin") {
+    app.dock.setIcon(path.join(__dirname, "..", "build", "icon.png"));
+  }
   createWindow();
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
   // Catches the case where a device is signed in but registration never

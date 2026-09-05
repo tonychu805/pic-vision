@@ -13,6 +13,7 @@ import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
 import { grabAndUploadSnapshot, applyPendingCalibration } from "./calibration.js";
+import { logEvent } from "./activityLog.js";
 
 const store = new Store({ name: "cloud" });
 
@@ -24,6 +25,15 @@ const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "http://localhos
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
 let heartbeatTimer = null;
+
+// Transition-tracking for the activity log -- both start "assumed fine"
+// (undefined for a camera means "no prior reading yet," true for the
+// heartbeat means "just connected/registered") so the very first
+// heartbeat tick after a launch or a fresh registration doesn't log a
+// spurious "recovered" the moment it succeeds; only an actual change from
+// a previously-known state logs anything.
+const lastCameraStatus = new Map(); // cameraId -> "online" | "offline"
+let lastHeartbeatOk = true;
 
 export function getCloudConnection() {
   return store.get("connection", null);
@@ -98,6 +108,8 @@ export async function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_UR
     connectedAt: new Date().toISOString(),
   };
   store.set("connection", connection);
+  lastHeartbeatOk = true; // fresh connection -- don't let a stale prior failure log a false "reconnected" on the first tick
+  logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
   startHeartbeatLoop();
   return connection;
 }
@@ -133,13 +145,19 @@ async function cameraStatuses() {
   const results = await Promise.allSettled(cameras.map((c) => testConnection(c)));
   return cameras.map((c, i) => {
     const recordings = listRecordings(c);
+    const status = results[i].status === "fulfilled" ? "online" : "offline";
+    const previous = lastCameraStatus.get(c.id);
+    if (previous && previous !== status) {
+      logEvent(status === "online" ? "camera_online" : "camera_offline", `${c.label} ${status === "online" ? "came back online" : "went offline"}`);
+    }
+    lastCameraStatus.set(c.id, status);
     return {
       cameraId: c.id,
       label: c.label,
       connectionType: c.connectionType,
       manufacturer: c.manufacturer ?? null,
       model: c.model ?? null,
-      status: results[i].status === "fulfilled" ? "online" : "offline",
+      status,
       firmwareVersion: c.firmwareVersion ?? null,
       serialNumber: c.serialNumber ?? null,
       addedAt: c.addedAt ?? null,
@@ -167,8 +185,12 @@ async function sendHeartbeat() {
       // isn't retried forever -- surfaces in status() instead of
       // silently hammering an endpoint that will never accept it again.
       console.error(`[cloud] heartbeat rejected: HTTP ${res.status}`);
+      if (lastHeartbeatOk) logEvent("cloud_disconnected", "Lost connection to the cloud console", `HTTP ${res.status}`);
+      lastHeartbeatOk = false;
       return;
     }
+    if (!lastHeartbeatOk) logEvent("cloud_connected", "Reconnected to the cloud console");
+    lastHeartbeatOk = true;
     // Keeps a Settings-page rename on the console reaching this already-
     // paired agent within one heartbeat cycle, instead of only ever
     // reflecting whatever the brand was named at pairing time.
@@ -181,6 +203,8 @@ async function sendHeartbeat() {
     // logged, not thrown; the loop just tries again next interval rather
     // than crashing the agent over a transient network blip.
     console.error(`[cloud] heartbeat failed: ${err.message}`);
+    if (lastHeartbeatOk) logEvent("cloud_disconnected", "Lost connection to the cloud console", err.message);
+    lastHeartbeatOk = false;
   }
 }
 

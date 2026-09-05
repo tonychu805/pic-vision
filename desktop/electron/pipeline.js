@@ -16,6 +16,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { PYTHON_BIN } from "./pythonBin.js";
 import { getCloudConnection } from "./cloud.js";
+import { logEvent } from "./activityLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = path.join(__dirname, "..", "..");
@@ -110,7 +111,31 @@ export function runCloudJob({ recordingDir, calibPath, targetSec, sessionId, vid
   }
   const proc = spawn(PYTHON_BIN, args, { cwd: REPO_ROOT, stdio: "ignore" });
   active.set(recordingDir, { proc, jobDir });
-  proc.on("exit", () => active.delete(recordingDir));
+  const label = cameraLabel || "camera";
+  logEvent("pipeline_started", `Sent ${label} to the cloud`);
+  proc.on("exit", () => {
+    active.delete(recordingDir);
+    // The process only ever exits after webapp/pipeline.py's run_cloud_job
+    // has written a terminal stage to status.json (done/error/cancelled)
+    // -- reading it right here, on the job's own exit, is simpler and more
+    // immediate than polling it from elsewhere (e.g. the next heartbeat
+    // tick), since this event fires the instant the job actually finishes.
+    const status = pipelineStatus(jobDir);
+    if (status.stage === "done") {
+      const full = (status.reels || []).find((r) => r.kind === "full") || (status.reels || [])[0];
+      const stats = full?.stats;
+      const detail = stats ? `${stats.n_chosen} rallies, ${Math.round(stats.total_duration_sec)}s` : null;
+      logEvent("pipeline_done", `${label} reel ready`, detail);
+    } else if (status.stage === "cancelled") {
+      logEvent("pipeline_failed", `${label} cloud job cancelled`);
+    } else {
+      // Covers "error" and the unexpected case of exiting with no
+      // status.json at all (e.g. a crash before webapp/pipeline.py ever
+      // wrote one) -- either way, the job didn't finish, worth a log
+      // entry either way rather than silently dropping it.
+      logEvent("pipeline_failed", `${label} cloud job failed`, status.message || status.error || null);
+    }
+  });
 
   return { jobDir };
 }
