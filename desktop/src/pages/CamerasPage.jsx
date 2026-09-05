@@ -457,7 +457,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
             <i className="ph ph-plus" style={{ fontSize: 15 }} />Add manually
           </button>
           <button className="btn btn-primary" onClick={startScan} disabled={scanning}>
-            <i className="ph ph-radar" style={{ fontSize: 16 }} />{scanning ? "Scanning…" : "Scan again"}
+            <i className="ph ph-radar" style={{ fontSize: 16 }} />{scanning ? "Scanning…" : "Scan"}
           </button>
         </div>
       </div>
