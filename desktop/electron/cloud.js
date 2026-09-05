@@ -156,6 +156,14 @@ async function sendHeartbeat() {
       // isn't retried forever -- surfaces in status() instead of
       // silently hammering an endpoint that will never accept it again.
       console.error(`[cloud] heartbeat rejected: HTTP ${res.status}`);
+      return;
+    }
+    // Keeps a Settings-page rename on the console reaching this already-
+    // paired agent within one heartbeat cycle, instead of only ever
+    // reflecting whatever the brand was named at pairing time.
+    const body = await res.json().catch(() => ({}));
+    if (typeof body.brandName === "string" && body.brandName !== connection.brandName) {
+      store.set("connection", { ...connection, brandName: body.brandName });
     }
   } catch (err) {
     // Console unreachable (offline venue, DNS hiccup, console down) --

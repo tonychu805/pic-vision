@@ -33,9 +33,23 @@ function navButtonStyle(active) {
 
 export default function Sidebar({ nav, onNavigate, deviceCount }) {
   const [network, setNetwork] = useState(null);
+  const [brandName, setBrandName] = useState(null);
 
   useEffect(() => {
     window.systemAPI?.getNetworkInfo().then(setNetwork).catch(() => setNetwork(null));
+  }, []);
+
+  // Polled on the same cadence as the heartbeat that keeps it fresh
+  // (cloud.js merges the console's current brand name into the stored
+  // connection on every heartbeat, so a Settings-page rename shows up
+  // here without restarting the app) -- window.cloudAPI.status() just
+  // reads that local cache, no network call of its own.
+  useEffect(() => {
+    if (typeof window.cloudAPI?.status !== "function") return;
+    const poll = () => window.cloudAPI.status().then((c) => setBrandName(c?.brandName ?? null)).catch(() => {});
+    poll();
+    const id = setInterval(poll, 30_000);
+    return () => clearInterval(id);
   }, []);
 
   return (
@@ -58,6 +72,23 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           picvision ai
         </span>
       </div>
+
+      {brandName && (
+        <div
+          style={{
+            padding: "0 8px 10px",
+            fontSize: 12,
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+            color: "color-mix(in srgb, var(--color-text) 65%, transparent)",
+          }}
+          title={brandName}
+        >
+          {brandName}
+        </div>
+      )}
 
       {NAV_ITEMS.map((item) => (
         <button key={item.key} style={navButtonStyle(nav === item.key)} onClick={() => onNavigate(item.key)}>
