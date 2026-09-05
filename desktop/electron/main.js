@@ -16,9 +16,8 @@ import {
   addCameraFromSampleClip,
 } from "./cameras/store.js";
 import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
-import { startRecording, stopRecording, stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
+import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { takeCalibrationSnapshot, discardCalibrationSnapshot, saveCalibration } from "./calibration.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -91,19 +90,12 @@ function registerCameraHandlers() {
   });
 }
 
-// Manual start/stop recording (capture.js) -- PIC-66. Takes just a
-// cameraId, not credentials from the renderer -- looks the full camera
-// object (including its stored password) up server-side via
-// listCameras(), same trust boundary as everything else here.
+// Recording status/history (capture.js) -- PIC-66, start/stop removed
+// 2026-09-05 (ADR-080): the renderer no longer starts or stops a
+// recording directly, only the cloud->agent command channel does
+// (cloud.js's runCommand, triggered from the console). startRecording/
+// stopRecording themselves are unchanged and still called from there.
 function registerCaptureHandlers() {
-  ipcMain.handle("capture:start", async (_event, cameraId) => {
-    const camera = listCameras().find((c) => c.id === cameraId);
-    if (!camera) throw new Error("Camera not found");
-    return startRecording(camera);
-  });
-  ipcMain.handle("capture:stop", async (_event, cameraId) => {
-    return stopRecording(cameraId);
-  });
   ipcMain.handle("capture:status", async (_event, cameraId) => {
     return recordingStatus(cameraId);
   });
@@ -111,27 +103,6 @@ function registerCaptureHandlers() {
     const camera = listCameras().find((c) => c.id === cameraId);
     if (!camera) throw new Error("Camera not found");
     return listRecordings(camera);
-  });
-}
-
-// Live-camera calibration (calibration.js) -- take a snapshot from the
-// camera's own stream, let the renderer collect 14 clicked points, then
-// hand them to cloud_pipeline/save_calibration.py. Looks the full camera
-// object up server-side by id, same trust-boundary convention as
-// registerCaptureHandlers.
-function registerCalibrationHandlers() {
-  ipcMain.handle("calibration:snapshot", async (_event, cameraId, atSec) => {
-    const camera = listCameras().find((c) => c.id === cameraId);
-    if (!camera) throw new Error("Camera not found");
-    return takeCalibrationSnapshot(camera, atSec);
-  });
-  ipcMain.handle("calibration:discardSnapshot", async (_event, snapshotPath) => {
-    return discardCalibrationSnapshot(snapshotPath);
-  });
-  ipcMain.handle("calibration:save", async (_event, cameraId, snapshotPath, points) => {
-    const camera = listCameras().find((c) => c.id === cameraId);
-    if (!camera) throw new Error("Camera not found");
-    return saveCalibration(camera, snapshotPath, points);
   });
 }
 
@@ -304,7 +275,6 @@ function createWindow() {
 app.whenReady().then(() => {
   registerCameraHandlers();
   registerCaptureHandlers();
-  registerCalibrationHandlers();
   registerPipelineHandlers();
   registerCloudHandlers();
   registerAuthHandlers();

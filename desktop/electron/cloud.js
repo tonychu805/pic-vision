@@ -12,6 +12,7 @@ import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
+import { grabAndUploadSnapshot, applyPendingCalibration } from "./calibration.js";
 
 const store = new Store({ name: "cloud" });
 
@@ -183,16 +184,16 @@ async function sendHeartbeat() {
   }
 }
 
-// First real use of the cloud->agent command channel (ADR-071/ADR-073's
-// long-flagged missing piece): the console can now create a row in
-// `agent_commands` (POST /api/commands, e.g. the Cameras page's Start/
-// Stop recording button) and this picks it up here, on the *same*
-// heartbeat cadence -- no separate timer, no persistent connection,
-// consistent with ADR-071's "polling is fine, none of this is
-// latency-sensitive like live video" call. Recording itself still has to
-// run wherever the camera actually is, so this just calls the exact same
-// capture.js functions the desktop app's own Start/Stop button already
-// calls -- only the trigger moved, not the action.
+// The cloud->agent command channel (ADR-071/ADR-073's long-flagged missing
+// piece, first built as ADR-077 for start/stop recording, extended by
+// ADR-080 for calibration): the console creates a row in `agent_commands`
+// (POST /api/commands) and this picks it up here, on the *same* heartbeat
+// cadence -- no separate timer, no persistent connection, consistent with
+// ADR-071's "polling is fine, none of this is latency-sensitive like live
+// video" call. Recording/calibration both still have to run wherever the
+// camera actually is, so this just calls the exact same capture.js/
+// calibration.js functions desktop's own local controls used to call --
+// only the trigger moved, not the action.
 async function fetchPendingCommands(connection) {
   try {
     const res = await fetch(`${connection.consoleUrl}/api/agents/commands`, {
@@ -222,11 +223,24 @@ async function completeCommand(connection, commandId, status, result) {
 async function runCommand(command) {
   const camera = listCameras().find((c) => c.id === command.camera_id);
   if (!camera) throw new Error("camera not found");
-  if (camera.connectionType === "sampleClip") {
-    throw new Error("sample-clip cameras have no live stream to record");
+
+  // The sample-clip guard only makes sense for recording -- a sample clip
+  // has no live stream to capture, but it can absolutely be calibrated
+  // (takeCalibrationSnapshot already seeks into the uploaded file for
+  // exactly this case), so this can't be a blanket check above the
+  // dispatch the way it used to be when recording was the only command.
+  if (command.type === "start_recording" || command.type === "stop_recording") {
+    if (camera.connectionType === "sampleClip") {
+      throw new Error("sample-clip cameras have no live stream to record");
+    }
   }
+
   if (command.type === "start_recording") return await startRecording(camera);
   if (command.type === "stop_recording") return await stopRecording(camera.id);
+  // Console-driven calibration (ADR-080) -- see calibration.js's header
+  // for why this replaced ADR-077's "scoped out" call on moving it here.
+  if (command.type === "grab_calibration_snapshot") return await grabAndUploadSnapshot(camera);
+  if (command.type === "apply_calibration") return applyPendingCalibration(camera, command.params?.points);
   throw new Error(`unknown command type: ${command.type}`);
 }
 

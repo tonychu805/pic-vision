@@ -663,7 +663,9 @@ pic-vision/
 │   │                                # per reel, a failure doesn't fail the job, the reel
 │   │                                # already exists in R2 either way
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
-│   │                                    # generate_presigned_url, ADR-074)
+│   │                                    # generate_presigned_url, ADR-074) -- also
+│   │                                    # what upload_calibration_snapshot.py's
+│   │                                    # upload_file() call goes through
 │   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
 │   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
@@ -673,6 +675,12 @@ pic-vision/
 │   │                                    # desktop client's live-camera calibration flow
 │   │                                    # (calibration.js) spawns this rather than
 │   │                                    # reimplementing calibrate.py's homography fit in JS
+│   ├── upload_calibration_snapshot.py    # 2026-09-05, ADR-080 -- thin CLI wrapping
+│   │                                    # r2_storage.upload_file, prints back a
+│   │                                    # cdn.picvisionai.com URL; desktop/electron/
+│   │                                    # calibration.js spawns this to hand a
+│   │                                    # snapshot (and later, a calib.json backup)
+│   │                                    # to the cloud console's calibration UI
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
 ├── desktop/                     # venue owner-facing local agent (2026-09-01,
@@ -688,21 +696,22 @@ pic-vision/
 │   │                              # subprocess (concatenating capture.js's segments
 │   │                              # first) rather than reimplementing R2 upload/
 │   │                              # RunPod dispatch/reel-cutting in JS, per ADR-071.
-│   │                              # Court calibration itself IS now built into the
-│   │                              # client (2026-09-03, superseding PIC-68's original
-│   │                              # "pass an existing calib.json path in" scope):
-│   │                              # CalibrationControl (CameraDetailPage.jsx) takes a
-│   │                              # live snapshot from the camera's own stream
-│   │                              # (capture.js's grabSnapshot) and lets the operator
-│   │                              # click the 12 court + 2 net points in the app --
-│   │                              # calibration.js then spawns
-│   │                              # cloud_pipeline/save_calibration.py (calibrate.py's
-│   │                              # homography fit, not reimplemented in JS) to write
-│   │                              # calib.json to that camera's own recordings folder
-│   │                              # and record its path via store.js's setCalibPath.
-│   │                              # The native file picker (system.js's pickCalibFile)
-│   │                              # stays as a secondary "import an existing file"
-│   │                              # option. Also 2026-09-03: ManualAddDialog
+│   │                              # Court calibration's 14-point clicking UI moved to
+│   │                              # the cloud console 2026-09-05 (ADR-080, superseding
+│   │                              # ADR-077's same-day "scoped out" call on this) --
+│   │                              # desktop now only does the two LAN-bound halves:
+│   │                              # calibration.js's grabAndUploadSnapshot (grabs a
+│   │                              # frame via capture.js's grabSnapshot, uploads it to
+│   │                              # R2 via cloud_pipeline/upload_calibration_snapshot.py)
+│   │                              # and applyPendingCalibration (once the console sends
+│   │                              # the clicked points back, runs the same unmodified
+│   │                              # cloud_pipeline/save_calibration.py homography fit
+│   │                              # PIC-68/ADR-080 both keep in Python, not JS, then
+│   │                              # backs the finished calib.json up to R2 too). The
+│   │                              # native file picker (system.js's pickCalibFile)
+│   │                              # stays as the only calibration entry point still on
+│   │                              # desktop -- a local-filesystem recovery path, not
+│   │                              # "performing calibration" the interactive way. Also 2026-09-03: ManualAddDialog
 │   │                              # (CamerasPage.jsx) can add a "sample clip"
 │   │                              # camera -- an uploaded local video file
 │   │                              # (store.js's addCameraFromSampleClip) standing
@@ -741,10 +750,20 @@ pic-vision/
 │   │   ├── calibration.js               # 2026-09-03: live-camera calibration --
 │   │   │                              # takes a snapshot (capture.js's grabSnapshot),
 │   │   │                              # spawns cloud_pipeline/save_calibration.py with
-│   │   │                              # the renderer's 14 clicked points, records the
-│   │   │                              # result via store.js's setCalibPath; the
-│   │   │                              # homography fit itself stays in Python
-│   │   │                              # (calibrate.py), per ADR-071
+│   │   │                              # the 14 clicked points, records the result via
+│   │   │                              # store.js's setCalibPath; the homography fit
+│   │   │                              # itself stays in Python (calibrate.py), per
+│   │   │                              # ADR-071. 2026-09-05 (ADR-080): the 14 points
+│   │   │                              # now come from the cloud console, not a local
+│   │   │                              # renderer modal -- grabAndUploadSnapshot grabs
+│   │   │                              # + uploads (cloud_pipeline/
+│   │   │                              # upload_calibration_snapshot.py), tracking the
+│   │   │                              # still-needed local file in a Map (cameraId ->
+│   │   │                              # {path, uploadedAt}, 15-min sweep) since the
+│   │   │                              # gap until the console sends points back is now
+│   │   │                              # human-paced; applyPendingCalibration runs the
+│   │   │                              # same saveCalibration() then backs the result
+│   │   │                              # up to R2 too (best-effort)
 │   │   ├── pipeline.js                  # PIC-68: spawns cloud_pipeline/run_desktop_job.py
 │   │   │                              # per recording, concatenating capture.js's
 │   │   │                              # 10-min segments first (ffmpeg concat, stream
@@ -756,7 +775,12 @@ pic-vision/
 │   │   │                              # agent's console-url/api-token (cloud.js's
 │   │   │                              # getCloudConnection()) so run_desktop_job.py
 │   │   │                              # can report the finished reel (ADR-074)
-│   │   ├── capture.js                   # manual start/stop recording -- spawns
+│   │   ├── capture.js                   # start/stop recording (triggered only from
+│   │   │                              # the cloud console since 2026-09-05's ADR-080 --
+│   │   │                              # startRecording/stopRecording themselves are
+│   │   │                              # unchanged, cloud.js's runCommand calls them
+│   │   │                              # now instead of a local renderer button) --
+│   │   │                              # spawns
 │   │   │                              # ffmpeg per TECH_SPEC §1.2's spec (RTSP pull,
 │   │   │                              # -c copy, 10-min segments, wallclock
 │   │   │                              # timestamps), .mkv not .mp4 (a real bug: the
@@ -884,19 +908,17 @@ pic-vision/
 │       │                                    # the latter uploads a local video file
 │       │                                    # via cameraAPI.addSampleClip instead of
 │       │                                    # connecting to anything), CameraDetailPage
-│       │                                    # (real -- incl. a real Start/Stop
-│       │                                    # recording control, capture.js, manual
-│       │                                    # button only, not triggered by the cloud
-│       │                                    # console's Schedule yet -- PIC-72, needs
-│       │                                    # the cloud->agent command channel
-│       │                                    # ADR-073 flagged as not yet built
-│       │                                    # (hidden for a sample-clip camera, which
-│       │                                    # has no live stream to record);
-│       │                                    # plus, PIC-68, a "Cloud pipeline" panel --
-│       │                                    # CalibrationControl (2026-09-03: live
-│       │                                    # snapshot + click-14-points modal, calling
-│       │                                    # calibration.js; a file-picker "import"
-│       │                                    # fallback stays available) + a "Send to
+│       │                                    # (real -- RecordingControl is read-only
+│       │                                    # since 2026-09-05 (ADR-080): still polls
+│       │                                    # captureAPI.status and shows elapsed
+│       │                                    # time/save path, but Start/Stop only
+│       │                                    # exist on the cloud console now (ADR-077's
+│       │                                    # command channel); plus, PIC-68, a "Cloud
+│       │                                    # pipeline" panel -- CalibrationControl
+│       │                                    # (2026-09-05: the click-14-points modal
+│       │                                    # moved to the console too, ADR-080 -- this
+│       │                                    # keeps only the "Import file…" fallback,
+│       │                                    # system.js's pickCalibFile) + a "Send to
 │       │                                    # cloud" row per past recording, polling
 │       │                                    # pipeline.js's job status). Schedule
 │       │                                    # (ScheduleOverviewPage/ScheduleEditorPage)
@@ -995,7 +1017,16 @@ pic-vision/
 │   │   │   │                             # posts to api/commands/route.ts, waits
 │   │   │   │                             # for is_recording to flip on the next
 │   │   │   │                             # heartbeat sync like every other field
-│   │   │   │                             # here, no faster poll invented for it
+│   │   │   │                             # here, no faster poll invented for it.
+│   │   │   │                             # Plus (same file) a Calibrate/Recalibrate
+│   │   │   │                             # button (ADR-080, same day) opening
+│   │   │   │                             # CalibrationModal -- a direct port of the
+│   │   │   │                             # desktop app's own click-14-points modal,
+│   │   │   │                             # driven by grab_calibration_snapshot/
+│   │   │   │                             # apply_calibration commands instead of
+│   │   │   │                             # IPC; polls agent_commands directly (RLS-
+│   │   │   │                             # readable by the browser client already)
+│   │   │   │                             # rather than a dedicated status endpoint
 │   │   │   ├── schedule/, schedule/[cameraId]/  # REAL as of 2026-09-04
 │   │   │   │                             # (ADR-071/PIC-73 -- migrated wholesale
 │   │   │   │                             # from desktop/, not rebuilt from
@@ -1102,10 +1133,12 @@ pic-vision/
 │   │                                    # single-reel share page at its own id
 │   │       ├── commands/route.ts            # ADR-077 (2026-09-05), Bearer-token --
 │   │       │                             # GET returns an agent's pending
-│   │       │                             # agent_commands rows; the desktop
-│   │       │                             # agent's heartbeat loop polls this on
-│   │       │                             # its own existing ~30s cadence, no new
-│   │       │                             # timer/connection
+│   │       │                             # agent_commands rows (id/camera_id/type/
+│   │       │                             # params -- params added ADR-080 the same
+│   │       │                             # day, for apply_calibration's clicked
+│   │       │                             # points); the desktop agent's heartbeat
+│   │       │                             # loop polls this on its own existing
+│   │       │                             # ~30s cadence, no new timer/connection
 │   │       └── commands/[id]/route.ts        # ADR-077, Bearer-token -- the agent
 │   │                                     # reports a command's done/error result
 │   │                                     # here right after executing it locally
@@ -1117,7 +1150,12 @@ pic-vision/
 │   │                                    # only inserts an agent_commands row,
 │   │                                    # never runs anything itself -- recording
 │   │                                    # (ffmpeg pulling RTSP) still has to
-│   │                                    # execute wherever the camera actually is
+│   │                                    # execute wherever the camera actually is.
+│   │                                    # ADR-080 (same day) added
+│   │                                    # grab_calibration_snapshot/apply_calibration
+│   │                                    # to VALID_TYPES plus an optional `params`
+│   │                                    # body field, validated as exactly 14
+│   │                                    # [x,y] pairs when type is apply_calibration
 │   ├── api/reels/[id]/video/route.ts       # ADR-074. Redirects to a stable
 │   │                                    # cdn.picvisionai.com R2 URL (lib/r2.ts,
 │   │                                    # ADR-075 -- no presigning) for the

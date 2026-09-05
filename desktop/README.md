@@ -8,8 +8,12 @@ upload), while a separate, not-yet-built cloud web app owns everything
 that's just data (scheduling, court/venue management, delivery to
 players). See `STRATEGY.md` §5 for the full split and `progress/09.02
 progress overview.md` for how it was decided. Built so far: camera
-discovery/management, recording (`electron/capture.js`), calibration
-(`electron/calibration.js`, 2026-09-03), triggering transcode/upload/
+discovery/management, recording (`electron/capture.js`, though as of
+2026-09-05's `ADR-080` the desktop app itself only shows read-only
+status — Start/Stop is console-only), calibration (`electron/
+calibration.js`, 2026-09-03; as of `ADR-080` the same day, desktop only
+grabs a snapshot and runs the homography math — the 14-point clicking UI
+moved to the cloud console too), triggering transcode/upload/
 inference/reel-cutting by invoking the existing Python as a subprocess
 (`electron/pipeline.js`, PIC-68), and — as of 2026-09-05 — a mandatory
 account sign-in gate (`electron/auth.js`, `src/pages/SignInPage.jsx`) in
@@ -406,6 +410,15 @@ this too, not be solved separately.
 
 ## Recording (`electron/capture.js`, 2026-09-02 -- PIC-66)
 
+**Superseded 2026-09-05 (`ADR-080`):** the Start/Stop control described in
+this section no longer exists on the desktop app itself -- it moved to
+the cloud console (`ADR-077`'s command channel), which calls the exact
+same `startRecording`/`stopRecording` functions below, just triggered
+remotely instead of by a local button. The detail page now only shows
+read-only status (elapsed time, save path). Everything else in this
+section (the `ffmpeg` command shape, segment/timestamp handling, clean-
+stop behavior) is unchanged.
+
 Real, not a stub: a "Start recording" / "Stop recording" control on each
 configured camera's detail page spawns `ffmpeg` and pulls the camera's
 actual RTSP stream to local `.mkv` segments -- the first thing in this
@@ -461,7 +474,15 @@ a calibration control (below) and a "Send to cloud" row per past recording
 `~/pic-vision-recordings/`, since nothing tracked recordings anywhere
 before this).
 
-**Calibration (`electron/calibration.js`, 2026-09-03).** Originally scoped
+**Calibration (`electron/calibration.js`, 2026-09-03).** **The
+click-14-points modal described below moved to the cloud console
+2026-09-05 (`ADR-080`)** -- desktop's `CalibrationControl` now only
+offers the "Import file…" fallback mentioned at the end of this section;
+`calibration.js` itself gained `grabAndUploadSnapshot`/
+`applyPendingCalibration` to serve that console flow instead. Kept below
+as the accurate history of how the snapshot-grab and homography-fit
+mechanisms (still used today, just driven differently) were originally
+built and verified. Originally scoped
 (PIC-68) to just a native file picker for an existing `calib.json` -- not a
 calibration flow. Superseded the same day: `CalibrationControl`
 (`CameraDetailPage.jsx`) now takes a real snapshot from the camera's own
@@ -669,12 +690,17 @@ confirmed the real account's 3 cameras/2 agents were untouched).
 - Court calibration's flow (`electron/calibration.js`, 2026-09-03) has its
   homography math verified (reproduces a real prior calibration's exact
   RMSE) and its snapshot mechanisms verified for both sources (a real
-  camera's live stream, and seeking into an uploaded sample clip), but the
-  click-collection modal itself has never been exercised end-to-end
-  against a real snapshot of an actual court -- neither camera on this
-  machine is currently pointed at one. The sample-clip source (above)
-  removes the reason that couldn't be tested safely; it just hasn't been
-  clicked through in the running app yet.
+  camera's live stream, and seeking into an uploaded sample clip). The
+  click-collection modal itself moved to the cloud console entirely as of
+  2026-09-05's `ADR-080` (never exercised as a *desktop* modal against a
+  real court, and now never will be -- it doesn't exist here anymore).
+  `ADR-080`'s new desktop-side pieces (`grabAndUploadSnapshot`/
+  `applyPendingCalibration` in `calibration.js`) are verified against
+  synthetic data and a full browser-driven console test, but not yet run
+  through the real, Electron-integrated command-dispatch path
+  (`cloud.js`'s `runCommand`) against the operator's actual live app --
+  see `DECISIONS.md` ADR-080's own Verification section for exactly what
+  is and isn't covered.
 - `PIC-67`'s CFR-encode NVIDIA-only gap is still open, but it's no longer
   the local agent's own problem to solve -- `pipeline.js` hands the whole
   job to `run_desktop_job.py`, which is the existing Python doing the

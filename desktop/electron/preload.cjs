@@ -53,16 +53,8 @@ contextBridge.exposeInMainWorld("systemAPI", {
 });
 
 contextBridge.exposeInMainWorld("captureAPI", {
-  start: (cameraId) => ipcRenderer.invoke("capture:start", cameraId),
-  stop: (cameraId) => ipcRenderer.invoke("capture:stop", cameraId),
   status: (cameraId) => ipcRenderer.invoke("capture:status", cameraId),
   listRecordings: (cameraId) => ipcRenderer.invoke("capture:listRecordings", cameraId),
-});
-
-contextBridge.exposeInMainWorld("calibrationAPI", {
-  snapshot: (cameraId, atSec) => ipcRenderer.invoke("calibration:snapshot", cameraId, atSec),
-  discardSnapshot: (snapshotPath) => ipcRenderer.invoke("calibration:discardSnapshot", snapshotPath),
-  save: (cameraId, snapshotPath, points) => ipcRenderer.invoke("calibration:save", cameraId, snapshotPath, points),
 });
 
 contextBridge.exposeInMainWorld("pipelineAPI", {
