@@ -893,6 +893,14 @@ pic-vision/
 │   │   │                              # sign-in (ADR-079) -- there is no separate
 │   │   │                              # pairing-code step anymore; signing in IS
 │   │   │                              # what connects this device to the console.
+│   │   ├── secureField.js              # 2026-09-05 (ADR-082, PIC-79): OS-vault
+│   │   │                              # encryption (Electron safeStorage) for
+│   │   │                              # individual secret strings before they
+│   │   │                              # reach electron-store's plaintext JSON --
+│   │   │                              # camera password/streamUri, the Supabase
+│   │   │                              # session, cloud.js's agent apiToken. Falls
+│   │   │                              # back to plaintext if no OS vault is
+│   │   │                              # available, rather than throwing.
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared

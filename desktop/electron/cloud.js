@@ -14,13 +14,27 @@ import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
 import { grabAndUploadSnapshot, applyPendingCalibration } from "./calibration.js";
 import { logEvent } from "./activityLog.js";
+import { encryptField, decryptField } from "./secureField.js";
 
 const store = new Store({ name: "cloud" });
 
-// Overridable for local dev (the console runs on localhost:3000 via
-// `pnpm dev` before it's deployed anywhere) without hardcoding either URL
-// as the only option.
-const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "http://localhost:3000";
+// Defaults to the real production console -- same pattern as auth.js's
+// SUPABASE_URL/SUPABASE_ANON_KEY, overridable via env var for local dev
+// against `pnpm dev`'s localhost:3000, never the other way around.
+//
+// Found 2026-09-05 while QCing the Disconnect feature: this used to
+// default to localhost:3000, which only ever worked by accident because
+// every call site that mattered already had a real stored consoleUrl to
+// reuse. registerDevice() (auth.js) does not -- it's the one path that
+// falls all the way back to this default, and it's exactly what the
+// "Connect to the cloud console" retry button and the auto-register-at-
+// launch check both call. Neither had ever been exercised against a
+// live, already-signed-in device without a working connection until
+// this session's revoke testing hit it for the first time -- surfaced
+// as a generic "TypeError: fetch failed" (a real connection refusal to
+// a port nothing was listening on), not an HTTP error, so it looked
+// environmental at first rather than a wrong URL.
+const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "https://console.picvisionai.com";
 
 const HEARTBEAT_INTERVAL_MS = 30_000;
 
@@ -36,7 +50,21 @@ const lastCameraStatus = new Map(); // cameraId -> "online" | "offline"
 let lastHeartbeatOk = true;
 
 export function getCloudConnection() {
-  return store.get("connection", null);
+  const connection = store.get("connection", null);
+  if (!connection) return connection;
+  return { ...connection, apiToken: decryptField(connection.apiToken) };
+}
+
+// Encrypts apiToken before it touches disk -- this is the long-lived
+// credential a revoked device can never get back (see the revoke API
+// route on the console), so the same class of secret as a camera
+// password or a Supabase session token. A decryption failure (vault
+// cleared, moved machines) just resolves as a null apiToken above,
+// which fails the same normal way a genuinely revoked token already
+// does -- a real 401 on the next heartbeat, logged and recoverable via
+// the existing "Connect to the cloud console" retry.
+function saveConnection(connection) {
+  store.set("connection", { ...connection, apiToken: encryptField(connection.apiToken) });
 }
 
 // A stable identity for this machine, independent of connection state --
@@ -87,10 +115,9 @@ export function setAgentName(name) {
 // function doesn't refresh it, same as it never touched the pairing code
 // it replaced.
 //
-// The returned long-lived API token is stored locally the same way camera
-// passwords already are (cameras/store.js's electron-store JSON -- see
-// that file's header for why this is a known, already-flagged POC gap,
-// not a new one introduced here).
+// The returned long-lived API token is OS-vault-encrypted at rest the
+// same way camera passwords are (secureField.js, PIC-79) -- see
+// saveConnection above.
 export async function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_URL) {
   const res = await fetch(`${consoleUrl}/api/agents/register`, {
     method: "POST",
@@ -107,7 +134,7 @@ export async function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_UR
     brandName: body.brandName,
     connectedAt: new Date().toISOString(),
   };
-  store.set("connection", connection);
+  saveConnection(connection);
   lastHeartbeatOk = true; // fresh connection -- don't let a stale prior failure log a false "reconnected" on the first tick
   logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
   startHeartbeatLoop();
@@ -196,7 +223,7 @@ async function sendHeartbeat() {
     // reflecting whatever the brand was named at pairing time.
     const body = await res.json().catch(() => ({}));
     if (typeof body.brandName === "string" && body.brandName !== connection.brandName) {
-      store.set("connection", { ...connection, brandName: body.brandName });
+      saveConnection({ ...connection, brandName: body.brandName });
     }
   } catch (err) {
     // Console unreachable (offline venue, DNS hiccup, console down) --

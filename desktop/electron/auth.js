@@ -14,8 +14,35 @@
 import Store from "electron-store";
 import { registerAgent, getCloudConnection } from "./cloud.js";
 import { logEvent } from "./activityLog.js";
+import { encryptField, decryptField } from "./secureField.js";
 
 const store = new Store({ name: "auth" });
+
+// A Supabase access/refresh token pair is a full user-session credential
+// (unlike cloud.js's long-lived agent apiToken, this can sign in as the
+// account owner). Centralized the same way cameras/store.js's password/
+// streamUri are: every writer already builds a full session object and
+// calls store.set once, so encrypting there and decrypting in the one
+// place sessions get read back covers every caller.
+function saveSession(session) {
+  store.set("session", { ...session, accessToken: encryptField(session.accessToken), refreshToken: encryptField(session.refreshToken) });
+}
+function loadSession() {
+  const session = store.get("session");
+  if (!session) return null;
+  const accessToken = decryptField(session.accessToken);
+  // A stored (non-null) token that comes back null failed to decrypt --
+  // vault cleared, or moved to a different machine/OS user, since keys
+  // aren't portable. Treat the whole session as gone rather than handing
+  // back a null token that would just fail confusingly further down;
+  // this forces a normal re-sign-in, the same recovery a user already
+  // has for an expired refresh token.
+  if (session.accessToken && !accessToken) {
+    store.delete("session");
+    return null;
+  }
+  return { ...session, accessToken, refreshToken: decryptField(session.refreshToken) };
+}
 
 // Same project/public anon key already committed in
 // pic-vision-cloud-console/.env.local.example (NEXT_PUBLIC_-prefixed
@@ -54,7 +81,7 @@ export async function signIn(email, password) {
     expiresAt: Date.now() + data.expires_in * 1000,
     user: { id: data.user.id, email: data.user.email },
   };
-  store.set("session", session);
+  saveSession(session);
   logEvent("signed_in", `Signed in as ${session.user.email}`);
 
   // Only register if this machine isn't already connected to some brand --
@@ -88,7 +115,7 @@ export async function registerDevice() {
 }
 
 export async function signOut() {
-  const session = store.get("session");
+  const session = loadSession();
   if (session?.accessToken) {
     // Best-effort -- an already-expired or already-revoked token 400s here,
     // which shouldn't block clearing the local session either way.
@@ -104,7 +131,7 @@ export async function signOut() {
 }
 
 export function getSession() {
-  return publicSession(store.get("session", null));
+  return publicSession(loadSession());
 }
 
 // Refreshes 60s ahead of real expiry so a call that's mid-flight when the
@@ -112,7 +139,7 @@ export function getSession() {
 // failed refresh (revoked/expired refresh token) rather than leaving a
 // dead session getSession() would keep reporting as signed-in.
 async function getValidAccessToken() {
-  const session = store.get("session");
+  const session = loadSession();
   if (!session) return null;
   if (Date.now() < session.expiresAt - 60_000) return session.accessToken;
   try {
@@ -123,7 +150,7 @@ async function getValidAccessToken() {
       expiresAt: Date.now() + data.expires_in * 1000,
       user: { id: data.user.id, email: data.user.email },
     };
-    store.set("session", refreshed);
+    saveSession(refreshed);
     return refreshed.accessToken;
   } catch {
     store.delete("session");

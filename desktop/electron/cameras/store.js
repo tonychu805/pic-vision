@@ -2,12 +2,13 @@
 // from a discovery result), plus the connect/describe logic both the
 // "add camera" and "test connection" UI actions need.
 //
-// POC note: camera passwords are stored in electron-store's plain JSON file
-// (~/.config/<app>/cameras.json on Linux) -- fine for local dev, not for a
-// client shipped to real venues. Same class of problem STRATEGY.md §5
-// already flags for RunPod/R2 credentials ("cannot ship .env values to
-// external venue owners") -- whatever secret-storage fix that gets should
-// cover this too, not be solved separately.
+// password/streamUri are OS-vault-encrypted at rest (see secureField.js,
+// PIC-79) where the OS actually provides one -- on a machine with no
+// vault available (e.g. a headless Linux box with no keyring daemon),
+// they fall back to the plain JSON this file originally shipped with.
+// STRATEGY.md §5's RunPod/R2 credentials gap is the same class of
+// problem but a separate, not-yet-built fix (server-side secrets, not a
+// local electron-store field).
 import Store from "electron-store";
 // See discovery.js for why this is a default import + destructure, not a
 // named import, despite onvif/promises being ESM-consumed CJS.
@@ -19,11 +20,31 @@ import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { vendorsForIps } from "./vendorLookup.js";
 import { RECORDINGS_ROOT, sanitizeForPath } from "../capture.js";
+import { encryptField, decryptField } from "../secureField.js";
 
 const store = new Store({ name: "cameras" });
 
+// password and streamUri (the RTSP-direct fallback embeds credentials
+// directly in the URL, see addCameraViaRtsp below) are the only fields
+// here that are actual secrets -- everything else (hostname, label,
+// manufacturer) is metadata safe to leave in the clear. Centralized here
+// rather than at each call site: every mutator already builds its full
+// camera list in memory and calls store.set once, so encrypting on the
+// way into that one call and decrypting on the way out of listCameras
+// covers every reader/writer in this file for free.
+function encryptCamera(camera) {
+  return { ...camera, password: encryptField(camera.password), streamUri: encryptField(camera.streamUri) };
+}
+function decryptCamera(camera) {
+  return { ...camera, password: decryptField(camera.password), streamUri: decryptField(camera.streamUri) };
+}
+
 export function listCameras() {
-  return store.get("cameras", []);
+  return store.get("cameras", []).map(decryptCamera);
+}
+
+function saveCameras(cameras) {
+  store.set("cameras", cameras.map(encryptCamera));
 }
 
 export async function testConnection({ hostname, port, username, password, path: connectPath, connectionType, sampleClipPath }) {
@@ -106,7 +127,7 @@ export async function addCamera({ label, hostname, port, username, password, pat
   };
   const cameras = listCameras();
   cameras.push(camera);
-  store.set("cameras", cameras);
+  saveCameras(cameras);
   return camera;
 }
 
@@ -142,13 +163,13 @@ export function addCameraFromSampleClip({ label, filePath }) {
 
   const cameras = listCameras();
   cameras.push(camera);
-  store.set("cameras", cameras);
+  saveCameras(cameras);
   return camera;
 }
 
 export function removeCamera(id) {
   const cameras = listCameras().filter((c) => c.id !== id);
-  store.set("cameras", cameras);
+  saveCameras(cameras);
   return cameras;
 }
 
@@ -159,7 +180,7 @@ export function removeCamera(id) {
 export function renameCamera(id, label) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
-  store.set("cameras", next);
+  saveCameras(next);
   return next.find((c) => c.id === id);
 }
 
@@ -175,7 +196,7 @@ export function renameCamera(id, label) {
 export function setCalibPath(id, calibPath) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, calibPath } : c));
-  store.set("cameras", next);
+  saveCameras(next);
   return next.find((c) => c.id === id);
 }
 
@@ -241,6 +262,6 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
   };
   const cameras = listCameras();
   cameras.push(camera);
-  store.set("cameras", cameras);
+  saveCameras(cameras);
   return camera;
 }
