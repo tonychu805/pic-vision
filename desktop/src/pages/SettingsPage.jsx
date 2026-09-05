@@ -12,8 +12,10 @@ import { useEffect, useState } from "react";
 // already run unconditionally, nothing to toggle), and the "Scan when
 // picvision opens" cadence radios (auto-scan-on-launch was already
 // explicitly removed once, 2026-09-03, "operator's call" -- rebuilding
-// it as a setting would quietly re-open that decision). "Previews" stays
-// -- it was already accurate static text, not a mock control.
+// it as a setting would quietly re-open that decision). "Previews" was
+// kept at first (it was already accurate static text, not a mock
+// control) but removed 2026-09-06, operator's call -- it didn't do
+// anything a setting page needs to do, just pointed elsewhere.
 export default function SettingsPage() {
   const [primaryCidr, setPrimaryCidr] = useState(null);
   const [extraRanges, setExtraRanges] = useState([]);
@@ -144,14 +146,6 @@ export default function SettingsPage() {
           <p style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", margin: "10px 0 0", lineHeight: 1.5 }}>
             How long to wait for a reply from each address during the RTSP port sweep. Lower is faster but can miss
             a slow-to-respond camera; higher is more thorough but takes longer on a large network.
-          </p>
-        </div>
-
-        <div style={{ padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", gridColumn: "1 / -1" }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Previews</div>
-          <p style={{ fontSize: 12, lineHeight: 1.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
-            This app doesn't decode live video previews — see the camera detail page's Streams panel for the raw
-            RTSP URL instead.
           </p>
         </div>
       </div>
