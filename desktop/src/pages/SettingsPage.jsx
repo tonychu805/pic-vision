@@ -109,6 +109,18 @@ export default function SettingsPage() {
             Only extends the RTSP port sweep — useful if your cameras sit on a separate VLAN from this machine.
             ONVIF discovery can't reach a different subnet no matter what's added here.
           </p>
+          <details style={{ marginTop: 10, fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+            <summary style={{ cursor: "pointer" }}>Want automatic discovery to reach that VLAN too?</summary>
+            <p style={{ lineHeight: 1.5, margin: "8px 0 0" }}>
+              That's a network setting, not something this app can turn on. Ask whoever manages the network to enable
+              "IGMP Proxy," "Multicast Routing," or "PIM" between the two VLANs on the router/switch that separates
+              them — usually under a Routing/Advanced/Multicast section. Most basic consumer routers don't offer
+              this; it's typically a prosumer/enterprise feature (Ubiquiti, pfSense, small-business Cisco/Netgear).
+              If it's not available, a small relay device on both networks (e.g. a Raspberry Pi running an
+              open-source multicast-relay tool) can do the same job. See the desktop README's "Cameras on a
+              different network" section for the full writeup.
+            </p>
+          </details>
         </div>
 
         <div style={{ padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
