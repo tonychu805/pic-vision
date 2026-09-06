@@ -39,8 +39,56 @@ function decryptCamera(camera) {
   return { ...camera, password: decryptField(camera.password), streamUri: decryptField(camera.streamUri) };
 }
 
+// What the renderer is allowed to see (PIC-97, 2026-09-06).
+//
+// ADR-082 encrypted `password` and `streamUri` at rest with the OS vault,
+// and then `cameras:list` handed both back decrypted on every page load --
+// so the encryption protected the disk and nothing else. Anyone who could
+// open the app, or its DevTools, could read every camera password at a
+// venue. That was tolerable while this only ran on the operator's own
+// machine; it stops being tolerable the moment there's an installer.
+//
+// `password` is dropped outright: no screen needs it. `streamUri` is
+// redacted rather than dropped because the Streams panel is a real
+// troubleshooting aid -- but the RTSP-direct fallback embeds credentials
+// in that URI (see addCameraViaRtsp), so what the UI displays now has
+// them starred out. `revealStreamUri()` below returns the real thing for
+// the Copy button, which makes exposing it a deliberate act rather than
+// something that happens on every render.
+export function redactStreamUri(uri) {
+  if (typeof uri !== "string" || !uri) return uri ?? null;
+  // rtsp://user:pass@host/path -> rtsp://***:***@host/path. Deliberately
+  // keeps the shape so "does this camera need credentials" stays visible.
+  //
+  // [^/]* rather than [^/@]+: an @ inside the password is legal and does
+  // happen, and stopping at the FIRST @ left the tail of it on screen
+  // ("rtsp://***:***@ss@10.0.0.5"). Greedy up to the last @ before the
+  // path instead. Caught by redaction.test.js, which is why that case is
+  // in there.
+  return uri.replace(/:\/\/[^/]*@/, "://***:***@");
+}
+
+export function publicCamera(camera) {
+  if (!camera) return camera;
+  const { password: _password, ...rest } = camera;
+  return { ...rest, streamUri: redactStreamUri(camera.streamUri) };
+}
+
+// The full stream URI, credentials included, for one camera. Only reached
+// by an explicit "Copy" in the UI -- never by a list render.
+export function revealStreamUri(cameraId) {
+  const camera = listCameras().find((c) => c.id === cameraId);
+  return camera?.streamUri ?? null;
+}
+
 export function listCameras() {
   return store.get("cameras", []).map(decryptCamera);
+}
+
+// The list the renderer gets. listCameras() stays internal: capture.js,
+// heartbeats and testConnection all genuinely need the real credentials.
+export function listCamerasForRenderer() {
+  return listCameras().map(publicCamera);
 }
 
 function saveCameras(cameras) {

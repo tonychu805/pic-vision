@@ -361,6 +361,35 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
   );
 }
 
+// The displayed stream URI has its credentials starred out (PIC-97 --
+// the RTSP-direct fallback embeds them, and they used to sit in the DOM
+// on every render). Copy still yields a URI you can paste straight into
+// VLC: it asks the main process for the real one at click time, so the
+// credentials exist for the length of a clipboard write rather than for
+// the length of the session.
+function CopyStreamUri({ cameraId }) {
+  const [state, setState] = useState("idle");
+
+  const copy = async () => {
+    try {
+      const uri = await window.cameraAPI.revealStreamUri(cameraId);
+      if (!uri) return setState("failed");
+      await navigator.clipboard.writeText(uri);
+      setState("copied");
+      setTimeout(() => setState("idle"), 1800);
+    } catch {
+      setState("failed");
+    }
+  };
+
+  return (
+    <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={copy} title="Copies the URI including its username and password">
+      <i className={`ph ${state === "copied" ? "ph-check" : "ph-copy"}`} style={{ fontSize: 14 }} />
+      {state === "copied" ? "Copied" : state === "failed" ? "Failed" : "Copy"}
+    </button>
+  );
+}
+
 function InfoPanel({ title, rows }) {
   return (
     <div className="card">
@@ -544,9 +573,7 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
                   <span className="tag tag-outline">{s.label}</span>
                   <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-fine)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
                   <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-3)" }}>{s.spec}</span>
-                  <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={() => navigator.clipboard.writeText(s.url)}>
-                    <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
-                  </button>
+                  <CopyStreamUri cameraId={card.camera.id} />
                 </div>
               ))
             )}

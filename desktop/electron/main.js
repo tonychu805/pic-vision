@@ -6,6 +6,9 @@ import { sweepNetwork } from "./cameras/networkSweep.js";
 import { getExtraRanges, addExtraRange, removeExtraRange, getTimeoutMs, setTimeoutMs } from "./scanSettings.js";
 import {
   listCameras,
+  listCamerasForRenderer,
+  publicCamera,
+  revealStreamUri,
   addCamera,
   removeCamera,
   renameCamera,
@@ -43,17 +46,26 @@ function registerCameraHandlers() {
   // response rather than stored locally (ADR-084) -- the fit runs on the
   // operator's job runner and lives on the camera's console row, so this
   // machine has no calib.json to look at.
+  // Redacted: no password, credentials starred out of streamUri (PIC-97).
+  // listCameras() itself stays for internal callers -- capture.js and the
+  // heartbeat genuinely need the real credentials.
   ipcMain.handle("cameras:list", async () => {
-    return listCameras().map((c) => ({ ...c, ...getCalibrationState(c.id) }));
+    return listCamerasForRenderer().map((c) => ({ ...c, ...getCalibrationState(c.id) }));
+  });
+  // The one deliberate way credentials reach the renderer: the Streams
+  // panel's Copy button, so pasting into VLC still works. An explicit act,
+  // not something every render does.
+  ipcMain.handle("cameras:revealStreamUri", async (_event, id) => {
+    return revealStreamUri(id);
   });
   ipcMain.handle("cameras:add", async (_event, config) => {
-    return addCamera(config);
+    return publicCamera(await addCamera(config));
   });
   ipcMain.handle("cameras:remove", async (_event, id) => {
     return removeCamera(id);
   });
   ipcMain.handle("cameras:rename", async (_event, id, label) => {
-    return renameCamera(id, label);
+    return publicCamera(await renameCamera(id, label));
   });
   ipcMain.handle("cameras:testConnection", async (_event, config) => {
     return testConnection(config);
@@ -100,7 +112,7 @@ function registerCameraHandlers() {
     return probeRtspFallback(config);
   });
   ipcMain.handle("cameras:addRtsp", async (_event, config) => {
-    return addCameraViaRtsp(config);
+    return publicCamera(await addCameraViaRtsp(config));
   });
   ipcMain.handle("cameras:parseRtspUrl", async (_event, raw, fallbackUsername, fallbackPassword) => {
     return parseRtspUrl(raw, fallbackUsername, fallbackPassword);
@@ -109,7 +121,7 @@ function registerCameraHandlers() {
   // alternative to a live camera, for exercising calibration/the cloud
   // pipeline without one. See store.js's addCameraFromSampleClip.
   ipcMain.handle("cameras:addSampleClip", async (_event, config) => {
-    return addCameraFromSampleClip(config);
+    return publicCamera(await addCameraFromSampleClip(config));
   });
   ipcMain.handle("system:pickVideoFile", async () => {
     return pickVideoFile();
@@ -197,7 +209,14 @@ function registerCloudHandlers() {
     return registerDevice();
   });
   ipcMain.handle("cloud:status", async () => {
-    return getCloudConnection();
+    // apiToken stripped (PIC-97): it's the long-lived credential a revoked
+    // device can never recover, and nothing in the UI reads it -- CloudPage
+    // uses brandName/connectedAt/consoleUrl only. It was being handed over
+    // on every poll for no reason at all.
+    const connection = getCloudConnection();
+    if (!connection) return connection;
+    const { apiToken: _apiToken, ...rest } = connection;
+    return rest;
   });
   ipcMain.handle("cloud:disconnect", async () => {
     disconnectCloud();

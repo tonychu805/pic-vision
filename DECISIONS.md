@@ -1567,3 +1567,27 @@ Now re-measured on three triggers: never measured or missing fields; **the ONVIF
 
 **Consequences.** What this costs, what it rules out, and what would make us revisit.
 ```
+
+## ADR-088 — The renderer never sees a camera password
+
+**Date:** 2026-09-06 · **Status:** accepted, implemented
+
+**Context.** ADR-082 encrypted camera passwords, stream URIs and the agent API token at rest with the OS vault, on the reasoning that a stolen laptop shouldn't hand over a venue's cameras. The 2026-09-06 codebase review then found the obvious hole (PIC-97), confirmed again while assessing packaging readiness: `cameras:list` returned `listCameras()`, which maps `decryptCamera`, so **every page load handed the renderer fully decrypted camera objects**. `cloud:status` did the same with the agent API token on every 30-second poll. The camera detail page rendered `streamUri` on screen with a Copy button — and the RTSP-direct fallback embeds credentials in that URI, as `store.js`'s own comment says.
+
+So the encryption protected the disk and nothing else. Anyone who could open the app, or its DevTools, could read every camera password at a venue.
+
+This was tolerable while the app only ran on the operator's own machine. It stops being tolerable the moment there is an installer: packaging means these credentials sit in the renderer of an Electron app on machines the operator does not control, in venues, around staff and contractors. That is why this blocked packaging rather than being filed as cleanup.
+
+**Decision.** Secrets stop at the main process.
+
+`store.js` gains `publicCamera()` — drops `password` outright, stars the credentials out of `streamUri` — and `listCamerasForRenderer()`. Every IPC handler that returns a camera (`list`, `add`, `addRtsp`, `addSampleClip`, `rename`) goes through it. `cloud:status` strips `apiToken`, which nothing in the UI ever read. `listCameras()` stays as-is for internal callers: capture, live view, calibration and the heartbeat genuinely need the real credentials, and they run in main.
+
+A **redaction, not a whitelist**, for the camera shape: a new harmless field shouldn't need a change here to become visible. The heartbeat's outbound payload is the opposite — an explicit field allowlist — because that crosses to the cloud, and was already correct.
+
+The Streams panel keeps working. What it *displays* is redacted; Copy calls a new `cameras:revealStreamUri` at click time, so a URI you can paste into VLC still reaches the clipboard, but the credentials exist for the length of a clipboard write rather than the length of the session. Exposing them becomes a deliberate act instead of something every render does.
+
+**Verification.** Six tests (`cameras/redaction.test.js`), pinning this specifically because it is the kind of fix a later refactor undoes invisibly — swap `listCamerasForRenderer()` back to `listCameras()` to fix an unrelated bug and the app looks identical. One test serialises the whole redacted object and asserts the password appears nowhere in it, rather than checking named fields.
+
+That test immediately caught a real leak in the first regex: `[^/@]+@` stops at the *first* `@`, so a password containing one — legal, and it happens — left its tail on screen as `rtsp://***:***@ss@10.0.0.5`. Now `[^/]*@`, greedy to the last `@` before the path.
+
+**Not addressed here.** Electron 33 is still end-of-life (PIC-98), and the desktop UI has still never been clicked through since the 2026-09-06 redesign. Both remain packaging blockers.
