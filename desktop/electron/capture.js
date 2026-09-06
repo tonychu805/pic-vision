@@ -188,7 +188,18 @@ export function measureStreamProfile(uri, { seconds = 5, timeoutMs = 20_000 } = 
 
       const span = times[times.length - 1] - times[0];
       if (span <= 0) return resolve(null);
-      const fps = (times.length - 1) / span;
+
+      // Median gap between frames, not frames-divided-by-span. An RTSP
+      // stream ramps up: the first second carries fewer frames while the
+      // connection settles, and averaging over it under-reads the rate.
+      // A real camera configured at 30 measured 24.9 that way, which would
+      // have been reported to the venue as "your network is dropping
+      // frames" -- a false alarm sending them to check working Wi-Fi. The
+      // median ignores a slow start and any isolated stall.
+      const gaps = times.slice(1).map((t, i) => t - times[i]).filter((g) => g > 0).sort((a, b) => a - b);
+      if (!gaps.length) return resolve(null);
+      const median = gaps[Math.floor(gaps.length / 2)];
+      const fps = 1 / median;
       if (!(1 <= fps && fps <= 240)) return resolve(null);
 
       const bits = packets.reduce((sum, pk) => sum + (Number(pk.size) || 0), 0) * 8;

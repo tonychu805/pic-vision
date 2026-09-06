@@ -69,8 +69,18 @@ const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrat
 const fpsMeasureAttempted = new Set();
 
 async function backfillMeasuredFps(camera) {
-  if (camera.profile?.measuredFps != null) return;
   if (fpsMeasureAttempted.has(camera.id)) return;
+  // What's missing depends on the camera type, not just on the frame rate.
+  // An ONVIF camera reports codec/resolution/bitrate itself and only needs
+  // its rate topped up; everything else has no other source for any of it.
+  // Checking measuredFps alone left RTSP cameras and sample clips measured
+  // once by an older build stuck with a frame rate and nothing else,
+  // because the guard saw a rate and returned.
+  const p = camera.profile ?? {};
+  const needsRate = p.measuredFps == null;
+  const needsRest = camera.connectionType !== "onvif"
+    && (p.codec == null || p.width == null || p.height == null || p.bitrateKbps == null);
+  if (!needsRate && !needsRest) return;
   // A sample clip is a local file (milliseconds); a live camera means
   // holding its stream open for a few seconds. Both end up in the same
   // field, so one guard covers all three connection types.
