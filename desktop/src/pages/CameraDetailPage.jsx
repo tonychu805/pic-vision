@@ -126,6 +126,31 @@ function LiveViewButton({ camera }) {
 
 const isSampleClip = (camera) => camera.connectionType === "sampleClip";
 
+// The one camera setting that stops everything working (ADR-087). Shown
+// here rather than only in the collapsed "Streams" detail panel, because a
+// camera below MIN_FPS is refused for both recording and calibration and
+// the venue needs to know why without going looking. Mirrors the threshold
+// in electron/cameras/frameRate.js, which is the actual gate.
+const MIN_FPS = 24;
+
+function FrameRateWarning({ camera }) {
+  const fps = camera.profile?.fps;
+  if (typeof fps !== "number" || fps <= 0 || fps >= MIN_FPS) return null;
+  return (
+    <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
+                  borderRadius: "var(--radius-sm)", fontSize: 12.5,
+                  background: "color-mix(in srgb, var(--color-accent-2-400) 12%, transparent)",
+                  border: "1px solid color-mix(in srgb, var(--color-accent-2-400) 35%, transparent)" }}>
+      <i className="ph ph-warning" style={{ fontSize: 15, color: "var(--color-accent-2-400)", flex: "none", marginTop: 1 }} />
+      <span>
+        This camera is set to <b>{fps} fps</b>. Recording and calibration are disabled below {MIN_FPS} fps —
+        at this rate about half the rallies go undetected. Sign in to the camera
+        {camera.hostname ? <> at <b>{camera.hostname}</b></> : null} and set its video frame rate to <b>30</b>.
+      </span>
+    </div>
+  );
+}
+
 // Calibration is entirely the cloud console's now (ADR-080 moved the
 // click-through UI there; ADR-084 moved the homography fit itself to the
 // operator's job runner). This machine holds no calib.json at all -- the
@@ -260,6 +285,7 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
           <i className="ph ph-arrows-clockwise" style={{ fontSize: 13 }} />Refresh
         </button>
       </div>
+      <FrameRateWarning camera={camera} />
       <CalibrationControl camera={camera} />
       <div style={{ marginTop: 10 }}>
         {recordings.length === 0 ? (
