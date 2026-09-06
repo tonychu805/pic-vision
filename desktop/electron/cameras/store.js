@@ -156,13 +156,14 @@ export async function addCamera({ label, hostname, port, username, password, pat
     serialNumber: info.serialNumber,
     firmwareVersion: info.firmwareVersion,
     streamUri,
-    // Not every camera fills in ONVIF's frameRateLimit. Where it's missing,
-    // measure off the stream rather than leave the frame-rate guard with a
-    // hole in it (ADR-087) -- same fallback the RTSP path uses, and the
-    // more truthful number of the two anyway, since ONVIF reports the
-    // configured limit rather than what actually arrives.
-    profile: profile && profile.fps == null && streamUri
-      ? { ...profile, fps: measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
+    // Measured on every add, not only when ONVIF stays silent (ADR-087).
+    // ONVIF reports what the camera is *configured* for; this reports what
+    // actually arrives. When they disagree -- set to 30, delivering 15 --
+    // the camera is fine and the network isn't, which no other part of the
+    // system would ever surface, and which needs completely different
+    // advice from "change the setting". Costs ~5s on a one-time step.
+    profile: profile && streamUri
+      ? { ...profile, measuredFps: measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
       : profile,
     connectionType: "onvif",
     addedAt: new Date().toISOString(),
@@ -237,10 +238,17 @@ export function setCameraProfile(id, profile) {
   const cameras = listCameras();
   const current = cameras.find((c) => c.id === id);
   if (!current) return null;
+  // measuredFps is deliberately carried over rather than refreshed: it
+  // costs a ~5s live probe, which is fine on a one-time add but not every
+  // 30s on every camera. Without this the heartbeat's ONVIF-only profile
+  // would silently wipe it and take the frame-rate guard back to trusting
+  // the configured number alone.
+  const merged = { ...profile, measuredFps: current.profile?.measuredFps ?? null };
   const same = current.profile
-    && ["codec", "width", "height", "fps", "bitrateKbps"].every((k) => current.profile[k] === profile[k]);
+    && ["codec", "width", "height", "fps", "bitrateKbps", "measuredFps"]
+      .every((k) => (current.profile[k] ?? null) === (merged[k] ?? null));
   if (same) return current;
-  const next = cameras.map((c) => (c.id === id ? { ...c, profile } : c));
+  const next = cameras.map((c) => (c.id === id ? { ...c, profile: merged } : c));
   saveCameras(next);
   return next.find((c) => c.id === id);
 }
@@ -304,14 +312,15 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
     serialNumber: null,
     firmwareVersion: null,
     streamUri: streamUri,
-    // An RTSP-added camera never went through ONVIF, so there's no profile
-    // to read a frame rate out of -- and without one it would skip the
-    // frame-rate guard entirely, which is exactly how a venue ends up
-    // recording at 15fps unnoticed. Measured off the stream instead
-    // (ADR-087). Measurement beats ONVIF's own number anyway: that one is
-    // the camera's configured limit, this is what it actually delivers.
-    // Null when the probe fails -- an unknown rate still never blocks.
-    profile: { codec: null, width: null, height: null, fps: measureStreamFps(streamUri), bitrateKbps: null },
+    // An RTSP-added camera never went through ONVIF, so there is no
+    // configured rate to read -- only a measured one (ADR-087). Without it
+    // this camera would skip the frame-rate guard entirely, which is
+    // exactly how a venue ends up recording at 15fps unnoticed. `fps` stays
+    // null: nothing here knows what the camera is *set* to, so the guard
+    // can't claim the settings are fine, and falls back to advising the
+    // setting change rather than blaming the network.
+    profile: { codec: null, width: null, height: null, fps: null,
+               measuredFps: measureStreamFps(streamUri), bitrateKbps: null },
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };

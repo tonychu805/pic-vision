@@ -214,6 +214,11 @@ async function cameraStatuses() {
       streamWidth: profile?.width ?? c.profile?.width ?? null,
       streamHeight: profile?.height ?? c.profile?.height ?? null,
       streamFps: profile?.fps ?? c.profile?.fps ?? null,
+      // What actually arrives, which is what detection quality depends on.
+      // Reported alongside the configured rate rather than instead of it:
+      // the console needs both to tell "set wrong" from "network dropping
+      // frames", which need opposite advice (ADR-087).
+      streamMeasuredFps: c.profile?.measuredFps ?? null,
       streamBitrateKbps: profile?.bitrateKbps ?? c.profile?.bitrateKbps ?? null,
       recordingCount: recordings.length,
       lastRecordingAt: parseRecordingStartedAt(recordings[0]?.name),

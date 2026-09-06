@@ -134,8 +134,15 @@ const isSampleClip = (camera) => camera.connectionType === "sampleClip";
 const MIN_FPS = 24;
 
 function FrameRateWarning({ camera }) {
-  const fps = camera.profile?.fps;
-  if (typeof fps !== "number" || fps <= 0 || fps >= MIN_FPS) return null;
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+  const configured = num(camera.profile?.fps);
+  const measured = num(camera.profile?.measuredFps);
+  const effective = measured ?? configured;
+  if (effective === null || effective >= MIN_FPS) return null;
+  const rounded = Math.round(effective);
+  // Set correctly but not arriving: a network fault, not a settings one,
+  // and telling them to change a correct setting would send them in circles.
+  const networkFault = configured !== null && configured >= MIN_FPS && measured !== null;
   return (
     <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
                   borderRadius: "var(--radius-sm)", fontSize: 12.5,
@@ -143,9 +150,19 @@ function FrameRateWarning({ camera }) {
                   border: "1px solid color-mix(in srgb, var(--color-accent-2-400) 35%, transparent)" }}>
       <i className="ph ph-warning" style={{ fontSize: 15, color: "var(--color-accent-2-400)", flex: "none", marginTop: 1 }} />
       <span>
-        This camera is set to <b>{fps} fps</b>. Recording and calibration are disabled below {MIN_FPS} fps —
-        at this rate about half the rallies go undetected. Sign in to the camera
-        {camera.hostname ? <> at <b>{camera.hostname}</b></> : null} and set its video frame rate to <b>30</b>.
+        {networkFault ? (
+          <>
+            This camera is set to <b>{configured} fps</b> but only about <b>{rounded} fps</b> are reaching
+            this computer, so recording and calibration are disabled. The camera's own settings are fine —
+            this is a network problem: check its Wi-Fi signal, or connect it by cable.
+          </>
+        ) : (
+          <>
+            This camera is set to <b>{rounded} fps</b>. Recording and calibration are disabled below {MIN_FPS} fps —
+            at this rate about half the rallies go undetected. Sign in to the camera
+            {camera.hostname ? <> at <b>{camera.hostname}</b></> : null} and set its video frame rate to <b>30</b>.
+          </>
+        )}
       </span>
     </div>
   );
