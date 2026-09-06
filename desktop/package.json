@@ -11,7 +11,7 @@
     "dev": "concurrently -k -n renderer,electron -c blue,green \"npm run dev:renderer\" \"wait-on tcp:5173 && npm run dev:electron\"",
     "build:renderer": "vite build",
     "build": "npm run build:renderer && electron-builder",
-    "test": "node --test \"electron/**/*.test.js\""
+    "test": "node --import ./electron/register-stub.mjs --test \"electron/**/*.test.js\""
   },
   "build": {
     "appId": "com.picvisionai.desktop",

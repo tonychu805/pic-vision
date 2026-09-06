@@ -13,6 +13,8 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
+import { basename } from "node:path";
+import { runCloudJob } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 
@@ -413,6 +415,20 @@ async function runCommand(command) {
         .then((fps) => { if (fps != null) setCameraProfile(camera.id, { ...(camera.profile ?? {}), measuredFps: fps }); })
         .catch((err) => console.error(`[cloud] post-recording fps check failed: ${err.message}`));
     }
+    // A booked session has to produce a reel without anyone touching
+    // anything -- that is the entire point of booking it. Stopping the
+    // recording used to be where the scheduler's involvement ended, so a
+    // scheduled session recorded to disk and sat there until someone
+    // clicked "Send to cloud" by hand.
+    //
+    // Only for scheduled stops: `schedule_booking_id` is set by the
+    // dispatcher (see the console's dispatch_due_schedule_bookings). A stop
+    // the operator triggered themselves keeps its manual send, since
+    // silently spending GPU money on a recording someone stopped by hand
+    // isn't obviously wanted.
+    if (result.stopped && result.outDir && command.params?.schedule_booking_id) {
+      sendRecordingToCloud(camera, result.outDir);
+    }
     return result;
   }
   // Console-driven calibration (ADR-080) -- see calibration.js's header
@@ -422,6 +438,25 @@ async function runCommand(command) {
   // needs OpenCV, so it runs on the operator's job runner instead and the
   // console turns those clicks into a `jobs` row, not a command for us.
   throw new Error(`unknown command type: ${command.type}`);
+}
+
+// Fire-and-forget: runCloudJob uploads in the background and tracks its own
+// state in the recording's cloud_job/status.json, exactly as it does for a
+// manual send, so nothing here needs to wait for it. Failures are logged to
+// the activity log by runCloudJob itself.
+function sendRecordingToCloud(camera, recordingDir) {
+  const sessionId = `${camera.label}-${basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  runCloudJob({
+    recordingDir,
+    videoPath: camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined,
+    targetSec: 300,
+    sessionId,
+    cameraId: camera.id,
+    cameraLabel: camera.label,
+  }).catch((err) => {
+    console.error(`[cloud] scheduled send failed for ${camera.label}: ${err.message}`);
+    logEvent("pipeline_failed", `${camera.label} scheduled upload failed`, err.message);
+  });
 }
 
 async function processCommands() {
