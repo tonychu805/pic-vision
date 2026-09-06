@@ -89,7 +89,7 @@ h1, h2, h3, h4, h5, h6 {
 }
 a { color: var(--color-accent); text-underline-offset: 3px; }
 img { display: block; max-width: 100%; }
-.text-muted { color: color-mix(in srgb, var(--color-text) 55%, transparent); }
+.text-muted { color: var(--text-3); }
 :focus { outline: none; }
 :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
 ::selection { background: color-mix(in srgb, var(--color-accent) 30%, transparent); }
@@ -284,3 +284,171 @@ img { display: block; max-width: 100%; }
 .notice-warning { background: var(--color-warning-bg); border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent); }
 .notice-danger { background: var(--color-danger-bg); border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent); }
 .notice-quiet { background: color-mix(in srgb, var(--color-text) 6%, transparent); color: var(--text-2); }
+
+/* ——————————————————————————————————————————————————————————————
+   Light theme (2026-09-06), mirroring pic-vision-cloud-console's.
+
+   Nocturne is dark-first, so rather than re-specify every component this
+   inverts the two colour ramps: the component classes are written in
+   terms of ramp positions (.tag-neutral is "neutral-800 background,
+   neutral-100 text"), so reversing 100<->900 flips a dark chip with light
+   text into a light chip with dark text automatically. The --text-2/3/4
+   and --hairline tokens are color-mix() over --color-text, so they invert
+   for free.
+
+   The theme is chosen by index.html's inline script before React mounts,
+   which is why this is keyed on [data-theme] rather than only a media
+   query. "System" writes no attribute at all and lets the media query
+   below decide -- Chromium follows the OS through Electron's nativeTheme,
+   so that tracks a machine switching at sunset with no code of ours.
+   —————————————————————————————————————————————————————————————— */
+:root[data-theme="light"] {
+  color-scheme: light;
+
+  --color-bg: #faf9f5;
+  --color-surface: #ffffff;
+  --color-text: #1b1c26;
+  /* #9184d9 is a mid-tone picked to sit on near-black; it reaches only
+     ~2:1 on white, so light mode needs its own. */
+  --color-accent: #5d52a8;
+  --color-accent-2: #6b64ab;
+  --color-divider: color-mix(in srgb, #1b1c26 14%, transparent);
+
+  --color-neutral-100: #292b31;
+  --color-neutral-200: #3f424d;
+  --color-neutral-300: #595d6c;
+  --color-neutral-400: #75798c;
+  --color-neutral-500: #9397ab;
+  --color-neutral-600: #b2b6ca;
+  --color-neutral-700: #cfd3e5;
+  --color-neutral-800: #e4e7f5;
+  --color-neutral-900: #f0f1f8;
+
+  --color-accent-100: #2b2741;
+  --color-accent-200: #423a6a;
+  --color-accent-300: #5d5294;
+  --color-accent-400: #796cbf;
+  --color-accent-500: #968ae0;
+  --color-accent-600: #b5abfc;
+  --color-accent-700: #d2cefd;
+  --color-accent-800: #e7e5fe;
+  --color-accent-900: #f5f4ff;
+
+  --color-accent-2-100: #2b293a;
+  --color-accent-2-200: #423e5d;
+  --color-accent-2-300: #5c5783;
+  --color-accent-2-400: #7972a9;
+  --color-accent-2-500: #9690c9;
+  --color-accent-2-600: #b5afe8;
+  --color-accent-2-700: #d2cefd;
+  --color-accent-2-800: #e7e5fe;
+  --color-accent-2-900: #f5f4ff;
+
+  /* The dark theme's semantic colours are lightened for a dark ground and
+     wash out on white -- #7fd1ae mint reads as barely-there mint on
+     #ffffff. These are the same hues taken down to ~4.5:1 on the light
+     surface. */
+  --color-success: #1c8560;
+  --color-warning: #96690b;
+  --color-danger: #c0392c;
+
+
+  /* Re-tuned for light, not inherited: the dark theme's 70/55/42%
+     measure 6.9 / 4.8 / 3.4 :1, but the same percentages over white
+     give 6.3 / 3.8 / 2.6 -- the last two below the 4.5:1 and 3.0:1
+     floors. These percentages were solved for >=7.0 / >=4.5 / >=3.5 on
+     #ffffff, which is the worst case (cards are lighter than the page). */
+  --text-2: color-mix(in srgb, var(--color-text) 74%, transparent);
+  --text-3: color-mix(in srgb, var(--color-text) 61%, transparent);
+  --text-4: color-mix(in srgb, var(--color-text) 53%, transparent);
+  --hairline: color-mix(in srgb, var(--color-text) 10%, transparent);
+  --shadow-sm: 0 0 0 1px #e2e2ea;
+  --shadow-md: 0 0 0 1px #d3d3de, 0 6px 18px rgba(27, 28, 38, 0.10);
+  --shadow-lg: 0 0 0 1px #c2c2d0, 0 16px 40px rgba(27, 28, 38, 0.18);
+}
+
+:root[data-theme="dark"] { color-scheme: dark; }
+
+/* The same palette for anyone who never chose: no attribute, so the
+   machine's own setting decides. Guarded with :not([data-theme="dark"])
+   so an explicit dark choice still wins on a light-mode machine.
+
+   Duplicated rather than shared because plain CSS cannot apply one
+   declaration block from both a media query and a bare selector -- if you
+   edit the palette above, edit it here too. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) {
+    color-scheme: light;
+
+    --color-bg: #faf9f5;
+    --color-surface: #ffffff;
+    --color-text: #1b1c26;
+    --color-accent: #5d52a8;
+    --color-accent-2: #6b64ab;
+    --color-divider: color-mix(in srgb, #1b1c26 14%, transparent);
+
+    --color-neutral-100: #292b31;
+    --color-neutral-200: #3f424d;
+    --color-neutral-300: #595d6c;
+    --color-neutral-400: #75798c;
+    --color-neutral-500: #9397ab;
+    --color-neutral-600: #b2b6ca;
+    --color-neutral-700: #cfd3e5;
+    --color-neutral-800: #e4e7f5;
+    --color-neutral-900: #f0f1f8;
+
+    --color-accent-100: #2b2741;
+    --color-accent-200: #423a6a;
+    --color-accent-300: #5d5294;
+    --color-accent-400: #796cbf;
+    --color-accent-500: #968ae0;
+    --color-accent-600: #b5abfc;
+    --color-accent-700: #d2cefd;
+    --color-accent-800: #e7e5fe;
+    --color-accent-900: #f5f4ff;
+
+    --color-accent-2-100: #2b293a;
+    --color-accent-2-200: #423e5d;
+    --color-accent-2-300: #5c5783;
+    --color-accent-2-400: #7972a9;
+    --color-accent-2-500: #9690c9;
+    --color-accent-2-600: #b5afe8;
+    --color-accent-2-700: #d2cefd;
+    --color-accent-2-800: #e7e5fe;
+    --color-accent-2-900: #f5f4ff;
+
+    --color-success: #1c8560;
+    --color-warning: #96690b;
+    --color-danger: #c0392c;
+
+  
+    /* Re-tuned for light, not inherited: the dark theme's 70/55/42%
+       measure 6.9 / 4.8 / 3.4 :1, but the same percentages over white
+       give 6.3 / 3.8 / 2.6 -- the last two below the 4.5:1 and 3.0:1
+       floors. These percentages were solved for >=7.0 / >=4.5 / >=3.5 on
+       #ffffff, which is the worst case (cards are lighter than the page). */
+    --text-2: color-mix(in srgb, var(--color-text) 74%, transparent);
+    --text-3: color-mix(in srgb, var(--color-text) 61%, transparent);
+    --text-4: color-mix(in srgb, var(--color-text) 53%, transparent);
+    --hairline: color-mix(in srgb, var(--color-text) 10%, transparent);
+  --shadow-sm: 0 0 0 1px #e2e2ea;
+    --shadow-md: 0 0 0 1px #d3d3de, 0 6px 18px rgba(27, 28, 38, 0.10);
+    --shadow-lg: 0 0 0 1px #c2c2d0, 0 16px 40px rgba(27, 28, 38, 0.18);
+  }
+}
+
+/* — brand mark — */
+/* The app logo is white-on-transparent, which vanished the moment the
+   sidebar could be light (caught 2026-09-06 while adding light mode).
+   Both inks already existed as separate files, so this swaps them on
+   exactly the same conditions as the palette above rather than trying to
+   filter one into the other -- a filter would also invert the coloured
+   part of a mark, which is wrong for anything that isn't monochrome.
+   Same problem, same answer, as an uploaded brand logo. */
+.brand-mark-on-light { display: none; }
+:root[data-theme="light"] .brand-mark-on-light { display: block; }
+:root[data-theme="light"] .brand-mark-on-dark { display: none; }
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .brand-mark-on-light { display: block; }
+  :root:not([data-theme="dark"]) .brand-mark-on-dark { display: none; }
+}

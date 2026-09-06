@@ -4,7 +4,9 @@ import { useEffect, useState } from "react";
 // was designed for a light background, not this one). Same
 // pic-vision-cloud-console/public/pic-vision-logo-white.png used there,
 // so the two apps show the same brand mark.
-import logo from "../assets/pic-vision-logo-white.png";
+import logoOnDark from "../assets/pic-vision-logo-white.png";
+import logoOnLight from "../assets/pic-vision-logo.png";
+import ThemeToggle from "./ThemeToggle.jsx";
 
 // "Scan settings" used to sit here as a fourth peer, but all it does is
 // configure the Cameras page's Scan button -- top-level standing it hadn't
@@ -74,30 +76,17 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
       }}
     >
       <div style={{ display: "flex", alignItems: "center", gap: 8, padding: "0 8px 14px" }}>
+        {/* Two inks, swapped by CSS on the same conditions as the palette
+            (see .brand-mark-* in index.css). The white mark was invisible
+            the moment this sidebar could be light. */}
         <div style={{ width: 22, height: 22, flex: "none", overflow: "hidden" }}>
-          <img src={logo} alt="picvision ai" style={{ height: 22, width: "auto", maxWidth: "none" }} />
+          <img className="brand-mark-on-dark" src={logoOnDark} alt="picvision ai" style={{ height: 22, width: "auto", maxWidth: "none" }} />
+          <img className="brand-mark-on-light" src={logoOnLight} alt="picvision ai" style={{ height: 22, width: "auto", maxWidth: "none" }} />
         </div>
         <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", letterSpacing: "-0.02em" }}>
           picvision ai
         </span>
       </div>
-
-      {brandName && (
-        <div
-          style={{
-            padding: "0 8px 10px",
-            fontSize: "var(--fs-fine)",
-            fontWeight: 500,
-            whiteSpace: "nowrap",
-            overflow: "hidden",
-            textOverflow: "ellipsis",
-            color: "var(--text-2)",
-          }}
-          title={brandName}
-        >
-          {brandName}
-        </div>
-      )}
 
       {NAV_ITEMS.map((item) => (
         <button key={item.key} style={navButtonStyle(nav === item.key)} onClick={() => onNavigate(item.key)}>
@@ -108,6 +97,10 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           )}
         </button>
       ))}
+
+      <div style={{ marginTop: "auto" }}>
+        <ThemeToggle />
+      </div>
 
       {/* Used to show the raw CIDR + interface name ("192.168.1.0/24" /
           "Interface · enp1s0") as the headline -- meaningless to a
@@ -121,7 +114,6 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           background work the app doesn't do. */}
       <div
         style={{
-          marginTop: "auto",
           padding: "10px 8px",
           borderRadius: "var(--radius-md)",
           background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
@@ -138,6 +130,30 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           {network?.cidr ? "Scan from the Cameras tab" : "Looking for a network connection"}
         </div>
       </div>
+
+      {/* Bottom-left, matching pic-vision-cloud-console's sidebar footer
+          (components/app/Sidebar.tsx) -- operator's call 2026-09-06, so
+          the two apps put the brand in the same place. It used to sit
+          directly under the picvision mark at the top, where it read as
+          part of the product's own wordmark rather than as "which brand
+          am I signed in to". */}
+      {brandName && (
+        <div
+          style={{
+            padding: "10px 8px 0",
+            marginTop: 12,
+            borderTop: "1px solid var(--color-divider)",
+            fontSize: "var(--fs-body)",
+            fontWeight: 500,
+            whiteSpace: "nowrap",
+            overflow: "hidden",
+            textOverflow: "ellipsis",
+          }}
+          title={brandName}
+        >
+          {brandName}
+        </div>
+      )}
     </div>
   );
 }

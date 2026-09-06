@@ -4,6 +4,24 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Pic Vision Camera Manager</title>
+    <!-- Applies the saved theme before any stylesheet paints, so opening
+         the window never flashes the wrong one. Plain inline script rather
+         than anything React renders: React warns that a <script> in a
+         component never executes on a client render, and it's right. Keep
+         in sync with src/lib/theme.js -- this runs before the bundle
+         exists, so it can't import from it.
+         "system" writes no attribute and lets index.css's
+         prefers-color-scheme media query decide. -->
+    <script>
+      (function () {
+        try {
+          var p = localStorage.getItem("pv-theme");
+          if (p === "light" || p === "dark") document.documentElement.dataset.theme = p;
+        } catch (e) {
+          /* site data blocked -- fall through to the media query */
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
