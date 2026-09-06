@@ -67,3 +67,24 @@ pipelines use them unchanged.
   as a documented negative result — re-batching this call has already been
   tried and shown not to help, twice (once with `.predict()`, once with
   `tf.function` — see `EXPERIMENTS.md` 2026-08-25).
+
+## Retired experiment: LLM-judged rally verification
+
+- `verify.py` (+ `tests/test_verify.py`) — moved here 2026-09-06
+  (`DECISIONS.md` ADR-085). Built 2026-08-16 to have Gemini Flash watch a
+  clip and judge "rally or dead time", with the aim of cutting the hand-
+  labelling cost. Never adopted, for two independent reasons:
+  1. **The verdicts moved with the video encoding, not the play.** The same
+     footage re-encoded differently got different answers — so the signal
+     being measured wasn't rally-vs-dead-time.
+  2. **It was never scored.** PIC-10 (score it against hand labels) was
+     blocked on a Google AI Studio spend cap and never unblocked, so there
+     is no precision/recall number for it at all.
+  Nothing in the pipeline ever imported it — only its own test did. Retired
+  along with its `GOOGLE_API_KEY` (removed from `.env`/`.env.example`) and
+  the `google-genai` dependency, since it was the sole user of both.
+  Before rebuilding this: reproduce finding 1 first. An automatic judge
+  whose answer depends on the encoding will quietly corrupt labels, which
+  is worse than labelling by hand — see `project_labeling_noise_floor`'s
+  wider point that labelling disagreement is already this project's
+  biggest measurement error.

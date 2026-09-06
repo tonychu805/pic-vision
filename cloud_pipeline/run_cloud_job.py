@@ -37,7 +37,7 @@ from dotenv import load_dotenv
 REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 
-# Same pattern as src/verify.py -- without this, RUNPOD_API_KEY and the
+# Without this, RUNPOD_API_KEY and the
 # CLOUDFLARE_R2_* vars are only visible if the caller manually sourced .env
 # into the shell first, which is exactly the crash a real run hit
 # (KeyError: 'CLOUDFLARE_R2_ACCOUNT_ID') before this was added.

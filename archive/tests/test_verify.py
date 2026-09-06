@@ -1,8 +1,8 @@
 import json
 
 import pytest
-import src.verify as verify_mod
-from src.verify import verify_clip, verify_clips
+import archive.verify as verify_mod
+from archive.verify import verify_clip, verify_clips
 
 
 class FakeResponse:

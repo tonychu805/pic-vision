@@ -1477,6 +1477,18 @@ Checked before building, not assumed: `save_calibration.py` (the homography fit)
 
 ---
 
+## ADR-085 — Retire the Gemini rally verifier and its API key
+
+**Date:** 2026-09-06 · **Status:** accepted, done
+
+**Context.** Auditing what secrets the desktop app had access to (ADR-084) surfaced a `GOOGLE_API_KEY` in `.env` and prompted the obvious question: what is it for? It belonged to `src/verify.py` (2026-08-16), an attempt to have Gemini Flash watch a clip and judge "rally or dead time" so hand-labelling would cost less. Two facts settled it. The verdicts **changed with the video encoding alone** — the same footage, re-encoded, got different answers — so whatever it was keying on, it wasn't the play. And it was **never actually scored**: PIC-10 was blocked on a Google AI Studio spend cap and never unblocked, so no precision/recall figure for it exists. The file had not been touched since the day it was written, and nothing in the pipeline imported it — only its own test did.
+
+**Decision.** Move `verify.py` and its test to `archive/`, delete `GOOGLE_API_KEY` from `.env`/`.env.example`, and drop `google-genai` from `requirements.txt` — the verifier was the sole user of both. `/committee-review` also uses Gemini, but through OpenRouter on a different credential, and is unaffected. `.env` was also tightened from `0664` to `0600` while in there.
+
+**Consequences.** One fewer live credential, and one fewer thing on disk that has to be explained before shipping anything. The negative result is kept rather than deleted: `archive/README.md` records that an encoding-sensitive judge would quietly corrupt labels, which is worse than labelling by hand — especially given PIC-6's finding that labelling disagreement is already this project's largest measurement error. Anyone rebuilding this should reproduce the encoding sensitivity first. The key itself still needs revoking in Google's console, which is the operator's to do.
+
+---
+
 ## Template
 
 ```markdown
