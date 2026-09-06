@@ -46,11 +46,20 @@ BLOCK_BELOW_FPS = 29.0
 # pass or fail, which is BLOCK_BELOW_FPS's job alone.
 DIP_RATIO = 0.85
 
-# How much of a session may sit below the floor before the job isn't worth
+# How much of a job's input may sit below the floor before it isn't worth
 # running. Some degradation still yields a usable reel from the rest; a
 # majority does not, and costs the same R2 transfer and GPU minutes either
-# way. Not a measured constant -- no session with partial degradation has
-# been scored yet -- so it's a deliberate judgement, marked as one.
+# way. Not a measured constant -- no partially-degraded session has been
+# scored -- so it's a deliberate judgement, marked as one.
+#
+# What bounds the risk of getting it wrong is the size of a job's input.
+# Today the runner concatenates a whole session into one job, so failing
+# here costs the entire session. Under ADR-066's rolling 10-minute chunks
+# (decided, not yet built) each chunk is its own job, so this same rule
+# would reject only the 10 minutes that were actually bad and keep the rest
+# -- 5 minutes of degradation out of 10, rather than an hour out of two.
+# Revisit this number if chunking lands: it is far safer there, and could
+# reasonably be tightened.
 MAX_DEGRADED_FRACTION = 0.5
 
 BUCKET_SEC = 30.0
