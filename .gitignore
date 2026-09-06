@@ -72,3 +72,11 @@ eval/labels/*_gaps_all.jsonl
 
 # Local Netlify folder
 .netlify
+
+# Sibling repos that live inside this one but are NOT part of it -- each has
+# its own remote (pic-vision-cloud-console, pic-vision-reel). Ignored so a
+# `git add -A` can't add them as submodule gitlinks, which it did once
+# (2026-09-07) and which silently commits a pointer to a commit nobody else
+# can resolve.
+pic-vision-cloud-console/
+reel-page/
