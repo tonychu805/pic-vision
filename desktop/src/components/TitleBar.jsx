@@ -1,10 +1,26 @@
-// The mockup drew all three mac dots in flat --color-neutral-700 (an
-// unfocused/decorative look, consistent with Nocturne's understated mono
-// accent). Deliberately deviated from here: since the window is frameless,
-// these are the ONLY way to close/minimize/maximize it -- real macOS
-// red/yellow/green semantics are load-bearing for discoverability, not
-// just decoration, once the buttons are wired to real window control.
+// No custom window buttons on macOS (2026-09-07).
+//
+// This used to draw its own red/yellow/green dots, on the reasoning that
+// "the window is frameless, so these are the ONLY way to close it". That
+// was true when written and stopped being true when main.js gained
+// `titleBarStyle: "hiddenInset"` -- hiddenInset hides the title bar but
+// KEEPS macOS's own traffic lights. Both sets then drew, overlapping, and
+// the first packaged build showed four-ish dots in the corner.
+//
+// The native ones win: they get the hover glyphs, the green button's
+// fullscreen menu, correct spacing for the OS version, and accessibility,
+// none of which three <button>s reproduce. What's left here is a spacer so
+// the centred title isn't sitting under them.
+//
+// windowAPI.close/minimize/maximize stay exposed in the preload -- a
+// Windows or Linux build has no native controls with frame:false and would
+// need them back.
 const isMac = window.platformAPI?.platform === "darwin";
+
+// Width of macOS's traffic lights plus their inset, measured against the
+// hiddenInset layout. Only needs to be close: it's reserving space, not
+// aligning to anything.
+const MAC_TRAFFIC_LIGHT_WIDTH = 78;
 
 export default function TitleBar() {
   return (
@@ -20,25 +36,7 @@ export default function TitleBar() {
         WebkitAppRegion: "drag",
       }}
     >
-      {isMac && (
-        <div style={{ display: "flex", gap: 7, WebkitAppRegion: "no-drag" }}>
-          <button
-            onClick={() => window.windowAPI.close()}
-            style={dotStyle("#ff5f57")}
-            aria-label="Close"
-          />
-          <button
-            onClick={() => window.windowAPI.minimize()}
-            style={dotStyle("#febc2e")}
-            aria-label="Minimize"
-          />
-          <button
-            onClick={() => window.windowAPI.maximize()}
-            style={dotStyle("#28c840")}
-            aria-label="Maximize"
-          />
-        </div>
-      )}
+      {isMac && <div style={{ width: MAC_TRAFFIC_LIGHT_WIDTH, flex: "none" }} aria-hidden="true" />}
       <div
         style={{
           flex: 1,
@@ -63,21 +61,13 @@ export default function TitleBar() {
           </button>
         </div>
       )}
-      {isMac && <div style={{ width: 52 }} />}
+      {/* Same width as the left spacer so the centred title is centred in
+          the WINDOW, not in the space left over. The old value (52) balanced
+          the custom dots that used to sit on the left; the native traffic
+          lights are wider. */}
+      {isMac && <div style={{ width: MAC_TRAFFIC_LIGHT_WIDTH, flex: "none" }} aria-hidden="true" />}
     </div>
   );
-}
-
-function dotStyle(color) {
-  return {
-    width: 11,
-    height: 11,
-    borderRadius: "50%",
-    background: color,
-    border: "none",
-    padding: 0,
-    cursor: "pointer",
-  };
 }
 
 const winBtnStyle = {
