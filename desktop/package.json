@@ -2,6 +2,7 @@
   "name": "pic-vision-desktop",
   "version": "1.0.0",
   "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md \u00a75)",
+  "author": "picvision ai",
   "private": true,
   "main": "electron/main.js",
   "type": "module",
@@ -64,8 +65,8 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "electron": "^33.3.1",
-    "electron-builder": "^25.1.8",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
     "react": "^18.3.1",
     "react-dom": "^18.3.1",
     "vite": "^6.0.7",
