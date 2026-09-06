@@ -2281,3 +2281,34 @@ Matches `sqrt`'s fp/10min improvement without its regression: **re-ran `pb_draft
 **Not fully closed.** `rally_id 1`'s best-overlapping candidate still only covers 14.57s of its 20.02s label window — real improvement, not a full fix. The dropout-driven fragmentation mechanism (`PIC-33`) is measurably reduced but not eliminated; the remaining gap needs its own investigation, separate from the label lead-in issue already tracked as `PIC-55`.
 
 **Conclusion → `DECISIONS.md` ADR-072.**
+
+---
+
+## 2026-09-06 — Does 15fps footage work? Measured A/B on `IMG_7893_390-690s`: no. Recall halves, and no threshold recovers it
+
+**Why.** `config.yaml` records `fps: 30` as "confirmed once at setup", but nothing has ever confirmed it and no venue-onboarding step checks it. The operator's own Court 1 was then measured at exactly **15.00 fps** (9,000 frames in 600.148s, `ffprobe -count_frames`), which the CFR conversion had been hiding by duplicating every frame up to 30. Question asked directly: is 15fps good enough for the POC?
+
+**Method.** One variable. `videos/IMG_7893_390-690s.mp4` (1920×1080, 300s, 13 labelled rallies) re-encoded to 15fps by dropping every other frame — exactly what a 15fps camera would have delivered. TrackNet k14 inference run locally on the 15fps copy; the 30fps arm reuses `cache/IMG_7893_390-690s_predictions_k14.csv`. Same calibration, same labels, same shipped constants (`gap_sec=3.0`, `min_crossings=6`), matched at IoU≥0.5.
+
+| arm | found | matched | precision | recall | fp/10min | crossings | ball tracked |
+|---|---|---|---|---|---|---|---|
+| **30fps, max_jump=150 (baseline)** | 8 | 6 | **0.75** | **0.46** | 4.0 | 122 | 1073/9000 |
+| 15fps, max_jump=150 (before ADR-086) | 4 | 2 | 0.50 | 0.15 | 4.0 | 100 | 554/4500 |
+| 15fps, max_jump=300 (after ADR-086) | 5 | 3 | 0.60 | 0.23 | 4.0 | 112 | 639/4500 |
+
+**ADR-086's frame-rate-aware threshold is a real gain and does not rescue 15fps.** Scaling `max_jump` with the frame rate lifted recall 0.15→0.23 (+53% relative) and precision 0.50→0.60 — worth having, since it costs nothing at 30fps (the value resolves to exactly 150). But 15fps still loses **half the baseline recall**, 0.46→0.23.
+
+**The second frame-rate-dependent constant: `min_crossings`.** Crossings barely fell (122→112, −8%) while detected rallies fell 8→5 (−37%). Mechanism: with the ball tracked in 639 rather than 1073 frames, individual crossings inside a rally go undetected, so rallies drop below `min_crossings=6` and vanish entirely. Lowering it trades precision away far faster than it buys recall:
+
+| 15fps config | found | matched | precision | recall | fp/10min |
+|---|---|---|---|---|---|
+| `min_crossings=6` | 5 | 3 | 0.60 | 0.23 | 4.0 |
+| `min_crossings=5` | 8 | 3 | 0.38 | 0.23 | 10.0 |
+| `min_crossings=4` | 12 | 4 | 0.33 | 0.31 | 16.0 |
+| `min_crossings=3` | 17 | 5 | 0.29 | 0.38 | 24.0 |
+
+**No setting recovers 30fps quality.** The best 15fps recall reached (0.38, at `min_crossings=3`) is still below the 30fps baseline's 0.46, and costs precision 0.75→0.29 and a 6× false-positive rate. The information isn't there to recover: half the frames means the tracker loses the ball more often, misses crossings within rallies, and whole rallies fall under any sane threshold.
+
+**Conclusion.** 30fps is a **requirement**, not a recommendation, and belongs in venue setup as a check rather than a line of guidance — a camera left on a 15fps default roughly halves the rallies found, silently. ADR-086's scaling ships anyway: it makes a misconfigured camera degrade visibly rather than catastrophically, and is a no-op at 30fps.
+
+**Caveats.** One video, 300s, 13 rallies — small. This arm's 30fps baseline recall (0.46) is itself below the `brickwall-SEMI` held-out figure (0.639, `PIC-56`); different footage, and it doesn't affect the relative comparison, which is the point of the test. Not re-run on a second video.
