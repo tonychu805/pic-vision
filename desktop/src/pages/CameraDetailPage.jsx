@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cardVisuals, detailPanels } from "../lib/cameraView.js";
+import { cardVisuals, detailPanels, frameRateSummary } from "../lib/cameraView.js";
 
 function formatElapsed(startedAt) {
   const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
@@ -138,11 +138,26 @@ function FrameRateWarning({ camera }) {
   const configured = num(camera.profile?.fps);
   const measured = num(camera.profile?.measuredFps);
   const effective = measured ?? configured;
-  if (effective === null || effective >= MIN_FPS) return null;
+  if (effective !== null && effective >= MIN_FPS) return null;
   const rounded = Math.round(effective);
   // Set correctly but not arriving: a network fault, not a settings one,
   // and telling them to change a correct setting would send them in circles.
   const networkFault = configured !== null && configured >= MIN_FPS && measured !== null;
+  const unknown = effective === null;
+  if (unknown) {
+    return (
+      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
+                    borderRadius: "var(--radius-sm)", fontSize: 12.5,
+                    background: "color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+        <i className="ph ph-question" style={{ fontSize: 15, flex: "none", marginTop: 1,
+             color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }} />
+        <span style={{ color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}>
+          This camera's frame rate hasn't been determined yet, so it isn't being checked. It'll be
+          measured on the next connection, or after its next recording.
+        </span>
+      </div>
+    );
+  }
   return (
     <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
                   borderRadius: "var(--radius-sm)", fontSize: 12.5,

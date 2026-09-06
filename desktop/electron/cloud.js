@@ -69,11 +69,17 @@ const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrat
 const fpsMeasureAttempted = new Set();
 
 async function backfillMeasuredFps(camera) {
-  if (camera.connectionType === "sampleClip") return;
   if (camera.profile?.measuredFps != null) return;
-  if (fpsMeasureAttempted.has(camera.id) || !camera.streamUri) return;
+  if (fpsMeasureAttempted.has(camera.id)) return;
+  // A sample clip is a local file (milliseconds); a live camera means
+  // holding its stream open for a few seconds. Both end up in the same
+  // field, so one guard covers all three connection types.
+  const source = camera.connectionType === "sampleClip"
+    ? camera.sampleClipPath
+    : camera.streamUri && authenticatedStreamUri(camera);
+  if (!source) return;
   fpsMeasureAttempted.add(camera.id);
-  const measured = await measureStreamFps(authenticatedStreamUri(camera));
+  const measured = await measureStreamFps(source);
   if (measured == null) return;
   setCameraProfile(camera.id, { ...(camera.profile ?? {}), measuredFps: measured });
 }
@@ -353,7 +359,20 @@ async function runCommand(command) {
   }
 
   if (command.type === "start_recording") return await startRecording(camera);
-  if (command.type === "stop_recording") return await stopRecording(camera.id);
+  if (command.type === "stop_recording") {
+    const result = await stopRecording(camera.id);
+    // Re-measure from what was actually captured. Free (a local file), more
+    // truthful than probing the live stream, and the only thing that would
+    // ever notice someone changing the camera's frame rate after it was
+    // added -- an RTSP camera has no ONVIF profile the heartbeat could
+    // refresh instead.
+    if (result.measureFrom) {
+      measureStreamFps(result.measureFrom)
+        .then((fps) => { if (fps != null) setCameraProfile(camera.id, { ...(camera.profile ?? {}), measuredFps: fps }); })
+        .catch((err) => console.error(`[cloud] post-recording fps check failed: ${err.message}`));
+    }
+    return result;
+  }
   // Console-driven calibration (ADR-080) -- see calibration.js's header
   // for why this replaced ADR-077's "scoped out" call on moving it here.
   if (command.type === "grab_calibration_snapshot") return await grabAndUploadSnapshot(camera);

@@ -182,7 +182,7 @@ const SAMPLE_CLIP_EXT = new Set([".mp4", ".mov", ".mkv", ".avi", ".MP4", ".MOV",
 // camera on this network has reliably been one (see the day's progress
 // notes). No `existingByHostname` dedup here -- a sample-clip camera has
 // no hostname, so that check doesn't apply and isn't called.
-export function addCameraFromSampleClip({ label, filePath }) {
+export async function addCameraFromSampleClip({ label, filePath }) {
   if (!filePath || !existsSync(filePath)) throw new Error("File not found: " + filePath);
   const ext = path.extname(filePath);
   if (!SAMPLE_CLIP_EXT.has(ext)) throw new Error(`Unsupported video file type ${ext || "(none)"}`);
@@ -203,6 +203,12 @@ export function addCameraFromSampleClip({ label, filePath }) {
   const dest = path.join(dir, "sample-clip" + ext);
   copyFileSync(filePath, dest);
   camera.sampleClipPath = dest;
+  // A sample clip stands in for a camera, so it has to clear the same
+  // frame-rate bar -- a 15fps clip produces the same halved results, and
+  // without this it skipped the guard entirely. Reading a local file costs
+  // milliseconds, unlike the live-stream probe the other two paths need.
+  camera.profile = { codec: null, width: null, height: null, fps: null,
+                     measuredFps: await measureStreamFps(dest), bitrateKbps: null };
 
   const cameras = listCameras();
   cameras.push(camera);

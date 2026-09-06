@@ -148,12 +148,16 @@ export function probeDuration(filePath) {
 // Async, not spawnSync: this holds a live connection for several seconds,
 // and the main process is single-threaded -- a sync version froze the
 // whole UI, including the window controls, for the duration.
-export function measureStreamFps(streamUri, { seconds = 5, timeoutMs = 20_000 } = {}) {
+export function measureStreamFps(uri, { seconds = 5, timeoutMs = 20_000 } = {}) {
+  const isLive = /^rtsps?:\/\//i.test(uri);
   return new Promise((resolve) => {
     const proc = spawn(FFPROBE, [
       "-v", "error",
-      "-rtsp_transport", "tcp",
-      "-i", streamUri,
+      // Only meaningful for a live stream. A finished recording or an
+      // uploaded sample clip is a plain file: no transport, and it reads
+      // in milliseconds instead of holding a connection open.
+      ...(isLive ? ["-rtsp_transport", "tcp"] : []),
+      "-i", uri,
       "-select_streams", "v:0",
       "-show_entries", "packet=pts_time",
       "-read_intervals", `%+${seconds}`,
@@ -284,7 +288,11 @@ export function stopRecording(cameraId) {
   return new Promise((resolve) => {
     rec.proc.once("exit", () => {
       logEvent("recording_stopped", "Stopped recording", rec.outDir);
-      resolve({ stopped: true, outDir: rec.outDir });
+      // Free, and better evidence than probing the live stream: this is
+      // exactly what got captured and what the pipeline will be given. Also
+      // how an RTSP camera's rate stays current after someone changes it in
+      // the camera's own settings -- nothing else would ever notice.
+      resolve({ stopped: true, outDir: rec.outDir, measureFrom: newestSegment(rec.outDir) });
     });
     rec.proc.kill("SIGINT");
   });
@@ -292,6 +300,18 @@ export function stopRecording(cameraId) {
 
 export function stopAllRecordings() {
   return Promise.all([...active.keys()].map(stopRecording));
+}
+
+// The most recently written segment of a finished session, for measuring
+// the frame rate actually captured. Null when nothing landed (a recording
+// that failed immediately).
+export function newestSegment(outDir) {
+  try {
+    const segs = readdirSync(outDir).filter((f) => /^session-\d+\.mkv$/.test(f)).sort();
+    return segs.length ? path.join(outDir, segs[segs.length - 1]) : null;
+  } catch {
+    return null;
+  }
 }
 
 // Every past (and current) recording session for a camera -- PIC-68's

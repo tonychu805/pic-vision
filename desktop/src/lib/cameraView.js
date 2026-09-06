@@ -149,9 +149,26 @@ export function profileSpec(camera) {
   const parts = [];
   if (p.codec) parts.push(p.codec === "H265" ? "H.265" : p.codec === "H264" ? "H.264" : p.codec);
   if (p.width && p.height) parts.push(`${p.width}x${p.height}`);
-  if (p.fps) parts.push(`${p.fps} fps${p.fps < 30 ? " (below 30 — see setup guide)" : ""}`);
+  const fps = frameRateSummary(camera);
+  if (fps) parts.push(fps);
   if (p.bitrateKbps) parts.push(`${(p.bitrateKbps / 1000).toFixed(1)} Mbps`);
   return parts.length ? parts.join(" · ") : null;
+}
+
+// Three states, never two. "No warning" previously meant either "checked,
+// fine" or "never managed to check" -- indistinguishable, which is the same
+// silent-failure shape the frame-rate guard exists to remove, just moved up
+// a level. A camera we couldn't measure says so.
+export function frameRateSummary(camera) {
+  const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
+  const configured = num(camera.profile?.fps);
+  const measured = num(camera.profile?.measuredFps);
+  if (measured === null && configured === null) return "frame rate not determined";
+  if (measured !== null && configured !== null && Math.abs(measured - configured) / configured > 0.15) {
+    return `${configured} fps set, ${Math.round(measured)} arriving`;
+  }
+  const effective = measured ?? configured;
+  return `${Math.round(effective)} fps${measured !== null ? " (measured)" : ""}`;
 }
 
 export function detailPanels(camera) {
