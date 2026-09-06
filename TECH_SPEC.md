@@ -835,6 +835,19 @@ pic-vision/
 │   │   │                              # than fetch(), which sends chunked
 │   │   │                              # transfer-encoding for a stream body -- S3-style
 │   │   │                              # presigned PUTs (R2 included) reject that
+│   │   ├── version.js                   # ADR-090: semver compare for the update check.
+│   │   │                              # "unknown" is a distinct state from "current" --
+│   │   │                              # unreachable/unpublished/unparseable never report
+│   │   │                              # "up to date", the one wrong answer with a cost.
+│   │   ├── version.test.js              # 5 tests; asserts unparseable returns null, not 0
+│   │   ├── packaged-paths.test.js       # ADR-090: static check that every
+│   │   │                              # path.join(__dirname, "..", X) at startup targets
+│   │   │                              # a directory build.files actually ships, or sits
+│   │   │                              # behind an isDev guard. Written after a packaged
+│   │   │                              # build launched with NO WINDOW: an unguarded
+│   │   │                              # app.dock.setIcon() pointed at build/icon.png,
+│   │   │                              # which isn't packaged, and threw before
+│   │   │                              # createWindow(). CI was green.
 │   │   ├── binaries.js                  # ADR-084: resolves the bundled ffmpeg/ffprobe
 │   │   │                              # (ffmpeg-static/ffprobe-static, asarUnpack'd).
 │   │   │                              # These were bare "ffmpeg"/"ffprobe" off PATH,
@@ -952,7 +965,27 @@ pic-vision/
 │   │                                       # pipeline without a real camera
 │   │                                       # (electron-store; POC stores camera
 │   │                                       # passwords in plaintext, see README)
+│   ├── .npmrc                            # ADR-090: tag-version-prefix=desktop-v, so
+│   │                                       # `npm version` tags what the release
+│   │                                       # workflow triggers on. Without it the tag
+│   │                                       # is v1.2.0, the workflow never fires, and
+│   │                                       # the version is bumped and committed anyway
+│   │                                       # -- the next attempt starts from a number
+│   │                                       # that looks already-released.
 │   ├── build/
+│   │   ├── afterPack.cjs                 # ADR-090: deletes ffprobe-static binaries for
+│   │   │                                   # platforms this build can't run on.
+│   │   │                                   # ffprobe-static ships all six (336 MB) where
+│   │   │                                   # one is used; that was over half a 487 MB
+│   │   │                                   # DMG. afterPack, NOT beforePack -- beforePack
+│   │   │                                   # would delete from the real node_modules and
+│   │   │                                   # leave a local build broken until the next
+│   │   │                                   # npm install. .cjs because package.json is
+│   │   │                                   # "type": "module" (cost one failed build).
+│   │   │                                   # Fails the build if the target platform's
+│   │   │                                   # binary is missing: shipping without it
+│   │   │                                   # breaks recording and ADR-087's frame-rate
+│   │   │                                   # gate at a venue, silently.
 │   │   └── icon.png                      # 2026-09-05: app icon (1024x1024,
 │   │                                       # provided by the operator, cropped/
 │   │                                       # cleaned up from a screenshot).
@@ -962,12 +995,15 @@ pic-vision/
 │   │                                       # -- generates .icns/.ico for
 │   │                                       # packaged mac/win builds from this
 │   │                                       # one source. Also passed directly
-│   │                                       # to main.js's BrowserWindow (and
-│   │                                       # app.dock.setIcon on macOS) so the
-│   │                                       # dev-mode window/taskbar icon isn't
-│   │                                       # just Electron's default, since
-│   │                                       # electron-builder's config is never
-│   │                                       # read by a plain `electron .` launch
+│   │                                       # to main.js's BrowserWindow and to
+│   │                                       # app.dock.setIcon on macOS -- but BOTH
+│   │                                       # are isDev-guarded now (ADR-090). build/
+│   │                                       # is not in build.files, so this path does
+│   │                                       # not exist inside a packaged app; the
+│   │                                       # unguarded dock call threw before
+│   │                                       # createWindow() and shipped a build that
+│   │                                       # launched with no window at all. Guarded
+│   │                                       # by electron/packaged-paths.test.js.
 │   ├── scripts/
 │   │   └── benchmark-decode.sh            # real N-camera decode/proxy-encode
 │   │                                       # capacity test for target hardware

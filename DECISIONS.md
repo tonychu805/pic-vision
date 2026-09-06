@@ -1591,3 +1591,51 @@ The Streams panel keeps working. What it *displays* is redacted; Copy calls a ne
 That test immediately caught a real leak in the first regex: `[^/@]+@` stops at the *first* `@`, so a password containing one — legal, and it happens — left its tail on screen as `rtsp://***:***@ss@10.0.0.5`. Now `[^/]*@`, greedy to the last `@` before the path.
 
 **Not addressed here.** Electron 33 is still end-of-life (PIC-98), and the desktop UI has still never been clicked through since the 2026-09-06 redesign. Both remain packaging blockers.
+
+## ADR-089 — Billing runs on ECPay, not Stripe, because Stripe does not serve Taiwan
+
+**Date:** 2026-09-07 · **Status:** accepted, implemented, not yet charging
+
+**Context.** PIC-83 needed a way to charge venues. The default assumption was Stripe. It doesn't apply: Stripe supports 46 countries and Taiwan is not among them, so a Taiwan-registered business cannot open a merchant account at all. The usual workarounds — a US entity via Stripe Atlas, or a merchant-of-record like Paddle — both add an entity or an intermediary before the first customer exists.
+
+**Decision.** ECPay (綠界), the local gateway, using its 定期定額 recurring credit-card product. Per camera, per month; one camera is one court in this system, so the camera count is the quantity.
+
+Three properties of ECPay shape the implementation and are not Stripe-shaped:
+
+- **Checkout is a browser form POST** to their cashier, not an API call returning a session URL. The Subscribe button fetches a server-signed, self-submitting form.
+- **Results arrive as server-to-server POSTs** that must be answered with the literal string `1|OK`, or ECPay redelivers. Those endpoints are necessarily public, so `CheckMacValue` is the entire authentication boundary.
+- **The charge amount is fixed for the life of a recurring order.** There is no equivalent of updating a subscription quantity; changing what a venue pays means cancelling and creating a new order. The billing page therefore *reports* camera-count drift rather than reconciling it (operator's call).
+
+Cancellation is a different endpoint family that authenticates by AES-128-CBC encrypting the payload rather than signing it — same secrets, different mechanism, kept in a separate module so the two can't be confused.
+
+**Verification.** Both crypto paths are asserted against ECPay's own published worked examples, because both fail opaquely and identically when wrong: a bad `CheckMacValue` is rejected with no detail, and wrong AES parameters produce ciphertext that looks perfectly valid. `npm test` covers both.
+
+**Deliberately not done.** `PRICE_PER_COURT_TWD` ships as `null` and Subscribe stays disabled — a plausible placeholder is the kind of value that reaches production and bills someone wrongly. The tab is hidden behind the PostHog flag `console-billing` while the merchant application is pending.
+
+**Known gap.** The Invoices table is a payment record, **not** a 統一發票. A company selling to customers in Taiwan is required to issue e-invoices; ECPay's 電子發票 is a separate service with its own credentials and the company tax ID. Required before charging a Taiwanese venue for real.
+
+## ADR-090 — The desktop agent ships Apple silicon only, and asks our own domain for updates
+
+**Date:** 2026-09-07 · **Status:** accepted, implemented (v1.0.0 released)
+
+**Context.** PIC-84 needed an installable build. Three decisions came out of actually producing one.
+
+**Decision 1 — Apple silicon only, macOS 13+.** Every Mac sold since late 2020 is arm64, and a venue capture box is bought for the job rather than inherited. macOS 13 is not a choice but Electron 44's floor (ADR: the Electron bump, PIC-98).
+
+This rules out two distinct populations with two distinct fixes, recorded because they will be asked about separately: a venue on an **Intel Mac** needs `x64` restored to the workflow matrix; a venue on **macOS 12 (Monterey)** needs Electron pinned back to 43. Apple itself stopped patching Monterey in 2024, so the second is defensible to refuse.
+
+Dropping Intel also removed the ambiguity behind a real bug: `build.mac.target` listed both architectures, and electron-builder builds every arch named there **regardless of the `--arm64`/`--x64` flag**, so each matrix leg built both DMGs and the arm64 runner packed its arm64 `ffmpeg` into the Intel installer. Broken on real Intel hardware, green in CI, visible only by reading the build log.
+
+**Decision 2 — no auto-update; a manual check pointed at our own domain.** Squirrel.Mac needs a Developer ID signature these builds don't have. The app checks `console.picvisionai.com/api/desktop/latest`, which derives its answer from the newest `desktop-v*` GitHub release.
+
+The important half is *whose* address it is. Whatever URL ships in v1.0.0 is frozen into every copy handed to a venue — point it at GitHub and moving downloads later strands everyone already installed, with no way to reach them. Pointing at our own console makes that a one-route edit every agent picks up on its next check. The answer is derived rather than configured, so there is no version number to type at release time and nothing to be silently wrong.
+
+"Couldn't check" is deliberately distinct from "up to date". Unreachable, unpublished and unparseable all report the former: claiming currency we haven't verified is the one wrong answer with a cost.
+
+**Decision 3 — the version in `package.json` is the single source of truth.** `npm version` bumps, commits and tags in one step; CI refuses to build if the tag and `package.json` disagree. The failure this prevents is silent: a release tagged 1.2.0 whose app reports 1.1.0 tells every one of its users they are up to date, forever.
+
+**Verification.** v1.0.0 built, published, installed on a real Mac, and confirmed to launch, sign in and complete a camera scan — the last exercising the bundled ffmpeg/ffprobe that this release prunes from 336 MB to 72 MB.
+
+**Two bugs found only by installing it**, both green in CI and both invisible in development: an unguarded dock-icon call referencing a file not in the package, which threw before the window was created (a frameless transparent window makes "no window" and "window that drew nothing" identical); and hand-drawn window buttons overlapping macOS's own, because `titleBarStyle: "hiddenInset"` was added long after the comment explaining why the hand-drawn ones existed. A static test now asserts every startup file path is actually packaged.
+
+**Still open.** Signing and notarization (PIC-84): unsigned means macOS warns on first launch and the installer must be allowed through System Settings once. Acceptable for operator-led pilot installs; needed before a venue self-installs from a link, or before updates should land without a visit.
