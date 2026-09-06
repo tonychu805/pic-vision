@@ -355,7 +355,11 @@ function createWindow() {
     // but that config is only ever read by electron-builder, never by a
     // plain `electron .` launch, so without this the dev window shows
     // Electron's own default icon regardless of what's set there.
-    icon: path.join(__dirname, "..", "build", "icon.png"),
+    // Dev only, for the same reason as the Dock icon below: build/ isn't
+    // packaged, so this path doesn't exist in a built app. A bad `icon`
+    // is ignored rather than fatal, unlike app.dock.setIcon -- but a
+    // reference to a file that can't be there is a lie either way.
+    ...(isDev ? { icon: path.join(__dirname, "..", "build", "icon.png") } : {}),
     // App.jsx's root div already draws borderRadius:12 + overflow:hidden
     // (the mockup's own rounded window) -- but that only clips this
     // window's OWN content. Without the window itself being transparent,
@@ -405,10 +409,25 @@ app.whenReady().then(() => {
   // BrowserWindow's icon option (createWindow) only ever reaches the
   // taskbar on Windows/Linux -- macOS's Dock icon for an unpackaged
   // `electron .` run needs setting separately, or it shows Electron's own
-  // default regardless. A packaged build doesn't need this (its Dock icon
-  // comes from the .app bundle's Info.plist, built from build.icon).
-  if (process.platform === "darwin") {
-    app.dock.setIcon(path.join(__dirname, "..", "build", "icon.png"));
+  // default regardless. A packaged build doesn't need this: its Dock icon
+  // comes from the .app bundle's Info.plist, built from build.icon.
+  //
+  // `isDev &&`, not just the platform check, and this cost a release
+  // candidate to find (2026-09-07). `build/` isn't in build.files, so
+  // build/icon.png does not exist inside a packaged app -- this line threw
+  // BEFORE createWindow() and the app started with no window at all. The
+  // process stayed alive with a Dock icon, so it looked like it had opened
+  // and simply drawn nothing, which a frameless transparent window is
+  // indistinguishable from.
+  //
+  // try/catch as well as the guard: a Dock icon is decoration, and nothing
+  // about it is worth taking the whole app down for.
+  if (isDev && process.platform === "darwin") {
+    try {
+      app.dock.setIcon(path.join(__dirname, "..", "build", "icon.png"));
+    } catch (err) {
+      console.error(`[app] could not set the dev Dock icon: ${err.message}`);
+    }
   }
   createWindow();
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
