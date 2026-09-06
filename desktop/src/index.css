@@ -2,7 +2,14 @@
    desktop-utility-by-claude-design.zip, 2026-09-01) -- tokens and component
    classes copied verbatim from styles.css so values stay traceable back to
    the source design rather than rederived by eye. */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+/* Inter is bundled, not fetched from Google Fonts at runtime: a venue's
+   machine may be on a network with no route to the internet (or a slow
+   one), and the app would silently fall back to a system font while
+   waiting -- plus it's a request to a third party on every launch. */
+@import "@fontsource/inter/400.css";
+@import "@fontsource/inter/500.css";
+@import "@fontsource/inter/600.css";
+@import "@fontsource/inter/700.css";
 @import "@phosphor-icons/web/regular";
 @import "@phosphor-icons/web/fill";
 

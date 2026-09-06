@@ -126,55 +126,22 @@ function LiveViewButton({ camera }) {
 
 const isSampleClip = (camera) => camera.connectionType === "sampleClip";
 
-// The 14-point click-through calibration flow moved to the cloud console
-// entirely (2026-09-05, ADR-080, superseding ADR-077's "scoped out, not
-// just deferred" call on this) -- desktop keeps only the file-picker
-// fallback (system.js's pickCalibFile), since that's a local-filesystem
-// recovery path, not "performing calibration" the interactive way: a
-// calibration produced elsewhere (cloud_pipeline/setup_venue_calibration.py,
-// or another camera's already-clicked calib.json for a venue that reuses
-// a mount) shouldn't need the console's UI at all, and nothing about it
-// needs LAN/camera access, so there's no reason to route it through a
-// command round-trip either.
-function CalibrationControl({ camera, onUpdated }) {
-  const [importing, setImporting] = useState(false);
-  const [importError, setImportError] = useState("");
-
-  // Same silent-failure class found in ManualAddDialog's "Choose file…"
-  // button (2026-09-03): with no try/catch, a main-process change that
-  // hadn't taken effect yet (a full app restart is needed, not just
-  // Vite's renderer hot-reload) made window.systemAPI.pickCalibFile
-  // undefined -- the click would otherwise fail invisibly instead of
-  // saying so.
-  const importFile = async () => {
-    setImporting(true);
-    setImportError("");
-    if (typeof window.systemAPI?.pickCalibFile !== "function") {
-      setImportError("This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).");
-      setImporting(false);
-      return;
-    }
-    try {
-      const picked = await window.systemAPI.pickCalibFile();
-      if (picked) onUpdated(await window.cameraAPI.setCalibPath(camera.id, picked));
-    } catch (err) {
-      setImportError(err.message);
-    }
-    setImporting(false);
-  };
-
+// Calibration is entirely the cloud console's now (ADR-080 moved the
+// click-through UI there; ADR-084 moved the homography fit itself to the
+// operator's job runner). This machine holds no calib.json at all -- the
+// fitted calibration lives on the camera's console row, and cameras:list
+// merges the state in from the last heartbeat response. So this is a
+// read-only indicator: there is nothing here for the operator to set.
+function CalibrationControl({ camera }) {
+  const rmse = typeof camera.calibrationRmseFt === "number" ? camera.calibrationRmseFt : null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, flexWrap: "wrap" }}>
       <span style={{ flex: "none", color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Calibration:</span>
-      <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
-        {camera.calibPath || "not set — calibrate from the cloud console"}
+      <span style={{ flex: 1, minWidth: 0 }}>
+        {camera.isCalibrated
+          ? `Calibrated${rmse !== null ? ` — ${rmse.toFixed(2)} ft reprojection error` : ""}`
+          : "Not calibrated — set it up from the cloud console"}
       </span>
-      <button className="btn btn-ghost" style={{ fontSize: 12, flex: "none" }} disabled={importing} onClick={importFile}>
-        Import file…
-      </button>
-      {importError && (
-        <p style={{ flex: "1 0 100%", margin: 0, fontSize: 12, color: "var(--color-accent-2-400)" }}>{importError}</p>
-      )}
     </div>
   );
 }
@@ -184,6 +151,11 @@ function CalibrationControl({ camera, onUpdated }) {
 // import cloud_pipeline (a JS renderer never can); update by hand if that
 // list changes.
 const CLOUD_STAGE_LABELS = {
+  // Local to the agent (pipeline.js) -- everything below runs elsewhere.
+  upload: "Uploading to the cloud",
+  queued: "Waiting for processing",
+  download: "Fetching the recording",
+  calibrate: "Fitting the court calibration",
   drift_check: "Checking camera drift",
   convert: "Converting to 30fps CFR",
   proxy: "Creating 720p upload proxy",
@@ -247,8 +219,8 @@ function CloudJobRow({ camera, recording }) {
         {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
       </span>
       {!hasRun && (
-        <button className="btn btn-ghost" style={{ fontSize: 12, flex: "none" }} disabled={starting || recording.recording || !camera.calibPath} onClick={start}>
-          {starting ? "Starting…" : recording.recording ? "Still recording" : "Send to cloud"}
+        <button className="btn btn-ghost" style={{ fontSize: 12, flex: "none" }} disabled={starting || recording.recording || !camera.isCalibrated} onClick={start}>
+          {starting ? "Starting…" : recording.recording ? "Still recording" : !camera.isCalibrated ? "Calibrate first" : "Send to cloud"}
         </button>
       )}
       {error && <span style={{ flex: "none", color: "var(--color-accent-2-400)" }}>{error}</span>}
@@ -288,7 +260,7 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
           <i className="ph ph-arrows-clockwise" style={{ fontSize: 13 }} />Refresh
         </button>
       </div>
-      <CalibrationControl camera={camera} onUpdated={onCameraUpdated} />
+      <CalibrationControl camera={camera} />
       <div style={{ marginTop: 10 }}>
         {recordings.length === 0 ? (
           <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>

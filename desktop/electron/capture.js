@@ -19,6 +19,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync 
 import path from "node:path";
 import os from "node:os";
 import { logEvent } from "./activityLog.js";
+import { FFMPEG, FFPROBE } from "./binaries.js";
 
 export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 
@@ -76,7 +77,7 @@ export function grabSnapshot(camera) {
   const url = authenticatedStreamUri(camera);
   const outPath = path.join(os.tmpdir(), `pic-vision-snapshot-${camera.id}-${Date.now()}.png`);
   const args = ["-y", "-rtsp_transport", "tcp", "-i", url, "-frames:v", "1", "-f", "image2", outPath];
-  const proc = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+  const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
   let stderrTail = "";
   proc.stderr.on("data", (chunk) => {
     stderrTail = (stderrTail + chunk.toString()).slice(-4000);
@@ -121,7 +122,7 @@ export function discardAllSnapshots() {
 // no need to read the whole file), same `-frames:v 1` grab as
 // grabSnapshot, same tmpdir output convention.
 export function probeDuration(filePath) {
-  const result = spawnSync("ffprobe", [
+  const result = spawnSync(FFPROBE, [
     "-v", "error", "-show_entries", "format=duration",
     "-of", "default=noprint_wrappers=1:nokey=1", filePath,
   ], { encoding: "utf8" });
@@ -132,7 +133,7 @@ export function probeDuration(filePath) {
 export function grabFrameFromFile(filePath, atSec) {
   const outPath = path.join(os.tmpdir(), `pic-vision-snapshot-${Date.now()}.png`);
   const args = ["-y", "-ss", String(atSec), "-i", filePath, "-frames:v", "1", "-f", "image2", outPath];
-  const result = spawnSync("ffmpeg", args, { encoding: "utf8" });
+  const result = spawnSync(FFMPEG, args, { encoding: "utf8" });
   if (result.status !== 0 || !existsSync(outPath)) {
     const stderrTail = (result.stderr || "").trim().split("\n").pop();
     throw new Error(stderrTail || `Could not read a frame at ${atSec}s from ${path.basename(filePath)}`);
@@ -187,7 +188,7 @@ export function startRecording(camera) {
     path.join(outDir, "session-%03d.mkv"),
   ];
 
-  const proc = spawn("ffmpeg", args, { stdio: ["ignore", "ignore", "pipe"] });
+  const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
   const startedAt = new Date().toISOString();
   let stderrTail = "";
   proc.stderr.on("data", (chunk) => {

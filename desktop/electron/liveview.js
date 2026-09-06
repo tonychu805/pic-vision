@@ -16,6 +16,7 @@
 import { spawn } from "node:child_process";
 import http from "node:http";
 import { authenticatedStreamUri } from "./capture.js";
+import { FFMPEG } from "./binaries.js";
 
 const BOUNDARY = "picvisionlive";
 const SOI = Buffer.from([0xff, 0xd8]);
@@ -36,7 +37,7 @@ export async function startLiveView(camera) {
   await stopLiveView(); // only one at a time
 
   const url = authenticatedStreamUri(camera);
-  const proc = spawn("ffmpeg", [
+  const proc = spawn(FFMPEG, [
     "-rtsp_transport", "tcp",
     "-i", url,
     "-f", "mjpeg",

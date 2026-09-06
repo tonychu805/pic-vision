@@ -1,6 +1,6 @@
 {
   "name": "pic-vision-desktop",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
   "private": true,
   "main": "electron/main.js",
@@ -18,10 +18,30 @@
     "icon": "build/icon.png",
     "files": [
       "dist/**/*",
-      "electron/**/*"
+      "electron/**/*",
+      "package.json"
     ],
+    "asarUnpack": [
+      "node_modules/ffmpeg-static/**",
+      "node_modules/ffprobe-static/**"
+    ],
+    "directories": {
+      "output": "release"
+    },
     "mac": {
-      "target": "dmg"
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "arm64",
+            "x64"
+          ]
+        }
+      ],
+      "category": "public.app-category.utilities",
+      "identity": null,
+      "hardenedRuntime": false,
+      "artifactName": "PicVision-CameraManager-${version}-${arch}.${ext}"
     },
     "win": {
       "target": "nsis"
@@ -31,8 +51,11 @@
     }
   },
   "dependencies": {
+    "@fontsource/inter": "^5.3.0",
     "@phosphor-icons/web": "^2.1.2",
     "electron-store": "^10.0.0",
+    "ffmpeg-static": "^5.3.0",
+    "ffprobe-static": "^3.1.0",
     "onvif": "^0.8.2",
     "oui-data": "^2.1.12",
     "posthog-node": "^5.51.6"

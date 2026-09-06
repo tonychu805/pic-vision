@@ -2,8 +2,8 @@
 // console (ADR-071's "polls or a lightweight persistent connection for
 // commands/status, never an inbound port"). Pairing + a heartbeat that
 // also reports the real camera list (2026-09-03). Reel reporting (ADR-074,
-// 2026-09-04) is a separate one-shot POST from cloud_pipeline/
-// run_desktop_job.py, not part of this heartbeat. Schedule migrated to
+// 2026-09-04) happens on the console side now (ADR-084) once the job
+// runner reports a finished job, not from this machine. Schedule migrated to
 // the cloud console entirely the same day (ADR-071/PIC-73) -- no local
 // schedule.js left to report on. Same electron-store-per-concern
 // convention as cameras/store.js.
@@ -12,7 +12,7 @@ import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
-import { grabAndUploadSnapshot, applyPendingCalibration } from "./calibration.js";
+import { grabAndUploadSnapshot } from "./calibration.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 
@@ -48,6 +48,18 @@ let heartbeatTimer = null;
 // a previously-known state logs anything.
 const lastCameraStatus = new Map(); // cameraId -> "online" | "offline"
 let lastHeartbeatOk = true;
+
+// Calibration state as last reported by the console (ADR-084 -- the
+// console owns it now, there's no local calib.json anymore). Refreshed on
+// every heartbeat response; read by main.js's cameras:list so the UI can
+// show it and gate "send to cloud" on it. Empty until the first heartbeat
+// lands, which reads as "not calibrated yet" -- correct for an unpaired
+// or freshly-launched agent.
+const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrationRmseFt, calibratedAt }
+
+export function getCalibrationState(cameraId) {
+  return calibrationByCameraId.get(cameraId) ?? { isCalibrated: false, calibrationRmseFt: null, calibratedAt: null };
+}
 
 export function getCloudConnection() {
   const connection = store.get("connection", null);
@@ -189,7 +201,6 @@ async function cameraStatuses() {
       serialNumber: c.serialNumber ?? null,
       addedAt: c.addedAt ?? null,
       isRecording: isRecording(c.id),
-      isCalibrated: Boolean(c.calibPath),
       recordingCount: recordings.length,
       lastRecordingAt: parseRecordingStartedAt(recordings[0]?.name),
     };
@@ -224,6 +235,16 @@ async function sendHeartbeat() {
     const body = await res.json().catch(() => ({}));
     if (typeof body.brandName === "string" && body.brandName !== connection.brandName) {
       saveConnection({ ...connection, brandName: body.brandName });
+    }
+    if (Array.isArray(body.cameras)) {
+      calibrationByCameraId.clear();
+      for (const c of body.cameras) {
+        calibrationByCameraId.set(c.cameraId, {
+          isCalibrated: Boolean(c.isCalibrated),
+          calibrationRmseFt: c.calibrationRmseFt ?? null,
+          calibratedAt: c.calibratedAt ?? null,
+        });
+      }
     }
   } catch (err) {
     // Console unreachable (offline venue, DNS hiccup, console down) --
@@ -291,7 +312,9 @@ async function runCommand(command) {
   // Console-driven calibration (ADR-080) -- see calibration.js's header
   // for why this replaced ADR-077's "scoped out" call on moving it here.
   if (command.type === "grab_calibration_snapshot") return await grabAndUploadSnapshot(camera);
-  if (command.type === "apply_calibration") return applyPendingCalibration(camera, command.params?.points);
+  // apply_calibration is no longer an agent command (ADR-084): the fit
+  // needs OpenCV, so it runs on the operator's job runner instead and the
+  // console turns those clicks into a `jobs` row, not a command for us.
   throw new Error(`unknown command type: ${command.type}`);
 }
 

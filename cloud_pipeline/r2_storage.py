@@ -34,6 +34,10 @@ def download_file(bucket, key, local_path):
     _client().download_file(bucket, key, local_path)
 
 
+def delete_object(bucket, key):
+    _client().delete_object(Bucket=bucket, Key=key)
+
+
 def object_exists(bucket, key):
     try:
         _client().head_object(Bucket=bucket, Key=key)

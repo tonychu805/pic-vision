@@ -1,34 +1,41 @@
-// Hands a finished recording to the cloud pipeline -- PIC-68, ADR-071's
-// "local agent invokes the existing Python as a subprocess, don't
-// reimplement transcode/upload/orchestration in JS" directive. Spawns
-// cloud_pipeline/run_desktop_job.py, which itself just calls
-// webapp/pipeline.py's run_cloud_job(job_dir) -- the same R2 upload +
-// RunPod inference + reel-cut logic the Flask dashboard already runs,
-// reused here rather than ported.
+// Hands a finished recording to the cloud for processing (ADR-084).
 //
-// Mirrors capture.js's own spawn/track/status shape: module-level Map,
-// not per-window state, since a cloud job must survive the renderer
-// navigating away from this camera's detail page, same reasoning as a
-// recording in progress.
-import { spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
+// This used to spawn cloud_pipeline/run_desktop_job.py, which ran the
+// whole RunPod orchestration right here on the venue's machine -- which
+// meant the operator's R2 and RunPod credentials had to be sitting on
+// every venue laptop. That's exactly what STRATEGY.md §5 and PIC-71 ruled
+// out for a client shipped to someone else, and it's why this app could
+// never be packaged. Now the agent only ever: asks the console for a job,
+// uploads the raw recording segments to the presigned URLs it gets back,
+// and polls for progress. The pipeline itself runs on the operator's own
+// machine (cloud_pipeline/job_runner.py), which is the only place the
+// cloud credentials live.
+//
+// The status.json contract is deliberately unchanged: this still writes
+// <recordingDir>/cloud_job/status.json with the same stage/message/
+// progress shape webapp/pipeline.py produces, and the console's job row
+// mirrors those same fields -- so main.js's pipeline:status handler and
+// the renderer's CloudJobRow keep working without knowing any of this
+// moved. Two stages are new and local to this file: "upload" (this
+// machine sending the video) and "queued" (waiting for a runner).
+import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
-import { PYTHON_BIN } from "./pythonBin.js";
-import { getCloudConnection } from "./cloud.js";
+import { powerSaveBlocker } from "electron";
+import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
 import { logEvent } from "./activityLog.js";
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const REPO_ROOT = path.join(__dirname, "..", "..");
-const RUN_DESKTOP_JOB = path.join(REPO_ROOT, "cloud_pipeline", "run_desktop_job.py");
-
 const SEGMENT_RE = /^session-\d+\.mkv$/;
+const POLL_INTERVAL_MS = 5_000;
+const UPLOAD_RETRIES = 3;
+const TERMINAL = new Set(["done", "error", "cancelled"]);
 
-// recordingDir -> { proc, jobDir }. Keyed by the recording's own
+// recordingDir -> { jobId, cancelled }. Keyed by the recording's own
 // directory (== capture.js's per-session outDir) rather than sessionId
-// alone, since that's also where status.json/log.txt end up (in a
-// cloud_job/ subdirectory) and where a second "send to cloud" click for
-// the same recording needs to be refused.
+// alone, since that's also where status.json ends up (in a cloud_job/
+// subdirectory) and where a second "send to cloud" click for the same
+// recording needs to be refused. Same module-level-Map shape capture.js
+// uses, and for the same reason: a job must survive the renderer
+// navigating away from this camera's detail page.
 const active = new Map();
 
 export function isPipelineRunning(recordingDir) {
@@ -38,116 +45,205 @@ export function isPipelineRunning(recordingDir) {
 export function pipelineStatus(jobDir) {
   const statusPath = path.join(jobDir, "status.json");
   if (!existsSync(statusPath)) return { stage: null };
-  return JSON.parse(readFileSync(statusPath, "utf8"));
+  try {
+    return JSON.parse(readFileSync(statusPath, "utf8"));
+  } catch {
+    // A torn read against writeStatus's rename is not worth surfacing as
+    // a job failure -- the next poll tick reads a whole file.
+    return { stage: null };
+  }
 }
 
-// jobDir is deterministic from recordingDir (== `${recordingDir}/cloud_job`,
-// same join runCloudJob does), so a renderer that only knows the recording
-// can recover an already-running job's status without ever having seen
-// runCloudJob's return value -- e.g. after navigating away from the camera
-// detail page and back, which otherwise looks exactly like the job
-// vanished even though it's still running server-side (real report,
-// 2026-09-03: CloudJobRow's `job` state, holding jobDir, was purely
-// in-memory and reset to null on remount).
 export function pipelineStatusForRecording(recordingDir) {
   return pipelineStatus(path.join(recordingDir, "cloud_job"));
 }
 
-// capture.js saves 10-minute segments (ADR-030/032: a crash or Wi-Fi drop
-// costs one segment, not the whole session), but the cloud pipeline needs
-// one continuous file. Stream-copy concat -- same -c copy capture.js
-// already uses, no re-encode -- rather than only supporting a
-// single-segment recording.
-function concatSegments(recordingDir) {
-  const segments = readdirSync(recordingDir).filter((f) => SEGMENT_RE.test(f)).sort();
-  if (segments.length === 0) throw new Error(`No recording segments found in ${recordingDir}`);
-  if (segments.length === 1) return path.join(recordingDir, segments[0]);
-
-  const listPath = path.join(recordingDir, "concat_list.txt");
-  const concatOut = path.join(recordingDir, "session_full.mkv");
-  writeFileSync(listPath, segments.map((f) => `file '${f}'`).join("\n") + "\n");
-  const result = spawnSync("ffmpeg", [
-    "-y", "-f", "concat", "-safe", "0", "-i", listPath, "-c", "copy", concatOut,
-  ], { cwd: recordingDir });
-  if (result.status !== 0) {
-    throw new Error(`ffmpeg concat failed: ${(result.stderr || "").toString().trim().slice(-2000)}`);
-  }
-  return concatOut;
+// Atomic (write + rename), same as webapp/pipeline.py's _set_status: the
+// renderer polls this file on its own timer and must never catch a
+// half-written one.
+function writeStatus(jobDir, fields) {
+  const current = pipelineStatus(jobDir);
+  const next = { ...current, ...fields };
+  const tmp = path.join(jobDir, "status.json.tmp");
+  writeFileSync(tmp, JSON.stringify(next, null, 2));
+  renameSync(tmp, path.join(jobDir, "status.json"));
+  return next;
 }
 
-// `videoPath`, when given, skips concatSegments entirely -- a sample-clip
-// camera (2026-09-03) already has a single, real video file (no segments
-// to join), so main.js passes its path straight through rather than
-// looking for session-*.mkv files that were never written.
-//
-// cameraId/cameraLabel (ADR-074) let run_desktop_job.py report the
-// finished reel to the cloud console once the job succeeds -- only
-// possible when this agent is actually paired (getCloudConnection()
-// returns something); an unpaired desktop still runs the job fine, it
-// just has nowhere to report to, same as heartbeat already no-ops
-// unpaired (cloud.js's own sendHeartbeat).
-export function runCloudJob({ recordingDir, calibPath, targetSec, sessionId, videoPath: explicitVideoPath, cameraId, cameraLabel }) {
-  if (active.has(recordingDir)) throw new Error("A cloud job is already running for this recording");
-  if (!calibPath || !existsSync(calibPath)) throw new Error(`No calibration file at ${calibPath}`);
-  if (explicitVideoPath && !existsSync(explicitVideoPath)) throw new Error(`No video file at ${explicitVideoPath}`);
+function segmentsIn(recordingDir) {
+  return readdirSync(recordingDir)
+    .filter((f) => SEGMENT_RE.test(f))
+    .sort()
+    .map((f) => path.join(recordingDir, f));
+}
 
-  const videoPath = explicitVideoPath || concatSegments(recordingDir);
-  const jobDir = path.join(recordingDir, "cloud_job");
-  mkdirSync(jobDir, { recursive: true });
-
-  const args = [
-    RUN_DESKTOP_JOB,
-    "--video", videoPath,
-    "--calib", calibPath,
-    "--target-sec", String(targetSec || 300),
-    "--session-id", sessionId,
-    "--out-dir", jobDir,
-  ];
-  if (cameraId) args.push("--camera-id", cameraId);
-  if (cameraLabel) args.push("--camera-label", cameraLabel);
-  const connection = getCloudConnection();
-  if (connection) {
-    args.push("--console-url", connection.consoleUrl, "--api-token", connection.apiToken);
+async function uploadWithRetry(jobId, upload, filePath, onProgress) {
+  let url = upload.url;
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await uploadFile(url, filePath, onProgress);
+    } catch (err) {
+      // A 403 here is almost always an expired signature rather than a
+      // real permission problem -- a venue on slow Wi-Fi can take longer
+      // to push a session than the URL's lifetime. Ask for a fresh one
+      // before spending a retry on the same dead URL.
+      if (err.status === 403) {
+        const refreshed = await consoleFetch(`/api/agents/jobs/${jobId}`, {
+          method: "PATCH",
+          body: { action: "refresh" },
+        });
+        const match = refreshed.uploads?.find((u) => u.name === upload.name);
+        if (match) url = match.url;
+      }
+      if (attempt >= UPLOAD_RETRIES) throw err;
+      await new Promise((r) => setTimeout(r, 2000 * attempt));
+    }
   }
-  const proc = spawn(PYTHON_BIN, args, { cwd: REPO_ROOT, stdio: "ignore" });
-  active.set(recordingDir, { proc, jobDir });
-  const label = cameraLabel || "camera";
-  logEvent("pipeline_started", `Sent ${label} to the cloud`);
-  proc.on("exit", () => {
+}
+
+async function uploadSegments(jobId, uploads, files, jobDir) {
+  const sizes = files.map((f) => statSync(f).size);
+  const grandTotal = sizes.reduce((a, b) => a + b, 0);
+  let done = 0;
+
+  for (let i = 0; i < files.length; i++) {
+    const name = path.basename(files[i]);
+    const upload = uploads.find((u) => u.name === name);
+    if (!upload) throw new Error(`the console didn't issue an upload for ${name}`);
+    writeStatus(jobDir, {
+      stage: "upload",
+      message: `uploading ${name} (${i + 1} of ${files.length})...`,
+    });
+    await uploadWithRetry(jobId, upload, files[i], (sent) => {
+      writeStatus(jobDir, { progress: { current: done + sent, total: grandTotal, eta_sec: null } });
+    });
+    done += sizes[i];
+  }
+}
+
+// Mirrors the console's view of the job into the local status.json until
+// it reaches a terminal state. Runs detached from the caller (nothing
+// awaits it) -- the renderer follows along by polling status.json, the
+// same way it followed the Python subprocess before.
+async function pollUntilDone(recordingDir, jobDir, jobId, label) {
+  for (;;) {
+    await new Promise((r) => setTimeout(r, POLL_INTERVAL_MS));
+    let job;
+    try {
+      ({ job } = await consoleFetch(`/api/agents/jobs/${jobId}`));
+    } catch (err) {
+      // Console unreachable: keep the job alive and try again. A venue's
+      // internet dropping shouldn't fail a job that's running fine on the
+      // operator's machine.
+      console.error(`[pipeline] status poll failed: ${err.message}`);
+      continue;
+    }
+
+    writeStatus(jobDir, {
+      stage: job.stage ?? job.status,
+      message: job.message ?? null,
+      progress: job.progress ?? null,
+      error: job.error ?? null,
+      done: job.status === "done",
+      ...(job.result ?? {}),
+    });
+
+    if (!TERMINAL.has(job.status)) continue;
+
     active.delete(recordingDir);
-    // The process only ever exits after webapp/pipeline.py's run_cloud_job
-    // has written a terminal stage to status.json (done/error/cancelled)
-    // -- reading it right here, on the job's own exit, is simpler and more
-    // immediate than polling it from elsewhere (e.g. the next heartbeat
-    // tick), since this event fires the instant the job actually finishes.
-    const status = pipelineStatus(jobDir);
-    if (status.stage === "done") {
-      const full = (status.reels || []).find((r) => r.kind === "full") || (status.reels || [])[0];
+    if (job.status === "done") {
+      const reels = job.result?.reels ?? [];
+      const full = reels.find((r) => r.kind === "full") ?? reels[0];
       const stats = full?.stats;
       const detail = stats ? `${stats.n_chosen} rallies, ${Math.round(stats.total_duration_sec)}s` : null;
       logEvent("pipeline_done", `${label} reel ready`, detail);
-    } else if (status.stage === "cancelled") {
+    } else if (job.status === "cancelled") {
       logEvent("pipeline_failed", `${label} cloud job cancelled`);
     } else {
-      // Covers "error" and the unexpected case of exiting with no
-      // status.json at all (e.g. a crash before webapp/pipeline.py ever
-      // wrote one) -- either way, the job didn't finish, worth a log
-      // entry either way rather than silently dropping it.
-      logEvent("pipeline_failed", `${label} cloud job failed`, status.message || status.error || null);
+      logEvent("pipeline_failed", `${label} cloud job failed`, job.error || job.message || null);
     }
+    return;
+  }
+}
+
+// `videoPath`, when given, skips the session-*.mkv lookup -- a sample-clip
+// camera (2026-09-03) already has a single, real video file.
+//
+// No calibPath argument anymore: the camera's calibration lives on its
+// console row since ADR-084, and the console attaches it to the job. That
+// also means an uncalibrated camera is refused by the console with a real
+// message rather than by a local file check.
+export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionId, cameraId, cameraLabel }) {
+  if (active.has(recordingDir)) throw new Error("A cloud job is already running for this recording");
+  const connection = requireConnection();
+
+  const files = videoPath ? [videoPath] : segmentsIn(recordingDir);
+  if (files.length === 0) throw new Error(`No recording segments found in ${recordingDir}`);
+  for (const f of files) {
+    if (!existsSync(f)) throw new Error(`No video file at ${f}`);
+  }
+
+  const jobDir = path.join(recordingDir, "cloud_job");
+  mkdirSync(jobDir, { recursive: true });
+  const label = cameraLabel || "camera";
+
+  writeStatus(jobDir, {
+    stage: "upload",
+    message: "preparing upload...",
+    progress: null,
+    error: null,
+    done: false,
+  });
+
+  const { jobId, uploads } = await consoleFetch("/api/agents/jobs", {
+    method: "POST",
+    connection,
+    body: {
+      sessionId,
+      cameraId,
+      cameraLabel,
+      targetSec: targetSec || 300,
+      files: files.map((f) => ({ name: path.basename(f), sizeBytes: statSync(f).size })),
+    },
+  });
+
+  active.set(recordingDir, { jobId });
+  writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ jobId, sessionId }, null, 2));
+  logEvent("pipeline_started", `Sent ${label} to the cloud`);
+
+  // Uploading a two-hour session takes a while; without this the Mac can
+  // sleep mid-transfer and the job sits half-uploaded until it expires.
+  const blocker = powerSaveBlocker.start("prevent-app-suspension");
+  try {
+    await uploadSegments(jobId, uploads, files, jobDir);
+    await consoleFetch(`/api/agents/jobs/${jobId}`, { method: "PATCH", body: { action: "complete" } });
+  } catch (err) {
+    active.delete(recordingDir);
+    writeStatus(jobDir, { stage: "error", message: "upload failed", error: err.message, done: false });
+    logEvent("pipeline_failed", `${label} upload failed`, err.message);
+    throw err;
+  } finally {
+    powerSaveBlocker.stop(blocker);
+  }
+
+  writeStatus(jobDir, { stage: "queued", message: "waiting for processing", progress: null });
+  pollUntilDone(recordingDir, jobDir, jobId, label).catch((err) => {
+    active.delete(recordingDir);
+    console.error(`[pipeline] polling stopped: ${err.message}`);
   });
 
   return { jobDir };
 }
 
-// SIGINT, matching capture.js's own "never a hard kill" convention --
-// run_desktop_job.py's signal handler calls webapp.pipeline.cancel_job(),
-// which terminates any RunPod pod already created (stops billing) before
-// this process exits, rather than a bare kill that would orphan a pod
-// nobody's tracking anymore.
 export function cancelCloudJob(recordingDir) {
   const rec = active.get(recordingDir);
   if (!rec) return { cancelled: false };
-  rec.proc.kill("SIGINT");
+  // Fire-and-forget: the console flips a queued job straight to cancelled
+  // and, for a running one, asks the runner to terminate its RunPod pod
+  // (which is what actually stops the billing). Either way the poll loop
+  // above sees the terminal state and cleans up.
+  consoleFetch(`/api/agents/jobs/${rec.jobId}`, { method: "PATCH", body: { action: "cancel" } }).catch((err) =>
+    console.error(`[pipeline] cancel failed: ${err.message}`),
+  );
   return { cancelled: true };
 }

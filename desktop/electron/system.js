@@ -27,20 +27,6 @@ export function getNetworkInfo() {
   return { cidr: null, interfaceName: null, address: null };
 }
 
-// Native file picker for a camera's calib.json (PIC-68) -- the secondary
-// "import an existing file" path now that CalibrationControl's live
-// snapshot-and-click flow (calibration.js) is the primary one. store.js's
-// setCalibPath just remembers whatever path comes back; this is the only
-// place that actually asks the OS for one.
-export async function pickCalibFile() {
-  const result = await dialog.showOpenDialog({
-    title: "Select calibration file",
-    properties: ["openFile"],
-    filters: [{ name: "Calibration JSON", extensions: ["json"] }],
-  });
-  if (result.canceled || result.filePaths.length === 0) return null;
-  return result.filePaths[0];
-}
 
 // Native file picker for a "sample clip" camera (2026-09-03) -- a local
 // video file uploaded to stand in for a live camera, so calibration and

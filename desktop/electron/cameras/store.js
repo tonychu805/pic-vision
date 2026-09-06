@@ -184,21 +184,6 @@ export function renameCamera(id, label) {
   return next.find((c) => c.id === id);
 }
 
-// Points at a per-camera calib.json (invalidated only by the camera
-// physically moving -- ADR-049), so pipeline.js's cloud job has something
-// to pass as --calib. Two callers: calibration.js's saveCalibration()
-// after a live snapshot-and-click pass (the primary flow), or an existing
-// file the operator picked via a native file dialog (system.js's
-// pickCalibFile) -- e.g. one produced by
-// cloud_pipeline/setup_venue_calibration.py, or another camera's already-
-// clicked calibration for a reused mount. Either way this function only
-// remembers the path; it never computes a calibration itself.
-export function setCalibPath(id, calibPath) {
-  const cameras = listCameras();
-  const next = cameras.map((c) => (c.id === id ? { ...c, calibPath } : c));
-  saveCameras(next);
-  return next.find((c) => c.id === id);
-}
 
 // --- RTSP-direct fallback (2026-09-01) ------------------------------
 // For cameras where ONVIF doesn't work (disabled, misconfigured, or -- a

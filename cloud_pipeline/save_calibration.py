@@ -35,35 +35,25 @@ def fail(msg):
     sys.exit(1)
 
 
-def main():
-    ap = argparse.ArgumentParser()
-    ap.add_argument("--snapshot", required=True)
-    ap.add_argument("--out", required=True)
-    args = ap.parse_args()
-
-    try:
-        data = json.load(sys.stdin)
-    except json.JSONDecodeError as e:
-        fail(f"invalid points JSON on stdin: {e}")
-
-    points = data.get("points", [])
+def build_calibration(points, snapshot_path):
+    """The fit itself, shared with cloud_pipeline/job_runner.py (ADR-084):
+    14 [x, y] pairs in POINTS-then-NET_PROMPTS order plus the snapshot they
+    were clicked on. Returns (calib_dict, rmse_ft, worst_point_name); raises
+    ValueError with a message meant for the operator."""
     n_court = len(POINTS)
     n_total = n_court + len(NET_PROMPTS)
     if len(points) != n_total:
-        fail(f"expected {n_total} points, got {len(points)}")
+        raise ValueError(f"expected {n_total} points, got {len(points)}")
 
     court_points = [tuple(p) for p in points[:n_court]]
     net_points = [tuple(p) for p in points[n_court:]]
 
-    try:
-        ordered, _ = solve_assignment(court_points)
-        result = compute_calibration(ordered)
-    except Exception as e:
-        fail(str(e))
+    ordered, _ = solve_assignment(court_points)
+    result = compute_calibration(ordered)
 
-    frame = cv2.imread(args.snapshot)
+    frame = cv2.imread(snapshot_path)
     if frame is None:
-        fail(f"could not read snapshot {args.snapshot}")
+        raise ValueError(f"could not read snapshot {snapshot_path}")
     frame_h, frame_w = frame.shape[:2]
 
     calib = {
@@ -76,17 +66,32 @@ def main():
         # See calibrate.py's identical field for why this is needed.
         "calibration_resolution": [frame_w, frame_h],
     }
+    err_ft = result["per_point_error_ft"]
+    worst = int(max(range(len(err_ft)), key=lambda k: err_ft[k]))
+    return calib, float(result["reprojection_rmse_ft"]), POINTS[worst][0]
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--snapshot", required=True)
+    ap.add_argument("--out", required=True)
+    args = ap.parse_args()
+
+    try:
+        data = json.load(sys.stdin)
+    except json.JSONDecodeError as e:
+        fail(f"invalid points JSON on stdin: {e}")
+
+    try:
+        calib, rmse_ft, worst = build_calibration(data.get("points", []), args.snapshot)
+    except Exception as e:
+        fail(str(e))
+
     os.makedirs(os.path.dirname(os.path.abspath(args.out)), exist_ok=True)
     with open(args.out, "w") as f:
         json.dump(calib, f, indent=2)
 
-    err_ft = result["per_point_error_ft"]
-    worst = int(max(range(len(err_ft)), key=lambda k: err_ft[k]))
-    print(json.dumps({
-        "ok": True,
-        "rmse_ft": result["reprojection_rmse_ft"],
-        "worst": POINTS[worst][0],
-    }))
+    print(json.dumps({"ok": True, "rmse_ft": rmse_ft, "worst": worst}))
 
 
 if __name__ == "__main__":

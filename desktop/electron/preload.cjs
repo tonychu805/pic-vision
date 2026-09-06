@@ -31,7 +31,6 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   addRtsp: (config) => ipcRenderer.invoke("cameras:addRtsp", config),
   parseRtspUrl: (raw, fallbackUsername, fallbackPassword) =>
     ipcRenderer.invoke("cameras:parseRtspUrl", raw, fallbackUsername, fallbackPassword),
-  setCalibPath: (id, calibPath) => ipcRenderer.invoke("cameras:setCalibPath", id, calibPath),
   addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
 });
 
@@ -58,7 +57,6 @@ contextBridge.exposeInMainWorld("windowAPI", {
 
 contextBridge.exposeInMainWorld("systemAPI", {
   getNetworkInfo: () => ipcRenderer.invoke("system:networkInfo"),
-  pickCalibFile: () => ipcRenderer.invoke("system:pickCalibFile"),
   pickVideoFile: () => ipcRenderer.invoke("system:pickVideoFile"),
 });
 

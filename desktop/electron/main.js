@@ -13,13 +13,12 @@ import {
   probeRtspFallback,
   addCameraViaRtsp,
   parseRtspUrl,
-  setCalibPath,
   addCameraFromSampleClip,
 } from "./cameras/store.js";
-import { getNetworkInfo, pickCalibFile, pickVideoFile } from "./system.js";
+import { getNetworkInfo, pickVideoFile } from "./system.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
@@ -40,8 +39,12 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:discover", async (_event, options) => {
     return discoverCameras(options);
   });
+  // Calibration state is merged in from the console's last heartbeat
+  // response rather than stored locally (ADR-084) -- the fit runs on the
+  // operator's job runner and lives on the camera's console row, so this
+  // machine has no calib.json to look at.
   ipcMain.handle("cameras:list", async () => {
-    return listCameras();
+    return listCameras().map((c) => ({ ...c, ...getCalibrationState(c.id) }));
   });
   ipcMain.handle("cameras:add", async (_event, config) => {
     return addCamera(config);
@@ -102,12 +105,6 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:parseRtspUrl", async (_event, raw, fallbackUsername, fallbackPassword) => {
     return parseRtspUrl(raw, fallbackUsername, fallbackPassword);
   });
-  ipcMain.handle("cameras:setCalibPath", async (_event, id, calibPath) => {
-    return setCalibPath(id, calibPath);
-  });
-  ipcMain.handle("system:pickCalibFile", async () => {
-    return pickCalibFile();
-  });
   // "Sample clip" source (2026-09-03) -- ManualAddDialog's dropdown
   // alternative to a live camera, for exercising calibration/the cloud
   // pipeline without one. See store.js's addCameraFromSampleClip.
@@ -152,17 +149,17 @@ function registerCaptureHandlers() {
   });
 }
 
-// Hands a finished recording to cloud_pipeline/run_desktop_job.py
-// (pipeline.js) -- PIC-68. Looks the camera's calibPath up server-side
-// (setCalibPath's IPC handler above is the only way it gets set) rather
-// than trusting one the renderer might pass in, same trust-boundary
-// convention as registerCaptureHandlers looking up the full camera object
-// instead of accepting credentials from the renderer.
+// Hands a finished recording to the cloud for processing (pipeline.js) --
+// PIC-68, rewired by ADR-084 to upload to the console rather than run the
+// pipeline locally. The camera is looked up here, from its id, rather than
+// trusting an object the renderer passes in -- same trust-boundary
+// convention as registerCaptureHandlers. The calibration check now lives
+// on the console (it holds the calibration), which answers with a real
+// message if the camera has never been calibrated.
 function registerPipelineHandlers() {
   ipcMain.handle("pipeline:run", async (_event, { cameraId, recordingDir, targetSec }) => {
     const camera = listCameras().find((c) => c.id === cameraId);
     if (!camera) throw new Error("Camera not found");
-    if (!camera.calibPath) throw new Error("No calibration file set for this camera");
     const sessionId = `${camera.label}-${path.basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
     // A sample-clip camera's one "recording" IS the uploaded file already
     // -- no segments to concatenate, so pipeline.js's videoPath override
@@ -170,7 +167,7 @@ function registerPipelineHandlers() {
     // files that were never written for this camera.
     const videoPath = camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined;
     return runCloudJob({
-      recordingDir, videoPath, calibPath: camera.calibPath, targetSec, sessionId,
+      recordingDir, videoPath, targetSec, sessionId,
       cameraId: camera.id, cameraLabel: camera.label,
     });
   });

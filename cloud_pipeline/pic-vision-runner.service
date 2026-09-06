@@ -1,0 +1,19 @@
+# systemd unit for the operator's job runner (ADR-084).
+#   sudo cp cloud_pipeline/pic-vision-runner.service /etc/systemd/system/
+#   sudo systemctl daemon-reload && sudo systemctl enable --now pic-vision-runner
+#   journalctl -u pic-vision-runner -f
+# Adjust User/WorkingDirectory to the checkout that has .venv and .env.
+[Unit]
+Description=pic-vision job runner (cloud console -> local pipeline)
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+User=tonychu
+WorkingDirectory=/home/tonychu/repository/pic-vision
+ExecStart=/home/tonychu/repository/pic-vision/.venv/bin/python -m cloud_pipeline.job_runner
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=multi-user.target
