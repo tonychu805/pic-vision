@@ -45,6 +45,7 @@ load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
 from src import job_log
 from src.drift import find_bumps, drift_span
+from src.video_quality import BLOCK_BELOW_FPS as VIDEO_BLOCK_BELOW_FPS, check_video
 from scripts.check_drift import measure as drift_measure
 from cloud_pipeline import r2_storage
 from cloud_pipeline import runpod_pod
@@ -88,6 +89,7 @@ POD_SETUP_CMD = (
 # first ran a real job -- the operator asked for visible progress after
 # watching one with no feedback beyond a log tail).
 STAGES = [
+    ("input_check", "Checking the recording is usable"),
     ("drift_check", "Checking camera drift"),
     ("convert", "Converting to 30fps CFR"),
     ("proxy", "Creating 1080p upload proxy"),
@@ -184,6 +186,28 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
     os.makedirs(out_dir, exist_ok=True)
     cfr_video = os.path.join(out_dir, "video_cfr.mp4")
     reel_dir = os.path.join(out_dir, "reel")
+
+    # --- Input gate: refuse a session that can't produce a decent reel
+    # BEFORE anything is spent on it. A degraded session costs exactly the
+    # same CFR encode, R2 transfer and GPU pod as a good one (ADR-087).
+    # Deliberately first: this is the cheapest check in the pipeline, a
+    # sub-second pass over packet timestamps with no decoding.
+    _check_cancel(should_cancel_fn)
+    log("checking the recording's frame rate...", stage="input_check")
+    quality = check_video(video_path)
+    fr = quality["frame_rate"]
+    if fr:
+        log(f"input: {fr['median_fps']:.1f} fps median over {fr['duration_sec']:.0f}s"
+            f" ({quality['below_floor_fraction'] * 100:.0f}% below "
+            f"{VIDEO_BLOCK_BELOW_FPS:.0f} fps), "
+            f"{quality['stream'].get('width')}x{quality['stream'].get('height')} "
+            f"{quality['stream'].get('codec')}")
+    if not quality["passes"]:
+        # SystemExit, matching this module's own convention for "this job
+        # cannot proceed" (see the missing-calibration guard above) --
+        # webapp/pipeline.py catches it and records the message as the job's
+        # error, so the venue is told why rather than getting a thin reel.
+        raise SystemExit(f"This recording can't be processed: {quality['reason']}")
 
     # --- Local, GPU-free steps: identical logic to webapp/pipeline.py's
     # drift check and CFR conversion (same functions, same recipe) ---

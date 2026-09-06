@@ -1406,6 +1406,12 @@ pic-vision/
 │   ├── ball.py                       # crossing_times / cluster_crossings / adaptive_gap_sec
 │   ├── select.py                       # rally ranking for reel selection (§7.2)
 │   ├── drift.py                       # camera-bump/creep detection
+│   ├── video_quality.py                # input gate (ADR-087): per-bucket frame-rate
+│   │                                     # profile + pass/fail, run first in
+│   │                                     # run_cloud_job so a session that can't
+│   │                                     # yield rallies is refused before the CFR
+│   │                                     # encode, the R2 upload or the GPU pod.
+│   │                                     # Packet timestamps only, no decoding
 │   ├── players.py                      # player/court-position helpers
 │   ├── events.py                        # motion_series / kitchen_series signals
 │   ├── render.py                         # clip rendering
