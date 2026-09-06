@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
-import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, authenticatedStreamUri } from "./capture.js";
+import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
@@ -79,9 +79,14 @@ async function backfillMeasuredFps(camera) {
     : camera.streamUri && authenticatedStreamUri(camera);
   if (!source) return;
   fpsMeasureAttempted.add(camera.id);
-  const measured = await measureStreamFps(source);
-  if (measured == null) return;
-  setCameraProfile(camera.id, { ...(camera.profile ?? {}), measuredFps: measured });
+  const measured = await measureStreamProfile(source);
+  if (!measured) return;
+  const { fps, ...rest } = measured;
+  // An ONVIF camera already reported codec/resolution/bitrate and those are
+  // authoritative for what it's *configured* to send; only its rate is
+  // topped up. Everything else has no other source, so take the lot.
+  const extra = camera.connectionType === "onvif" ? {} : rest;
+  setCameraProfile(camera.id, { ...(camera.profile ?? {}), ...extra, measuredFps: fps });
 }
 
 export function getCalibrationState(cameraId) {

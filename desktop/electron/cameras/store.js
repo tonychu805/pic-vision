@@ -19,7 +19,7 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { vendorsForIps } from "./vendorLookup.js";
-import { RECORDINGS_ROOT, sanitizeForPath, measureStreamFps, authenticatedStreamUri } from "../capture.js";
+import { RECORDINGS_ROOT, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
 
 const store = new Store({ name: "cameras" });
@@ -124,6 +124,16 @@ function streamProfile(cam) {
   };
 }
 
+// Shapes a measured profile the way the ONVIF path stores one: `fps` is
+// reserved for the camera's *configured* rate, which nothing can tell us
+// here, so the measured rate lands in `measuredFps` and `fps` stays null.
+async function rtspProfile(uri) {
+  const measured = await measureStreamProfile(uri);
+  if (!measured) return { codec: null, width: null, height: null, fps: null, measuredFps: null, bitrateKbps: null };
+  const { fps, ...rest } = measured;
+  return { ...rest, fps: null, measuredFps: fps };
+}
+
 // Real duplicate found 2026-09-01: the same physical Synology camera got
 // added twice (two independent `addCamera` calls a few seconds apart,
 // same hostname, no cross-check between them) -- neither addCamera nor
@@ -207,8 +217,7 @@ export async function addCameraFromSampleClip({ label, filePath }) {
   // frame-rate bar -- a 15fps clip produces the same halved results, and
   // without this it skipped the guard entirely. Reading a local file costs
   // milliseconds, unlike the live-stream probe the other two paths need.
-  camera.profile = { codec: null, width: null, height: null, fps: null,
-                     measuredFps: await measureStreamFps(dest), bitrateKbps: null };
+  camera.profile = await rtspProfile(dest);
 
   const cameras = listCameras();
   cameras.push(camera);
@@ -322,15 +331,14 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
     serialNumber: null,
     firmwareVersion: null,
     streamUri: streamUri,
-    // An RTSP-added camera never went through ONVIF, so there is no
-    // configured rate to read -- only a measured one (ADR-087). Without it
-    // this camera would skip the frame-rate guard entirely, which is
-    // exactly how a venue ends up recording at 15fps unnoticed. `fps` stays
-    // null: nothing here knows what the camera is *set* to, so the guard
-    // can't claim the settings are fine, and falls back to advising the
-    // setting change rather than blaming the network.
-    profile: { codec: null, width: null, height: null, fps: null,
-               measuredFps: await measureStreamFps(streamUri), bitrateKbps: null },
+    // An RTSP-added camera never went through ONVIF, so nothing else knows
+    // its codec, resolution, frame rate or bitrate -- all of it comes from
+    // sampling the stream (ADR-087). Without this it would show nothing and
+    // skip the frame-rate guard entirely, which is how a venue ends up at
+    // 15fps unnoticed. `fps` deliberately stays null: this is what the
+    // camera is *sending*, not what it is *set* to, so the guard can't
+    // claim the settings are fine and blame the network instead.
+    profile: await rtspProfile(streamUri),
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };

@@ -131,37 +131,41 @@ export function probeDuration(filePath) {
   return Number.isFinite(seconds) ? seconds : 0;
 }
 
-// Measures the frame rate off the live stream itself, for cameras that
-// never went through ONVIF and so report no profile (store.js's
-// addCameraViaRtsp), and to backfill cameras added before this existed.
-// Without it, an RTSP-added camera skips the frame-rate guard entirely --
-// the exact gap that lets a venue run at 15fps unnoticed.
+// Reads what a stream is actually sending -- codec, resolution, frame rate
+// and bitrate -- by sampling a few seconds of it.
+//
+// Needed because only ONVIF cameras report a profile. An RTSP-added camera
+// and a sample clip have no such source, so without this they'd show
+// nothing and, worse, skip the frame-rate guard entirely (ADR-087) -- the
+// exact gap that lets a venue run at 15fps unnoticed.
 //
 // rtspProbe.js deliberately avoided decoding because bundling ffmpeg was
 // "a real packaging concern for something shipped to venue owners"; that
 // stopped being true when binaries.js started shipping it (ADR-084).
 //
-// Counting packets, not decoding frames: no pixels are ever read, which
-// keeps it cheap and means it never produces an image (see the standing
-// rule about not grabbing live frames from real cameras during testing).
+// Counting packets, never decoding frames: no pixels are read, so it stays
+// cheap and can never produce an image (see the standing rule about not
+// grabbing live frames from real cameras during testing). Bitrate comes
+// from the packet sizes for the same reason -- a live stream usually
+// reports no bit_rate in its container metadata at all.
 //
-// Async, not spawnSync: this holds a live connection for several seconds,
-// and the main process is single-threaded -- a sync version froze the
-// whole UI, including the window controls, for the duration.
-export function measureStreamFps(uri, { seconds = 5, timeoutMs = 20_000 } = {}) {
+// Async, not spawnSync: this holds a live connection for several seconds
+// and the main process is single-threaded -- a sync version froze the whole
+// UI, window controls included, for the duration.
+export function measureStreamProfile(uri, { seconds = 5, timeoutMs = 20_000 } = {}) {
   const isLive = /^rtsps?:\/\//i.test(uri);
   return new Promise((resolve) => {
     const proc = spawn(FFPROBE, [
       "-v", "error",
       // Only meaningful for a live stream. A finished recording or an
-      // uploaded sample clip is a plain file: no transport, and it reads
-      // in milliseconds instead of holding a connection open.
+      // uploaded sample clip is a plain file -- no transport, and it reads
+      // in milliseconds rather than holding a connection open.
       ...(isLive ? ["-rtsp_transport", "tcp"] : []),
       "-i", uri,
       "-select_streams", "v:0",
-      "-show_entries", "packet=pts_time",
       "-read_intervals", `%+${seconds}`,
-      "-of", "csv=p=0",
+      "-show_entries", "stream=codec_name,width,height:packet=pts_time,size",
+      "-of", "json",
     ], { stdio: ["ignore", "pipe", "ignore"] });
 
     let out = "";
@@ -170,137 +174,43 @@ export function measureStreamFps(uri, { seconds = 5, timeoutMs = 20_000 } = {}) 
     proc.on("error", () => { clearTimeout(timer); resolve(null); });
     proc.on("close", () => {
       clearTimeout(timer);
-      const times = out.split("\n").map((t) => Number(t.trim()))
+      let parsed;
+      try {
+        parsed = JSON.parse(out);
+      } catch {
+        return resolve(null);
+      }
+      const stream = parsed.streams?.[0] ?? {};
+      const packets = parsed.packets ?? [];
+      const times = packets.map((pk) => Number(pk.pts_time))
         .filter((t) => Number.isFinite(t)).sort((a, b) => a - b);
       if (times.length < 10) return resolve(null); // too little to conclude anything
+
       const span = times[times.length - 1] - times[0];
       if (span <= 0) return resolve(null);
       const fps = (times.length - 1) / span;
-      resolve(1 <= fps && fps <= 240 ? Math.round(fps * 100) / 100 : null);
+      if (!(1 <= fps && fps <= 240)) return resolve(null);
+
+      const bits = packets.reduce((sum, pk) => sum + (Number(pk.size) || 0), 0) * 8;
+      const positive = (v) => (Number.isFinite(v) && v > 0 ? v : null);
+      resolve({
+        codec: stream.codec_name ? String(stream.codec_name).toUpperCase() : null,
+        width: positive(Number(stream.width)),
+        height: positive(Number(stream.height)),
+        fps: Math.round(fps * 100) / 100,
+        bitrateKbps: positive(Math.round(bits / span / 1000)),
+      });
     });
   });
 }
 
-
-export function grabFrameFromFile(filePath, atSec) {
-  const outPath = path.join(os.tmpdir(), `pic-vision-snapshot-${Date.now()}.png`);
-  const args = ["-y", "-ss", String(atSec), "-i", filePath, "-frames:v", "1", "-f", "image2", outPath];
-  const result = spawnSync(FFMPEG, args, { encoding: "utf8" });
-  if (result.status !== 0 || !existsSync(outPath)) {
-    const stderrTail = (result.stderr || "").trim().split("\n").pop();
-    throw new Error(stderrTail || `Could not read a frame at ${atSec}s from ${path.basename(filePath)}`);
-  }
-  outstandingSnapshots.add(outPath);
-  return { path: outPath, base64: readFileSync(outPath).toString("base64"), atSec };
+// Frame rate alone, for callers that only need to re-check that one number
+// (a finished recording, or topping up an ONVIF camera that reports
+// everything except its rate).
+export async function measureStreamFps(uri, opts) {
+  return (await measureStreamProfile(uri, opts))?.fps ?? null;
 }
 
-export function isRecording(cameraId) {
-  return active.has(cameraId);
-}
-
-export function recordingStatus(cameraId) {
-  const rec = active.get(cameraId);
-  return rec ? { recording: true, outDir: rec.outDir, startedAt: rec.startedAt } : { recording: false };
-}
-
-// How long to wait before trusting a start actually worked. Real gap
-// found and fixed 2026-09-01: this used to return immediately after
-// spawning, so a fast failure (wrong codec/container, bad auth, camera
-// offline) reported "recording started" to the UI and then silently
-// reverted to "Start recording" seconds later with no explanation once
-// ffmpeg actually exited -- confusing, looked like a UI bug rather than
-// a real, diagnosable ffmpeg error. Caught by testing against a real
-// failure (the pcm_alaw/MP4 bug above), not assumed.
-const STARTUP_GRACE_MS = 2000;
-
-export function startRecording(camera) {
-  if (active.has(camera.id)) throw new Error("Already recording this camera");
-  // Refuse rather than record footage the pipeline can't get rallies out
-  // of -- a low frame rate halves detection and would otherwise fail
-  // silently, hours later, as a thin reel with no explanation.
-  assertUsableFrameRate(camera);
-
-  const outDir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label), new Date().toISOString().replace(/[:.]/g, "-"));
-  mkdirSync(outDir, { recursive: true });
-
-  const url = authenticatedStreamUri(camera);
-  // .mkv, not TECH_SPEC.md §1.2's literal .mp4 -- real bug caught by
-  // actually running this against a real camera (2026-09-01), not by
-  // copying the spec's example verbatim: the Tapo C200 streams pcm_alaw
-  // audio, and MP4 has no codec tag for that (ffmpeg: "Could not find
-  // tag for codec pcm_alaw in stream #1... Could not write header").
-  // TECH_SPEC.md's own prose already says pcm_alaw requires MKV -- its
-  // filename in the example command just didn't reflect that. Confirmed
-  // fixed against this exact camera: real 1080p h264+pcm_alaw file,
-  // ffprobe-valid, before this was trusted.
-  const args = [
-    "-rtsp_transport", "tcp",
-    "-i", url,
-    "-use_wallclock_as_timestamps", "1",
-    "-c", "copy",
-    "-f", "segment",
-    "-segment_time", "600",
-    "-reset_timestamps", "1",
-    path.join(outDir, "session-%03d.mkv"),
-  ];
-
-  const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
-  const startedAt = new Date().toISOString();
-  let stderrTail = "";
-  proc.stderr.on("data", (chunk) => {
-    stderrTail = (stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
-  });
-
-  const record = { proc, outDir, startedAt, stderrTail: () => stderrTail };
-  active.set(camera.id, record);
-
-  return new Promise((resolve, reject) => {
-    let started = false;
-    const timer = setTimeout(() => {
-      started = true;
-      logEvent("recording_started", `Started recording ${camera.label}`, outDir);
-      resolve({ outDir, startedAt });
-    }, STARTUP_GRACE_MS);
-    proc.on("exit", (code) => {
-      // Only clear if this is still the tracked process for this camera --
-      // a fast stop-then-restart could otherwise let a late exit event
-      // from the OLD process clobber the NEW one's tracked state.
-      if (active.get(camera.id) === record) active.delete(camera.id);
-      clearTimeout(timer);
-      // An exit after the grace period is stopRecording's own SIGINT --
-      // expected, already logged there, not a failure. Only an exit
-      // *before* the grace period ever resolved is a real start failure.
-      if (started) return;
-      const reason = stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
-      logEvent("recording_failed", `${camera.label} recording failed to start`, reason);
-      reject(new Error(reason));
-    });
-  });
-}
-
-// Clean stop only -- SIGINT, never SIGKILL (ADR-031: a hard kill was
-// observed to corrupt the output container). ffmpeg finalizes the
-// current segment on SIGINT and exits on its own; this resolves once
-// that actually happens rather than assuming it did.
-export function stopRecording(cameraId) {
-  const rec = active.get(cameraId);
-  if (!rec) return Promise.resolve({ stopped: false });
-  return new Promise((resolve) => {
-    rec.proc.once("exit", () => {
-      logEvent("recording_stopped", "Stopped recording", rec.outDir);
-      // Free, and better evidence than probing the live stream: this is
-      // exactly what got captured and what the pipeline will be given. Also
-      // how an RTSP camera's rate stays current after someone changes it in
-      // the camera's own settings -- nothing else would ever notice.
-      resolve({ stopped: true, outDir: rec.outDir, measureFrom: newestSegment(rec.outDir) });
-    });
-    rec.proc.kill("SIGINT");
-  });
-}
-
-export function stopAllRecordings() {
-  return Promise.all([...active.keys()].map(stopRecording));
-}
 
 // The most recently written segment of a finished session, for measuring
 // the frame rate actually captured. Null when nothing landed (a recording
