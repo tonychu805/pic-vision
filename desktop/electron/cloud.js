@@ -57,46 +57,73 @@ let lastHeartbeatOk = true;
 // or freshly-launched agent.
 const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrationRmseFt, calibratedAt }
 
-// Cameras whose frame rate we've already tried to measure this run. The
-// measurement is only taken at add time, so every camera added before that
-// existed -- and every RTSP camera, which has no ONVIF profile to fall back
-// on -- would otherwise never get one and would skip the frame-rate guard
-// forever. Backfilled here, on the heartbeat's existing connection check.
+// Re-measuring what a camera is actually sending. Deliberately not
+// once-per-run: an operator who changes a camera's frame rate in its own
+// web page gets no signal from us otherwise, which is exactly what
+// happened -- the setting changed and both the app and the console kept
+// showing the old number indefinitely.
 //
-// In memory rather than on disk on purpose: a camera that was unreachable
-// at the moment we tried gets another chance next launch, but not another
-// 5-second probe every 30 seconds for as long as the app is open.
-const fpsMeasureAttempted = new Set();
+// Three triggers, cheapest first:
+//   - never measured, or missing fields this camera type can supply
+//   - the ONVIF-reported (configured) rate changed since we last measured,
+//     which IS the "someone changed the setting" signal
+//   - the measurement has simply gone stale
+//
+// Skipped while a camera is recording: the probe opens a second RTSP
+// session and some cameras allow only one. A finished recording is
+// re-measured on stop anyway (runCommand), which is better evidence.
+const MEASURE_TTL_MS = 10 * 60 * 1000;
 
-async function backfillMeasuredFps(camera) {
-  if (fpsMeasureAttempted.has(camera.id)) return;
-  // What's missing depends on the camera type, not just on the frame rate.
-  // An ONVIF camera reports codec/resolution/bitrate itself and only needs
-  // its rate topped up; everything else has no other source for any of it.
-  // Checking measuredFps alone left RTSP cameras and sample clips measured
-  // once by an older build stuck with a frame rate and nothing else,
-  // because the guard saw a rate and returned.
+// Only to stop two probes racing for the same camera -- never to stop a
+// repeat, which was the original bug.
+const measuringNow = new Set();
+
+function needsMeasuring(camera) {
   const p = camera.profile ?? {};
-  const needsRate = p.measuredFps == null;
-  const needsRest = camera.connectionType !== "onvif"
-    && (p.codec == null || p.width == null || p.height == null || p.bitrateKbps == null);
-  if (!needsRate && !needsRest) return;
+  if (p.measuredFps == null) return true;
+  if (camera.connectionType !== "onvif"
+      && (p.codec == null || p.width == null || p.height == null || p.bitrateKbps == null)) return true;
+  // A changed configured rate means the camera was reconfigured, so the
+  // stored measurement describes the old setting and must not outlive it.
+  // This matters because effectiveFps() prefers the measured value: a
+  // stale one would override the fresh configured one indefinitely.
+  if (p.measuredAtFps != null && p.fps != null && p.measuredAtFps !== p.fps) return true;
+  if (!p.measuredAt) return true;
+  return Date.now() - new Date(p.measuredAt).getTime() > MEASURE_TTL_MS;
+}
+
+async function refreshMeasuredProfile(camera) {
+  if (measuringNow.has(camera.id) || isRecording(camera.id)) return;
+  if (!needsMeasuring(camera)) return;
+
   // A sample clip is a local file (milliseconds); a live camera means
-  // holding its stream open for a few seconds. Both end up in the same
-  // field, so one guard covers all three connection types.
+  // holding its stream open for a few seconds. Both land in the same
+  // field, so one path covers all three connection types.
   const source = camera.connectionType === "sampleClip"
     ? camera.sampleClipPath
     : camera.streamUri && authenticatedStreamUri(camera);
   if (!source) return;
-  fpsMeasureAttempted.add(camera.id);
-  const measured = await measureStreamProfile(source);
-  if (!measured) return;
-  const { fps, ...rest } = measured;
-  // An ONVIF camera already reported codec/resolution/bitrate and those are
-  // authoritative for what it's *configured* to send; only its rate is
-  // topped up. Everything else has no other source, so take the lot.
-  const extra = camera.connectionType === "onvif" ? {} : rest;
-  setCameraProfile(camera.id, { ...(camera.profile ?? {}), ...extra, measuredFps: fps });
+
+  measuringNow.add(camera.id);
+  try {
+    const measured = await measureStreamProfile(source);
+    if (!measured) return;
+    const { fps, ...rest } = measured;
+    // An ONVIF camera already reported codec/resolution/bitrate, and those
+    // describe what it's configured to send; only its rate is topped up.
+    // Everything else has no other source, so take the lot.
+    const extra = camera.connectionType === "onvif" ? {} : rest;
+    setCameraProfile(camera.id, {
+      ...(camera.profile ?? {}), ...extra,
+      measuredFps: fps,
+      measuredAt: new Date().toISOString(),
+      // What the camera said it was set to when this was measured, so a
+      // later change to that setting invalidates it.
+      measuredAtFps: camera.profile?.fps ?? null,
+    });
+  } finally {
+    measuringNow.delete(camera.id);
+  }
 }
 
 export function getCalibrationState(cameraId) {
@@ -236,7 +263,7 @@ async function cameraStatuses() {
     // Fire-and-forget: the result lands in the store for the next tick
     // rather than holding this heartbeat open for it.
     if (results[i].status === "fulfilled") {
-      backfillMeasuredFps(c).catch((err) => console.error(`[cloud] fps backfill failed for ${c.label}: ${err.message}`));
+      refreshMeasuredProfile(c).catch((err) => console.error(`[cloud] fps check failed for ${c.label}: ${err.message}`));
     }
     const previous = lastCameraStatus.get(c.id);
     if (previous && previous !== status) {

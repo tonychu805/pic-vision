@@ -262,9 +262,16 @@ export function setCameraProfile(id, profile) {
   // the ONVIF heartbeat profile has no measuredFps and would otherwise wipe
   // it every 30s. But a caller that DOES supply one (cloud.js's backfill)
   // must win, or the backfill silently writes nothing.
-  const merged = { ...profile, measuredFps: profile.measuredFps ?? current.profile?.measuredFps ?? null };
+  const merged = {
+    ...profile,
+    measuredFps: profile.measuredFps ?? current.profile?.measuredFps ?? null,
+    // Carried with the measurement they describe, so the heartbeat's
+    // ONVIF-only profile can't strand a value without its timestamp.
+    measuredAt: profile.measuredAt ?? current.profile?.measuredAt ?? null,
+    measuredAtFps: profile.measuredAtFps ?? current.profile?.measuredAtFps ?? null,
+  };
   const same = current.profile
-    && ["codec", "width", "height", "fps", "bitrateKbps", "measuredFps"]
+    && ["codec", "width", "height", "fps", "bitrateKbps", "measuredFps", "measuredAt", "measuredAtFps"]
       .every((k) => (current.profile[k] ?? null) === (merged[k] ?? null));
   if (same) return current;
   const next = cameras.map((c) => (c.id === id ? { ...c, profile: merged } : c));
