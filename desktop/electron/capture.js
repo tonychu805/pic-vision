@@ -20,6 +20,7 @@ import path from "node:path";
 import os from "node:os";
 import { logEvent } from "./activityLog.js";
 import { FFMPEG, FFPROBE } from "./binaries.js";
+import { assertUsableFrameRate } from "./cameras/frameRate.js";
 
 export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 
@@ -163,6 +164,10 @@ const STARTUP_GRACE_MS = 2000;
 
 export function startRecording(camera) {
   if (active.has(camera.id)) throw new Error("Already recording this camera");
+  // Refuse rather than record footage the pipeline can't get rallies out
+  // of -- a low frame rate halves detection and would otherwise fail
+  // silently, hours later, as a thin reel with no explanation.
+  assertUsableFrameRate(camera);
 
   const outDir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label), new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });

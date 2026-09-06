@@ -13,8 +13,8 @@
 // makes this app packageable for a venue: no Python, no OpenCV, no
 // credentials (see pipeline.js's header).
 import { grabSnapshot, grabFrameFromFile, probeDuration, discardSnapshot } from "./capture.js";
-import { consoleFetch } from "./consoleApi.js";
-import { uploadFile } from "./consoleApi.js";
+import { consoleFetch, uploadFile } from "./consoleApi.js";
+import { assertUsableFrameRate } from "./cameras/frameRate.js";
 import { logEvent } from "./activityLog.js";
 
 // A sample-clip camera (2026-09-03) has no live stream to grab from --
@@ -38,6 +38,10 @@ export async function takeCalibrationSnapshot(camera, atSec) {
 // storage. That also closes the "a live frame of someone's court sat in
 // /tmp indefinitely" gap that the old pending-snapshot map had to sweep.
 export async function grabAndUploadSnapshot(camera) {
+  // Same gate as recording: calibrating a camera that can't produce usable
+  // footage just wastes the operator's time clicking 14 points for a
+  // camera that will never yield decent reels. Better to say so first.
+  assertUsableFrameRate(camera);
   const snapshot = await takeCalibrationSnapshot(camera);
   try {
     const { url, publicUrl } = await consoleFetch("/api/agents/calibration-snapshots", { method: "POST" });

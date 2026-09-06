@@ -1512,6 +1512,24 @@ Second, **nothing recorded what a camera was streaming.** No codec, resolution, 
 
 ---
 
+## ADR-087 — Refuse to record or calibrate a camera below 24fps, and say how to fix it
+
+**Date:** 2026-09-06 · **Status:** accepted, implemented
+
+**Context.** ADR-086 made the tracker's thresholds frame-rate aware, which raised the obvious question: is 15fps then *good enough*? Measured directly rather than assumed (`EXPERIMENTS.md` 2026-09-06) — the same 300s of labelled footage, differing only in frame rate, scored precision 0.75 / recall 0.46 at 30fps and 0.60 / 0.23 at 15fps. **Half the rallies found, and nothing recovers them:** loosening `min_crossings` to buy recall back reached only 0.38 recall at 0.29 precision with a 6× false-positive rate — worse than the 30fps baseline on both axes. The information isn't there.
+
+The failure mode is what makes this worth a guardrail rather than a note. A camera left on a low factory default produces no error anywhere: the recording succeeds, the job succeeds, the reel is simply thinner, and nobody can say why. With venues installing their own hardware, that is a support burden with no diagnostic trail.
+
+**Decision.** `desktop/electron/cameras/frameRate.js` refuses both recording (`capture.js`'s `startRecording`) and calibration (`calibration.js`'s `grabAndUploadSnapshot`) for a camera reporting under **24fps**, with a message naming the camera's own address and the setting to change. The console mirrors the rule (`cameras-client.tsx`) so the buttons are disabled with the reason visible, rather than the operator discovering it from a failed command a round-trip later; the agent stays the authority, since it holds the real ONVIF profile.
+
+Three deliberate details. **24, not 30**, so a 25fps PAL-region camera still works — it's within reach of the tuning in a way 15 is not; only 30 and 15 were measured, so the exact line is a judgement call between two data points and is marked as such in the code. **Blocks only on a frame rate actually known** — an RTSP-added camera never went through ONVIF and reports no profile, a sample clip has no camera at all, and guessing for those would refuse real setups over missing data. **Calibration is gated too**, not just recording: clicking 14 court points on a camera that can never yield decent reels is wasted operator time.
+
+**Verification.** Seven tests (`frameRate.test.js`) covering the 30fps pass, the 25fps pass, the 15fps refusal, the message naming address and target setting, the unknown-rate cases (undefined/0/null/string), and boundary inclusivity. These are the desktop app's **first automated tests** — `node --test`, no new dependency, wired to `npm test`, which the 2026-09-06 review had flagged as entirely absent.
+
+**Consequences.** A venue cannot silently run a misconfigured camera, and the fix is self-service. The cost is that a camera whose ONVIF profile misreports its rate could be blocked wrongly — the profile is the camera's *configured* limit, not measured delivery, and the two can differ under network loss. No such case has been seen, and the refusal names the setting to check, so it degrades to a visible support question rather than a silent quality loss. Sub-30 rates between 24 and 30 are allowed on inference from two measured points, not evidence; worth revisiting if a 25fps venue ever scores badly.
+
+---
+
 ## Template
 
 ```markdown
