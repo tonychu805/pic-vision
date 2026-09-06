@@ -163,7 +163,7 @@ export async function addCamera({ label, hostname, port, username, password, pat
     // system would ever surface, and which needs completely different
     // advice from "change the setting". Costs ~5s on a one-time step.
     profile: profile && streamUri
-      ? { ...profile, measuredFps: measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
+      ? { ...profile, measuredFps: await measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
       : profile,
     connectionType: "onvif",
     addedAt: new Date().toISOString(),
@@ -243,7 +243,11 @@ export function setCameraProfile(id, profile) {
   // 30s on every camera. Without this the heartbeat's ONVIF-only profile
   // would silently wipe it and take the frame-rate guard back to trusting
   // the configured number alone.
-  const merged = { ...profile, measuredFps: current.profile?.measuredFps ?? null };
+  // Preserve the stored measurement when the caller doesn't supply one --
+  // the ONVIF heartbeat profile has no measuredFps and would otherwise wipe
+  // it every 30s. But a caller that DOES supply one (cloud.js's backfill)
+  // must win, or the backfill silently writes nothing.
+  const merged = { ...profile, measuredFps: profile.measuredFps ?? current.profile?.measuredFps ?? null };
   const same = current.profile
     && ["codec", "width", "height", "fps", "bitrateKbps", "measuredFps"]
       .every((k) => (current.profile[k] ?? null) === (merged[k] ?? null));
@@ -320,7 +324,7 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
     // can't claim the settings are fine, and falls back to advising the
     // setting change rather than blaming the network.
     profile: { codec: null, width: null, height: null, fps: null,
-               measuredFps: measureStreamFps(streamUri), bitrateKbps: null },
+               measuredFps: await measureStreamFps(streamUri), bitrateKbps: null },
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };

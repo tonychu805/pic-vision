@@ -11,7 +11,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
-import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
+import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, authenticatedStreamUri } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
@@ -56,6 +56,27 @@ let lastHeartbeatOk = true;
 // lands, which reads as "not calibrated yet" -- correct for an unpaired
 // or freshly-launched agent.
 const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrationRmseFt, calibratedAt }
+
+// Cameras whose frame rate we've already tried to measure this run. The
+// measurement is only taken at add time, so every camera added before that
+// existed -- and every RTSP camera, which has no ONVIF profile to fall back
+// on -- would otherwise never get one and would skip the frame-rate guard
+// forever. Backfilled here, on the heartbeat's existing connection check.
+//
+// In memory rather than on disk on purpose: a camera that was unreachable
+// at the moment we tried gets another chance next launch, but not another
+// 5-second probe every 30 seconds for as long as the app is open.
+const fpsMeasureAttempted = new Set();
+
+async function backfillMeasuredFps(camera) {
+  if (camera.connectionType === "sampleClip") return;
+  if (camera.profile?.measuredFps != null) return;
+  if (fpsMeasureAttempted.has(camera.id) || !camera.streamUri) return;
+  fpsMeasureAttempted.add(camera.id);
+  const measured = await measureStreamFps(authenticatedStreamUri(camera));
+  if (measured == null) return;
+  setCameraProfile(camera.id, { ...(camera.profile ?? {}), measuredFps: measured });
+}
 
 export function getCalibrationState(cameraId) {
   return calibrationByCameraId.get(cameraId) ?? { isCalibrated: false, calibrationRmseFt: null, calibratedAt: null };
@@ -191,6 +212,11 @@ async function cameraStatuses() {
     // own web page without anyone re-adding it here.
     const profile = results[i].status === "fulfilled" ? results[i].value?.profile ?? null : null;
     if (profile) setCameraProfile(c.id, profile);
+    // Fire-and-forget: the result lands in the store for the next tick
+    // rather than holding this heartbeat open for it.
+    if (results[i].status === "fulfilled") {
+      backfillMeasuredFps(c).catch((err) => console.error(`[cloud] fps backfill failed for ${c.label}: ${err.message}`));
+    }
     const previous = lastCameraStatus.get(c.id);
     if (previous && previous !== status) {
       logEvent(status === "online" ? "camera_online" : "camera_offline", `${c.label} ${status === "online" ? "came back online" : "went offline"}`);
