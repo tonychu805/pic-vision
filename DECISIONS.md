@@ -1438,6 +1438,24 @@ Checked before building, not assumed: `save_calibration.py` (the homography fit)
 
 ---
 
+## ADR-083 — Reel share pages read through a scoped lookup function, not a public SELECT on `reels`; the report route pins ownership
+
+**Date:** 2026-09-06 · **Status:** accepted, code committed; production migration + reel-page deploy pending operator approval (PIC-94)
+
+**Context.** A full codebase review (structure/security/aesthetics across the Python pipeline, `desktop/`, `pic-vision-cloud-console/`, `reel-page/`) checked the live Supabase RLS policies directly rather than trusting the code comments describing them. The `reels` policy "anyone with the id can read a reel (share links)" (migration `20260904090713`) was `USING (true)` for `anon, authenticated`. Since the anon key is bundled into every browser client by design, that meant `GET /rest/v1/reels?select=share_id,r2_key_ranked,brand_name` with no filter returned every reel in every brand — share ids, stable unsigned CDN video URLs, camera labels — verified against production. The comments in `reel-page/lib/supabase.ts` and `app/r/[shareId]/page.tsx` described a "must know the id" gate that PostgREST never enforces: a `USING (true)` policy gates nothing, a `WHERE` clause is the caller's choice. The same policy also let any signed-in user of any brand read any reel row, and therefore fetch any video through `/api/reels/[id]/video`. Two adjacent leaks were found on the same path: `lib/brand.ts` fell back to `user.email` as the brand name, which the reels route denormalized into `reels.brand_name` and the share page rendered as the venue header (the 3 live rows carried the operator's email, stale after the brand was later renamed); and `POST /api/agents/reels` accepted caller-supplied `id`/`shareId`/`bucket`/`rankedKey` with no ownership check, so one brand's bearer token could add a slide to another brand's public share page or point a row at any object in the bucket. Blast radius today is one brand and three reels; none of this is acceptable the day a second venue signs up.
+
+**Decision.**
+1. **Share-page reads go through `get_reels_by_share_id(uuid)`**, a `SECURITY DEFINER` SQL function (console `supabase/migrations/20260906120000_reels_share_lookup_function.sql`) granted to `anon`/`authenticated`, returning rows for exactly the one `share_id` passed in. The anon SELECT policy is dropped in a *separate* follow-up migration (`20260906120100`) so it can be applied only after reel-page is deployed on the function — applying it first would 404 every existing share link. reel-page validates the id as a UUID before calling.
+2. **Brand name is joined live from `brands` inside that function** rather than read from the denormalized column, so renames propagate; any email-shaped name resolves to null. `ensureBrand()` no longer falls back to the email at all (`'My brand'`), the report route never writes an email-shaped `brand_name`, and the migration backfills the existing rows.
+3. **The report route pins what a bearer token may claim:** `id` and `shareId` must be UUIDs; `rankedKey` must equal `reels/<id>.mp4` exactly (the object key is the whole access boundary per ADR-075, so the row must not be able to point elsewhere); a `shareId` already used by another agent's rows is refused with 403; a duplicate `id` returns 409 instead of a raw Postgres message. The pre-ADR-075 "no id, let Postgres default it" path is removed — `cloud_pipeline/run_desktop_job.py`, the only caller, already sends exactly this shape.
+4. **The live RLS set is now in version control** (`supabase/policies.snapshot.sql`, a read-only dump) as a stopgap: the 13 earlier migrations were applied through the dashboard/MCP and never exported, which is *why* this policy was only discoverable by querying production. Exporting the real migrations is PIC-103.
+
+**Verification.** Both apps `tsc --noEmit` clean. The enumeration itself was reproduced against production before the fix (`content-range: 0-2/3`, all rows). Post-fix verification is gated on applying the migration and is spelled out step-by-step in PIC-94.
+
+**Consequences.** Share links keep working unchanged for recipients; the only behavior change is that a direct anon select on `reels` returns nothing. Two things this rules out: any future public read of `reels` must be a new function, not a policy; and `reels.brand_name` is now a fallback, not the source of truth. Also filed from the same review, not fixed today: PIC-95–108 (desktop hands decrypted secrets to the renderer, Electron 33 EOL, secrets on argv, no CSP, `webapp.py` on `0.0.0.0` unauthenticated, nested-repo tracking, mock-data pages unbannered, design tokens bypassed, Python hygiene). `pytest.ini` with `testpaths = tests` was added in the same change because the documented `make test` had been silently aborting at collection on `archive/tests/`.
+
+---
+
 ## Template
 
 ```markdown

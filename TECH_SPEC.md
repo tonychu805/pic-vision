@@ -593,6 +593,7 @@ pic-vision/
 ├── requirements.txt          # Python dependencies
 ├── config.yaml               # thresholds and weights
 ├── Makefile                  # `make test` / `make eval` / `make process`
+├── pytest.ini                # testpaths = tests (keeps archive/tests/ out of collection)
 ├── sessions.jsonl            # eval/dev session-role assignments (ADR-052)
 │
 ├── calibrate.py               # 12-point court calibration, local X11 click UI
