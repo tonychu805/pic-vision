@@ -22,10 +22,12 @@
 export const MIN_FPS = 24;
 export const RECOMMENDED_FPS = 30;
 
-// Only ever blocks on a frame rate we actually know. A camera added through
-// the RTSP fallback never went through ONVIF and reports no profile; a
-// sample clip has no camera at all. Guessing for those would block real
-// setups over missing data, so they pass.
+// Only ever blocks on a frame rate we actually know. ONVIF cameras report
+// one in their profile; RTSP-added cameras have it measured off the stream
+// at add time (store.js, via capture.js's measureStreamFps), since they'd
+// otherwise skip this guard entirely. What's left unknown is a sample clip
+// (no camera at all) and a stream whose probe failed -- guessing for those
+// would block real setups over missing data, so they pass.
 export function frameRateProblem(camera) {
   const fps = camera?.profile?.fps;
   if (typeof fps !== "number" || !Number.isFinite(fps) || fps <= 0) return null;

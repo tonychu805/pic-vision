@@ -131,6 +131,52 @@ export function probeDuration(filePath) {
   return Number.isFinite(seconds) ? seconds : 0;
 }
 
+// Measures the frame rate off the live stream itself, for cameras that
+// never went through ONVIF and so report no profile (store.js's
+// addCameraViaRtsp). Without this, an RTSP-added camera skips the guard
+// entirely -- the exact gap that lets a venue run at 15fps unnoticed.
+//
+// rtspProbe.js deliberately avoided decoding because bundling ffmpeg was
+// "a real packaging concern for something shipped to venue owners"; that
+// stopped being true when binaries.js started shipping it (ADR-084), so
+// the cheaper RTSP DESCRIBE is no longer the only option available.
+//
+// Counting packets, not decoding frames: no pixels are ever read, which
+// keeps this fast and means it never produces an image (see the standing
+// rule about not grabbing live frames from real cameras during testing).
+//
+// This is strictly better evidence than the ONVIF number, which is the
+// camera's *configured* limit rather than what it actually delivers -- the
+// two diverge under network loss. It's the fallback rather than the
+// primary only because it costs a live connection and several seconds,
+// where the ONVIF value is already in hand for free.
+export function measureStreamFps(streamUri, { seconds = 5, timeoutMs = 20_000 } = {}) {
+  const result = spawnSync(FFPROBE, [
+    "-v", "error",
+    "-rtsp_transport", "tcp",
+    "-i", streamUri,
+    "-select_streams", "v:0",
+    "-show_entries", "packet=pts_time",
+    "-read_intervals", `%+${seconds}`,
+    "-of", "csv=p=0",
+  ], { encoding: "utf8", timeout: timeoutMs });
+
+  if (result.status !== 0) return null;
+  const times = String(result.stdout || "")
+    .split("\n")
+    .map((t) => Number(t.trim()))
+    .filter((t) => Number.isFinite(t))
+    .sort((a, b) => a - b);
+  if (times.length < 10) return null; // too little to conclude anything
+
+  const span = times[times.length - 1] - times[0];
+  if (span <= 0) return null;
+  const fps = (times.length - 1) / span;
+  if (!(1 <= fps && fps <= 240)) return null;
+  return Math.round(fps * 100) / 100;
+}
+
+
 export function grabFrameFromFile(filePath, atSec) {
   const outPath = path.join(os.tmpdir(), `pic-vision-snapshot-${Date.now()}.png`);
   const args = ["-y", "-ss", String(atSec), "-i", filePath, "-frames:v", "1", "-f", "image2", outPath];

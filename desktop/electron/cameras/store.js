@@ -19,7 +19,7 @@ import { copyFileSync, existsSync, mkdirSync } from "node:fs";
 import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { vendorsForIps } from "./vendorLookup.js";
-import { RECORDINGS_ROOT, sanitizeForPath } from "../capture.js";
+import { RECORDINGS_ROOT, sanitizeForPath, measureStreamFps, authenticatedStreamUri } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
 
 const store = new Store({ name: "cameras" });
@@ -156,7 +156,14 @@ export async function addCamera({ label, hostname, port, username, password, pat
     serialNumber: info.serialNumber,
     firmwareVersion: info.firmwareVersion,
     streamUri,
-    profile,
+    // Not every camera fills in ONVIF's frameRateLimit. Where it's missing,
+    // measure off the stream rather than leave the frame-rate guard with a
+    // hole in it (ADR-087) -- same fallback the RTSP path uses, and the
+    // more truthful number of the two anyway, since ONVIF reports the
+    // configured limit rather than what actually arrives.
+    profile: profile && profile.fps == null && streamUri
+      ? { ...profile, fps: measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
+      : profile,
     connectionType: "onvif",
     addedAt: new Date().toISOString(),
   };
@@ -281,6 +288,7 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
   if (existing) return existing;
   port = port || 554;
   await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
+  const streamUri = `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`;
   const vendors = vendorsForIps([hostname]);
   const vendor = vendors[hostname] ?? null;
   const camera = {
@@ -295,7 +303,15 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
     model: null,
     serialNumber: null,
     firmwareVersion: null,
-    streamUri: `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`,
+    streamUri: streamUri,
+    // An RTSP-added camera never went through ONVIF, so there's no profile
+    // to read a frame rate out of -- and without one it would skip the
+    // frame-rate guard entirely, which is exactly how a venue ends up
+    // recording at 15fps unnoticed. Measured off the stream instead
+    // (ADR-087). Measurement beats ONVIF's own number anyway: that one is
+    // the camera's configured limit, this is what it actually delivers.
+    // Null when the probe fails -- an unknown rate still never blocks.
+    profile: { codec: null, width: null, height: null, fps: measureStreamFps(streamUri), bitrateKbps: null },
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };
