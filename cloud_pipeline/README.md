@@ -97,6 +97,34 @@ route still collects calibration fresh, in-browser, *per job* — unchanged,
 and arguably has the same "should this really run every session" question,
 just not one raised or touched today.
 
+## The job runner (ADR-084)
+
+`job_runner.py` is how venues' recordings get processed now. Venue machines
+run a thin desktop agent that can't run any of this (no credentials, no
+Python, by design — see `desktop/README.md`); they upload their recordings
+to R2 and enqueue a job on the cloud console. This runner is the other half:
+
+```
+make runner        # or: .venv/bin/python -m cloud_pipeline.job_runner
+```
+
+It polls the console for queued jobs, downloads the segments, joins them,
+and calls `webapp.pipeline.run_cloud_job(job_dir)` — the same function the
+Flask dashboard and the old desktop path both used, unchanged. Progress is
+mirrored back to the console every few seconds, which is what the venue
+sees; a cancel from the venue comes back on that same call and terminates
+the RunPod pod. The console creates the `reels` rows itself, so this
+process never holds a venue agent's token.
+
+**While it isn't running, nothing gets processed** — jobs sit `queued` and
+venues see "Waiting for processing". For an always-on install:
+
+```
+sudo cp cloud_pipeline/pic-vision-runner.service /etc/systemd/system/
+sudo systemctl daemon-reload && sudo systemctl enable --now pic-vision-runner
+journalctl -u pic-vision-runner -f
+```
+
 ## Prerequisites
 
 `.env` (gitignored, repo root) needs:
@@ -105,6 +133,8 @@ RUNPOD_API_KEY=...
 CLOUDFLARE_R2_ACCESS_KEY_ID=...
 CLOUDFLARE_R2_SECRET_ACCESS_KEY=...
 CLOUDFLARE_R2_ACCOUNT_ID=...
+RUNNER_TOKEN=...        # job_runner.py; same value set on the console (Netlify)
+CONSOLE_URL=...         # optional, defaults to https://console.picvisionai.com
 ```
 
 An R2 bucket must already exist (Cloudflare doesn't provision the

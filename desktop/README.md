@@ -38,7 +38,59 @@ boundary is deliberate: it's what would let a later Tauri port keep
 would let this same backend eventually grow a real local-agent API
 surface without restructuring it first.
 
-## Run it
+## Install it (macOS)
+
+Download `PicVision-CameraManager-<version>-<arch>.dmg` (arm64 for Apple
+Silicon, x64 for Intel), open it, and drag the app to Applications.
+
+**The build is not code-signed yet** (PIC-84 -- an Apple Developer
+membership is the missing piece, not a technical blocker), so macOS
+refuses it on first launch: *"Pic Vision Camera Manager" can't be opened
+because Apple cannot check it for malicious software.* To allow it:
+
+1. Open the app once and dismiss the warning.
+2. **System Settings → Privacy & Security**, scroll to Security, and click
+   **Open Anyway** next to the app's name.
+3. Confirm at the next prompt.
+
+Right-click → Open, the old advice, no longer works on macOS 15+. The
+terminal equivalent of the above is
+`xattr -cr "/Applications/Pic Vision Camera Manager.app"`.
+
+Nothing else needs installing: ffmpeg is bundled, and the app runs no
+Python and holds no cloud credentials (ADR-084 -- see "What this app does
+not do" below).
+
+## Build a release
+
+```
+cd desktop
+npm ci
+npm run build              # vite build + electron-builder -> release/*.dmg
+```
+
+`ffmpeg-static` only downloads the architecture it was installed for, so
+arm64 and x64 are two separate builds, not one invocation:
+
+```
+npm_config_arch=arm64 npm ci && npm run build -- --mac --arm64
+npm_config_arch=x64   npm ci && npm run build -- --mac --x64
+```
+
+`.github/workflows/desktop-mac.yml` does both on a `desktop-v*` tag.
+
+## What this app does not do
+
+Since ADR-084 the agent is deliberately thin. It records, manages cameras,
+and uploads -- the processing pipeline runs on the operator's own machine
+(`cloud_pipeline/job_runner.py`), reached through the cloud console. So
+this app contains **no** Python, no OpenCV, no ssh, and no R2/RunPod
+credentials. That is what makes it safe to hand to a venue: the machine it
+runs on is not worth stealing. If reels stop appearing, the first thing to
+check is whether the operator's job runner is up -- jobs sit in "Waiting
+for processing" until it claims them.
+
+## Run it from source
 
 ```
 cd desktop

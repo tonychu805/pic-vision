@@ -590,6 +590,10 @@ pic-vision/
 ├── LABELING.md               # rally-labeling + highlight-worthy grading protocol
 ├── README.md                 # how to run
 ├── AGENTS.md                 # agent-facing pointers
+├── .github/workflows/        # CI. desktop-mac.yml: builds the venue-facing
+│                              # desktop agent as an unsigned macOS DMG on a
+│                              # `desktop-v*` tag (ADR-084/PIC-84), one leg per
+│                              # arch since ffmpeg-static is arch-specific
 ├── requirements.txt          # Python dependencies
 ├── config.yaml               # thresholds and weights
 ├── Makefile                  # `make test` / `make eval` / `make process`
@@ -651,18 +655,28 @@ pic-vision/
 │   │                                # burst's own candidate pool comes up empty. Deployed via a
 │   │                                # small tarball (run_cloud_job.py's POD_REEL_DEPS) since
 │   │                                # the pod has no other way to get src/'s modules
-│   ├── run_desktop_job.py            # PIC-68: CLI wrapper for desktop/'s pipeline.js --
-│   │                                # writes job.json then calls webapp.pipeline's
-│   │                                # run_cloud_job(job_dir) on a background thread so a
-│   │                                # SIGINT/SIGTERM from the Electron parent can call its
-│   │                                # cancel_job(job_dir) (terminates any RunPod pod already
-│   │                                # created, not just this process); on success, with
-│   │                                # --console-url/--api-token (from cloud.js's stored
-│   │                                # connection), _report_reels() (ADR-076, was _report_reel)
-│   │                                # POSTs each finished reel (1 or 2) to the cloud console's
-│   │                                # /api/agents/reels, all sharing one shareId -- best-effort
-│   │                                # per reel, a failure doesn't fail the job, the reel
-│   │                                # already exists in R2 either way
+│   ├── run_desktop_job.py            # PIC-68: CLI wrapper originally spawned by desktop/'s
+│   │                                # pipeline.js. DEAD as of ADR-084 -- the desktop no
+│   │                                # longer runs Python at all; job_runner.py below does
+│   │                                # the same thing, driven by the console's job queue
+│   │                                # rather than by a local subprocess. Kept for the
+│   │                                # operator's own one-off runs until those move too
+│   ├── job_runner.py                 # ADR-084 (2026-09-06): the operator-side half of the
+│   │                                # thin-agent split. Polls the cloud console
+│   │                                # (POST /api/runner/jobs/claim, RUNNER_TOKEN-authed)
+│   │                                # for jobs venues' desktop agents enqueued, downloads
+│   │                                # their uploaded segments from R2, joins them with the
+│   │                                # same ffmpeg concat pipeline.js used to run locally,
+│   │                                # then calls webapp.pipeline's run_cloud_job(job_dir)
+│   │                                # unchanged -- mirroring status.json to the console
+│   │                                # every few seconds, and calling cancel_job() (which
+│   │                                # terminates the RunPod pod) when the console reports
+│   │                                # the venue asked to cancel. Never holds a venue
+│   │                                # agent's token: the console inserts the `reels` rows
+│   │                                # itself from the job's agent_id. Also runs
+│   │                                # kind='calibration' jobs via save_calibration's
+│   │                                # build_calibration(). See pic-vision-runner.service
+│   ├── pic-vision-runner.service     # systemd unit for the above (Restart=always)
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
 │   │                                    # generate_presigned_url, ADR-074) -- also
 │   │                                    # what upload_calibration_snapshot.py's
@@ -672,16 +686,18 @@ pic-vision/
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
 │   │                                    # run_cloud_job.py has no calibration logic of its own)
 │   ├── save_calibration.py               # 2026-09-03: computes+writes calib.json from 14
-│   │                                    # clicked points against a snapshot image -- the
-│   │                                    # desktop client's live-camera calibration flow
-│   │                                    # (calibration.js) spawns this rather than
-│   │                                    # reimplementing calibrate.py's homography fit in JS
+│   │                                    # clicked points against a snapshot image, reusing
+│   │                                    # calibrate.py's homography fit rather than
+│   │                                    # reimplementing it. ADR-084 split the fit itself
+│   │                                    # out as build_calibration(), which job_runner.py
+│   │                                    # imports -- the CLI is now the operator's manual
+│   │                                    # path, not something the desktop spawns
 │   ├── upload_calibration_snapshot.py    # 2026-09-05, ADR-080 -- thin CLI wrapping
 │   │                                    # r2_storage.upload_file, prints back a
-│   │                                    # cdn.picvisionai.com URL; desktop/electron/
-│   │                                    # calibration.js spawns this to hand a
-│   │                                    # snapshot (and later, a calib.json backup)
-│   │                                    # to the cloud console's calibration UI
+│   │                                    # cdn.picvisionai.com URL. DEAD as of ADR-084:
+│   │                                    # the desktop uploads snapshots straight to a
+│   │                                    # presigned URL from the console instead
+│   │                                    # (POST /api/agents/calibration-snapshots)
 │   └── jobs/                            # runtime per-job data -- gitignored, regenerable
 │
 ├── desktop/                     # venue owner-facing local agent (2026-09-01,
@@ -786,34 +802,45 @@ pic-vision/
 │   │   │                              # (best-effort -- one bad/oversized
 │   │   │                              # extra range is logged and skipped,
 │   │   │                              # not allowed to fail the whole scan)
-│   │   ├── calibration.js               # 2026-09-03: live-camera calibration --
-│   │   │                              # takes a snapshot (capture.js's grabSnapshot),
-│   │   │                              # spawns cloud_pipeline/save_calibration.py with
-│   │   │                              # the 14 clicked points, records the result via
-│   │   │                              # store.js's setCalibPath; the homography fit
-│   │   │                              # itself stays in Python (calibrate.py), per
-│   │   │                              # ADR-071. 2026-09-05 (ADR-080): the 14 points
-│   │   │                              # now come from the cloud console, not a local
-│   │   │                              # renderer modal -- grabAndUploadSnapshot grabs
-│   │   │                              # + uploads (cloud_pipeline/
-│   │   │                              # upload_calibration_snapshot.py), tracking the
-│   │   │                              # still-needed local file in a Map (cameraId ->
-│   │   │                              # {path, uploadedAt}, 15-min sweep) since the
-│   │   │                              # gap until the console sends points back is now
-│   │   │                              # human-paced; applyPendingCalibration runs the
-│   │   │                              # same saveCalibration() then backs the result
-│   │   │                              # up to R2 too (best-effort)
-│   │   ├── pipeline.js                  # PIC-68: spawns cloud_pipeline/run_desktop_job.py
-│   │   │                              # per recording, concatenating capture.js's
-│   │   │                              # 10-min segments first (ffmpeg concat, stream
-│   │   │                              # copy); polls/relays the same status.json
-│   │   │                              # contract webapp/pipeline.py's dashboard route
-│   │   │                              # already uses; cancel sends SIGINT, same
-│   │   │                              # "never a hard kill" convention as capture.js;
-│   │   │                              # passes cameraId/cameraLabel + the paired
-│   │   │                              # agent's console-url/api-token (cloud.js's
-│   │   │                              # getCloudConnection()) so run_desktop_job.py
-│   │   │                              # can report the finished reel (ADR-074)
+│   │   ├── calibration.js               # live-camera calibration, agent half. ADR-080
+│   │   │                              # moved the 14-point click UI to the cloud
+│   │   │                              # console; ADR-084 (2026-09-06) moved the
+│   │   │                              # homography fit off this machine too, so all
+│   │   │                              # that's left here is grabAndUploadSnapshot:
+│   │   │                              # grab a frame (the only LAN-bound part) and
+│   │   │                              # PUT it to a presigned URL from the console.
+│   │   │                              # No Python, no local calib.json, and no
+│   │   │                              # pending-snapshot Map -- the runner fits from
+│   │   │                              # the copy in storage, so the local file is
+│   │   │                              # discarded immediately (which also closes the
+│   │   │                              # "a live frame of someone's court sat in /tmp"
+│   │   │                              # gap the old version had to sweep for)
+│   │   ├── pipeline.js                  # PIC-68, rewritten by ADR-084: asks the console
+│   │   │                              # for a job (POST /api/agents/jobs), streams each
+│   │   │                              # of capture.js's 10-min segments to the presigned
+│   │   │                              # URL it gets back, marks the upload complete, then
+│   │   │                              # polls the job and mirrors the console's
+│   │   │                              # stage/message/progress into the SAME local
+│   │   │                              # status.json contract the renderer already polled
+│   │   │                              # -- so main.js's handlers and CloudJobRow didn't
+│   │   │                              # change when the work moved off this machine. No
+│   │   │                              # local concat (the runner joins them), no calibPath
+│   │   │                              # (the console attaches the camera's calibration),
+│   │   │                              # no Python. Cancel is a PATCH, which reaches the
+│   │   │                              # runner on its next status poll and terminates the
+│   │   │                              # RunPod pod. Uploads hold a powerSaveBlocker
+│   │   ├── consoleApi.js                # ADR-084: the one place that knows the console URL
+│   │   │                              # and bearer token. uploadFile() deliberately uses
+│   │   │                              # node:https with an explicit Content-Length rather
+│   │   │                              # than fetch(), which sends chunked
+│   │   │                              # transfer-encoding for a stream body -- S3-style
+│   │   │                              # presigned PUTs (R2 included) reject that
+│   │   ├── binaries.js                  # ADR-084: resolves the bundled ffmpeg/ffprobe
+│   │   │                              # (ffmpeg-static/ffprobe-static, asarUnpack'd).
+│   │   │                              # These were bare "ffmpeg"/"ffprobe" off PATH,
+│   │   │                              # which works from a shell and breaks in a
+│   │   │                              # packaged .app: macOS gives a Finder-launched
+│   │   │                              # GUI app a minimal PATH with no /opt/homebrew/bin
 │   │   ├── capture.js                   # start/stop recording (triggered only from
 │   │   │                              # the cloud console since 2026-09-05's ADR-080 --
 │   │   │                              # startRecording/stopRecording themselves are
@@ -846,16 +873,6 @@ pic-vision/
 │   │   │                              # indefinitely -- real gap found the
 │   │   │                              # same day, where one such leftover
 │   │   │                              # was a live, private frame
-│   │   ├── pythonBin.js                 # 2026-09-03: resolves .venv/bin/python3 if
-│   │   │                              # present (falls back to bare "python3")
-│   │   │                              # -- calibration.js/pipeline.js's spawned
-│   │   │                              # subprocess previously used a bare
-│   │   │                              # "python3", which silently resolved to
-│   │   │                              # the system interpreter (no cv2/numpy)
-│   │   │                              # when the app wasn't launched from a
-│   │   │                              # shell that had activated the repo's
-│   │   │                              # .venv -- root cause of a real "cannot
-│   │   │                              # save calibration" report
 │   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
 │   │   │                              # to pic-vision-cloud-console (ADR-071) --
 │   │   │                              # registerAgent (2026-09-05, ADR-079 --

@@ -1,0 +1,81 @@
+# Builds the venue-facing desktop agent as an unsigned macOS DMG (PIC-84,
+# ADR-084) and attaches it to a GitHub Release.
+#
+# Two separate build legs rather than one universal invocation: ffmpeg-static
+# downloads only the architecture it was installed for, so each arch needs
+# its own `npm ci` with npm_config_arch set before electron-builder runs.
+#
+# Signing is deliberately off (CSC_IDENTITY_AUTO_DISCOVERY=false, and
+# build.mac.identity is null in package.json) until an Apple Developer
+# membership exists -- see desktop/README.md's install section for what
+# that costs the person installing it.
+name: Build desktop (macOS)
+
+on:
+  push:
+    tags:
+      - "desktop-v*"
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: macos-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [arm64, x64]
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Install dependencies for ${{ matrix.arch }}
+        working-directory: desktop
+        env:
+          npm_config_arch: ${{ matrix.arch }}
+        run: npm ci
+
+      - name: Build ${{ matrix.arch }} DMG
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build -- --mac --${{ matrix.arch }}
+
+      - name: Check the bundle carries its runtime dependencies
+        working-directory: desktop
+        run: |
+          APP=$(find release -maxdepth 2 -name "*.app" -print -quit)
+          echo "checking $APP"
+          npx --yes @electron/asar list "$APP/Contents/Resources/app.asar" > /tmp/asar.txt
+          for pkg in electron-store onvif oui-data posthog-node; do
+            grep -q "node_modules/$pkg/" /tmp/asar.txt || { echo "MISSING $pkg in asar"; exit 1; }
+          done
+          # ffmpeg/ffprobe must be OUTSIDE the asar to be executable at all.
+          test -x "$APP/Contents/Resources/app.asar.unpacked/node_modules/ffmpeg-static/ffmpeg" \
+            || { echo "ffmpeg not unpacked/executable"; exit 1; }
+          echo "bundle checks passed"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dmg-${{ matrix.arch }}
+          path: desktop/release/*.dmg
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/desktop-v')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*.dmg
+          body: |
+            Unsigned macOS build. On first launch macOS will refuse to open it:
+            open it once, then System Settings → Privacy & Security → **Open Anyway**.
+            See `desktop/README.md` for details.
