@@ -128,21 +128,24 @@ const isSampleClip = (camera) => camera.connectionType === "sampleClip";
 
 // The one camera setting that stops everything working (ADR-087). Shown
 // here rather than only in the collapsed "Streams" detail panel, because a
-// camera below MIN_FPS is refused for both recording and calibration and
-// the venue needs to know why without going looking. Mirrors the threshold
-// in electron/cameras/frameRate.js, which is the actual gate.
-const MIN_FPS = 24;
+// camera below the floor is refused for both recording and calibration and
+// the venue needs to know why without going looking. Mirrors
+// electron/cameras/frameRate.js, which is the actual gate -- 30 is the
+// requirement, compared with slack so 29.97 (NTSC) and a slightly noisy
+// measurement of a genuine 30fps camera aren't false alarms.
+const MIN_FPS = 30;
+const BLOCK_BELOW_FPS = 29;
 
 function FrameRateWarning({ camera }) {
   const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
   const configured = num(camera.profile?.fps);
   const measured = num(camera.profile?.measuredFps);
   const effective = measured ?? configured;
-  if (effective !== null && effective >= MIN_FPS) return null;
+  if (effective !== null && effective >= BLOCK_BELOW_FPS) return null;
   const rounded = Math.round(effective);
   // Set correctly but not arriving: a network fault, not a settings one,
   // and telling them to change a correct setting would send them in circles.
-  const networkFault = configured !== null && configured >= MIN_FPS && measured !== null;
+  const networkFault = configured !== null && configured >= BLOCK_BELOW_FPS && measured !== null;
   const unknown = effective === null;
   if (unknown) {
     return (
@@ -173,8 +176,8 @@ function FrameRateWarning({ camera }) {
           </>
         ) : (
           <>
-            This camera is set to <b>{rounded} fps</b>. Recording and calibration are disabled below {MIN_FPS} fps —
-            at this rate about half the rallies go undetected. Sign in to the camera
+            This camera is set to <b>{rounded} fps</b>. Rally detection needs {MIN_FPS} fps, so recording
+            and calibration are disabled — at this rate about half the rallies go undetected. Sign in to the camera
             {camera.hostname ? <> at <b>{camera.hostname}</b></> : null} and set its video frame rate to <b>30</b>.
           </>
         )}

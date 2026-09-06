@@ -1512,7 +1512,7 @@ Second, **nothing recorded what a camera was streaming.** No codec, resolution, 
 
 ---
 
-## ADR-087 — Refuse to record or calibrate a camera below 24fps, and say how to fix it
+## ADR-087 — Refuse to record or calibrate a camera below 30fps, and say how to fix it
 
 **Date:** 2026-09-06 · **Status:** accepted, implemented
 
@@ -1522,7 +1522,7 @@ The failure mode is what makes this worth a guardrail rather than a note. A came
 
 **Decision.** `desktop/electron/cameras/frameRate.js` refuses both recording (`capture.js`'s `startRecording`) and calibration (`calibration.js`'s `grabAndUploadSnapshot`) for a camera reporting under **24fps**, with a message naming the camera's own address and the setting to change. The console mirrors the rule (`cameras-client.tsx`) so the buttons are disabled with the reason visible, rather than the operator discovering it from a failed command a round-trip later; the agent stays the authority, since it holds the real ONVIF profile.
 
-Three deliberate details. **24, not 30**, so a 25fps PAL-region camera still works — it's within reach of the tuning in a way 15 is not; only 30 and 15 were measured, so the exact line is a judgement call between two data points and is marked as such in the code. **Blocks only on a frame rate actually known** — an RTSP-added camera never went through ONVIF and reports no profile, a sample clip has no camera at all, and guessing for those would refuse real setups over missing data. **Calibration is gated too**, not just recording: clicking 14 court points on a camera that can never yield decent reels is wasted operator time.
+Three deliberate details. **30, the rate everything was actually tuned at** (operator's call, revised from an initial 24 that would have let a 25fps camera through — that leniency was never evidence-backed either, since only 30 and 15 were ever measured). Compared with a little slack — anything at or above **29** passes — because 29.97 (NTSC) is a real rate meaning "30" in practice, and the measured value is sampled off a few seconds of live video, so blocking a genuine 30fps camera that read 29.6 would be a false alarm sending a venue to change a correct setting. **Blocks only on a frame rate actually known** — an RTSP-added camera never went through ONVIF and reports no profile, a sample clip has no camera at all, and guessing for those would refuse real setups over missing data. **Calibration is gated too**, not just recording: clicking 14 court points on a camera that can never yield decent reels is wasted operator time.
 
 **Verification.** Seven tests (`frameRate.test.js`) covering the 30fps pass, the 25fps pass, the 15fps refusal, the message naming address and target setting, the unknown-rate cases (undefined/0/null/string), and boundary inclusivity. These are the desktop app's **first automated tests** — `node --test`, no new dependency, wired to `npm test`, which the 2026-09-06 review had flagged as entirely absent.
 
@@ -1538,7 +1538,7 @@ Two further fixes fell out. `setCameraProfile` force-preserved the stored `measu
 
 Finally, **the UI distinguishes three states, not two**: measured and fine, too low, and *not determined*. Previously "no warning" meant either "checked, fine" or "never managed to check" — indistinguishable, which is the same silent-failure shape this ADR exists to remove, moved up one level.
 
-**Consequences.** A venue cannot silently run a misconfigured *or* under-delivering camera, whichever way it was added, and the fix is self-service. What remains unknown — and so never blocks — is a sample clip and a stream whose probe failed. Sub-30 rates between 24 and 30 are allowed on inference from two measured points, not evidence; worth revisiting if a 25fps venue ever scores badly. Measuring costs a live connection and ~5s on the add path for cameras without an ONVIF frame rate, which is why the ONVIF value is still preferred when present.
+**Consequences.** A venue cannot silently run a misconfigured *or* under-delivering camera, whichever way it was added, and the fix is self-service. What remains unknown — and so never blocks — is a sample clip and a stream whose probe failed. The floor now matches the only rate the pipeline was tuned at, so nothing rests on inference between the two measured points. Measuring costs a live connection and ~5s on the add path for cameras without an ONVIF frame rate, which is why the ONVIF value is still preferred when present.
 
 ---
 

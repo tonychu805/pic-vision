@@ -1,7 +1,7 @@
 // Run with: npm test  (node's built-in runner, no dependency)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MIN_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem } from "./frameRate.js";
+import { BLOCK_BELOW_FPS, MIN_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem } from "./frameRate.js";
 
 const camera = (fps, extra = {}) => ({
   label: "Court 1",
@@ -22,8 +22,20 @@ test("a 30fps camera is fine", () => {
   assert.equal(frameRateProblem(camera(30)), null);
 });
 
-test("25fps (PAL region) still passes -- close enough to the tuning", () => {
-  assert.equal(frameRateProblem(camera(25)), null);
+test("29.97 (NTSC) passes -- it means 30 everywhere in practice", () => {
+  assert.equal(frameRateProblem(camera(29.97)), null);
+});
+
+test("a genuine 30fps camera measured slightly low is not blocked", () => {
+  // Sampling a few seconds of live video carries noise. Blocking here would
+  // send a venue to change a setting that is already correct.
+  assert.equal(frameRateProblem(both(30, 29.4)), null);
+});
+
+test("25fps is refused now the floor is 30", () => {
+  const problem = frameRateProblem(camera(25));
+  assert.ok(problem, "25fps should not pass a 30fps floor");
+  assert.match(problem, /needs 30 fps/);
 });
 
 test("15fps is refused, since it halves the rallies found", () => {
@@ -52,9 +64,10 @@ test("a camera whose frame rate we don't know is never blocked", () => {
   assert.equal(frameRateProblem(camera("30")), null);
 });
 
-test("the boundary is inclusive", () => {
-  assert.equal(frameRateProblem(camera(MIN_FPS)), null);
-  assert.ok(frameRateProblem(camera(MIN_FPS - 1)));
+test("the boundary is inclusive, and sits at the tolerance not the requirement", () => {
+  assert.equal(MIN_FPS, 30);
+  assert.equal(frameRateProblem(camera(BLOCK_BELOW_FPS)), null);
+  assert.ok(frameRateProblem(camera(BLOCK_BELOW_FPS - 0.1)));
 });
 
 test("assertUsableFrameRate throws the same message it reports", () => {
@@ -96,7 +109,7 @@ test("an RTSP camera has no configured rate, so it gets the settings advice", ()
 });
 
 test("measured and configured both healthy passes", () => {
-  assert.equal(frameRateProblem(both(30, 29.4)), null);
+  assert.equal(frameRateProblem(both(30, 30)), null);
   assert.equal(effectiveFps(both(30, 29.4)), 29.4);
 });
 

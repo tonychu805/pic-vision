@@ -82,8 +82,8 @@ npm_config_arch=x64   npm ci && npm run build -- --mac --x64
 ## Camera setup: 30fps is required, not advised
 
 Set every camera to **30 frames per second** in its own settings page before
-adding it here. This is enforced, not suggested: a camera reporting under 24
-fps is refused for both recording and calibration, with a message naming the
+adding it here. This is enforced, not suggested: a camera below 30 fps is
+refused for both recording and calibration, with a message naming the
 camera's address and the setting to change.
 
 The reason is measured, not cautious (`EXPERIMENTS.md` 2026-09-06). The same
@@ -103,9 +103,11 @@ and whole rallies fall below the "this is an exchange" bar.
 Left unchecked this fails silently: no error, just thinner reels and no
 reason given. Hence a refusal up front instead.
 
-25 fps (PAL-region cameras) is allowed — close enough to the tuning. The
-floor is 24. Only 30 and 15 were actually measured, so the exact line is a
-judgement call between them.
+30 is the rate every shipped detection constant was tuned at, so it's the
+requirement rather than a recommendation. The comparison carries a little
+slack — anything at or above 29 passes — so that 29.97 (NTSC, which means
+"30" in practice) and a slightly noisy measurement of a genuine 30 fps
+camera aren't false alarms. 25 fps and below is refused.
 
 ## What this app does not do
 

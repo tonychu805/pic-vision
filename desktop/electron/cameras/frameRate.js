@@ -19,13 +19,22 @@
 // that was caught.
 
 // 30fps is what every shipped constant was tuned against (config.yaml's
-// `capture.fps`, `track_ball`'s max_jump, `min_crossings`). 24 is the floor
-// rather than 30 so a 25fps (PAL-region) camera still works: it's within
-// reach of the tuning, unlike 15. Note the honest gap -- 30 and 15 are
-// measured, everything between them is inference from those two points, so
-// this line is a judgement call, not a measured cliff.
-export const MIN_FPS = 24;
-export const RECOMMENDED_FPS = 30;
+// `capture.fps`, `track_ball`'s max_jump, `min_crossings`), and 30 is now
+// the requirement rather than a recommendation (operator's call). An
+// earlier version allowed down to 24 so a 25fps PAL-region camera would
+// pass; that leniency was never backed by evidence either -- only 30 and 15
+// were ever measured -- so requiring the rate everything was actually tuned
+// at is the more defensible line.
+export const MIN_FPS = 30;
+
+// ...but compared with a little slack, for two honest reasons. 29.97 is a
+// real, extremely common rate (NTSC) that means "30" everywhere in
+// practice. And the measured rate is sampled over a few seconds of live
+// video, so it carries noise -- blocking a genuine 30fps camera because it
+// read 29.6 would be a false alarm sending a venue to change a setting
+// that is already correct. Anything at or above this passes; 25fps and
+// below still doesn't.
+export const BLOCK_BELOW_FPS = 29;
 
 const number = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
@@ -52,7 +61,7 @@ export function effectiveFps(camera) {
 // data is worse than the problem.
 export function frameRateProblem(camera) {
   const effective = effectiveFps(camera);
-  if (effective === null || effective >= MIN_FPS) return null;
+  if (effective === null || effective >= BLOCK_BELOW_FPS) return null;
 
   const configured = number(camera?.profile?.fps);
   const measured = number(camera?.profile?.measuredFps);
@@ -62,19 +71,20 @@ export function frameRateProblem(camera) {
   // The camera is set correctly and the frames still aren't arriving. This
   // is a network fault, and nothing else in the system would ever surface
   // it -- the recording would simply succeed and the reel would be thin.
-  if (configured !== null && configured >= MIN_FPS && measured !== null) {
+  if (configured !== null && configured >= BLOCK_BELOW_FPS && measured !== null) {
     return (
       `${label} is set to ${configured} fps but only about ${rounded} fps are reaching this computer. ` +
-      `That halves the rallies found. The camera's own settings are fine — this is a network problem: ` +
+      `Rally detection needs ${MIN_FPS} fps, and that gap halves the rallies found. ` +
+      `The camera's own settings are fine — this is a network problem: ` +
       `check its Wi-Fi signal, or connect it by cable, then try again.`
     );
   }
 
   const where = camera?.hostname ? `http://${camera.hostname}` : "the camera's own settings page";
   return (
-    `${label} is set to ${rounded} fps. Rally detection needs at least ${MIN_FPS} fps ` +
-    `(${RECOMMENDED_FPS} is recommended) — at ${rounded} fps it finds roughly half the rallies. ` +
-    `Sign in to the camera at ${where}, set the video frame rate to ${RECOMMENDED_FPS}, ` +
+    `${label} is set to ${rounded} fps. Rally detection needs ${MIN_FPS} fps — ` +
+    `at ${rounded} fps it finds roughly half the rallies. ` +
+    `Sign in to the camera at ${where}, set the video frame rate to ${MIN_FPS}, ` +
     `then try again.`
   );
 }
