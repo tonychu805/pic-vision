@@ -43,6 +43,7 @@ export async function load(url, ctx, next) {
         static getAllWindows() { return [] }
       };
       export const dialog = { showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }) };
+      export const shell = { openExternal: () => Promise.resolve() };
     ` };
   }
   if (url === "stub:electron-store") {

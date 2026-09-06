@@ -58,6 +58,7 @@ contextBridge.exposeInMainWorld("windowAPI", {
 contextBridge.exposeInMainWorld("systemAPI", {
   getNetworkInfo: () => ipcRenderer.invoke("system:networkInfo"),
   pickVideoFile: () => ipcRenderer.invoke("system:pickVideoFile"),
+  openExternal: (url) => ipcRenderer.invoke("system:openExternal", url),
 });
 
 contextBridge.exposeInMainWorld("captureAPI", {

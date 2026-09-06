@@ -6,11 +6,22 @@
 // available" rather than invented (ONVIF's GetDeviceInformation has no
 // MAC address field, so that one's always "Not available", never guessed).
 
+// The status dot each of these used to carry is gone (2026-09-06): it sat
+// next to the tag saying the same thing twice, and three of the six
+// states drew it in near-identical greys (neutral-600/500/400), so it
+// added noise rather than a second reading of the state. The tag now
+// carries a semantic colour instead of every non-ok state being the same
+// neutral chip.
+//
+// "Online", not "Streaming" (2026-09-06): all this state means is that
+// testConnection reached the camera. Nothing is being streamed or
+// recorded -- recording is started from the cloud console -- and
+// "Streaming" invited a venue owner to believe footage was being captured.
 export const STATE_META = {
-  ok: { label: "Streaming", dot: "var(--color-accent-400)", tagClass: "tag tag-accent" },
-  checking: { label: "Checking…", dot: "var(--color-neutral-500)", tagClass: "tag tag-neutral" },
-  offline: { label: "Not answering", dot: "var(--color-neutral-600)", tagClass: "tag tag-neutral" },
-  auth: { label: "Sign-in needed", dot: "var(--color-neutral-400)", tagClass: "tag tag-neutral" },
+  ok: { label: "Online", tagClass: "tag tag-success" },
+  checking: { label: "Checking…", tagClass: "tag tag-neutral" },
+  offline: { label: "Not answering", tagClass: "tag tag-danger" },
+  auth: { label: "Sign-in needed", tagClass: "tag tag-warning" },
   // Two sweep-hit levels, distinct from `auth` (which means "we know this
   // is ONVIF, just needs credentials"): `rtsp` means an actual RTSP
   // OPTIONS handshake completed (RFC 2326 -- needs no credentials, so this
@@ -18,8 +29,8 @@ export const STATE_META = {
   // definitely speaking RTSP, ONVIF support is still unknown. `unconfirmed`
   // is weaker still: the TCP port answered but nothing recognizable as
   // RTSP came back, so this could be any service, camera or not.
-  rtsp: { label: "Ready to add", dot: "var(--color-accent-2-400)", tagClass: "tag tag-outline" },
-  unconfirmed: { label: "Unconfirmed", dot: "var(--color-neutral-500)", tagClass: "tag tag-neutral" },
+  rtsp: { label: "Ready to add", tagClass: "tag tag-outline" },
+  unconfirmed: { label: "Unconfirmed", tagClass: "tag tag-neutral" },
 };
 
 // Builds a full card for one configured (persisted) camera -- the only
@@ -112,15 +123,14 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
 export function cardVisuals(card) {
   const meta = STATE_META[card.state];
   const live = card.state === "ok";
-  // "Streaming" reads wrong for a sample-clip camera, which never streams
-  // anything -- STATE_META's "ok" otherwise just means "its file is
-  // there," so say that instead.
+  // "Online" reads wrong for a sample-clip camera, which has no network
+  // presence at all -- STATE_META's "ok" for one of those just means "its
+  // file is there," so say that instead.
   const isSampleClip = card.kind === "configured" && card.camera.connectionType === "sampleClip";
   return {
     ...card,
     stateLabel: isSampleClip && card.state === "ok" ? "File ready" : meta.label,
     stateTagClass: meta.tagClass,
-    dot: meta.dot,
     live,
     thumbIcon: live
       ? "ph ph-video-camera"

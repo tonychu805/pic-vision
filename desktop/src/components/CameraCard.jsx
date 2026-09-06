@@ -5,43 +5,48 @@ import { cardVisuals } from "../lib/cameraView.js";
 // gradient placeholder, so the card's biggest visual element was dead
 // space). Same fields as before (icon, name, subtitle, state tag, dismiss),
 // just laid out horizontally instead of stacked over a thumbnail.
+//
+// A real <button>, not a <div onClick> (2026-09-06): opening a camera is
+// the main screen's primary action and it could not be reached by keyboard
+// at all -- no tab stop, no Enter/Space, no focus ring, and no hover state
+// to say it was clickable. `.row-button` in index.css is the button reset
+// plus the hover/active states.
+//
+// The dismiss control has to stay outside that button -- a <button> inside
+// a <button> is invalid HTML and browsers do not agree on what to do with
+// it -- so the row is a flex container holding the big button plus, when
+// relevant, the dismiss button as a sibling.
 export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss }) {
   const v = cardVisuals(card);
-  return (
-    <div
-      style={{
-        display: "flex",
-        alignItems: "center",
-        gap: 14,
-        padding: "10px 14px",
-        borderRadius: "var(--radius-md)",
-        cursor: "pointer",
-        background: "var(--color-surface)",
-        boxShadow: picked && selectMode ? "0 0 0 2px var(--color-accent)" : "var(--shadow-sm)",
-      }}
-      onClick={onOpen}
-    >
-      <div
-        style={{
-          flex: "none",
-          width: 36,
-          height: 36,
-          borderRadius: "50%",
-          display: "grid",
-          placeItems: "center",
-          background: v.live ? "var(--color-accent-900)" : "var(--color-neutral-900)",
-        }}
-      >
-        <i
-          className={v.thumbIcon}
-          style={{ fontSize: 16, color: v.live ? "var(--color-accent-300)" : "color-mix(in srgb, var(--color-text) 40%, transparent)" }}
-        />
-      </div>
+  const dismissable = !selectMode && card.kind !== "configured";
 
-      <div style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "center", gap: 8 }}>
-        <span style={{ width: 7, height: 7, flex: "none", borderRadius: "50%", background: v.dot }} />
-        <div style={{ minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
-          <span style={{ fontWeight: 500, fontSize: 14, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+  return (
+    <div style={{ display: "flex", alignItems: "stretch", gap: 6 }}>
+      <button
+        type="button"
+        className="row-button"
+        style={{ flex: 1, minWidth: 0, boxShadow: picked && selectMode ? "0 0 0 2px var(--color-accent)" : "var(--shadow-sm)" }}
+        onClick={onOpen}
+      >
+        <span
+          style={{
+            flex: "none",
+            width: 36,
+            height: 36,
+            borderRadius: "50%",
+            display: "grid",
+            placeItems: "center",
+            background: v.live ? "var(--color-accent-900)" : "var(--color-neutral-900)",
+          }}
+        >
+          <i
+            className={v.thumbIcon}
+            style={{ fontSize: 16, color: v.live ? "var(--color-accent-300)" : "var(--text-4)" }}
+          />
+        </span>
+
+        <span style={{ flex: 1, minWidth: 0, display: "flex", alignItems: "baseline", gap: 8 }}>
+          <span className="truncate" style={{ fontWeight: 500, fontSize: "var(--fs-strong)" }}>
             {v.name}
           </span>
           {/* v.subtitle is the operator's label's counterpart: vendor/model
@@ -52,36 +57,37 @@ export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss
               2026-09-01 card-view decision to hide it, per operator
               feedback 2026-09-05 that Court 1/2's rows gave no way to
               tell them apart from real device identity). */}
-          <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+          <span className="truncate text-3" style={{ fontSize: "var(--fs-body)" }}>
             {v.subtitle}
           </span>
-        </div>
-      </div>
+        </span>
 
-      <span className={v.stateTagClass} style={{ flex: "none" }}>{v.stateLabel}</span>
+        <span className={v.stateTagClass} style={{ flex: "none" }}>{v.stateLabel}</span>
 
-      {selectMode ? (
-        <i
-          className={picked ? "ph-fill ph-check-circle" : "ph ph-circle"}
-          style={{ flex: "none", fontSize: 20, color: picked ? "var(--color-accent)" : "color-mix(in srgb, var(--color-text) 45%, transparent)" }}
-        />
-      ) : (
-        // A not-yet-configured card (found by discovery/sweep, never saved
-        // anywhere) shouldn't require signing in just to get rid of it --
-        // e.g. a device that turned out not to be the operator's camera at
-        // all. Dismisses from this scan's results only (session-local, not
-        // persisted) -- it can reappear on the next "Scan again" since the
-        // device is still really there.
-        card.kind !== "configured" && (
-          <button
-            className="btn btn-ghost"
-            style={{ flex: "none", padding: 4, minHeight: 0 }}
-            title="Not my camera — remove from this list"
-            onClick={(e) => { e.stopPropagation(); onDismiss?.(); }}
-          >
-            <i className="ph ph-x" style={{ fontSize: 13 }} />
-          </button>
-        )
+        {selectMode && (
+          <i
+            className={picked ? "ph-fill ph-check-circle" : "ph ph-circle"}
+            style={{ flex: "none", fontSize: 20, color: picked ? "var(--color-accent)" : "var(--text-4)" }}
+          />
+        )}
+      </button>
+
+      {/* A not-yet-configured card (found by discovery/sweep, never saved
+          anywhere) shouldn't require signing in just to get rid of it --
+          e.g. a device that turned out not to be the operator's camera at
+          all. Dismisses from this scan's results only (session-local, not
+          persisted) -- it can reappear on the next "Scan again" since the
+          device is still really there. */}
+      {dismissable && (
+        <button
+          className="btn btn-ghost"
+          style={{ flex: "none", padding: "0 6px", minHeight: 0 }}
+          title="Not my camera — remove from this list"
+          aria-label={`Remove ${v.name} from this list`}
+          onClick={onDismiss}
+        >
+          <i className="ph ph-x" style={{ fontSize: 13 }} />
+        </button>
       )}
     </div>
   );

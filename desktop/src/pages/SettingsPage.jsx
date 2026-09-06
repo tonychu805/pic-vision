@@ -39,7 +39,7 @@ function describeRange(input) {
   return { ok: true, text: `= ${count} addresses` };
 }
 
-export default function SettingsPage() {
+export default function SettingsPage({ onBack }) {
   const [primaryCidr, setPrimaryCidr] = useState(null);
   const [extraRanges, setExtraRanges] = useState([]);
   const [newRange, setNewRange] = useState("");
@@ -51,6 +51,11 @@ export default function SettingsPage() {
   const [savedTimeoutMs, setSavedTimeoutMs] = useState(null);
   const [timeoutError, setTimeoutError] = useState("");
   const [savingTimeout, setSavingTimeout] = useState(false);
+  // Adding a range confirms itself -- the row appears. Blurring the
+  // timeout field showed a flash of "Saving…" and then nothing, so there
+  // was no way to know it had stuck. Held for a couple of seconds, then
+  // cleared.
+  const [timeoutSaved, setTimeoutSaved] = useState(false);
 
   useEffect(() => {
     window.systemAPI?.getNetworkInfo().then((info) => setPrimaryCidr(info?.cidr ?? null));
@@ -87,6 +92,8 @@ export default function SettingsPage() {
       const saved = await window.scanSettingsAPI.setTimeout(Number(trimmed));
       setTimeoutMsField(String(saved));
       setSavedTimeoutMs(saved);
+      setTimeoutSaved(true);
+      setTimeout(() => setTimeoutSaved(false), 2200);
     } catch (err) {
       setTimeoutError(err.message);
     }
@@ -94,26 +101,35 @@ export default function SettingsPage() {
   };
 
   return (
-    <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "16px 22px 26px" }}>
-      <div style={{ fontFamily: "var(--font-heading)", fontSize: 20, lineHeight: 1.2, marginBottom: 4 }}>Scan settings</div>
-      <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", margin: "0 0 16px" }}>
+    <div className="page">
+      {/* Reached from the Cameras page's "Scan options" now rather than
+          from the sidebar, so it needs its own way back -- same pattern
+          as the camera detail page. */}
+      <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", marginBottom: 8 }} onClick={onBack}>
+        <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />All cameras
+      </button>
+      <div className="page-title" style={{ marginBottom: 4 }}>Scan options</div>
+      <p className="page-sub" style={{ marginBottom: 16 }}>
         "Scan" on the Cameras page already checks your whole network automatically. These settings extend that when
         the default doesn't cover your setup.
       </p>
 
-      <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, alignItems: "start" }}>
-        <div style={{ padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Ranges</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+      {/* One column, not a 1fr 1fr grid: the right-hand panel holds a
+          single number field and ended about a third of the way down the
+          left one, leaving a large empty block beside a tall panel. */}
+      <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
+        <div className="card">
+          <div className="section-label">Where to look</div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
             <i className="ph ph-wifi-high" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
-            <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5 }}>{primaryCidr || "detecting…"}</span>
-            <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 45%, transparent)" }}>this machine — always scanned</span>
+            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{primaryCidr || "detecting…"}</span>
+            <span className="text-4" style={{ fontSize: "var(--fs-fine)" }}>this machine — always scanned</span>
           </div>
           {extraRanges.map((cidr) => (
-            <div key={cidr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+            <div key={cidr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
               <i className="ph ph-network" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
-              <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5, flex: 1 }}>{cidr}</span>
-              <button type="button" className="btn btn-ghost" style={{ fontSize: 11.5, padding: 0 }} onClick={() => removeRange(cidr)}>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", flex: 1 }}>{cidr}</span>
+              <button type="button" className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", padding: 0 }} onClick={() => removeRange(cidr)}>
                 Remove
               </button>
             </div>
@@ -124,23 +140,23 @@ export default function SettingsPage() {
               placeholder="192.168.1.50 or 192.168.1.0/24"
               value={newRange}
               onChange={(e) => setNewRange(e.target.value)}
-              style={{ flex: 1, fontFamily: "ui-monospace, Menlo, monospace" }}
+              style={{ flex: 1, fontFamily: "var(--font-mono)" }}
             />
             <button className="btn btn-secondary" disabled={addingRange || !newRange.trim() || rangeHint?.ok === false}>
               {addingRange ? "Adding…" : "Add"}
             </button>
           </form>
           {rangeHint && (
-            <p style={{ color: rangeHint.ok ? "color-mix(in srgb, var(--color-text) 50%, transparent)" : "var(--color-accent-2-400)", fontSize: 11.5, margin: "6px 0 0" }}>
+            <p style={{ color: rangeHint.ok ? "var(--text-3)" : "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>
               {rangeHint.text}
             </p>
           )}
-          {rangeError && <p style={{ color: "var(--color-accent-2-400)", fontSize: 12, margin: "8px 0 0" }}>{rangeError}</p>}
-          <p style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", margin: "10px 0 0", lineHeight: 1.5 }}>
+          {rangeError && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "8px 0 0" }}>{rangeError}</p>}
+          <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
             Only extends the RTSP port sweep — useful if your cameras sit on a separate VLAN from this machine.
             ONVIF discovery can't reach a different subnet no matter what's added here.
           </p>
-          <details style={{ marginTop: 10, fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+          <details className="text-3" style={{ marginTop: 10, fontSize: "var(--fs-fine)" }}>
             <summary style={{ cursor: "pointer" }}>Want automatic discovery to reach that VLAN too?</summary>
             <p style={{ lineHeight: 1.5, margin: "8px 0 0" }}>
               That's a network setting, not something this app can turn on. Ask whoever manages the network to enable
@@ -154,10 +170,10 @@ export default function SettingsPage() {
           </details>
         </div>
 
-        <div style={{ padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-          <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Timeout</div>
+        <div className="card">
+          <div className="section-label">How long to wait</div>
           <div className="field">
-            <label>Per-address timeout (ms)</label>
+            <label>Wait for each device before moving on</label>
             <input
               className="input"
               type="number"
@@ -169,11 +185,17 @@ export default function SettingsPage() {
               onKeyDown={(e) => e.key === "Enter" && saveTimeout()}
               style={{ maxWidth: 140 }}
             />
+            <span className="text-4" style={{ fontSize: "var(--fs-fine)", marginLeft: 8 }}>milliseconds</span>
           </div>
-          {savingTimeout && <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Saving…</span>}
-          {timeoutError && <p style={{ color: "var(--color-accent-2-400)", fontSize: 12, margin: "6px 0 0" }}>{timeoutError}</p>}
-          <p style={{ fontSize: 11.5, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", margin: "10px 0 0", lineHeight: 1.5 }}>
-            How long to wait for a reply from each address during the RTSP port sweep. Lower is faster but can miss
+          {savingTimeout && <span className="text-3" style={{ fontSize: "var(--fs-fine)" }}>Saving…</span>}
+          {timeoutSaved && !savingTimeout && (
+            <span style={{ fontSize: "var(--fs-fine)", color: "var(--color-success)" }}>
+              <i className="ph ph-check" style={{ fontSize: 12, marginRight: 4 }} />Saved
+            </span>
+          )}
+          {timeoutError && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{timeoutError}</p>}
+          <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
+            How long to wait for a reply from each address while checking the network. Lower is faster but can miss
             a slow-to-respond camera; higher is more thorough but takes longer on a large network.
           </p>
         </div>

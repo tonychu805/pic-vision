@@ -1,7 +1,7 @@
 // Real local-network info for the sidebar's "Network" panel -- cheap to get
 // honestly (os.networkInterfaces()), so there's no reason to hardcode a
 // fake subnet the way the mockup's static prototype data does.
-import { dialog } from "electron";
+import { dialog, shell } from "electron";
 import os from "node:os";
 
 function guessCidr(ip, netmask) {
@@ -41,4 +41,26 @@ export async function pickVideoFile() {
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];
+}
+
+
+// Opens a link in the operator's real browser (the cloud console, from
+// the "Recording and calibration live in the cloud console" pointer on
+// the camera detail page). Restricted to http/https on purpose: this is
+// reachable from the renderer, and shell.openExternal will happily hand
+// the OS a file:// path or a custom scheme registered by some other
+// installed application, which is a much larger surface than "open a web
+// page" needs. Anything else is refused rather than silently ignored, so
+// a caller passing the wrong thing finds out.
+export async function openExternal(url) {
+  let parsed;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Not a valid URL: ${url}`);
+  }
+  if (parsed.protocol !== "https:" && parsed.protocol !== "http:") {
+    throw new Error(`Refusing to open a ${parsed.protocol} link`);
+  }
+  await shell.openExternal(parsed.href);
 }

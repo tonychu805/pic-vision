@@ -42,16 +42,16 @@ export default function TitleBar() {
       <div
         style={{
           flex: 1,
-          fontSize: 12,
+          fontSize: "var(--fs-fine)",
           fontWeight: 500,
-          color: "color-mix(in srgb, var(--color-text) 55%, transparent)",
+          color: "var(--text-3)",
           textAlign: "center",
         }}
       >
         picvision ai — Court Cameras
       </div>
       {!isMac && (
-        <div style={{ display: "flex", gap: 2, color: "color-mix(in srgb, var(--color-text) 55%, transparent)", WebkitAppRegion: "no-drag" }}>
+        <div style={{ display: "flex", gap: 2, color: "var(--text-3)", WebkitAppRegion: "no-drag" }}>
           <button onClick={() => window.windowAPI.minimize()} style={winBtnStyle} aria-label="Minimize">
             <i className="ph ph-minus" style={{ fontSize: 13 }} />
           </button>

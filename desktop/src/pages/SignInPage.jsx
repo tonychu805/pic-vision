@@ -71,11 +71,11 @@ export default function SignInPage({ onSignedIn }) {
           <h1 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 38, lineHeight: 1.15, margin: "0 0 16px" }}>
             Every rally, cut by morning.
           </h1>
-          <p className="text-muted" style={{ fontSize: 14, lineHeight: 1.6 }}>
+          <p className="text-muted" style={{ fontSize: "var(--fs-strong)", lineHeight: 1.6 }}>
             This machine handles the cameras at your court. Sign in with your brand's account to connect it.
           </p>
         </div>
-        <div style={{ display: "flex", gap: 20, fontSize: 11, letterSpacing: "0.08em", textTransform: "uppercase", color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }}>
+        <div style={{ display: "flex", gap: 20, fontSize: "var(--fs-fine)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>
           <span>Brand operations</span>
           <span>Camera fleet</span>
           <span>Reel delivery</span>
@@ -84,16 +84,16 @@ export default function SignInPage({ onSignedIn }) {
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
         <div style={{ width: "min(340px, 100%)" }}>
-          <div style={{ fontSize: 11.5, letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-accent-300)", marginBottom: 8 }}>
+          <div style={{ fontSize: "var(--fs-fine)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-accent-300)", marginBottom: 8 }}>
             Desktop sign in
           </div>
           <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 24, margin: "0 0 6px" }}>Sign in to your brand</h2>
-          <p className="text-muted" style={{ fontSize: 13.5, margin: "0 0 24px" }}>
+          <p className="text-muted" style={{ fontSize: "var(--fs-strong)", margin: "0 0 24px" }}>
             Use the same email and password as your picvision cloud console account.
           </p>
 
           {AUTH_API_MISSING ? (
-            <p style={{ fontSize: 13, color: "var(--color-accent-2-400)" }}>
+            <p style={{ fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
               This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).
             </p>
           ) : (
@@ -121,17 +121,17 @@ export default function SignInPage({ onSignedIn }) {
               </div>
 
               <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-                <label className="radio" style={{ fontSize: 12.5 }} title="Sessions already stay signed in by default">
+                <label className="radio" style={{ fontSize: "var(--fs-body)" }} title="Sessions already stay signed in by default">
                   <input type="checkbox" disabled />
                   <span className="dot" style={{ borderRadius: 4 }} />
                   Keep me signed in
                 </label>
-                <span style={{ fontSize: 12.5, opacity: 0.5, cursor: "not-allowed" }} title="Password reset isn't built yet">
+                <span style={{ fontSize: "var(--fs-body)", opacity: 0.5, cursor: "not-allowed" }} title="Password reset isn't built yet">
                   Forgot password
                 </span>
               </div>
 
-              {error && <p className="text-muted" style={{ fontSize: 13, marginBottom: 14 }}>{error}</p>}
+              {error && <p className="text-muted" style={{ fontSize: "var(--fs-body)", marginBottom: 14 }}>{error}</p>}
 
               <button type="submit" className="btn btn-primary" disabled={submitting || !email.trim() || !password} style={{ width: "100%", marginBottom: 8 }}>
                 {submitting ? "Signing in…" : "Sign in"}
@@ -142,10 +142,10 @@ export default function SignInPage({ onSignedIn }) {
             </form>
           )}
 
-          <p className="text-muted" style={{ fontSize: 12, marginTop: 20 }}>
+          <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 20 }}>
             Don't have an account yet? Create one on the cloud console.
           </p>
-          <p className="text-muted" style={{ fontSize: 11.5, marginTop: 6 }}>
+          <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 6 }}>
             Once signed in, this device connects to the Cloud console automatically.
           </p>
         </div>

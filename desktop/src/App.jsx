@@ -61,7 +61,10 @@ export default function App() {
       ) : (
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <Sidebar
-          nav={nav === "detail" ? "cameras" : nav}
+          // "detail" and "settings" are both reached from the Cameras
+          // tab and have no nav entry of their own, so the Cameras item
+          // stays lit while you're in either.
+          nav={nav === "detail" || nav === "settings" ? "cameras" : nav}
           onNavigate={(k) => { setSelectedCard(null); setNav(k); }}
           deviceCount={cameraCount}
         />
@@ -75,7 +78,12 @@ export default function App() {
               change elsewhere (a rename/removal on the detail page) while
               this tab was hidden -- only the real network scan is skipped. */}
           <div style={{ display: nav === "cameras" ? "flex" : "none", flex: 1, minWidth: 0, flexDirection: "column" }}>
-            <CamerasPage onOpenCamera={openCamera} onCameraCountChange={setCameraCount} active={nav === "cameras"} />
+            <CamerasPage
+              onOpenCamera={openCamera}
+              onCameraCountChange={setCameraCount}
+              onOpenScanSettings={() => setNav("settings")}
+              active={nav === "cameras"}
+            />
           </div>
           {nav === "detail" && selectedCard && (
             <CameraDetailPage
@@ -91,7 +99,7 @@ export default function App() {
             />
           )}
           {nav === "log" && <LogPage />}
-          {nav === "settings" && <SettingsPage />}
+          {nav === "settings" && <SettingsPage onBack={() => setNav("cameras")} />}
           {nav === "cloud" && <CloudPage session={session} onSignedOut={() => setSession(null)} />}
         </div>
       </div>

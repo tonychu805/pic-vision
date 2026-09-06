@@ -178,13 +178,13 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             <label>Video file</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
               <button type="button" className="btn btn-secondary" onClick={pickClipFile}>Choose file…</button>
-              <span style={{ fontSize: 12.5, fontFamily: "ui-monospace, Menlo, monospace", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              <span style={{ fontSize: "var(--fs-body)", fontFamily: "var(--font-mono)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 {clipPath || "No file chosen"}
               </span>
             </div>
           </div>
           {clipError && (
-            <p style={{ color: "var(--color-accent-2-400)", fontSize: 13, margin: 0 }}>{clipError}</p>
+            <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>{clipError}</p>
           )}
           <div className="dialog-actions">
             <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
@@ -220,7 +220,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             />
           </div>
           {error && (
-            <p style={{ color: "var(--color-accent-2-400)", fontSize: 13, margin: 0 }}>
+            <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>
               Couldn't connect with that either. ({error})
             </p>
           )}
@@ -249,7 +249,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             <>
               Don't see your camera in the list? You can add it directly if you know its IP address — check the
               camera's own app, usually under Network or Wi-Fi settings. It looks like a short string of numbers,
-              e.g. <span style={{ fontFamily: "ui-monospace, Menlo, monospace" }}>192.168.1.42</span>.
+              e.g. <span style={{ fontFamily: "var(--font-mono)" }}>192.168.1.42</span>.
             </>
           )}
         </div>
@@ -265,7 +265,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
           <button
             type="button"
             className="btn btn-ghost"
-            style={{ alignSelf: "flex-start", fontSize: 12.5, padding: 0 }}
+            style={{ alignSelf: "flex-start", fontSize: "var(--fs-body)", padding: 0 }}
             onClick={() => setShowAdvanced(true)}
           >
             Advanced settings
@@ -281,7 +281,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
         )}
 
         {error && (
-          <p style={{ color: "var(--color-accent-2-400)", fontSize: 13, margin: 0 }}>
+          <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>
             Couldn't connect — double-check the username and password, or that the camera is turned on and connected
             to the same network. ({error})
           </p>
@@ -295,7 +295,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   );
 }
 
-export default function CamerasPage({ onOpenCamera, onCameraCountChange, active }) {
+export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenScanSettings, active }) {
   const [configured, setConfigured] = useState([]);
   const [discovered, setDiscovered] = useState([]);
   const [sweepHits, setSweepHits] = useState([]);
@@ -311,6 +311,13 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   const [manualPrefill, setManualPrefill] = useState({ hostname: "", vendor: null, port: 80 });
   const [bulkOpen, setBulkOpen] = useState(false);
   const scanTimer = useRef(null);
+  // Bumped by every scan start and by Stop. The discover/sweep promises
+  // can't be aborted (no AbortSignal through the preload bridge), so Stop
+  // used to only hide the progress bar -- the awaited results still landed
+  // a few seconds later and repopulated the list, which is not what a
+  // button labelled Stop should do. Results now carry the run they belong
+  // to and a stale one is dropped on arrival.
+  const scanRun = useRef(0);
 
   // Bulk select (Sign in / Sync time / Update firmware) isn't wired up
   // to anything real yet -- see the "aren't wired up yet" dialog below.
@@ -350,6 +357,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
   }, [active]);
 
   const startScan = async () => {
+    const run = ++scanRun.current;
     setScanning(true);
     setScanError(null);
     setSweepError(null);
@@ -374,6 +382,8 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
       window.cameraAPI.sweep(),
     ]);
 
+    if (run !== scanRun.current) return; // stopped while these were in flight
+
     if (discoverResult.status === "fulfilled") setDiscovered(discoverResult.value);
     else setScanError(discoverResult.reason?.message ?? String(discoverResult.reason));
 
@@ -386,11 +396,23 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
     setTimeout(() => setScanning(false), 200);
   };
 
+  const stopScan = () => {
+    scanRun.current += 1;
+    clearInterval(scanTimer.current);
+    setScanning(false);
+  };
+
   useEffect(() => () => clearInterval(scanTimer.current), []);
 
   const cards = buildCards({ configured, discovered, sweepHits, statusById });
-  const isEmpty = !scanning && hasScanned === false && cards.length === 0;
-  const needsAttentionCount = cards.filter((c) => c.kind !== "configured").length;
+  // Used to also require `hasScanned === false`, which meant a scan that
+  // found nothing fell through to the list branch and rendered an empty
+  // scroll area -- a header and blank space, at exactly the moment there's
+  // most to explain. Both cases show the empty state now; only the wording
+  // differs.
+  const isEmpty = !scanning && cards.length === 0;
+  const mine = cards.filter((c) => c.kind === "configured");
+  const found = cards.filter((c) => c.kind !== "configured");
 
   useEffect(() => {
     onCameraCountChange?.(cards.length);
@@ -444,11 +466,17 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
     <div style={{ flex: 1, minHeight: 0, display: "flex", flexDirection: "column" }}>
       <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 12, padding: "16px 22px 12px" }}>
         <div style={{ minWidth: 0 }}>
-          <div style={{ fontFamily: "var(--font-heading)", fontSize: 20, lineHeight: 1.2 }}>
-            {scanning ? "Looking for cameras" : cards.length === 0 ? "Cameras" : `${cards.length} camera${cards.length === 1 ? "" : "s"}`}
-          </div>
-          <div style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>
-            {scanning ? "This takes a few seconds…" : cards.length === 0 ? "Nothing found yet" : "Found automatically, or added by hand"}
+          {/* The title used to become the count ("3 cameras") and the
+              state ("Looking for cameras"), so the page changed identity
+              as you used it and the sidebar's own count said it again.
+              Constant title, changing subtitle. */}
+          <div className="page-title">Cameras</div>
+          <div className="page-sub">
+            {scanning
+              ? "Looking for cameras — this takes a few seconds…"
+              : mine.length === 0 && found.length === 0
+                ? "None added yet"
+                : `${mine.length} added${found.length ? ` · ${found.length} found on your network` : ""}`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
@@ -463,14 +491,27 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
           <button className="btn btn-primary" onClick={startScan} disabled={scanning}>
             <i className="ph ph-radar" style={{ fontSize: 16 }} />{scanning ? "Scanning…" : "Scan"}
           </button>
+          {/* Scan settings used to be a top-level nav tab, a peer of
+              Cameras/Log/Cloud console -- odd standing for a page whose
+              only job is to configure this one button. It lives behind
+              this instead, next to the thing it affects. */}
+          <button
+            className="btn btn-ghost"
+            style={{ padding: "0 6px" }}
+            title="Scan options"
+            aria-label="Scan options"
+            onClick={onOpenScanSettings}
+          >
+            <i className="ph ph-sliders-horizontal" style={{ fontSize: 16 }} />
+          </button>
         </div>
       </div>
 
       {scanning && (
         <div style={{ flex: "none", margin: "0 22px 14px", padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", boxShadow: "var(--shadow-sm)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Checking every device on your network…</span>
-            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5 }} onClick={() => { clearInterval(scanTimer.current); setScanning(false); }}>Stop</button>
+            <span style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>Checking every device on your network…</span>
+            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)" }} onClick={stopScan}>Stop</button>
           </div>
           <div style={{ height: 3, borderRadius: 2, background: "color-mix(in srgb, var(--color-text) 10%, transparent)", overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${scanPct}%`, background: "var(--color-accent)", transition: "width .12s linear" }} />
@@ -479,27 +520,19 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
       )}
 
       {(scanError || sweepError) && (
-        <p style={{ margin: "0 22px 12px", fontSize: 13, color: "var(--color-accent-2-400)" }}>
+        <p style={{ margin: "0 22px 12px", fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
           The scan ran into a problem, but you can still add a camera by hand below.
-        </p>
-      )}
-
-      {!scanning && needsAttentionCount > 0 && (
-        <p style={{ margin: "0 22px 12px", fontSize: 13, color: "color-mix(in srgb, var(--color-text) 65%, transparent)" }}>
-          {needsAttentionCount === 1
-            ? "We found something that might be your camera below — tap it to finish setting it up."
-            : `We found ${needsAttentionCount} things below that might be your cameras — tap one to finish setting it up.`}
         </p>
       )}
 
       {selectMode && (
         <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, margin: "0 22px 12px", padding: "8px 14px", borderRadius: "var(--radius-md)", background: "var(--color-accent-900)" }}>
-          <span style={{ fontSize: 12.5, fontWeight: 500, color: "var(--color-accent-200)" }}>{picked.size} of {cards.length} selected</span>
+          <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--color-accent-200)" }}>{picked.size} of {cards.length} selected</span>
           <div style={{ width: 1, height: 14, background: "var(--color-accent-700)" }} />
           <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-key" style={{ fontSize: 14 }} />Sign in</button>
           <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-clock-clockwise" style={{ fontSize: 14 }} />Sync time</button>
           <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-arrow-circle-up" style={{ fontSize: 14 }} />Update firmware</button>
-          <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }} onClick={() => { setSelectMode(false); setPicked(new Set()); }}>Done</button>
+          <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)", color: "var(--text-3)" }} onClick={() => { setSelectMode(false); setPicked(new Set()); }}>Done</button>
         </div>
       )}
 
@@ -507,26 +540,73 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, active 
         <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "0 22px 40px" }}>
           <div style={{ maxWidth: 420, textAlign: "center" }}>
             <div style={{ width: 104, height: 104, margin: "0 auto 18px", borderRadius: "50%", display: "grid", placeItems: "center", background: "radial-gradient(circle, var(--color-accent-900), transparent 70%)" }}>
-              <i className="ph ph-radar" style={{ fontSize: 44, color: "var(--color-accent)" }} />
+              <i className={hasScanned ? "ph ph-binoculars" : "ph ph-radar"} style={{ fontSize: 44, color: "var(--color-accent)" }} />
             </div>
-            <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, marginBottom: 6 }}>No cameras added yet</div>
-            <p style={{ fontSize: 13.5, lineHeight: 1.6, color: "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
-              picvision can look for cameras on your Wi-Fi network for you — usually takes just a few seconds. If it
-              doesn't find yours, you can add it yourself using its IP address instead.
+            <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, marginBottom: 6 }}>
+              {hasScanned ? "Nothing found on this network" : "No cameras added yet"}
+            </div>
+            <p className="text-2" style={{ fontSize: "var(--fs-strong)", lineHeight: 1.6 }}>
+              {hasScanned ? (
+                <>
+                  The scan finished without finding anything. A camera on a different network, or one that doesn't
+                  answer discovery, won't show up here — you can still add it yourself using its IP address.
+                </>
+              ) : (
+                <>
+                  picvision can look for cameras on your Wi-Fi network for you — usually takes just a few seconds. If it
+                  doesn't find yours, you can add it yourself using its IP address instead.
+                </>
+              )}
             </p>
             <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
-              <button className="btn btn-primary" onClick={startScan}><i className="ph ph-radar" style={{ fontSize: 16 }} />Scan this network</button>
+              <button className="btn btn-primary" onClick={startScan}>
+                <i className="ph ph-radar" style={{ fontSize: 16 }} />{hasScanned ? "Scan again" : "Scan this network"}
+              </button>
               <button className="btn btn-secondary" onClick={() => openManual()}>Add manually</button>
             </div>
+            {hasScanned && (
+              <button className="btn btn-ghost" style={{ marginTop: 10, fontSize: "var(--fs-body)" }} onClick={onOpenScanSettings}>
+                Check scan options
+              </button>
+            )}
           </div>
         </div>
       ) : (
         <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: "0 22px 22px" }}>
-          <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-            {cards.map((card) => (
-              <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
-            ))}
-          </div>
+          {/* Two sections, not one flat list (2026-09-06): a camera you
+              set up and an unconfirmed open port that might not be a
+              camera at all were rendering identically, with only a
+              sentence above the list to tell them apart. buildCards
+              already returns them in this order -- this just makes the
+              boundary visible. */}
+          {mine.length > 0 && (
+            <>
+              {found.length > 0 && <div className="section-label">Your cameras</div>}
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                {mine.map((card) => (
+                  <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
+                ))}
+              </div>
+            </>
+          )}
+
+          {found.length > 0 && (
+            <>
+              <div className="section-label" style={{ marginTop: mine.length > 0 ? 20 : 0 }}>
+                Found on your network
+              </div>
+              <p className="page-sub" style={{ margin: "-6px 0 8px" }}>
+                {found.length === 1
+                  ? "One device that might be your camera — open it to finish setting it up."
+                  : `${found.length} devices that might be your cameras — open one to finish setting it up.`}
+              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8, opacity: 0.92 }}>
+                {found.map((card) => (
+                  <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
+                ))}
+              </div>
+            </>
+          )}
         </div>
       )}
 

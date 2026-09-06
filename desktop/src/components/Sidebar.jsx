@@ -6,10 +6,13 @@ import { useEffect, useState } from "react";
 // so the two apps show the same brand mark.
 import logo from "../assets/pic-vision-logo-white.png";
 
+// "Scan settings" used to sit here as a fourth peer, but all it does is
+// configure the Cameras page's Scan button -- top-level standing it hadn't
+// earned, in a four-item nav. It's reached from the control it affects
+// now (CamerasPage's "Scan options"), not from here.
 const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
   { key: "log", label: "Log", icon: "ph-list-bullets" },
-  { key: "settings", label: "Scan settings", icon: "ph-sliders-horizontal" },
   { key: "cloud", label: "Cloud console", icon: "ph-cloud" },
 ];
 
@@ -26,7 +29,7 @@ function navButtonStyle(active) {
     font: "500 13px Inter, system-ui, sans-serif",
     textAlign: "left",
     background: active ? "color-mix(in srgb, var(--color-accent) 16%, transparent)" : "transparent",
-    color: active ? "var(--color-accent-200)" : "color-mix(in srgb, var(--color-text) 72%, transparent)",
+    color: active ? "var(--color-accent-200)" : "var(--text-2)",
   };
 }
 
@@ -74,7 +77,7 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
         <div style={{ width: 22, height: 22, flex: "none", overflow: "hidden" }}>
           <img src={logo} alt="picvision ai" style={{ height: 22, width: "auto", maxWidth: "none" }} />
         </div>
-        <span style={{ fontFamily: "ui-monospace, Menlo, monospace", fontSize: 13, letterSpacing: "-0.02em" }}>
+        <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", letterSpacing: "-0.02em" }}>
           picvision ai
         </span>
       </div>
@@ -83,12 +86,12 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
         <div
           style={{
             padding: "0 8px 10px",
-            fontSize: 12,
+            fontSize: "var(--fs-fine)",
             fontWeight: 500,
             whiteSpace: "nowrap",
             overflow: "hidden",
             textOverflow: "ellipsis",
-            color: "color-mix(in srgb, var(--color-text) 65%, transparent)",
+            color: "var(--text-2)",
           }}
           title={brandName}
         >
@@ -101,7 +104,7 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           <i className={`ph ${item.icon}`} style={{ fontSize: 17 }} />
           {item.label}
           {item.key === "cameras" && (
-            <span style={{ marginLeft: "auto", fontSize: 11, opacity: 0.6 }}>{deviceCount}</span>
+            <span style={{ marginLeft: "auto", fontSize: "var(--fs-fine)", opacity: 0.6 }}>{deviceCount}</span>
           )}
         </button>
       ))}
@@ -110,7 +113,12 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
           "Interface · enp1s0") as the headline -- meaningless to a
           non-technical venue owner and the first thing a plain-language
           walkthrough (2026-09-01) noticed. Kept available as a hover
-          tooltip for troubleshooting, not in the primary view. */}
+          tooltip for troubleshooting, not in the primary view.
+          The second line used to read "Scanning this network for
+          cameras", which stopped being true on 2026-09-03 when
+          auto-scan-on-launch was removed (operator's call) -- nothing
+          scans until someone clicks Scan, so it claimed continuous
+          background work the app doesn't do. */}
       <div
         style={{
           marginTop: "auto",
@@ -122,12 +130,12 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
       >
         <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
           <i className="ph ph-wifi-high" style={{ fontSize: 14, color: "var(--color-accent-300)" }} />
-          <span style={{ fontSize: 12, fontWeight: 500 }}>
+          <span style={{ fontSize: "var(--fs-fine)", fontWeight: 500 }}>
             {network?.cidr ? "Connected" : "Checking…"}
           </span>
         </div>
-        <div style={{ fontSize: 11, color: "color-mix(in srgb, var(--color-text) 45%, transparent)", marginTop: 2 }}>
-          Scanning this network for cameras
+        <div style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", marginTop: 2 }}>
+          {network?.cidr ? "Scan from the Cameras tab" : "Looking for a network connection"}
         </div>
       </div>
     </div>

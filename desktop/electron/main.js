@@ -15,7 +15,7 @@ import {
   parseRtspUrl,
   addCameraFromSampleClip,
 } from "./cameras/store.js";
-import { getNetworkInfo, pickVideoFile } from "./system.js";
+import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
@@ -113,6 +113,9 @@ function registerCameraHandlers() {
   });
   ipcMain.handle("system:pickVideoFile", async () => {
     return pickVideoFile();
+  });
+  ipcMain.handle("system:openExternal", async (_event, url) => {
+    return openExternal(url);
   });
 }
 

@@ -31,17 +31,17 @@ function RecordingControl({ camera }) {
     <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "12px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
       {status.recording ? (
         <>
-          <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--color-accent-2-400)", animation: "blip 1.4s ease-in-out infinite" }} />
+          <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--color-success)", animation: "blip 1.4s ease-in-out infinite" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: 13, fontWeight: 500 }}>Recording · {formatElapsed(status.startedAt)}</div>
-            <div style={{ fontSize: 11.5, fontFamily: "ui-monospace, Menlo, monospace", color: "color-mix(in srgb, var(--color-text) 50%, transparent)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+            <div style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>Recording · {formatElapsed(status.startedAt)}</div>
+            <div style={{ fontSize: "var(--fs-fine)", fontFamily: "var(--font-mono)", color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
               Saving to {status.outDir}
             </div>
           </div>
         </>
       ) : (
-        <div style={{ flex: 1, minWidth: 0, fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
-          Not recording — start it from the cloud console
+        <div className="text-3" style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-body)" }}>
+          Not recording
         </div>
       )}
     </div>
@@ -93,7 +93,7 @@ function LiveViewButton({ camera }) {
 
   return (
     <>
-      <button className="btn btn-secondary" style={{ fontSize: 12.5 }} onClick={openLiveView}>
+      <button className="btn btn-secondary" style={{ fontSize: "var(--fs-body)" }} onClick={openLiveView}>
         <i className="ph ph-play-circle" style={{ fontSize: 15 }} />Live view
       </button>
       {open && (
@@ -102,9 +102,9 @@ function LiveViewButton({ camera }) {
             <div className="dialog-title">{camera.label} -- live</div>
             <div className="dialog-body" style={{ padding: 0 }}>
               {error ? (
-                <p style={{ padding: 16, fontSize: 13, color: "var(--color-accent-2-400)" }}>{error}</p>
+                <p style={{ padding: 16, fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>{error}</p>
               ) : starting ? (
-                <p style={{ padding: 16, fontSize: 13, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Connecting…</p>
+                <p style={{ padding: 16, fontSize: "var(--fs-body)", color: "var(--text-3)" }}>Connecting…</p>
               ) : (
                 <img
                   src={url}
@@ -125,6 +125,38 @@ function LiveViewButton({ camera }) {
 }
 
 const isSampleClip = (camera) => camera.connectionType === "sampleClip";
+
+// Recording (ADR-080) and calibration (ADR-080/084) both moved to the
+// cloud console, and this page had grown three separate "…from the cloud
+// console" sentences saying so -- in the recording panel, in the
+// calibration line, and implicitly wherever else a control used to be.
+// Three dead ends telling you to go somewhere with no way to get there.
+// One line, once, with a button that opens it.
+function ConsolePointer() {
+  const [url, setUrl] = useState(null);
+
+  useEffect(() => {
+    window.cloudAPI?.status?.().then((c) => setUrl(c?.consoleUrl ?? null)).catch(() => {});
+  }, []);
+
+  return (
+    <div className="notice notice-quiet" style={{ marginTop: 14, alignItems: "center" }}>
+      <i className="ph ph-cloud" style={{ fontSize: 15, flex: "none" }} />
+      <span style={{ flex: 1, minWidth: 0 }}>
+        Recording and calibration for this camera are managed in the cloud console.
+      </span>
+      {url && (
+        <button
+          className="btn btn-ghost"
+          style={{ flex: "none", fontSize: "var(--fs-body)" }}
+          onClick={() => window.systemAPI?.openExternal?.(url)}
+        >
+          Open console<i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} />
+        </button>
+      )}
+    </div>
+  );
+}
 
 // The one camera setting that stops everything working (ADR-087). Shown
 // here rather than only in the collapsed "Streams" detail panel, because a
@@ -149,12 +181,9 @@ function FrameRateWarning({ camera }) {
   const unknown = effective === null;
   if (unknown) {
     return (
-      <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
-                    borderRadius: "var(--radius-sm)", fontSize: 12.5,
-                    background: "color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
-        <i className="ph ph-question" style={{ fontSize: 15, flex: "none", marginTop: 1,
-             color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }} />
-        <span style={{ color: "color-mix(in srgb, var(--color-text) 70%, transparent)" }}>
+      <div className="notice notice-quiet" style={{ marginBottom: 10 }}>
+        <i className="ph ph-question text-3" style={{ fontSize: 15, flex: "none", marginTop: 1 }} />
+        <span>
           This camera's frame rate hasn't been determined yet, so it isn't being checked. It'll be
           measured on the next connection, or after its next recording.
         </span>
@@ -162,11 +191,8 @@ function FrameRateWarning({ camera }) {
     );
   }
   return (
-    <div style={{ display: "flex", gap: 9, alignItems: "flex-start", padding: "10px 12px", marginBottom: 10,
-                  borderRadius: "var(--radius-sm)", fontSize: 12.5,
-                  background: "color-mix(in srgb, var(--color-accent-2-400) 12%, transparent)",
-                  border: "1px solid color-mix(in srgb, var(--color-accent-2-400) 35%, transparent)" }}>
-      <i className="ph ph-warning" style={{ fontSize: 15, color: "var(--color-accent-2-400)", flex: "none", marginTop: 1 }} />
+    <div className="notice notice-warning" style={{ marginBottom: 10 }}>
+      <i className="ph ph-warning" style={{ fontSize: 15, color: "var(--color-warning)", flex: "none", marginTop: 1 }} />
       <span>
         {networkFault ? (
           <>
@@ -195,12 +221,12 @@ function FrameRateWarning({ camera }) {
 function CalibrationControl({ camera }) {
   const rmse = typeof camera.calibrationRmseFt === "number" ? camera.calibrationRmseFt : null;
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: 12.5, flexWrap: "wrap" }}>
-      <span style={{ flex: "none", color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Calibration:</span>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "var(--fs-body)", flexWrap: "wrap" }}>
+      <span className="text-3" style={{ flex: "none" }}>Calibration:</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         {camera.isCalibrated
           ? `Calibrated${rmse !== null ? ` — ${rmse.toFixed(2)} ft reprojection error` : ""}`
-          : "Not calibrated — set it up from the cloud console"}
+          : "Not calibrated"}
       </span>
     </div>
   );
@@ -274,23 +300,23 @@ function CloudJobRow({ camera, recording }) {
   const stageLabel = status?.stage ? (CLOUD_STAGE_LABELS[status.stage] || status.stage) : null;
 
   return (
-    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)", fontSize: 12.5 }}>
-      <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+    <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: "var(--fs-body)" }}>
+      <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
       </span>
       {!hasRun && (
-        <button className="btn btn-ghost" style={{ fontSize: 12, flex: "none" }} disabled={starting || recording.recording || !camera.isCalibrated} onClick={start}>
+        <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} disabled={starting || recording.recording || !camera.isCalibrated} onClick={start}>
           {starting ? "Starting…" : recording.recording ? "Still recording" : !camera.isCalibrated ? "Calibrate first" : "Send to cloud"}
         </button>
       )}
-      {error && <span style={{ flex: "none", color: "var(--color-accent-2-400)" }}>{error}</span>}
+      {error && <span style={{ flex: "none", color: "var(--color-danger)" }}>{error}</span>}
       {hasRun && (
         <>
-          <span style={{ flex: "none", color: status.stage === "error" ? "var(--color-accent-2-400)" : "color-mix(in srgb, var(--color-text) 60%, transparent)" }}>
+          <span style={{ flex: "none", color: status.stage === "error" ? "var(--color-danger)" : "var(--text-2)" }}>
             {stageLabel}{status.progress ? ` (${status.progress.current}/${status.progress.total})` : ""}
           </span>
           {running && (
-            <button className="btn btn-ghost" style={{ fontSize: 12, flex: "none" }} onClick={() => window.pipelineAPI.cancel(recording.dir)}>
+            <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} onClick={() => window.pipelineAPI.cancel(recording.dir)}>
               Cancel
             </button>
           )}
@@ -313,10 +339,10 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
   useEffect(() => { refresh(); }, [camera.id]);
 
   return (
-    <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
+    <div className="card" style={{ marginTop: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)" }}>Cloud pipeline</span>
-        <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={refresh}>
+        <span className="section-label" style={{ marginBottom: 0 }}>Cloud pipeline</span>
+        <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={refresh}>
           <i className="ph ph-arrows-clockwise" style={{ fontSize: 13 }} />Refresh
         </button>
       </div>
@@ -324,7 +350,7 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
       <CalibrationControl camera={camera} />
       <div style={{ marginTop: 10 }}>
         {recordings.length === 0 ? (
-          <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
+          <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>
             No recordings yet.
           </p>
         ) : (
@@ -337,12 +363,12 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
 
 function InfoPanel({ title, rows }) {
   return (
-    <div style={{ padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-      <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>{title}</div>
+    <div className="card">
+      <div className="section-label">{title}</div>
       {rows.map((row) => (
-        <div key={row.k} style={{ display: "flex", gap: 10, padding: "5px 0", fontSize: 13, borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
-          <span style={{ width: 96, flex: "none", color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{row.k}</span>
-          <span style={{ minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12.5 }}>{row.v}</span>
+        <div key={row.k} style={{ display: "flex", gap: 10, padding: "5px 0", fontSize: "var(--fs-body)", borderBottom: "1px solid var(--hairline)" }}>
+          <span style={{ width: 96, flex: "none", color: "var(--text-3)" }}>{row.k}</span>
+          <span style={{ minWidth: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{row.v}</span>
         </div>
       ))}
     </div>
@@ -377,7 +403,7 @@ function EditableCameraName({ camera, onRenamed }) {
       <input
         className="input"
         autoFocus
-        style={{ fontSize: 20, fontFamily: "var(--font-heading)", height: "auto", padding: "2px 8px", maxWidth: 320 }}
+        style={{ fontSize: "var(--fs-title)", fontFamily: "var(--font-heading)", height: "auto", padding: "2px 8px", maxWidth: 320 }}
         value={value}
         disabled={saving}
         onChange={(e) => setValue(e.target.value)}
@@ -393,12 +419,12 @@ function EditableCameraName({ camera, onRenamed }) {
   return (
     <button
       className="btn btn-ghost"
-      style={{ padding: 0, fontFamily: "var(--font-heading)", fontSize: 24, lineHeight: 1.2, color: "var(--color-text)", justifyContent: "flex-start", gap: 8 }}
+      style={{ padding: 0, fontFamily: "var(--font-heading)", fontSize: "var(--fs-title)", lineHeight: 1.2, color: "var(--color-text)", justifyContent: "flex-start", gap: 8 }}
       onClick={() => setEditing(true)}
       title="Rename this camera"
     >
       {camera.label}
-      <i className="ph ph-pencil-simple" style={{ fontSize: 15, color: "color-mix(in srgb, var(--color-text) 40%, transparent)" }} />
+      <i className="ph ph-pencil-simple" style={{ fontSize: 15, color: "var(--text-4)" }} />
     </button>
   );
 }
@@ -422,7 +448,7 @@ function RemoveCameraControl({ camera, onRemoved }) {
 
   if (!confirming) {
     return (
-      <button className="btn btn-ghost" style={{ fontSize: 12.5, flex: "none" }} onClick={() => setConfirming(true)}>
+      <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", flex: "none" }} onClick={() => setConfirming(true)}>
         <i className="ph ph-trash" style={{ fontSize: 14 }} />Remove camera
       </button>
     );
@@ -430,9 +456,9 @@ function RemoveCameraControl({ camera, onRemoved }) {
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
-      <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>Remove this camera?</span>
-      <button className="btn btn-secondary" style={{ fontSize: 12 }} disabled={removing} onClick={() => setConfirming(false)}>Cancel</button>
-      <button className="btn btn-primary" style={{ fontSize: 12, color: "var(--color-accent-2-400)", borderColor: "var(--color-accent-2-400)" }} disabled={removing} onClick={remove}>
+      <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-3)" }}>Remove this camera?</span>
+      <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} disabled={removing} onClick={() => setConfirming(false)}>Cancel</button>
+      <button className="btn btn-primary" style={{ fontSize: "var(--fs-fine)", color: "var(--color-danger)", borderColor: "var(--color-danger)" }} disabled={removing} onClick={remove}>
         {removing ? "Removing…" : "Remove"}
       </button>
     </div>
@@ -458,8 +484,8 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
   const [showDetails, setShowDetails] = useState(false);
 
   return (
-    <div style={{ flex: 1, minWidth: 0, overflow: "auto", padding: "18px 22px 26px" }}>
-      <button className="btn btn-ghost" style={{ fontSize: 12.5, marginBottom: 8 }} onClick={onBack}>
+    <div className="page">
+      <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", marginBottom: 8 }} onClick={onBack}>
         <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />All cameras
       </button>
 
@@ -469,37 +495,36 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
             <EditableCameraName camera={card.camera} onRenamed={onCameraRenamed} />
             <span className={v.stateTagClass}>{v.stateLabel}</span>
           </div>
-          <div style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", marginTop: 2 }}>
+          <div style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", marginTop: 2 }}>
             {v.subtitle}{v.ip ? ` · ${v.ip}` : ""}
           </div>
         </div>
         {!isSampleClip(card.camera) && <LiveViewButton camera={card.camera} />}
-        <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />
       </div>
 
       {isSampleClip(card.camera) ? (
         // No live stream to start/stop -- the one "recording" is the file
         // it was added with (capture.js's listRecordings returns it as a
         // single synthetic entry for the Cloud pipeline panel below).
-        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "12px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 55%, transparent)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "12px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", fontSize: "var(--fs-body)", color: "var(--text-3)" }}>
           <i className="ph ph-file-video" style={{ fontSize: 16, flex: "none" }} />
           Sample clip -- no live stream to record. Its one "recording" is the uploaded file itself, below.
         </div>
       ) : (
         <RecordingControl camera={card.camera} />
       )}
+      <ConsolePointer />
       <CloudPipelineControl camera={card.camera} onCameraUpdated={onCameraRenamed} />
 
       <button
         type="button"
         className="btn btn-ghost"
-        style={{ marginTop: 14, fontSize: 12.5 }}
+        style={{ marginTop: 14, fontSize: "var(--fs-body)" }}
         onClick={() => setShowDetails((v) => !v)}
       >
         <i className={`ph ${showDetails ? "ph-caret-up" : "ph-caret-down"}`} style={{ fontSize: 13 }} />
         {showDetails ? "Hide camera details" : "Show camera details"}
       </button>
-
       {showDetails && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 10 }}>
@@ -507,19 +532,19 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
             <InfoPanel title="Network" rows={panels.network} />
           </div>
 
-          <div style={{ marginTop: 14, padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)" }}>
-            <div style={{ fontSize: 10, letterSpacing: "0.1em", textTransform: "uppercase", color: "var(--color-accent)", marginBottom: 10 }}>Streams</div>
+          <div className="card" style={{ marginTop: 14 }}>
+            <div className="section-label">Streams</div>
             {panels.streams.length === 0 ? (
-              <p style={{ fontSize: 12.5, color: "color-mix(in srgb, var(--color-text) 50%, transparent)", margin: 0 }}>
+              <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>
                 No stream URI on record for this camera.
               </p>
             ) : (
               panels.streams.map((s) => (
-                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid color-mix(in srgb, var(--color-text) 6%, transparent)" }}>
+                <div key={s.label} style={{ display: "flex", alignItems: "center", gap: 12, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
                   <span className="tag tag-outline">{s.label}</span>
-                  <span style={{ flex: 1, minWidth: 0, fontFamily: "ui-monospace, Menlo, monospace", fontSize: 12, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
-                  <span style={{ fontSize: 12, color: "color-mix(in srgb, var(--color-text) 50%, transparent)" }}>{s.spec}</span>
-                  <button className="btn btn-ghost" style={{ fontSize: 12 }} onClick={() => navigator.clipboard.writeText(s.url)}>
+                  <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-fine)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>{s.url}</span>
+                  <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-3)" }}>{s.spec}</span>
+                  <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={() => navigator.clipboard.writeText(s.url)}>
                     <i className="ph ph-copy" style={{ fontSize: 14 }} />Copy
                   </button>
                 </div>
@@ -528,6 +553,16 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
           </div>
         </>
       )}
+
+
+      {/* Removing a camera is permanent (electron-store, no undo) and used
+          to sit in the top-right corner in the same ghost styling as
+          "Live view", one careless click from the page's most benign
+          action. Down here it's still one click away, just not adjacent
+          to something you press routinely. */}
+      <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 18, paddingTop: 12, borderTop: "1px solid var(--hairline)" }}>
+        <RemoveCameraControl camera={card.camera} onRemoved={onCameraRemoved} />
+      </div>
     </div>
   );
 }

@@ -186,3 +186,101 @@ img { display: block; max-width: 100%; }
 .dialog-title { font-family: var(--font-heading); font-weight: var(--font-heading-weight); font-size: 20px; }
 .dialog-body { font-size: 14px; opacity: 0.85; }
 .dialog-actions { display: flex; justify-content: flex-end; gap: var(--space-2); margin-top: var(--space-2); }
+
+/* ——————————————————————————————————————————————————————————————
+   Additions beyond the Nocturne handoff (2026-09-06 design pass).
+
+   Nocturne shipped tokens and *component* classes (.btn/.input/.tag/…)
+   but no page-level ones, so every page hand-rolled its shell, cards,
+   section labels and muted text as inline style objects. That drifted:
+   the same muted text colour was retyped 23 times in 9 files, page
+   padding came out three different ways, and fontSize took 17 distinct
+   values -- several a half-pixel apart, which nobody can see but which
+   keeps the vertical rhythm subtly off. These are the five patterns
+   that were actually in use, named once.
+   —————————————————————————————————————————————————————————————— */
+
+:root {
+  /* Semantic colours. Nocturne's two accents are both purple, so until
+     now success, warning and error were all the same hue and a failed
+     job in the log looked like a finished one. These are tuned to sit on
+     --color-surface (#232532) without leaving the palette's dusk range:
+     desaturated, not signal-flare primaries. */
+  --color-success: #7fd1ae;
+  --color-warning: #e2bb6c;
+  --color-danger: #e79191;
+  --color-success-bg: color-mix(in srgb, var(--color-success) 13%, transparent);
+  --color-warning-bg: color-mix(in srgb, var(--color-warning) 13%, transparent);
+  --color-danger-bg: color-mix(in srgb, var(--color-danger) 13%, transparent);
+
+  /* Text emphasis ladder, replacing ad-hoc color-mix percentages
+     anywhere between 40% and 80%. Three steps is all the pages were
+     really distinguishing. */
+  --text-2: color-mix(in srgb, var(--color-text) 70%, transparent);
+  --text-3: color-mix(in srgb, var(--color-text) 55%, transparent);
+  --text-4: color-mix(in srgb, var(--color-text) 42%, transparent);
+  --hairline: color-mix(in srgb, var(--color-text) 6%, transparent);
+
+  /* Type scale: five steps, chosen to land on the sizes already most
+     used so the refactor doesn't visibly resize the app. */
+  --fs-title: 20px;   /* page heading */
+  --fs-strong: 14px;  /* row title, emphasis */
+  --fs-body: 12.5px;  /* body and secondary text */
+  --fs-fine: 11.5px;  /* hints, timestamps, fine print */
+  --fs-label: 10px;   /* uppercase section label */
+
+  --font-mono: ui-monospace, Menlo, monospace;
+}
+
+/* — page shell — */
+.page { flex: 1; min-height: 0; overflow: auto; padding: 16px 22px 26px; }
+/* Variant for pages that own their own scrolling region (a long list
+   that must scroll under a fixed header) rather than scrolling whole. */
+.page-fixed { flex: 1; min-height: 0; display: flex; flex-direction: column; overflow: hidden; padding: 16px 22px 22px; }
+.page-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; }
+.page-title { font-family: var(--font-heading); font-size: var(--fs-title); line-height: 1.2; }
+.page-sub { font-size: var(--fs-body); color: var(--text-3); margin: 0; }
+
+/* — cards — */
+.card { padding: 14px 16px; border-radius: var(--radius-md); background: var(--color-surface); }
+/* Outlined, unfilled: for read-only or secondary content that shouldn't
+   compete with the cards holding things you can act on. */
+.card-quiet { padding: 12px 16px 14px; border-radius: var(--radius-md); border: 1px solid var(--color-divider); }
+.section-label {
+  font-size: var(--fs-label); letter-spacing: 0.1em; text-transform: uppercase;
+  color: var(--color-accent); margin-bottom: 10px;
+}
+.section-label-quiet { color: var(--text-4); }
+
+/* — rows — */
+.row-line { padding: 7px 0; border-bottom: 1px solid var(--hairline); }
+.row-line-top { border-bottom: 0; border-top: 1px solid var(--hairline); }
+/* A whole row that acts as one button (camera list, etc). A <div onClick>
+   can't be tabbed to or activated by keyboard; this is the button reset
+   that makes one behave. */
+.row-button {
+  display: flex; align-items: center; gap: 14px; width: 100%; text-align: left;
+  padding: 10px 14px; border: 0; border-radius: var(--radius-md); cursor: pointer;
+  font: inherit; color: inherit; background: var(--color-surface);
+  box-shadow: var(--shadow-sm);
+}
+.row-button:hover { background: color-mix(in srgb, var(--color-text) 4%, var(--color-surface)); }
+.row-button:active { background: color-mix(in srgb, var(--color-text) 8%, var(--color-surface)); }
+
+/* — text — */
+.text-2 { color: var(--text-2); }
+.text-3 { color: var(--text-3); }
+.text-4 { color: var(--text-4); }
+.mono { font-family: var(--font-mono); }
+.truncate { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+/* — semantic tags — */
+.tag-success { background: var(--color-success-bg); color: var(--color-success); }
+.tag-warning { background: var(--color-warning-bg); color: var(--color-warning); }
+.tag-danger { background: var(--color-danger-bg); color: var(--color-danger); }
+
+/* — notices — */
+.notice { display: flex; gap: 9px; align-items: flex-start; padding: 10px 12px; border-radius: var(--radius-sm); font-size: var(--fs-body); }
+.notice-warning { background: var(--color-warning-bg); border: 1px solid color-mix(in srgb, var(--color-warning) 35%, transparent); }
+.notice-danger { background: var(--color-danger-bg); border: 1px solid color-mix(in srgb, var(--color-danger) 35%, transparent); }
+.notice-quiet { background: color-mix(in srgb, var(--color-text) 6%, transparent); color: var(--text-2); }
