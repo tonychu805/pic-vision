@@ -19,6 +19,7 @@ import {
   addCameraFromSampleClip,
 } from "./cameras/store.js";
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
+import { updateState } from "./version.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
@@ -29,6 +30,13 @@ import { getEvents, clearEvents } from "./activityLog.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
+
+// Where the app asks "is there a newer version?". Deliberately a constant:
+// this URL is baked into every copy handed to a venue and can never
+// change, which is exactly why it points at something we own rather than
+// at a release host we might swap. Overridable for local testing only.
+const UPDATE_FEED_URL =
+  process.env.PIC_VISION_UPDATE_URL || "https://console.picvisionai.com/api/desktop/latest";
 
 // All OS/network-touching work (ONVIF discovery, camera connect, persisted
 // storage) is registered here, once, behind named ipcMain handlers -- the
@@ -128,6 +136,33 @@ function registerCameraHandlers() {
   });
   ipcMain.handle("system:openExternal", async (_event, url) => {
     return openExternal(url);
+  });
+
+  // Manual update check. Auto-update needs a Developer ID signature that
+  // the unsigned venue builds don't have, so the app tells the operator
+  // and they install it themselves.
+  //
+  // The address is fixed rather than read from the paired connection: an
+  // agent that was never paired, or whose token was revoked, still needs
+  // to be able to find out it's out of date. It points at our own console
+  // rather than at GitHub directly so the download location can move later
+  // without stranding copies already installed -- see that route's own
+  // comment.
+  ipcMain.handle("updates:check", async () => {
+    const current = app.getVersion();
+    try {
+      const res = await fetch(UPDATE_FEED_URL, {
+        headers: { accept: "application/json" },
+        signal: AbortSignal.timeout(10_000),
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return updateState(current, await res.json());
+    } catch (err) {
+      // Offline venue, DNS, console down. Reported as "couldn't check",
+      // never as "up to date".
+      console.error(`[updates] check failed: ${err.message}`);
+      return { ...updateState(current, null), error: err.message };
+    }
   });
 }
 

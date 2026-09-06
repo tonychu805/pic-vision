@@ -55,6 +55,69 @@ function DetailRow({ label, value, mono, hint, children }) {
   );
 }
 
+// Version, and a manual check for a newer one.
+//
+// Manual on purpose: the venue builds aren't signed by Apple, and
+// automatic updating needs a signature, so the honest thing is to say
+// what's available and let the operator install it. It sits in Details
+// because that's the "about this install" block -- and because the first
+// thing a support conversation needs is which version they're on.
+function UpdateRow() {
+  const [version, setVersion] = useState("");
+  const [result, setResult] = useState(null);
+  const [checking, setChecking] = useState(false);
+
+  useEffect(() => {
+    window.updatesAPI?.check?.().then((r) => {
+      setVersion(r.current);
+      setResult(r);
+    }).catch(() => {});
+  }, []);
+
+  const check = async () => {
+    setChecking(true);
+    try {
+      const r = await window.updatesAPI.check();
+      setVersion(r.current);
+      setResult(r);
+    } catch {
+      setResult({ status: "unknown" });
+    }
+    setChecking(false);
+  };
+
+  const hint =
+    result?.status === "outdated" ? `Version ${result.latest} is available`
+    : result?.status === "current" ? "This is the latest version"
+    : result?.status === "unknown" ? "Couldn't check for updates just now"
+    : undefined;
+
+  return (
+    <DetailRow label="Version" value={version || "…"} mono hint={hint}>
+      {result?.status === "outdated" ? (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ fontSize: "var(--fs-fine)", padding: 0, color: "var(--color-accent)" }}
+          onClick={() => window.systemAPI?.openExternal?.(result.downloadUrl)}
+        >
+          Download<i className="ph ph-arrow-square-out" style={{ fontSize: 12 }} />
+        </button>
+      ) : (
+        <button
+          type="button"
+          className="btn btn-ghost"
+          style={{ fontSize: "var(--fs-fine)", padding: 0 }}
+          onClick={check}
+          disabled={checking}
+        >
+          {checking ? "Checking…" : "Check for updates"}
+        </button>
+      )}
+    </DetailRow>
+  );
+}
+
 export default function CloudPage({ session, onSignedOut }) {
   const [connection, setConnection] = useState(undefined); // undefined = loading
   const [registering, setRegistering] = useState(false);
@@ -212,6 +275,7 @@ export default function CloudPage({ session, onSignedOut }) {
           </DetailRow>
         )}
         <DetailRow label="Device ID" value={deviceId} mono hint="Fixed — identifies this machine to the console across re-registrations." />
+        <UpdateRow />
         {connection && (
           <>
             {/* pairedAt fallback: a connection saved before today's ADR-079

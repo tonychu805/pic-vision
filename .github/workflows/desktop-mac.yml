@@ -31,6 +31,26 @@ jobs:
         with:
           node-version: 20
 
+      # The tag is what names the release; package.json is what the built
+      # app reports as its own version and what the update check compares
+      # against. If they disagree, the release says 1.2.0 while every copy
+      # of it calls itself 1.1.0 -- so the update check tells those users
+      # they're behind forever, and nothing anywhere looks broken.
+      # `npm version` (see desktop/.npmrc) keeps them in step; this is the
+      # guard for when someone tags by hand instead.
+      - name: Tag must match package.json
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        working-directory: desktop
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "tag=$TAG_VERSION package.json=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag desktop-v$TAG_VERSION does not match package.json $PKG_VERSION."
+            echo "::error::Use 'npm version <patch|minor|major>' in desktop/ instead of tagging by hand."
+            exit 1
+          fi
+
       - name: Install dependencies for ${{ matrix.arch }}
         working-directory: desktop
         env:

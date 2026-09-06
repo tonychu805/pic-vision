@@ -90,6 +90,10 @@ contextBridge.exposeInMainWorld("authAPI", {
   getBrand: () => ipcRenderer.invoke("auth:getBrand"),
 });
 
+contextBridge.exposeInMainWorld("updatesAPI", {
+  check: () => ipcRenderer.invoke("updates:check"),
+});
+
 contextBridge.exposeInMainWorld("analyticsAPI", {
   capture: (event, properties) => ipcRenderer.invoke("analytics:capture", event, properties),
   isFeatureEnabled: (key) => ipcRenderer.invoke("analytics:isFeatureEnabled", key),

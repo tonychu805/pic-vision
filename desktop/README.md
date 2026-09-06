@@ -79,6 +79,57 @@ npm_config_arch=x64   npm ci && npm run build -- --mac --x64
 
 `.github/workflows/desktop-mac.yml` does both on a `desktop-v*` tag.
 
+### Cutting a release
+
+```
+cd desktop
+npm version minor          # or patch / major -- see below
+git push --follow-tags
+```
+
+That is the whole process. `npm version` bumps `package.json`, commits it,
+and creates the matching tag; `.npmrc` sets the `desktop-v` prefix the
+workflow triggers on. Pushing the tag builds both architectures and
+attaches the DMGs to a GitHub Release.
+
+**Never tag by hand.** The tag names the release, but `package.json` is
+what the built app reports as its own version and what the update check
+compares against. If they disagree, the release says 1.2.0 while every
+copy of it calls itself 1.1.0 -- so the update check tells those operators
+they're up to date forever, and nothing anywhere looks broken. The
+workflow fails the build if they don't match, but the point is not to get
+there.
+
+Which number to bump:
+
+| Bump | When |
+|---|---|
+| `patch` | Fixes and copy changes a venue won't notice |
+| `minor` | New capability or visible change |
+| `major` | The venue has to *act* -- reinstall, re-pair, or their Mac is now too old |
+
+### How updating works for a venue
+
+There is no auto-update: Squirrel.Mac needs a Developer ID signature, and
+these builds are unsigned. The app checks manually instead -- Cloud
+console tab, Details, "Check for updates" -- and sends the operator to the
+release page to install it themselves.
+
+The app asks `https://console.picvisionai.com/api/desktop/latest`, which
+reads the newest `desktop-v*` release from GitHub and caches it for an
+hour. Two deliberate choices there:
+
+- **The address is ours, not GitHub's.** It is baked into every copy handed
+  to a venue and can never change. Because it points at our own console,
+  moving downloads off GitHub later is an edit to that one route, which
+  every installed agent picks up on its next check.
+- **The answer is derived, not configured.** No version number to type at
+  release time, so there is nothing to forget and nothing to be silently
+  wrong.
+
+If the check fails or nothing is published, the app says it couldn't check
+-- never that you're up to date.
+
 ## Camera setup: 30fps is required, not advised
 
 Set every camera to **30 frames per second** in its own settings page before
