@@ -1,4 +1,4 @@
-from src.track import track_ball
+from src.track import track_ball, max_jump_for_fps, reset_after_for_fps
 
 
 def test_follows_smooth_ball_ignores_distractor():
@@ -81,3 +81,42 @@ def test_single_spurious_blip_after_reset_is_not_accepted():
     ys = track_ball(frames, max_jump=100, reset_after=15)
     assert ys[0] == 60
     assert all(y is None for y in ys[1:])   # spurious blip never confirmed
+
+
+# --- frame-rate-aware thresholds (ADR-086) ---------------------------------
+# max_jump is "how far can the ball move between two frames" -- a speed, not a
+# distance. It was a flat 150 px/frame tuned entirely on 30fps footage, which
+# silently rejected genuine fast-ball motion on a 15fps camera (real: Court 1,
+# measured at 15.00 fps -- 9,000 frames in 600s).
+
+def test_30fps_thresholds_are_unchanged():
+    # The whole change must be a no-op for every video scored so far, or every
+    # tuned parameter and recorded precision/recall number is invalidated.
+    assert max_jump_for_fps(30) == 150.0
+    assert reset_after_for_fps(30) == 15
+
+
+def test_half_frame_rate_doubles_the_jump_allowance():
+    # At 15fps the ball genuinely travels twice as far between frames.
+    assert max_jump_for_fps(15) == 300.0
+
+
+def test_reset_after_holds_constant_in_seconds_not_frames():
+    # 0.5s of missing detections, whatever the frame rate.
+    assert reset_after_for_fps(15) == 8      # round(0.5 * 15)
+    assert reset_after_for_fps(60) == 30
+
+
+def test_missing_or_absurd_fps_falls_back_to_30fps_behaviour():
+    # A failed probe must degrade to today's behaviour, never to an absurd
+    # radius that would accept any background clutter on the frame.
+    for bad in (None, 0, -5):
+        assert max_jump_for_fps(bad) == 150.0
+        assert reset_after_for_fps(bad) == 15
+
+
+def test_fast_ball_at_15fps_is_kept_but_would_be_lost_at_the_old_flat_threshold():
+    # 200px per frame: real motion for a hard drive at 15fps, impossible at 30.
+    frames = [[(100, 100, 0.9)], [(300, 100, 0.9)], [(500, 100, 0.9)]]
+    assert track_ball(frames, max_jump=150) == [100, None, None]          # old behaviour: dropped
+    assert track_ball(frames, max_jump=max_jump_for_fps(15)) == [100, 100, 100]   # kept

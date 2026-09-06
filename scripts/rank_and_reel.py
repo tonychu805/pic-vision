@@ -26,9 +26,12 @@ from src.calib import court_wedge
 from src.track import track_ball
 from src.ball import net_line_y, crossing_times, cluster_crossings
 from src.select import frame_speeds, spike_threshold, rank_segments
-from src.render import cut_clips, concat_clips
+from src.render import cut_clips, concat_clips, probe_fps
+from src.track import max_jump_for_fps, reset_after_for_fps
 
-FPS = 30.0
+# Measured per video rather than assumed (ADR-086). Was a flat FPS = 30.0,
+# which held only because the CFR conversion forces 30 -- by duplicating
+# frames when the camera streams slower. See src/render.py's probe_fps.
 GAP_SEC = 3.0
 MIN_CROSSINGS = 6
 PAD_SEC = 3.0
@@ -82,14 +85,15 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
 
     with open(calib_path) as f:
         calib = json.load(f)
-    track = load_predictions(csv, FPS)
+    fps = probe_fps(video)
+    track = load_predictions(csv, fps)
     in_court = court_wedge(calib)
     net_y = net_line_y(calib)
 
     times = [t for t, *_ in track]
     frames = [[(x, y, conf if conf is not None else 1.0)] if in_court(x, y) else []
               for _, x, y, w, h, conf in track]
-    ys = track_ball(frames, max_jump=150, reset_after=15)
+    ys = track_ball(frames, max_jump=max_jump_for_fps(fps), reset_after=reset_after_for_fps(fps))
     tracked = list(zip(times, ys))
     times_crossed = crossing_times(tracked, net_y=net_y, band=0.0)
     segments = cluster_crossings(times_crossed, gap_sec=GAP_SEC, min_crossings=MIN_CROSSINGS)

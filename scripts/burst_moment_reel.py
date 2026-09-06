@@ -26,12 +26,11 @@ sys.path.insert(0, ".")
 
 from src.tracknet import load_predictions
 from src.calib import court_wedge
-from src.track import track_ball
+from src.track import track_ball, max_jump_for_fps, reset_after_for_fps
 from src.ball import net_line_y, crossing_times, cluster_crossings
 from src.select import frame_speeds, spike_threshold, rank_segments, peak_window
-from src.render import cut_clips, concat_clips
+from src.render import cut_clips, concat_clips, probe_fps
 
-FPS = 30.0
 GAP_SEC = 3.0
 MIN_CROSSINGS = 6
 MOMENT_WINDOW = 3.0   # matches rank_segments' peak_crossing_rate window -- the
@@ -53,14 +52,15 @@ def build_burst_reel(video, csv, calib_path, out_dir, target_sec, session_id,
     with open(calib_path) as f:
         import json
         calib = json.load(f)
-    track = load_predictions(csv, FPS)
+    fps = probe_fps(video)
+    track = load_predictions(csv, fps)
     in_court = court_wedge(calib)
     net_y = net_line_y(calib)
 
     times = [t for t, *_ in track]
     frames = [[(x, y, conf if conf is not None else 1.0)] if in_court(x, y) else []
               for _, x, y, w, h, conf in track]
-    ys = track_ball(frames, max_jump=150, reset_after=15)
+    ys = track_ball(frames, max_jump=max_jump_for_fps(fps), reset_after=reset_after_for_fps(fps))
     tracked = list(zip(times, ys))
     times_crossed = crossing_times(tracked, net_y=net_y, band=0.0)
     segments = cluster_crossings(times_crossed, gap_sec=GAP_SEC, min_crossings=MIN_CROSSINGS)

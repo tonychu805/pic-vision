@@ -68,6 +68,44 @@ no prior track to protect and a bad pick there is just a normal teleport-reject
 away from being corrected."""
 
 
+# max_jump is "how far can the ball move between two frames" -- which is a
+# speed, not a distance, so it only means anything alongside a frame rate.
+# It was written as a bare 150 px/frame, tuned entirely on 30fps footage. A
+# 15fps camera (real: this project's own Court 1) moves the ball twice as
+# far per frame, so a flat 150 rejects genuine fast-ball motion as a
+# teleport -- silently, and worst on exactly the shots a highlight reel
+# exists to capture.
+#
+# Expressed per second instead, per config.yaml's own convention that
+# temporal parameters are configured in seconds and converted at runtime.
+# 4500 px/s is 150 px/frame at 30fps, so 30fps footage behaves exactly as
+# before; this only changes what happens off 30.
+#
+# Note the cost, which is real: at 15fps this doubles the acceptance
+# radius, and a wider radius admits more background clutter -- a widened
+# radius has already cost a real rally in this project once (see the
+# elapsed-frame-scaling attempt described above). Lower frame rates are
+# genuinely harder to track, and this makes them workable, not equivalent.
+MAX_JUMP_PX_PER_SEC = 4500.0
+RESET_AFTER_SEC = 0.5
+
+
+def max_jump_for_fps(fps):
+    """Per-frame teleport threshold for footage at `fps`. Falls back to the
+    30fps value for a missing/nonsensical rate rather than producing an
+    absurd radius from a bad probe."""
+    if not fps or fps <= 0:
+        fps = 30.0
+    return MAX_JUMP_PX_PER_SEC / fps
+
+
+def reset_after_for_fps(fps):
+    """Gap tolerance in frames, held constant in wall-clock terms (0.5s)."""
+    if not fps or fps <= 0:
+        fps = 30.0
+    return max(1, round(RESET_AFTER_SEC * fps))
+
+
 def track_ball(frames, max_jump, reset_after=15, min_seg_frames=None,
                min_seg_span=None, return_x=False):
     """frames: per-frame candidate lists, each [(x, y, conf), ...] (empty if no

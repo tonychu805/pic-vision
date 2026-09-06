@@ -137,6 +137,23 @@ export function cardVisuals(card) {
 // Identity/network/streams panels for the detail page -- "Not available"
 // wherever ONVIF's GetDeviceInformation genuinely has no such field, rather
 // than inventing MAC/subnet/gateway values the way the mockup's fixtures do.
+// What the camera says it's actually sending, read from its ONVIF profile
+// when it was added or last checked (cameras/store.js's streamProfile).
+// Shown because all three numbers change how well detection works and none
+// of them were visible anywhere before: H.265 has silently broken decoding
+// on this project's footage once already, and anything below 30fps makes the
+// ball travel further between frames than the tracker was tuned for.
+export function profileSpec(camera) {
+  const p = camera.profile;
+  if (!p) return null;
+  const parts = [];
+  if (p.codec) parts.push(p.codec === "H265" ? "H.265" : p.codec === "H264" ? "H.264" : p.codec);
+  if (p.width && p.height) parts.push(`${p.width}x${p.height}`);
+  if (p.fps) parts.push(`${p.fps} fps${p.fps < 30 ? " (below 30 — see setup guide)" : ""}`);
+  if (p.bitrateKbps) parts.push(`${(p.bitrateKbps / 1000).toFixed(1)} Mbps`);
+  return parts.length ? parts.join(" · ") : null;
+}
+
 export function detailPanels(camera) {
   const na = "Not available";
   const viaRtsp = camera.connectionType === "rtsp";
@@ -178,7 +195,7 @@ export function detailPanels(camera) {
       { k: "Gateway", v: na },
     ],
     streams: camera.streamUri
-      ? [{ label: "MAIN", url: camera.streamUri, spec: viaRtsp ? "found directly, without ONVIF" : "reported by camera's GetStreamUri" }]
+      ? [{ label: "MAIN", url: camera.streamUri, spec: profileSpec(camera) || (viaRtsp ? "found directly, without ONVIF" : "reported by camera's GetStreamUri") }]
       : [],
   };
 }

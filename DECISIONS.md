@@ -1489,6 +1489,29 @@ Checked before building, not assumed: `save_calibration.py` (the homography fit)
 
 ---
 
+## ADR-086 — Measure the frame rate instead of assuming 30, and record what each camera is actually streaming
+
+**Date:** 2026-09-06 · **Status:** accepted, implemented; not yet exercised against real cameras
+
+**Context.** A discussion about which codecs real venue cameras support turned up two things nobody could see.
+
+First, **`fps: 30` was an assumption nothing checked.** `config.yaml` records it as "confirmed once at setup (PRD §6)", but no such confirmation step exists anywhere in the venue onboarding flow, and `scripts/rank_and_reel.py` simply hardcoded `FPS = 30.0`. Court 1 was then measured at **exactly 15.00 fps** — 9,000 frames in 600.148s, counted with `ffprobe -count_frames`. The CFR conversion had been papering over this by duplicating every frame up to 30, which means: the GPU was being paid to run inference over twice as many frames as carry information, and TrackNet — which detects the ball by comparing three consecutive frames — was being handed pairs of identical images for half of those comparisons.
+
+Worse, `track_ball`'s `max_jump=150` is a *speed* written as a distance: "how far can the ball move between two frames". It was tuned entirely on 30fps footage. At 15fps a real ball travels twice as far per frame, so a flat 150 rejects genuine fast-ball motion as a teleport — silently, and worst on exactly the shots a highlight reel exists to capture.
+
+Second, **nothing recorded what a camera was streaming.** No codec, resolution, frame rate or bitrate was stored anywhere, despite all four changing how the pipeline behaves — and despite this project having already lost a session to HEVC damage that made `cv2.VideoCapture` stop at 930 of 121,013 frames while exiting 0 (`EXPERIMENTS.md` 2026-08-16).
+
+**Decision.**
+1. **`max_jump` and `reset_after` become frame-rate derived** (`src/track.py`): `MAX_JUMP_PX_PER_SEC = 4500` (= 150 px/frame × 30fps) and `RESET_AFTER_SEC = 0.5`. At 30fps both resolve to exactly their previous values, so every scored video and tuned parameter is untouched; only off-30 footage changes. A missing or implausible rate falls back to the 30fps values rather than producing an absurd radius.
+2. **`src/render.py`'s `probe_fps()` measures the rate from packet timestamps**, bounded to the first 60 seconds. Deliberately *not* from `r_frame_rate` or `avg_frame_rate`: `capture.js` records with `-c copy`, so the container inherits whatever the camera *declares*. Court 1's file declares `30/1` in both fields while containing 15.00 fps of actual frames — a first implementation of this trusted `avg_frame_rate` and would have silently returned 30 for exactly the case it exists to catch.
+3. **The ONVIF stream profile is captured and stored** (`cameras/store.js`): codec, resolution, frame rate, bitrate. This costs no extra network round-trip — `cam.connect()` already calls `getProfiles()` and populates `activeSource`; the values were being discarded. Refreshed on every heartbeat's existing connection check, which also backfills cameras added before this existed. Reported to the console (`cameras.codec/stream_*`) and shown in both UIs, with a sub-30fps rate deliberately un-muted as something to go and fix in the camera.
+
+**Verification.** `probe_fps` measures 14.99 on the real Court 1 recording and 30.00 on the three 30fps files, and falls back to 30 on a missing file. New tests assert the 30fps no-op, the 15fps doubling, the seconds-based `reset_after`, the bad-input fallback, and — directly — that a 200px/frame ball is dropped at the old flat 150 and kept at the frame-rate-derived threshold. 128 tests pass; console `tsc` clean. **Not yet verified against a real camera**: reading a live ONVIF profile needs the camera credentials, which are OS-vault encrypted and reachable only from the running app. It will populate on the operator's next launch.
+
+**Consequences.** 15fps cameras are supported rather than silently degraded, but they are *not* equivalent to 30fps: doubling the acceptance radius admits more background clutter, and a widened radius has already cost a real rally in this project once (see `src/track.py`'s own note on the elapsed-frame-scaling attempt). So 30fps stays the recommendation and belongs in venue setup guidance; this makes the alternative workable, not equal. The frame rate now travels with the video rather than being global, which is also the prerequisite for ever dropping the upsample-to-30 in the CFR step — the change that would halve GPU cost on such cameras, deliberately not made here.
+
+---
+
 ## Template
 
 ```markdown

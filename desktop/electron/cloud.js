@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
-import { listCameras, testConnection } from "./cameras/store.js";
+import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
 import { isRecording, listRecordings, startRecording, stopRecording } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { logEvent } from "./activityLog.js";
@@ -185,6 +185,12 @@ async function cameraStatuses() {
   return cameras.map((c, i) => {
     const recordings = listRecordings(c);
     const status = results[i].status === "fulfilled" ? "online" : "offline";
+    // The connection check above already asked the camera what it's
+    // streaming; keep it rather than discard it. Backfills cameras added
+    // before this existed, and picks up a setting changed on the camera's
+    // own web page without anyone re-adding it here.
+    const profile = results[i].status === "fulfilled" ? results[i].value?.profile ?? null : null;
+    if (profile) setCameraProfile(c.id, profile);
     const previous = lastCameraStatus.get(c.id);
     if (previous && previous !== status) {
       logEvent(status === "online" ? "camera_online" : "camera_offline", `${c.label} ${status === "online" ? "came back online" : "went offline"}`);
@@ -201,6 +207,14 @@ async function cameraStatuses() {
       serialNumber: c.serialNumber ?? null,
       addedAt: c.addedAt ?? null,
       isRecording: isRecording(c.id),
+      // What this camera is actually sending, so the console can see which
+      // venues stream H.265 or run below 30fps -- both change how well
+      // detection works, and neither was visible anywhere before.
+      codec: profile?.codec ?? c.profile?.codec ?? null,
+      streamWidth: profile?.width ?? c.profile?.width ?? null,
+      streamHeight: profile?.height ?? c.profile?.height ?? null,
+      streamFps: profile?.fps ?? c.profile?.fps ?? null,
+      streamBitrateKbps: profile?.bitrateKbps ?? c.profile?.bitrateKbps ?? null,
       recordingCount: recordings.length,
       lastRecordingAt: parseRecordingStartedAt(recordings[0]?.name),
     };

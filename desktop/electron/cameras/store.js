@@ -87,7 +87,41 @@ export async function testConnection({ hostname, port, username, password, path:
     // URI -- connection itself already succeeded, so don't fail the whole
     // test over this.
   }
-  return { info, streamUri };
+  return { info, streamUri, profile: streamProfile(cam) };
+}
+
+// What the camera is actually about to send us: codec, resolution, frame
+// rate and bitrate. This costs no extra network round-trip -- connect()
+// already calls getProfiles() internally and populates `activeSource` from
+// the same default profile that getStreamUri() above resolves to; the
+// values were simply being thrown away.
+//
+// Worth recording because the pipeline's behaviour depends on all four and
+// none of them were previously visible:
+//   - codec: H.265 is increasingly the factory default, and this project has
+//     already lost a session to HEVC damage that made the decoder stop
+//     silently (930 of 121,013 frames, exit code 0 -- see EXPERIMENTS.md
+//     2026-08-16). Knowing which venues stream H.265 is the difference
+//     between predicting that and discovering it.
+//   - frame rate: the ball tracker's max-jump threshold assumes how far a
+//     ball can travel between two frames, so a 15fps camera moves the ball
+//     twice as far per frame as the tuning expects.
+//   - resolution/bitrate: what the venue's upload actually costs, which is
+//     set here in the camera, not by anything downstream.
+function streamProfile(cam) {
+  const source = cam.activeSource;
+  if (!source) return null;
+  const toNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    codec: source.encoding ? String(source.encoding).toUpperCase() : null,
+    width: toNumber(source.width),
+    height: toNumber(source.height),
+    fps: toNumber(source.fps),
+    bitrateKbps: toNumber(source.bitrate),
+  };
 }
 
 // Real duplicate found 2026-09-01: the same physical Synology camera got
@@ -105,7 +139,7 @@ function existingByHostname(hostname) {
 export async function addCamera({ label, hostname, port, username, password, path }) {
   const existing = existingByHostname(hostname);
   if (existing) return existing;
-  const { info, streamUri } = await testConnection({ hostname, port, username, password, path });
+  const { info, streamUri, profile } = await testConnection({ hostname, port, username, password, path });
   const camera = {
     id: randomUUID(),
     label: label || info.manufacturer + " " + info.model,
@@ -122,6 +156,7 @@ export async function addCamera({ label, hostname, port, username, password, pat
     serialNumber: info.serialNumber,
     firmwareVersion: info.firmwareVersion,
     streamUri,
+    profile,
     connectionType: "onvif",
     addedAt: new Date().toISOString(),
   };
@@ -180,6 +215,25 @@ export function removeCamera(id) {
 export function renameCamera(id, label) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
+  saveCameras(next);
+  return next.find((c) => c.id === id);
+}
+
+// Refreshes what a camera says it's streaming. Called from the heartbeat's
+// own connection check (cloud.js), which already talks to every camera --
+// so this both backfills cameras added before `profile` existed and notices
+// when someone changes a camera's settings from its own web page, without
+// a second round of connections. Only writes when something actually
+// changed, since the heartbeat runs every 30s and this store is on disk.
+export function setCameraProfile(id, profile) {
+  if (!profile) return null;
+  const cameras = listCameras();
+  const current = cameras.find((c) => c.id === id);
+  if (!current) return null;
+  const same = current.profile
+    && ["codec", "width", "height", "fps", "bitrateKbps"].every((k) => current.profile[k] === profile[k]);
+  if (same) return current;
+  const next = cameras.map((c) => (c.id === id ? { ...c, profile } : c));
   saveCameras(next);
   return next.find((c) => c.id === id);
 }
