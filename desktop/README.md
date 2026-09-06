@@ -40,8 +40,14 @@ surface without restructuring it first.
 
 ## Install it (macOS)
 
-Download `PicVision-CameraManager-<version>-<arch>.dmg` (arm64 for Apple
-Silicon, x64 for Intel), open it, and drag the app to Applications.
+**Apple silicon, macOS 13 (Ventura) or newer.** Intel Macs are not
+supported (operator's call, 2026-09-07) and no x64 build is produced;
+macOS 13 is the floor Electron 44 imposes. A venue on an Intel Mac, or on
+Monterey, cannot run this -- adding `x64` back to the workflow matrix
+covers the first case, and pinning Electron 43 would cover the second.
+
+Download `PicVision-CameraManager-<version>-arm64.dmg`, open it, and drag
+the app to Applications.
 
 **The build is not code-signed yet** (PIC-84 -- an Apple Developer
 membership is the missing piece, not a technical blocker), so macOS

@@ -1,16 +1,22 @@
 # Builds the venue-facing desktop agent as an unsigned macOS DMG (PIC-84,
 # ADR-084) and attaches it to a GitHub Release.
 #
-# Two separate build legs rather than one universal invocation: ffmpeg-static
-# downloads only the architecture it was installed for, so each arch needs
-# its own `npm ci` with npm_config_arch set before electron-builder runs.
+# Apple silicon only (operator's call, 2026-09-07). Intel Macs are not
+# supported: every Mac sold since late 2020 is arm64, and a venue capture
+# box is bought for the job rather than inherited. A venue that already
+# owns an Intel Mac can't run this -- re-adding `x64` to the matrix below
+# is all it takes if that changes.
 #
-# For that split to mean anything, package.json's build.mac.target must NOT
-# list `arch` -- electron-builder builds every arch named there regardless
-# of the --arm64/--x64 flag passed here. It did until 2026-09-07, so each
-# leg built both DMGs and the arm64 runner packed its arm64 ffmpeg into the
-# x64 installer: broken on a real Intel Mac, and only visible by reading
-# the build log.
+# The matrix is kept for one entry precisely so that stays a one-line
+# change, and because ffmpeg-static downloads only the architecture it was
+# installed for -- any second arch needs its own `npm ci` with
+# npm_config_arch set, not a shared one.
+#
+# package.json's build.mac.target must NOT list `arch`: electron-builder
+# builds every arch named there regardless of the flag passed here. It did
+# until 2026-09-07, so each leg built both DMGs and the arm64 runner packed
+# its arm64 ffmpeg into an x64 installer -- broken on a real Intel Mac, and
+# visible only by reading the build log.
 #
 # Signing is deliberately off (CSC_IDENTITY_AUTO_DISCOVERY=false, and
 # build.mac.identity is null in package.json) until an Apple Developer
@@ -30,7 +36,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        arch: [arm64, x64]
+        arch: [arm64]
     steps:
       - uses: actions/checkout@v4
 
