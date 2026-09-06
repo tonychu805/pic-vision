@@ -5,6 +5,13 @@
 # downloads only the architecture it was installed for, so each arch needs
 # its own `npm ci` with npm_config_arch set before electron-builder runs.
 #
+# For that split to mean anything, package.json's build.mac.target must NOT
+# list `arch` -- electron-builder builds every arch named there regardless
+# of the --arm64/--x64 flag passed here. It did until 2026-09-07, so each
+# leg built both DMGs and the arm64 runner packed its arm64 ffmpeg into the
+# x64 installer: broken on a real Intel Mac, and only visible by reading
+# the build log.
+#
 # Signing is deliberately off (CSC_IDENTITY_AUTO_DISCOVERY=false, and
 # build.mac.identity is null in package.json) until an Apple Developer
 # membership exists -- see desktop/README.md's install section for what
