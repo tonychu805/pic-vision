@@ -23,6 +23,7 @@ import {
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
 import { classifyProbeError } from "./cameras/probeResult.js";
+import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
@@ -420,6 +421,10 @@ function createWindow() {
 }
 
 app.whenReady().then(() => {
+  // Before anything reads a credential: tightens the store files to 0600
+  // and re-encrypts anything a pre-ADR-082 version left in plaintext.
+  // Both were real on 2026-09-07 -- see storeFiles.js.
+  secureStoreFiles();
   registerCameraHandlers();
   registerScanSettingsHandlers();
   registerCaptureHandlers();

@@ -840,6 +840,15 @@ pic-vision/
 │   │   │                              # unreachable/unpublished/unparseable never report
 │   │   │                              # "up to date", the one wrong answer with a cost.
 │   │   ├── version.test.js              # 5 tests; asserts unparseable returns null, not 0
+│   │   ├── storeFiles.js                # runs once at startup: chmod 0600 on every
+│   │   │                              # electron-store JSON, and re-encrypts any
+│   │   │                              # secret a pre-ADR-082 build left in
+│   │   │                              # plaintext. Both were real on 2026-09-07 --
+│   │   │                              # auth.json still held a plaintext Supabase
+│   │   │                              # refresh token (written 43 min before the
+│   │   │                              # encryption shipped; nothing migrated it),
+│   │   │                              # and every store file was mode 664, i.e.
+│   │   │                              # readable by any other local user.
 │   │   ├── ipc-contract.test.js         # 2026-09-07 gate: every IPC handler taking
 │   │   │                              # an OBJECT from the renderer must be
 │   │   │                              # classified as receiving a stored entity

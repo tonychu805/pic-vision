@@ -14,7 +14,14 @@
 // not a regression to guard against.
 import { safeStorage } from "electron";
 
-const PREFIX = "enc:v1:";
+export const PREFIX = "enc:v1:";
+
+// True for a value this code encrypted. Used by the migration in
+// store.js/auth.js/cloud.js to tell "already done" from "written before
+// encryption shipped".
+export function isEncrypted(value) {
+  return typeof value === "string" && value.startsWith(PREFIX);
+}
 
 export function encryptField(value) {
   if (value == null) return value;

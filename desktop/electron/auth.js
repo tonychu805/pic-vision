@@ -131,7 +131,17 @@ export async function signOut() {
 }
 
 export function getSession() {
-  return publicSession(loadSession());
+  const session = loadSession();
+  if (!session) return null;
+  // An access token lasts about an hour and is renewed by the refresh
+  // token, so "expired" on its own is normal and not a problem. What
+  // isn't reportable as signed-in is a session whose REFRESH token is
+  // also gone -- there's no way back from that without signing in again,
+  // and saying "signed in" invites someone to trust a session that can't
+  // be renewed. The access token's own expiry is left to
+  // getValidAccessToken(), which refreshes it on demand.
+  if (!session.refreshToken) return null;
+  return publicSession(session);
 }
 
 // Refreshes 60s ahead of real expiry so a call that's mid-flight when the
