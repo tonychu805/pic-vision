@@ -38,6 +38,9 @@
         }
       ],
       "category": "public.app-category.utilities",
+      "extendInfo": {
+        "NSLocalNetworkUsageDescription": "Pic Vision Camera Manager uses your local network to find and connect to your cameras."
+      },
       "identity": null,
       "hardenedRuntime": false,
       "artifactName": "PicVision-CameraManager-${version}-${arch}.${ext}"

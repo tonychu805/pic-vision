@@ -519,7 +519,12 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
         </div>
       )}
 
-      {(scanError || sweepError) && (
+      {/* WS-Discovery multicast is often unavailable on managed Wi-Fi and
+          some macOS network configurations.  The RTSP sweep is deliberately
+          an independent fallback, so one method failing does not mean the
+          scan failed.  Only call this a problem when neither produced a
+          result. */}
+      {scanError && sweepError && (
         <p style={{ margin: "0 22px 12px", fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
           The scan ran into a problem, but you can still add a camera by hand below.
         </p>

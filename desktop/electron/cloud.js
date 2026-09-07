@@ -42,6 +42,17 @@ const HEARTBEAT_INTERVAL_MS = 30_000;
 
 let heartbeatTimer = null;
 
+// Registration is started automatically after sign-in and, if that first
+// attempt has not completed when the Cloud console page opens, an operator
+// can also click its retry button.  Those are intentionally two ways to
+// recover from an offline console, but they must share the *same* request:
+// two simultaneous register calls can both observe no agent row and race to
+// insert the same stable device_id.  The database correctly rejects the
+// second insert as a duplicate.  Keep the promise (rather than only a
+// boolean) so every caller receives the successful connection or the same
+// actionable failure.
+let registrationInFlight = null;
+
 // Transition-tracking for the activity log -- both start "assumed fine"
 // (undefined for a camera means "no prior reading yet," true for the
 // heartbeat means "just connected/registered") so the very first
@@ -201,7 +212,15 @@ export function setAgentName(name) {
 // The returned long-lived API token is OS-vault-encrypted at rest the
 // same way camera passwords are (secureField.js, PIC-79) -- see
 // saveConnection above.
-export async function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_URL) {
+export function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_URL) {
+  if (registrationInFlight) return registrationInFlight;
+
+  registrationInFlight = registerAgentOnce(accessToken, consoleUrl)
+    .finally(() => { registrationInFlight = null; });
+  return registrationInFlight;
+}
+
+async function registerAgentOnce(accessToken, consoleUrl) {
   const res = await fetch(`${consoleUrl}/api/agents/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
