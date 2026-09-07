@@ -40,6 +40,33 @@ See `.gitignore` for the full list. In short: commit `eval/labels/*.jsonl` (hand
 
 Judge rally-vs-dead-time calls from actual video playback, not still frames — a stills-based verdict has already been wrong once on this project (see `EXPERIMENTS.md`, the IMG_7744 false-positive review). A lead from a still frame is not a verdict until someone has watched the clip.
 
+## Security changes: remove the secret, then prove it still works
+
+A security fix that removes data is only half done. On 2026-09-06 the desktop's
+camera passwords were stripped from everything the renderer receives (ADR-088,
+correctly). The next morning every camera read "Not answering", because the
+renderer hands that same stripped object back to the connection check — which
+then authenticated with no password. Live view was unaffected: it passes an id
+and reads the real record in the main process.
+
+Three things follow, and only the first two are enforced:
+
+- **A gate, `electron/ipc-contract.test.js`**: every IPC handler taking an
+  object from the renderer must be classified as receiving either a *stored*
+  entity (must call `withStoredSecrets()`) or *freshly-typed input*. A new
+  unclassified handler fails the suite. Prefer the immune shape — take an id,
+  read the record in main (`liveview:start`).
+- **A gate, paired assertions**: a test proving a secret is gone must sit
+  beside one proving the feature still works without it. `redaction.test.js`
+  asserted removal, passed, and the app was broken. Removal is not correctness.
+- **Guidance, not a gate — an anomaly appearing right after your change is
+  your change until proven otherwise.** The "Not answering" badges were on
+  screen in a screenshot one turn after the commit that caused them, and were
+  explained away as pre-existing bad credentials. Note that
+  `feedback_verify_mechanisms_rigorously` already said as much and was loaded
+  in context at the time; written guidance has a real failure rate, which is
+  why the two items above are tests instead.
+
 ## Where new files go
 
 - **Root**: tools an operator runs directly as a primary workflow step (`calibrate*.py`, `label*.py`) plus the docs/config listed in `TECH_SPEC.md` §12.

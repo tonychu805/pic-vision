@@ -840,6 +840,17 @@ pic-vision/
 │   │   │                              # unreachable/unpublished/unparseable never report
 │   │   │                              # "up to date", the one wrong answer with a cost.
 │   │   ├── version.test.js              # 5 tests; asserts unparseable returns null, not 0
+│   │   ├── ipc-contract.test.js         # 2026-09-07 gate: every IPC handler taking
+│   │   │                              # an OBJECT from the renderer must be
+│   │   │                              # classified as receiving a stored entity
+│   │   │                              # (must restore secrets) or fresh input.
+│   │   │                              # A new unclassified one fails the suite.
+│   │   │                              # Written after ADR-088's redaction broke
+│   │   │                              # every camera's status check: the renderer
+│   │   │                              # handed its stripped copy back to main,
+│   │   │                              # which then authenticated with no password.
+│   │   │                              # Caught a 6th object-taking handler on its
+│   │   │                              # first run that a manual grep had missed.
 │   │   ├── packaged-paths.test.js       # ADR-090: static check that every
 │   │   │                              # path.join(__dirname, "..", X) at startup targets
 │   │   │                              # a directory build.files actually ships, or sits

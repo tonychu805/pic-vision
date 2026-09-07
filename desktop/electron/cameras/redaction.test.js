@@ -94,3 +94,40 @@ test("withStoredSecrets puts back what the renderer isn't allowed to hold", asyn
   assert.equal(withStoredSecrets(null), null);
   assert.equal(withStoredSecrets(undefined), undefined);
 });
+
+// --- the PAIRED assertion --------------------------------------------
+// The tests above prove the password is gone. That is exactly half of
+// what matters, and the half that passed happily while the app was
+// broken: on 2026-09-07 every camera failed its own status check because
+// the stripped object was handed back to main with no way to restore it.
+//
+// A security assertion needs a functional one beside it. Removal is only
+// correct if the thing still works afterwards.
+test("what publicCamera strips, mergeStoredSecrets restores exactly", async () => {
+  const { mergeStoredSecrets } = await import("./store.js");
+
+  const stored = {
+    id: "cam-1",
+    label: "Court 1",
+    hostname: "192.168.1.42",
+    username: "admin",
+    password: "hunter2",
+    streamUri: "rtsp://admin:hunter2@192.168.1.42:554/stream1",
+  };
+
+  // 1. security half -- nothing secret survives the trip to the renderer
+  const redacted = publicCamera(stored);
+  assert.ok(!JSON.stringify(redacted).includes("hunter2"));
+
+  // 2. functional half -- and main can put it back, byte for byte, so the
+  //    connection check still authenticates with what the camera expects
+  const restored = mergeStoredSecrets(redacted, stored);
+  assert.equal(restored.password, "hunter2");
+  assert.equal(restored.streamUri, "rtsp://admin:hunter2@192.168.1.42:554/stream1");
+
+  // 3. and the non-secret fields the renderer may legitimately have
+  //    edited are NOT clobbered by the restore
+  const renamed = mergeStoredSecrets({ ...redacted, label: "Court One" }, stored);
+  assert.equal(renamed.label, "Court One");
+  assert.equal(renamed.password, "hunter2");
+});

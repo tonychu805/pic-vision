@@ -104,7 +104,16 @@ export function listCameras() {
 export function withStoredSecrets(config) {
   if (!config?.id) return config;
   const stored = listCameras().find((c) => c.id === config.id);
-  if (!stored) return config;
+  return mergeStoredSecrets(config, stored);
+}
+
+// The merge itself, split out so a test can prove the ROUND TRIP without
+// an Electron store to seed: publicCamera() strips, this restores, and the
+// result must be usable again. That pairing is the assertion the original
+// redaction tests were missing -- they proved the password was gone (true,
+// and the app was broken) but never that anything still worked without it.
+export function mergeStoredSecrets(config, stored) {
+  if (!config || !stored) return config;
   return { ...config, password: stored.password, streamUri: stored.streamUri };
 }
 
