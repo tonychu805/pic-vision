@@ -337,9 +337,17 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
     setConfigured(cameras);
     for (const camera of cameras) {
       setStatusById((s) => ({ ...s, [camera.id]: "checking" }));
+      // The handler classifies the failure and never throws, so the state
+      // says WHY. This used to be `.catch(() => "offline")`, which threw
+      // the error away and rendered "Not answering" for a camera that had
+      // answered "401 Unauthorized" -- sending the operator to check
+      // cables when the fix was a password (reported 2026-09-07).
+      //
+      // The catch below is now only for the IPC call itself failing (a
+      // stale preload, main process gone), not for the camera.
       window.cameraAPI
         .testConnection(camera)
-        .then(() => setStatusById((s) => ({ ...s, [camera.id]: "ok" })))
+        .then((result) => setStatusById((s) => ({ ...s, [camera.id]: result.state ?? "offline" })))
         .catch(() => setStatusById((s) => ({ ...s, [camera.id]: "offline" })));
     }
   };

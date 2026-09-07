@@ -22,6 +22,13 @@ export const STATE_META = {
   checking: { label: "Checking…", tagClass: "tag tag-neutral" },
   offline: { label: "Not answering", tagClass: "tag tag-danger" },
   auth: { label: "Sign-in needed", tagClass: "tag tag-warning" },
+  // The camera answered; its ONVIF control service didn't. Distinct from
+  // `offline` because the RTSP stream is a different port and may be
+  // perfectly fine -- which is exactly the case that made two cameras read
+  // "Not answering" while live view played from both (2026-09-07).
+  service: { label: "Settings unreachable", tagClass: "tag tag-warning" },
+  // A sample clip whose file has been moved or deleted since it was added.
+  missing: { label: "File missing", tagClass: "tag tag-danger" },
   // Two sweep-hit levels, distinct from `auth` (which means "we know this
   // is ONVIF, just needs credentials"): `rtsp` means an actual RTSP
   // OPTIONS handshake completed (RFC 2326 -- needs no credentials, so this

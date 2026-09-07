@@ -68,3 +68,29 @@ test("publicCamera passes null/undefined through", () => {
   assert.equal(publicCamera(null), null);
   assert.equal(publicCamera(undefined), undefined);
 });
+
+// --- the round trip the redaction broke --------------------------------
+// publicCamera() strips the password, and the renderer hands that stripped
+// object straight back to cameras:testConnection. Without putting the
+// secrets back, every configured camera fails its own status check with a
+// 401 -- which is exactly what shipped on 2026-09-07 and was reported as
+// "why do my cameras suddenly need signing in?". Nothing caught it: the
+// redaction tests passed (the password really was gone) and the app looked
+// like it was working, because live view takes an ID and looks the camera
+// up in main instead of round-tripping it.
+test("withStoredSecrets puts back what the renderer isn't allowed to hold", async () => {
+  const { withStoredSecrets } = await import("./store.js");
+
+  // An unsaved camera mid-add has no id and must pass through untouched,
+  // or the add flow can never test credentials it hasn't stored yet.
+  const unsaved = { hostname: "10.0.0.9", username: "admin", password: "typed-just-now" };
+  assert.deepEqual(withStoredSecrets(unsaved), unsaved);
+
+  // Defensive: an id naming nothing we hold is returned as-is rather than
+  // throwing, since this runs on every status refresh.
+  const unknown = { id: "no-such-camera", hostname: "10.0.0.9" };
+  assert.deepEqual(withStoredSecrets(unknown), unknown);
+
+  assert.equal(withStoredSecrets(null), null);
+  assert.equal(withStoredSecrets(undefined), undefined);
+});

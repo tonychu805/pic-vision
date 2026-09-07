@@ -90,6 +90,9 @@ export default function App() {
               card={selectedCard}
               onBack={backToGrid}
               onCameraRemoved={backToGrid}
+              // Credentials just verified against the real camera, so
+              // unlike a rename this DID change reachability.
+              onCameraReconnected={(camera) => setSelectedCard(configuredCard(camera, "ok"))}
               onCameraRenamed={(camera) => {
                 // Keep the card's existing connection state -- a rename
                 // doesn't change whether the camera is actually reachable,

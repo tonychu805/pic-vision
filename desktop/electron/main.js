@@ -8,10 +8,12 @@ import {
   listCameras,
   listCamerasForRenderer,
   publicCamera,
+  withStoredSecrets,
   revealStreamUri,
   addCamera,
   removeCamera,
   renameCamera,
+  updateCameraCredentials,
   testConnection,
   probeRtspFallback,
   addCameraViaRtsp,
@@ -20,6 +22,7 @@ import {
 } from "./cameras/store.js";
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
+import { classifyProbeError } from "./cameras/probeResult.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
@@ -73,11 +76,31 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:remove", async (_event, id) => {
     return removeCamera(id);
   });
+  // Re-enter credentials for a camera that's refusing them. Verified
+  // against the real camera before anything is saved, so a typo can't
+  // replace working credentials with broken ones.
+  ipcMain.handle("cameras:updateCredentials", async (_event, id, username, password) => {
+    return updateCameraCredentials(id, username, password);
+  });
   ipcMain.handle("cameras:rename", async (_event, id, label) => {
     return publicCamera(await renameCamera(id, label));
   });
+  // Returns a classification rather than throwing (PIC-93-adjacent, fixed
+  // 2026-09-07). The renderer used to do `.catch(() => "offline")`, which
+  // threw the error away and rendered "Not answering" for everything --
+  // including a camera that answered "401 Unauthorized", where the fix is
+  // a password, not a cable. testConnection itself still throws, because
+  // cloud.js's heartbeat and store.js's pre-save check both rely on that.
   ipcMain.handle("cameras:testConnection", async (_event, config) => {
-    return testConnection(config);
+    try {
+      // withStoredSecrets: the renderer's copy has no password (ADR-088),
+      // and it hands that copy straight back here. Without this every
+      // configured camera fails its own check with a 401.
+      const result = await testConnection(withStoredSecrets(config));
+      return { ok: true, state: "ok", ...result };
+    } catch (err) {
+      return { ok: false, ...classifyProbeError(err) };
+    }
   });
   ipcMain.handle("system:networkInfo", async () => {
     return getNetworkInfo();

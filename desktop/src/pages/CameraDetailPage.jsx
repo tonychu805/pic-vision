@@ -390,6 +390,75 @@ function CopyStreamUri({ cameraId }) {
   );
 }
 
+// Re-enter a camera's username and password.
+//
+// Shown only when the camera is actually refusing them (`auth`), because
+// this is a repair tool, not a settings panel -- offering it on a working
+// camera invites someone to break one. Before this existed a camera whose
+// password had changed showed "Sign-in needed" with nothing to click, and
+// the only fix was to delete and re-add it, losing its recording history
+// and calibration.
+//
+// The credentials are verified against the real camera before anything is
+// saved (electron/cameras/store.js's updateCameraCredentials), so a typo
+// can't replace working credentials with broken ones.
+function CameraSignIn({ camera, onUpdated }) {
+  const [username, setUsername] = useState(camera.username ?? "");
+  const [password, setPassword] = useState("");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    try {
+      onUpdated(await window.cameraAPI.updateCredentials(camera.id, username, password));
+    } catch (err) {
+      // Deliberately not err.message verbatim (PIC-93): the underlying
+      // text is "RTSP/1.0 401 Unauthorized" or an ONVIF SOAP fault, which
+      // tells a venue owner nothing. The one thing worth saying is which
+      // of the two things to check.
+      setError("That didn't work — check the username and password, and that this camera is switched on.");
+      setSaving(false);
+    }
+  };
+
+  return (
+    <form className="card" style={{ marginTop: 14 }} onSubmit={submit}>
+      <div className="section-label">Sign in to this camera</div>
+      <p className="text-3" style={{ fontSize: "var(--fs-body)", margin: "0 0 12px", lineHeight: 1.5 }}>
+        {camera.label} is refusing the saved username and password. Enter them again to reconnect.
+        {camera.manufacturer?.toLowerCase().includes("tp-link") || /tapo/i.test(camera.model ?? "") ? (
+          <> Tapo cameras use the separate <b>camera account</b> created in the Tapo app, not your TP-Link login.</>
+        ) : null}
+      </p>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Username</label>
+          <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
+        </div>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Password</label>
+          <input
+            className="input"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="off"
+          />
+        </div>
+        <button className="btn btn-primary" style={{ marginBottom: 2 }} disabled={saving || !username || !password}>
+          {saving ? "Checking…" : "Sign in"}
+        </button>
+      </div>
+      {error && (
+        <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: "10px 0 0" }}>{error}</p>
+      )}
+    </form>
+  );
+}
+
 function InfoPanel({ title, rows }) {
   return (
     <div className="card">
@@ -500,7 +569,7 @@ function RemoveCameraControl({ camera, onRemoved }) {
 // 2026-09-01: one workflow to connect a camera regardless of how it was
 // found, replacing this page's own separate, weaker inline sign-in form
 // -- ONVIF-only, no RTSP fallback if it failed).
-export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraRenamed }) {
+export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraRenamed, onCameraReconnected }) {
   const v = cardVisuals(card);
   const panels = detailPanels(card.camera);
   // Collapsed by default (2026-09-01, operator's call) -- Identity/
@@ -530,6 +599,16 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         </div>
         {!isSampleClip(card.camera) && <LiveViewButton camera={card.camera} />}
       </div>
+
+      {/* onCameraReconnected, not onCameraRenamed: updateCredentials only
+          returns after the camera has accepted them, so the state genuinely
+          changed and the card must stop saying "Sign-in needed" -- otherwise
+          this form stays on screen after a successful sign-in and looks
+          broken. A rename, by contrast, deliberately preserves the old
+          state. */}
+      {card.state === "auth" && (
+        <CameraSignIn camera={card.camera} onUpdated={onCameraReconnected} />
+      )}
 
       {isSampleClip(card.camera) ? (
         // No live stream to start/stop -- the one "recording" is the file

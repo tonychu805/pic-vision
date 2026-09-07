@@ -11,6 +11,7 @@ import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
+import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename } from "node:path";
@@ -288,7 +289,18 @@ async function cameraStatuses() {
     }
     const previous = lastCameraStatus.get(c.id);
     if (previous && previous !== status) {
-      logEvent(status === "online" ? "camera_online" : "camera_offline", `${c.label} ${status === "online" ? "came back online" : "went offline"}`);
+      if (status === "online") {
+        logEvent("camera_online", `${c.label} came back online`);
+      } else {
+        // Say WHY, and carry the raw message as the detail line. Without
+        // this the log said "went offline" for a camera that had answered
+        // "401 Unauthorized", and the actual reason existed nowhere at all
+        // -- which is what made the 2026-09-07 report undiagnosable from
+        // inside the app. The badge stays two words; this is where the
+        // detail lives (Log tab rows expand).
+        const { state, detail } = classifyProbeError(results[i].reason);
+        logEvent("camera_offline", describeProbeState(state, c.label), detail);
+      }
     }
     lastCameraStatus.set(c.id, status);
     return {

@@ -85,6 +85,29 @@ export function listCameras() {
   return store.get("cameras", []).map(decryptCamera);
 }
 
+// Puts back the secrets the renderer never had.
+//
+// The renderer round-trips camera objects: it calls cameras:list, holds
+// the result, and hands one back to cameras:testConnection. Since
+// publicCamera() started stripping `password` (ADR-088), that round trip
+// arrived in main with no credentials, so every configured camera failed
+// its own status check with a 401 -- reported 2026-09-07 as "why do my
+// cameras suddenly need signing in, when live view still works?".
+//
+// Live view never broke because it takes a camera ID and looks the real
+// camera up here (main.js's liveview:start). That's the safer shape, and
+// this makes the object-taking handlers behave the same way: if what came
+// in names a camera we have stored, the stored one wins.
+//
+// Deliberately merge rather than replace outright, so an unsaved camera
+// being tested during the add flow (no id yet) still works untouched.
+export function withStoredSecrets(config) {
+  if (!config?.id) return config;
+  const stored = listCameras().find((c) => c.id === config.id);
+  if (!stored) return config;
+  return { ...config, password: stored.password, streamUri: stored.streamUri };
+}
+
 // The list the renderer gets. listCameras() stays internal: capture.js,
 // heartbeats and testConnection all genuinely need the real credentials.
 export function listCamerasForRenderer() {
@@ -283,6 +306,65 @@ export function removeCamera(id) {
 // credentials) aren't editable yet; changing those would need the same
 // re-verification addCamera/addCameraViaRtsp already do before saving,
 // which this doesn't attempt.
+// Re-enter a camera's username and password.
+//
+// Until now `renameCamera` was the only edit a stored camera allowed, on
+// the reasoning that changing connection details needs the same
+// verification the add flow does. True -- so this does that verification
+// rather than skipping the feature: the new credentials are tested against
+// the real camera BEFORE anything is written, so a typo can't replace
+// working credentials with broken ones.
+//
+// Needed because a camera whose password changed had no repair path at
+// all: the card said "Sign-in needed" and the only fix was to delete the
+// camera and add it again, losing its recording history (which is keyed by
+// label -- see the folder-keying bug) and its calibration.
+//
+// Both connection types are handled, because both can refuse a login and
+// they verify differently: ONVIF re-reads device information, RTSP
+// re-runs the DESCRIBE probe. testConnection already branches on
+// connectionType, so this just feeds it the candidate credentials.
+export async function updateCameraCredentials(id, username, password) {
+  const camera = listCameras().find((c) => c.id === id);
+  if (!camera) throw new Error("camera not found");
+
+  // Throws if the camera refuses them -- caller reports it, nothing saved.
+  const result = await testConnection({ ...camera, username, password });
+
+  const cameras = listCameras();
+  const next = cameras.map((c) =>
+    c.id === id
+      ? {
+          ...c,
+          username,
+          password,
+          // An RTSP-direct camera stores credentials inside streamUri, so
+          // updating the fields alone would leave the old password in the
+          // URL that recording and live view actually use. Re-derive it
+          // from whatever the probe confirmed.
+          streamUri: result.streamUri ?? rebuildStreamUri(c, username, password),
+        }
+      : c,
+  );
+  saveCameras(next);
+  return publicCamera(next.find((c) => c.id === id));
+}
+
+// Swaps the credentials inside a stored rtsp:// URL, leaving host, port,
+// path and query exactly as they were -- those were confirmed working when
+// the camera was added and must not be reconstructed from parts.
+function rebuildStreamUri(camera, username, password) {
+  if (!camera.streamUri) return camera.streamUri;
+  try {
+    const url = new URL(camera.streamUri);
+    url.username = encodeURIComponent(username);
+    url.password = encodeURIComponent(password);
+    return url.toString();
+  } catch {
+    return camera.streamUri;
+  }
+}
+
 export function renameCamera(id, label) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
