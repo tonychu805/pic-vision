@@ -13,6 +13,20 @@
   existing device row and handles a concurrent retry without exposing a
   duplicate-key error. Verified in production: **Connect to the cloud
   console** works.
+- **Camera status now says what's actually wrong.** Every failure used to read
+  "Not answering", including a camera that was answering and refusing the
+  password. Statuses are now **Sign-in needed**, **Settings unreachable**,
+  **File missing** or **Not answering**, and the technical detail is in the Log
+  tab rather than on the card.
+- **You can re-enter a camera's password.** A camera refusing its saved
+  credentials now shows a sign-in form on its detail page, verified against the
+  camera before saving. Previously the only repair was removing the camera and
+  adding it again, which lost its recording history and calibration.
+- **Fixed:** every configured camera reported "Not answering" in 1.0.0. The
+  connection check was being asked to authenticate without the stored password.
+- **Security:** sign-in tokens left unencrypted by a build older than 1.0.0 are
+  re-encrypted on launch, and the app's stored files are no longer readable by
+  other user accounts on the same machine.
 
 ## 1.0.0 — 2026-09-06
 

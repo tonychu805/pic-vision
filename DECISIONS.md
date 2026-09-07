@@ -1639,3 +1639,27 @@ The important half is *whose* address it is. Whatever URL ships in v1.0.0 is fro
 **Two bugs found only by installing it**, both green in CI and both invisible in development: an unguarded dock-icon call referencing a file not in the package, which threw before the window was created (a frameless transparent window makes "no window" and "window that drew nothing" identical); and hand-drawn window buttons overlapping macOS's own, because `titleBarStyle: "hiddenInset"` was added long after the comment explaining why the hand-drawn ones existed. A static test now asserts every startup file path is actually packaged.
 
 **Still open.** Signing and notarization (PIC-84): unsigned means macOS warns on first launch and the installer must be allowed through System Settings once. Acceptable for operator-led pilot installs; needed before a venue self-installs from a link, or before updates should land without a visit.
+
+## ADR-091 — Secrets stop at the main process, and the boundary is enforced by a test
+
+**Date:** 2026-09-07 · **Status:** accepted, implemented
+
+**Context.** ADR-088 stripped camera passwords from everything the renderer receives. The next morning every configured camera read "Not answering" while live view played from the same cameras. The redaction was correct; the round trip was not. `CamerasPage` calls `cameras:list`, holds the result, and hands one of those records back to `cameras:testConnection` — which then authenticated with `password: undefined`. `liveview:start` was unaffected because it takes a camera **id** and reads the real record in main.
+
+Nothing caught it. The redaction tests asserted the password was gone — true, passing, and the app was broken. CI was green. The failure existed only at runtime, in the interaction between two correct-looking halves.
+
+**Decision.** Three things, of which two are gates and one is explicitly not.
+
+**1. `withStoredSecrets()` restores what the renderer isn't allowed to hold.** Any incoming object naming a stored camera gets its secrets merged back from the store before use. An unsaved camera mid-add (no id) passes through untouched, so the add flow still verifies what was typed.
+
+**2. `electron/ipc-contract.test.js` — a gate.** Every IPC handler taking an object from the renderer must be classified as receiving a *stored* entity (must call `withStoredSecrets`) or *freshly-typed input*. A new unclassified handler fails the suite. The gap this closes is the next instance of the class, not this one. Both branches were proved to fire by reintroducing each failure and restoring it.
+
+It justified itself immediately: on its first run it found `cameras:discover`, a sixth object-taking handler that a manual audit an hour earlier had missed because that audit grepped for `config` and this one takes `options`. The reported count was five; it was six.
+
+**3. Paired assertions — a gate by convention.** A test proving a secret is removed must sit beside one proving the feature still works without it. `mergeStoredSecrets()` was split out of `withStoredSecrets()` purely so that round trip is testable without an Electron store to seed.
+
+**Explicitly not a gate.** *An anomaly appearing immediately after your change belongs to your change until proven otherwise.* The "Not answering" badges were in a screenshot one turn after the commit that caused them, and were explained away as pre-existing bad credentials. This is in `CLAUDE.md` labelled as guidance, because `feedback_verify_mechanisms_rigorously` already said as much, was loaded in context at the time, and did not prevent it. Written guidance has a measurable failure rate; that is the argument for converting it into tests wherever it can be.
+
+**Second-order finding, same shape.** Auditing what was actually encrypted on disk found the operator's Supabase session tokens still in plaintext — not a code bug, but a file written 43 minutes before the encryption shipped that nothing ever migrated — and every store file at mode 664, readable by any other local user, while the repo's own `.env` had been locked to 600 the day before. `electron/storeFiles.js` now repairs both at startup. **Both were "the fix was applied to new writes and never to existing state", which is the same failure the ADR itself is about.**
+
+**Still open.** Nothing runs the app in a test. Every guard here is static — it reads source. The class these cannot see is "compiles, passes, launches, behaves wrong", which describes this regression and both of the day's packaging bugs.
