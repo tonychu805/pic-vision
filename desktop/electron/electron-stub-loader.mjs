@@ -22,7 +22,7 @@ export async function load(url, ctx, next) {
     return { format: "module", shortCircuit: true, source: `
       export const app = {
         isPackaged: false, getPath: () => "/tmp", dock: { setIcon() {} },
-        on() {}, quit() {}, exit() {},
+        on() {}, emit() {}, quit() {}, exit() {},
         // Never resolves on purpose. This harness checks that modules parse
         // and link, not that the app boots -- resolving here would run
         // main.js's whole startup path (windows, IPC registration, the
@@ -39,9 +39,15 @@ export async function load(url, ctx, next) {
       };
       export const BrowserWindow = class {
         loadURL() {} loadFile() {} on() {}
+        isMinimized() { return false } restore() {} show() {} focus() {}
         static getFocusedWindow() { return null }
         static getAllWindows() { return [] }
       };
+      export const Menu = { buildFromTemplate: () => ({}) };
+      export const Tray = class {
+        setContextMenu() {} setToolTip() {} setTitle() {} destroy() {}
+      };
+      export const nativeImage = { createFromPath: () => ({ setTemplateImage() {} }) };
       export const dialog = { showOpenDialog: () => Promise.resolve({ canceled: true, filePaths: [] }) };
       export const shell = { openExternal: () => Promise.resolve() };
     ` };

@@ -20,13 +20,14 @@ import {
 } from "./cameras/store.js";
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
-import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots } from "./capture.js";
+import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 import { getEvents, clearEvents } from "./activityLog.js";
+import { createTray, destroyTray } from "./tray.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -430,6 +431,16 @@ app.whenReady().then(() => {
     }
   }
   createWindow();
+  // Closing the last macOS window keeps the agent running so recordings and
+  // cloud heartbeats continue. The menu-bar item is the visible proof of
+  // that state, plus the deliberate place to reopen or quit the app.
+  createTray(() => {
+    const cameras = listCameras();
+    return {
+      recordingLabels: cameras.filter((camera) => isRecording(camera.id)).map((camera) => camera.label),
+      connection: getCloudConnection(),
+    };
+  });
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
   // Catches the case where a device is signed in but registration never
   // succeeded (console unreachable the first time, or this is a relaunch
@@ -458,6 +469,7 @@ app.on("window-all-closed", () => {
 // clean SIGINT stop first.
 app.on("before-quit", async (e) => {
   e.preventDefault();
+  destroyTray();
   await stopAllRecordings();
   await stopLiveView(); // no-op if no live-view popup was open
   // A calibration snapshot left over from a modal closed mid-flow
