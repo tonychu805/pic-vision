@@ -412,8 +412,9 @@ function CameraSignIn({ camera, onUpdated }) {
     e.preventDefault();
     setSaving(true);
     setError("");
+    let updated;
     try {
-      onUpdated(await window.cameraAPI.updateCredentials(camera.id, username, password));
+      updated = await window.cameraAPI.updateCredentials(camera.id, username, password);
     } catch (err) {
       // Deliberately not err.message verbatim (PIC-93): the underlying
       // text is "RTSP/1.0 401 Unauthorized" or an ONVIF SOAP fault, which
@@ -421,7 +422,16 @@ function CameraSignIn({ camera, onUpdated }) {
       // of the two things to check.
       setError("That didn't work — check the username and password, and that this camera is switched on.");
       setSaving(false);
+      return;
     }
+    // Outside the try, and deliberately. By this point the credentials
+    // have been verified against the real camera and written to the store
+    // -- the save has SUCCEEDED. Calling the parent's callback inside the
+    // try meant anything it threw (or its simply not being passed, since
+    // the prop is optional) surfaced as "that didn't work", inviting the
+    // operator to retype credentials that were already saved, or to delete
+    // and re-add the camera and lose its history.
+    onUpdated?.(updated);
   };
 
   return (

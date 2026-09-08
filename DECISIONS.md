@@ -1663,3 +1663,125 @@ It justified itself immediately: on its first run it found `cameras:discover`, a
 **Second-order finding, same shape.** Auditing what was actually encrypted on disk found the operator's Supabase session tokens still in plaintext — not a code bug, but a file written 43 minutes before the encryption shipped that nothing ever migrated — and every store file at mode 664, readable by any other local user, while the repo's own `.env` had been locked to 600 the day before. `electron/storeFiles.js` now repairs both at startup. **Both were "the fix was applied to new writes and never to existing state", which is the same failure the ADR itself is about.**
 
 **Still open.** Nothing runs the app in a test. Every guard here is static — it reads source. The class these cannot see is "compiles, passes, launches, behaves wrong", which describes this regression and both of the day's packaging bugs.
+
+**Correction, same day, found by review.** The sentence above about `storeFiles.js` repairing mode 664 "at startup" was wrong, and wrong in the way this ADR is about: applied and never verified to hold. `chmodSync` at launch is undone by the app's own next write — `conf` writes atomically, to a temp file that is then renamed, so the chmod'd inode is discarded and the new one lands at conf's default `0o666` (`0664` after umask). Measured on this machine before the fix: `cameras.json`, the file holding camera passwords, was `-rw-rw-r--` while every untouched file still read `-rw-------`. The mechanism is `configFileMode: 0o600` at each `new Store()` — electron-store forwards its options to conf verbatim — and `storeFiles.js` keeps the chmod only to repair files older builds already wrote. Verified end to end: launched the app, and the file it rewrote came back `0600`.
+
+Two things follow, both now tests (`electron/storeFiles.test.js`):
+
+- **The paired assertion applies to a lock as much as to a secret.** "0600 was applied" is not "0600 holds". The test writes three times and re-`stat`s.
+- **A list of protected files that nobody checks is a list that rots.** The hardened list named a `schedules.json` no store has created since 2026-09-03, and would have silently skipped any store added later. It is now checked against the real `new Store({ name })` call sites, with a separate `LEGACY_STORE_FILES` for genuine leftovers still sitting in `userData` on machines that ran an older build.
+
+The `ipc-contract.test.js` gate above had a hole of the same kind: it matched object-ish parameter *names*, so a destructured parameter — `(_event, { cameraId, ... })`, a shape `main.js` already contained at `pipeline:run` — matched nothing at all, and an object under an unlisted name (`properties`) passed too. Inverted: anything not recognisably a scalar must now be classified. A gate written as an allowlist has to predict the name of a parameter nobody has written yet.
+
+---
+
+## ADR-092 — A Diagnostics tab measures the venue's upstream against R2 itself, not a speedtest server
+
+**Date:** 2026-09-08 · **Status:** accepted; built, tested, and verified end to end against real infrastructure from the operator's workstation — not yet deployed, and not yet run at a venue
+
+**Context.** ADR-084 made the venue machine thin: it records with `-c copy` and uploads the raw 10-minute segments as they came off the camera, and every encode — CFR conversion, the 1080p proxy — happens later on the operator's own workstation. That removed Python, ssh and cloud credentials from venue laptops, which was the point. It also moved the whole session's bitrate onto the venue's uplink: the real recordings in `~/pic-vision-recordings` measure 1.57 and 2.84 Mbps (2880×1620 h264, two different sessions), so a two-hour single-court session is ~2.5 GB going out of the building, against ADR-043's original ~90 MB/hr proxy plan.
+
+That makes upstream bandwidth a per-venue gating fact, and until now there was no way to find it out except running a real session and watching. Worse, the obvious way to check — a speedtest app on the venue's laptop — measures a nearby server over parallel connections, which is not the number that matters. What matters is a single-stream presigned PUT to R2 over the venue's actual path, and the two can differ by a lot.
+
+**Decision.** A **Diagnostics** tab in the desktop agent, and one new console route to support it.
+
+1. **The benchmark uploads throwaway synthetic bytes through the real transport.** `electron/consoleApi.js`'s `uploadFile()` was split into `putStream()` (any readable body) plus a two-line file wrapper, so the benchmark sends *the same request* a recording segment does — same `node:https` call, same explicit `Content-Length`, same single stream. A benchmark whose transport merely resembles the real one measures the wrong thing, and the Content-Length lesson in that function is exactly the kind of difference that would go unnoticed. Bytes are generated, not read from disk or from a recording: nothing private leaves the venue for a speed test, no 256 MB temp file is written to a venue laptop, and the test works before a single camera has recorded.
+2. **A size ladder (8 / 64 / 256 MB), climbing only while a run finishes too fast to trust.** Measured on this workstation against real R2: the 8 MB rung reported 26.9 Mbps in 2.49s, the 64 MB rung 37.7 Mbps in 14.2s on the same link. The short run understated the link by 30% — which is the entire argument for the ladder, and for not reporting the first rung when it comes back quickly.
+3. **Three samples at the settled size, reported as a median with the spread visible.** This was not in the original design; the measurements forced it. Consecutive 8 MB PUTs from this workstation to the same bucket returned **28.8, 3.4, 29.0 and 32.3 Mbps** — same client, minutes apart. The first reading of that pattern was "the slow ones are IPv6", which was **checked and is wrong**: forcing each family gave 28.8 (v4), 29.0 (v6), 3.4 (v4), 32.3 (v6). The path to R2 from this network is bimodal per connection, at roughly 3.5 or roughly 30 Mbps, and which mode a connection lands in looks like luck. One sample therefore cannot characterise a venue, and either number alone would send a survey the wrong way — so the tab takes up to three samples (inside a 60s budget, so a genuinely slow link isn't measured three times), reports the median, and when fastest/slowest exceeds 2× says so in its own row: "runs ranged from 3.6 to 33.3 Mbps minutes apart" with both session estimates, rather than folding that into one confident-looking number.
+
+4. **Throughput is measured after a 2-second warmup, anchored on the response.** A progress callback fires when a chunk is handed to the socket, not when it lands, so early samples partly measure the kernel buffer; TLS setup and TCP slow start sit in the same window. Counting `total − sentAtWarmup` bytes against the time the endpoint acknowledged the last byte keeps the tail exact and confines the buffer error to the warmup boundary. When a run is too short to have a steady state the code falls back to the whole-transfer average, which is the *pessimistic* reading — and that run gets escalated anyway.
+5. **The answer is given in the venue's terms.** "8.4 Mbps" is not a finding; "a 2-hour session would take 40 minutes to upload, and reels will land after everyone has gone home" is. Three verdicts: **ok**, **slow** (>30 min per session), and **below** — under 3 Mbps per camera, where uploads can never catch up with recording and every session falls further behind the last.
+6. **The console mints the target** (`app/api/agents/bandwidth-test/route.ts`): POST returns a presigned PUT for a `bwtest/<agent_id>/<uuid>.bin` key, DELETE removes it, prefix-scoped to that agent because these routes use the service-role client and RLS will not scope them. The agent holds no R2 credentials (ADR-084), so the target has to come from here. POST also **sweeps that agent's own test objects older than 20 minutes** before issuing a new one. That was added after the first day's testing left a stray 8 MB object behind: the agent's cleanup DELETE is best-effort by construction, because the console can be unreachable at exactly the moment a test finishes — which is one of the conditions a venue survey exists to find. A self-healing sweep beats a hand-configured bucket lifecycle rule for the same reason a test beats a note.
+7. **Three more checks share the tab**, each reading something the app already computes rather than inventing a signal: console round-trip over the same route the heartbeat uses, per-camera reachability plus the stored stream profile against the 30fps floor (ADR-086/087), and free space where recordings land expressed as hours of recording. `electron/diagnostics.js` returns renderer-safe summaries only — a label and a verdict, never a camera record (ADR-088).
+
+   The fps row earned itself immediately, and also showed its own limit: it flagged Court 2 at 17fps, and Court 2 is a **wifi** camera. The check reports what the stream delivers, which is the right thing to gate on (ADR-087) — but "the camera is configured at 15fps" and "wifi is dropping frames" (the real risk ADR-030/032 measured) produce the same row and need different fixes. Worth saying so in the row's wording rather than implying a settings change will fix it.
+
+**Verification.** 11 tests in `electron/bandwidth.test.js` cover the maths — both steady-state fallbacks, the ladder, the median, the unstable-spread threshold — plus a real local HTTP server asserting `Content-Length` is sent and chunked encoding is not. That last one is the paired assertion for the `uploadFile` refactor: a benchmark that quietly broke real segment uploads would be a bad trade.
+
+Then the whole feature was run **end to end against real infrastructure**, not mocked: the desktop app pointed at a locally-run console (same production Supabase and R2), the real agent token authenticating, presigned PUTs to real R2, and the tab rendering the result. Two full runs, both showing the design doing its job — one where the link was in its slow mode (3.6, 28.3, 33.3 Mbps → median 28.3, with the "inconsistent" row and both session estimates), one where it wasn't (the ladder escalated to 64 MB, then 37.3, 35.7, 37.6 Mbps — tight, no warning). Guards checked separately: no token and a bogus token both 401 on POST and DELETE. After the sweep landed, `bwtest/` was confirmed **empty** — the 3.5-hour-old stray gone and all three fresh objects deleted by the agent.
+
+The other three rows were verified the same way, against this machine's real cameras: Court 2 correctly flagged "Check fps — 17 fps, below the 30 fps this pipeline needs" while three others passed, and the storage row read 156.7 GB / ~116 hours.
+
+**Still not verified:** the route has never run on deployed Netlify, and no venue Mac has run the tab. The speeds here are the operator's workstation, which is not a venue.
+
+**Consequences.** A site survey becomes one screen. The tab also makes the ADR-084 trade visible where it lands — a venue that cannot upload faster than its cameras record now finds out during setup rather than after the first session.
+
+**The bimodal path is a product finding, not just a measurement nuisance.** Real segment uploads take the same route through the same code, so a session that would upload in 11 minutes at 30 Mbps takes an hour and a half in the slow mode.
+
+It was investigated the same day, and the cause is **outside this system**. What the measurements establish:
+
+- **Not the IP family.** Forced IPv4 and IPv6 each produced both modes.
+- **Not the Electron runtime or TLS.** From inside the app, a PUT to a local HTTP server ran at ~18 Gbps and to a local HTTPS server at 1.5–4.6 Gbps.
+- **Not packet loss.** Slow connections show *zero* retransmissions, a healthy congestion window, and a low kernel-measured `delivery_rate`. Fast connections, by contrast, do retransmit (4–32 per 8 MB) — they push hard enough to make the network drop something.
+- **Not a burst allowance.** A single 128 MB upload sustained 30–38 Mbps for its whole 37 seconds, with dips but no step-down.
+- **Not R2, and not Cloudflare.** 8 MB uploads alternating between R2 and `speed.cloudflare.com/__up` — same client, same minute — showed both modes on *both* endpoints, uncorrelated with each other (R2 31.9 / CF 4.2, then R2 3.6 / CF 3.9, then R2 9.9 / CF 35.6). A destination-independent effect is not the storage vendor's.
+
+What's left is the uplink itself: **a per-connection effect on the local ISP path**, where an individual TCP flow lands in a ~4 Mbps regime for its entire life while a flow opened seconds later gets ~30. **Parallelism does not rescue it** — four concurrent 8 MB uploads aggregated to 15–23 Mbps, *less* than a single fast flow, so the link tops out around 30 Mbps in total and multipart upload is not the fix here. Two things follow for the product: measure at a venue rather than assuming this network is representative, and treat a session's upload time as a distribution rather than a number.
+
+One thing left open: a presigned PUT cannot cap the body size, so `bytes` bounds what the agent is *told* to send rather than what R2 would accept — the same trust already extended to an agent uploading real segments.
+
+---
+
+## ADR-093 — One cloud job per camera, driven by a self-sufficient pod: amends the 2026-09-05 "Cloudflare Containers" conclusion
+
+**Date:** 2026-09-09 · **Status:** accepted as direction; nothing built. Supersedes the hosting conclusion recorded in `progress/09.05 progress overview.md` (which was research, not an ADR)
+
+**Context.** Operator, on being told four courts queue behind one job runner: *"I expect each camera spin up each of their cloudflare workers."* That is the right target and was already half-decided — 2026-09-05 evaluated hosting for `run_cloud_job.py`'s orchestration half and landed on Cloudflare Containers. What that research did not examine is *why* the orchestration needs a machine with a shell at all. It does, today, for two reasons, and both are removable.
+
+**Reason 1: the pipeline needs the operator's NVIDIA card before RunPod is involved.** `run_cloud_job.py:226` converts the recording to 30fps CFR with `h264_nvenc`, on whatever machine runs the script. A Cloudflare container has no GPU, so as long as that step is where it is, the orchestrator cannot leave the operator's workstation. It also produces a silly path for the video: venue → R2 → operator's machine → R2 → pod. The operator's own uplink carries a full session *upward twice*, on the same bimodal link measured in ADR-092.
+
+**Reason 2: the orchestrator drives the pod over SSH.** Create pod, `wait_for_ssh`, `ssh_run` a ~900s dependency install, `scp` `pod_infer.py` / `pod_r2_helper.py` / a tarball of reel-cutting deps, then `ssh_run` inference with per-line stdout parsed for progress (`_PROGRESS_RE`), then `ssh_run` the cut. Workers and Workflows cannot reasonably speak SSH. A container can — which is most of why containers looked like the answer.
+
+**Decision — three changes, in this order. None is built.**
+
+1. **Move the CFR convert onto the pod.** The pod has a GPU and already runs ffmpeg there to cut the reels (ADR-074). This deletes the operator's machine from the data path, deletes one upload of the whole session from the operator's uplink, and retires the NVIDIA-only constraint (PIC-67) as a *deployment* problem — it stays true, but only on a machine we rent and choose.
+2. **Bake a pod image and let the pod drive itself.** Today's per-job `POD_SETUP_CMD` install and three `scp`s are rebuilt from scratch on every single job; an image with TF 2.15, the scripts and the weights removes minutes per job and the whole `scp` dance. The pod then does what the venue agent already does: fetch its inputs (it already pulls video/calib/weights from R2 through `pod_r2_helper.py`), do the work, report progress and completion to the console over HTTPS, upload the reels, and stop. Progress stops being SSH stdout and becomes the same `status.json`-shaped mirror the console already accepts from the runner.
+3. **Then orchestration is HTTPS-only, and one instance per camera job is trivial.** With no shell needed, **Cloudflare Workflows fits better than Containers** — checked against current Cloudflare docs, not assumed: a Workflow instance that is *waiting* does not count toward concurrency limits (50,000 concurrent on the paid plan), whereas Containers default to `max_instances: 20` and sleep after 10 minutes of inactivity, which is a poor fit for a job that is mostly waiting 40 minutes on a GPU. Workflows are durable across the platform stopping an instance — which it may do at any time (host restarts; SIGTERM, then up to 15 minutes) — so the orchestrator must be resumable from stored state rather than holding the job in memory. That is what a Workflow gives by construction. Containers remain the fallback only if something genuinely needs a shell.
+
+**What this fixes.** Four courts stop queueing. Four pods run at once for the same GPU-minutes and therefore the same cost — the difference is four reels within the hour instead of the last one at 2am. The operator's workstation leaves the production path entirely, which is what ADR-084's thin-agent split was for; the runner becomes a development convenience, not infrastructure, and PIC-109's "single point of failure with no alerting" stops being load-bearing.
+
+**Interim, available today with no code:** start two or three `job_runner.py` processes. The queue already hands jobs out safely to multiple workers (`claim_next_job()`, `FOR UPDATE SKIP LOCKED`), so this is an operational change that cuts the wait proportionally while the above is built.
+
+**Risks and open questions, none resolved here.**
+
+- **Who kills an orphaned pod?** Today the runner's `finally` terminates it. A self-driving pod needs its own deadline (self-terminate after N hours) *plus* an external sweep, or a crash leaves a GPU billing quietly. This is the failure mode that makes RunPod-hosted orchestration a bad idea (2026-09-05) and it does not go away here.
+- **Four pods at once needs GPU availability and spend controls.** `FALLBACK_GPU_TYPES` already handles capacity for one pod; four is untested. PIC-80 (no spend controls) becomes materially more expensive to ignore.
+- **Credentials.** The pod currently receives R2 keys as environment variables *on an SSH command line* (`r2_env`, related to PIC-99). A self-driving pod needs them in its own env, and needs a console token scoped to its one job — not the operator's `RUNNER_TOKEN`, which is valid across every brand.
+- **The reel-quality guarantee.** ADR-043's byte-identical claim is pinned to a GPU type; the pinning and its documented fallback are unchanged by this ADR, but a per-job image bakes in a toolchain version that should be pinned as deliberately.
+
+---
+
+## ADR-094 — A device's cloud identity follows the signed-in account, not whoever registered it first
+
+**Date:** 2026-09-09 · **Status:** accepted, fixed in the desktop app; the console-side reclaim question is filed, not answered
+
+**Context.** Operator report, with a screenshot: signed in on a Mac as `blackclub2@gmail.com` (brand *Pickle Day Social Club*), while the app's Cloud console page read **"Connected as Syno Pickleball"** — a brand owned by a different account entirely (`tony.chu805@gmail.com`).
+
+Confirmed against production, not inferred: the device (`0fe6ddc6-…`, agent *11505-DT-002.local*) was attached to the *Syno Pickleball* brand while its human was signed in as the other account.
+
+**Root cause.** The desktop keeps two separate things on disk: a **session** (who is signed in) and a **connection** (this device's agent id, its long-lived agent token, and its brand). They were never tied together.
+
+- `signOut()` deleted only the session, leaving the connection intact — deliberately, so a sign-out doesn't tear down the device's registration.
+- `signIn()` registered only `if (!getCloudConnection())` — deliberately too, so an ordinary re-login doesn't mint a new agent row or rotate the token every time.
+- `main.js`'s launch-time retry asked the same question.
+
+Each rule is defensible alone. Together they mean **the first account to register a machine owns it forever**: sign out, sign in as anyone else, and the device keeps the previous account's agent identity. The wrong brand name on screen is the harmless symptom. The real one is that the agent token in that connection is what the heartbeat, camera sync and every job use — so this machine's cameras, recordings and reels would have been filed under the other brand, invisible to the account actually using it (ownership derives from `agent_id`, ADR-083/084). Nothing had been misfiled yet: that agent had 0 cameras, 0 jobs, 0 reels, 0 commands when checked.
+
+**Decision.** The connection now records **which account it was registered as** (`userId`), and one pure function decides what to do about it — `registrationState(connection, userId, sessionBrandName)`, with four answers:
+
+- **`none`** — not connected to anything. Register silently: a fresh machine has nothing to lose and nobody to ask.
+- **`ok`** — already registered as this account. Do nothing, preserving the original intent (no needless agent rows, no token rotation on every ordinary re-login).
+- **`adopt`** — a connection written before `userId` existed whose brand still matches the signed-in account's. Nothing changed hands; the record was missing a field. Stamp it, so upgrading doesn't interrogate every existing user.
+- **`mismatch`** — registered as a different account. **Ask. Never resolve this silently.**
+
+The first draft of this ADR had the mismatch case re-register automatically, and the operator rejected that on sight: *"I think it needs a configuration popup wizard to guide the setup."* That is the right call, and for a reason worth writing down — **moving a machine is not a correction, it is a transfer.** The cameras attached to it move with it, along with everything they go on to record, and the venue that had it loses it without being told. A launch sequence should not make that call on someone's behalf, however confident it is about who is "right".
+
+So `AccountMismatchDialog` blocks the app until a person answers: **move it to the signed-in venue**, or **sign out** and sign back in as the venue that actually owns the machine. It states the consequence in the dialog rather than burying it. There is deliberately no "later" — a device in this state is already reporting to the wrong venue every 30 seconds.
+
+The console side already did the right thing: `/api/agents/register` sets `brand_id` to the newly signed-in owner's brand when it reclaims a device by `device_id`. Nothing there needed changing — the desktop simply never called it.
+
+**The reported Mac therefore does not fix itself.** On its next launch with this build it will raise the dialog, naming *Syno Pickleball* and the signed-in account, and wait. If that machine belongs to Syno Pickleball, sign out and sign in as its owner; if it belongs to Pickle Day Social Club, move it.
+
+**Verification.** Six tests in `electron/auth.test.js`, paired on purpose: a mismatch is noticed, the same account is still left alone (the behaviour the original condition existed to protect — a fix that lost it would be its own bug), a legacy connection on the same brand is adopted rather than interrogated, one on a *different* brand still asks, and a failed brand lookup asks rather than assuming the comfortable answer. Then the dialog itself was driven in the real app against a synthetic session: it renders, it blocks, and its failure path was exercised live (the console rejected the fake token and the dialog reported "invalid or expired session" in place, staying open). That last check also caught the raw `Error invoking remote method 'cloud:register'` wrapper leaking into user-facing text — the PIC-93 class of problem — now stripped in this dialog.
+
+**Filed, not fixed: any signed-in account can reclaim any device it can name.** `/api/agents/register` looks a device up by `device_id` globally and re-homes it to the caller's brand, authenticated only as "some signed-in user". That is what makes legitimate re-homing work, and it is also a cross-tenant takeover path: `device_id` is a UUID, but the desktop prints it on screen, and re-homing an agent takes its `cameras` rows with it. The fix is not obvious — refusing the reclaim would break the legitimate case this ADR depends on — so it is a Linear issue with the trade written down rather than a change made in passing.

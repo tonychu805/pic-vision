@@ -29,8 +29,17 @@
  *             separating this from `offline`
  *   missing   a sample clip's file is gone from disk
  *   offline   nothing answered, or we genuinely can't tell
+ *
+ * `connectionType` is the camera's own ('onvif' | 'rtsp' | 'sampleClip'),
+ * and is what makes `service` legitimate. Without it this function assumed
+ * every camera was ONVIF, so an RTSP-direct camera refusing a connection
+ * on 554 -- its STREAM port, the only port it has -- was reported as
+ * "answered, but its ONVIF service didn't; streaming may still work". That
+ * is the same wrong-badge failure this file was written to fix, inverted:
+ * a camera that is genuinely down, reassuringly mislabelled. Omitted means
+ * unknown, which is treated as ONVIF (the default and the common case).
  */
-export function classifyProbeError(error) {
+export function classifyProbeError(error, connectionType) {
   const message = String(error?.message ?? error ?? "");
   const code = error?.code ?? "";
 
@@ -56,7 +65,16 @@ export function classifyProbeError(error) {
   // path is wrong (a real case on this project's own Synology camera,
   // which serves /Onvif/device_service with a capital O). In both, the
   // RTSP stream on 554 is untouched and may be fine.
-  if (code === "ECONNREFUSED" || /\b404\b|econnrefused|not found/i.test(message)) {
+  //
+  // Only for a camera that HAS an ONVIF service. For an RTSP-direct one
+  // there is no control service to be separately unreachable: the probe
+  // talks to 554, so a refusal or a 404 there is about the stream itself.
+  // A 404 means the stream path is wrong rather than nothing answering --
+  // worth its own state if it ever shows up in practice, but guessing at
+  // one now would just be a differently-confident wrong badge, so it takes
+  // the honest default below and the raw text reaches the Log tab.
+  const hasOnvifService = connectionType !== "rtsp" && connectionType !== "sampleClip";
+  if (hasOnvifService && (code === "ECONNREFUSED" || /\b404\b|econnrefused|not found/i.test(message))) {
     return { state: "service", detail: message };
   }
 

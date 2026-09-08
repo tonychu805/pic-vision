@@ -24,6 +24,22 @@ test("a host that answers without a working ONVIF service is 'service'", () => {
   assert.equal(classifyProbeError(new Error("HTTP 404 Not Found")).state, "service");
 });
 
+test("'service' is only offered to cameras that have an ONVIF service", () => {
+  // An RTSP-direct camera is probed on 554, its stream port and its only
+  // port. A refusal there is the camera being down -- reporting it as
+  // "answered, but its ONVIF service didn't; streaming may still work"
+  // reassures the operator about the exact thing that just failed.
+  const refused = Object.assign(new Error("connect ECONNREFUSED 192.168.1.42:554"), { code: "ECONNREFUSED" });
+  assert.equal(classifyProbeError(refused, "rtsp").state, "offline");
+  // Wrong stream path. Not "the settings service is unreachable" either.
+  assert.equal(classifyProbeError(new Error("RTSP/1.0 404 Not Found"), "rtsp").state, "offline");
+  // Unchanged for an ONVIF camera, and for a caller that doesn't say.
+  assert.equal(classifyProbeError(refused, "onvif").state, "service");
+  assert.equal(classifyProbeError(refused).state, "service");
+  // Credentials still outrank connection type: a 401 is a 401 either way.
+  assert.equal(classifyProbeError(new Error("RTSP/1.0 401 Unauthorized"), "rtsp").state, "auth");
+});
+
 test("a missing sample-clip file is its own state", () => {
   assert.equal(classifyProbeError(new Error("Sample clip file is missing")).state, "missing");
 });

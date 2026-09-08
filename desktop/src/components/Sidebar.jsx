@@ -15,6 +15,7 @@ import ThemeToggle from "./ThemeToggle.jsx";
 const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
   { key: "log", label: "Log", icon: "ph-list-bullets" },
+  { key: "diagnostics", label: "Diagnostics", icon: "ph-gauge" },
   { key: "cloud", label: "Cloud console", icon: "ph-cloud" },
 ];
 

@@ -50,24 +50,70 @@ const FRESH_INPUT_ONLY = new Set([
   // otherwise -- found by this test on its first run, having been missed
   // by a manual audit that grepped for `config` and not `options`.
   "cameras:discover",
+  // { cameraId, recordingDir, targetSec }: ids and paths the renderer
+  // just chose, and the camera is re-read in main by id further down
+  // (pipeline.js). Was invisible to this test until destructured
+  // parameters were handled -- it is the shape the gate missed.
+  "pipeline:run",
+  // { ...properties } built by the renderer for one telemetry event.
+  // Never a stored entity, and nothing reads a credential off it.
+  "analytics:capture",
 ]);
 
-// Parameter names that indicate an object rather than a scalar id. A
-// handler taking `id`/`cameraId`/`url` can't carry a stripped secret.
-const OBJECT_PARAM = /^(config|camera|options|settings|payload|data|body)$/;
+// Which parameters count as "an object from the renderer".
+//
+// This used to be an allowlist of object-ish NAMES (config, camera,
+// options...). Two holes, both found by review on 2026-09-07 rather than
+// by the test: a destructured parameter -- `(_event, { cameraId, ... })`,
+// which main.js already contained at pipeline:run -- matched nothing at
+// all, and any object under an unlisted name (`properties`) sailed past.
+// An allowlist has to predict the name of a parameter nobody has written
+// yet, which is exactly the thing this file exists because we're bad at.
+//
+// So it's inverted: anything that isn't recognisably a scalar is treated
+// as an object and must be classified. Adding a name here is a deliberate
+// claim that the value is a string/number and cannot carry a stripped
+// secret -- cheap to do, and visible in review when it's wrong.
+const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec)$/;
+
+function isObjectParam(param) {
+  // `{ a, b }` / `[a, b]` -- destructured, therefore an object.
+  if (/^[[{]/.test(param)) return true;
+  return !SCALAR_PARAM.test(param.replace(/\s*=.*$/, "").trim());
+}
+
+// Split a parameter list on top-level commas only, so a destructured
+// parameter stays in one piece instead of shattering into "{ cameraId",
+// "recordingDir", "targetSec }" -- none of which looked like an object,
+// which is how pipeline:run went unclassified.
+function splitParams(text) {
+  const params = [];
+  let depth = 0;
+  let current = "";
+  for (const char of text) {
+    if ("{[(".includes(char)) depth++;
+    else if ("}])".includes(char)) depth--;
+    if (char === "," && depth === 0) {
+      params.push(current.trim());
+      current = "";
+    } else {
+      current += char;
+    }
+  }
+  params.push(current.trim());
+  return params.filter(Boolean);
+}
 
 function handlerSignatures() {
   const source = readFileSync(path.join(ROOT, "main.js"), "utf8");
+  // [^)]* is enough for a destructured parameter (no parens inside one),
+  // and stops at the arrow's own closing paren.
   const pattern = /ipcMain\.handle\(\s*"([^"]+)"\s*,\s*(?:async\s*)?\(([^)]*)\)/g;
   const found = [];
   let match;
   while ((match = pattern.exec(source)) !== null) {
     const channel = match[1];
-    const params = match[2]
-      .split(",")
-      .map((p) => p.trim())
-      .filter(Boolean)
-      .slice(1); // drop the leading _event
+    const params = splitParams(match[2]).slice(1); // drop the leading _event
     found.push({ channel, params });
   }
   return found;
@@ -78,7 +124,7 @@ test("every object-taking IPC handler is classified", () => {
   assert.ok(handlers.length > 10, `only found ${handlers.length} handlers -- did main.js's shape change?`);
 
   const unclassified = handlers
-    .filter(({ params }) => params.some((p) => OBJECT_PARAM.test(p)))
+    .filter(({ params }) => params.some(isObjectParam))
     .map(({ channel }) => channel)
     .filter((channel) => !RESTORES_SECRETS.has(channel) && !FRESH_INPUT_ONLY.has(channel));
 

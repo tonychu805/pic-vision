@@ -5,9 +5,11 @@ import CamerasPage from "./pages/CamerasPage.jsx";
 import CameraDetailPage from "./pages/CameraDetailPage.jsx";
 import { configuredCard } from "./lib/cameraView.js";
 import LogPage from "./pages/LogPage.jsx";
+import DiagnosticsPage from "./pages/DiagnosticsPage.jsx";
 import SettingsPage from "./pages/SettingsPage.jsx";
 import CloudPage from "./pages/CloudPage.jsx";
 import SignInPage from "./pages/SignInPage.jsx";
+import AccountMismatchDialog from "./components/AccountMismatchDialog.jsx";
 
 export default function App() {
   const [nav, setNav] = useState("cameras");
@@ -18,10 +20,23 @@ export default function App() {
   // resolved, so a fresh launch never flashes the main UI before falling
   // back to sign-in.
   const [session, setSession] = useState(undefined);
+  // Whether this machine is registered to the account that's signed in.
+  // Checked on launch and after every sign-in: a device connected as
+  // somebody else is reporting to the wrong venue right now, so it's
+  // asked about before anything else (ADR-094).
+  const [registration, setRegistration] = useState(null);
+
+  const checkRegistration = () =>
+    window.cloudAPI?.registrationStatus().then(setRegistration).catch(() => setRegistration(null));
 
   useEffect(() => {
     window.authAPI?.getSession().then(setSession).catch(() => setSession(null));
   }, []);
+
+  useEffect(() => {
+    if (session) checkRegistration();
+    else setRegistration(null);
+  }, [session]);
 
   // Desktop's equivalent of a web pageview -- this app never navigates
   // by URL, so "page" is just the nav key already driving which page
@@ -53,6 +68,13 @@ export default function App() {
       }}
     >
       <TitleBar />
+      {session && registration?.state === "mismatch" && (
+        <AccountMismatchDialog
+          status={registration}
+          onMoved={checkRegistration}
+          onSignedOut={() => { setSession(null); setRegistration(null); }}
+        />
+      )}
       {!session ? (
         // undefined (still checking) renders the same empty pane as null
         // (signed out) would flash into a moment later -- not worth a
@@ -102,6 +124,7 @@ export default function App() {
             />
           )}
           {nav === "log" && <LogPage />}
+          {nav === "diagnostics" && <DiagnosticsPage />}
           {nav === "settings" && <SettingsPage onBack={() => setNav("cameras")} />}
           {nav === "cloud" && <CloudPage session={session} onSignedOut={() => setSession(null)} />}
         </div>

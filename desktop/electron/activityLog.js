@@ -13,7 +13,14 @@
 import { randomUUID } from "node:crypto";
 import Store from "electron-store";
 
-const store = new Store({ name: "activityLog" });
+// configFileMode 0600: owner-only. electron-store passes its options
+// straight to conf, which otherwise writes every file 0666 (0664 after
+// the usual umask) -- readable by every other account on the machine.
+// Set HERE rather than chmod-ed afterwards: conf writes atomically, to a
+// new temp file that is then renamed, so a chmod on the old inode is
+// discarded by the very next write. storeFiles.js still chmods at
+// startup, but only to repair files older builds left behind.
+const store = new Store({ name: "activityLog", configFileMode: 0o600 });
 
 // Bounded so this can't grow forever on a machine that runs for months --
 // same reasoning as capture.js's segmented recordings, just for a JSON

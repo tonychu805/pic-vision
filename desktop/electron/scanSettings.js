@@ -13,7 +13,9 @@
 import Store from "electron-store";
 import { hostsInCidr, MAX_HOSTS } from "./cameras/networkSweep.js";
 
-const store = new Store({ name: "scanSettings" });
+// configFileMode 0600: owner-only, and set here rather than chmod-ed
+// afterwards -- see activityLog.js for why that distinction matters.
+const store = new Store({ name: "scanSettings", configFileMode: 0o600 });
 
 const DEFAULT_TIMEOUT_MS = 400;
 const MIN_TIMEOUT_MS = 50;

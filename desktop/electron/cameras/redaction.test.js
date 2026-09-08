@@ -131,3 +131,38 @@ test("what publicCamera strips, mergeStoredSecrets restores exactly", async () =
   assert.equal(renamed.label, "Court One");
   assert.equal(renamed.password, "hunter2");
 });
+
+test("mergeStoredSecrets fills gaps and never overrides a real credential", async () => {
+  // Imported here rather than at the top, like the round-trip test above:
+  // store.js pulls in electron-store, which the stub only stands up
+  // inside a running test.
+  const { mergeStoredSecrets } = await import("./store.js");
+
+  const stored = {
+    id: "cam-1",
+    username: "admin",
+    password: "old-password",
+    streamUri: "rtsp://admin:old-password@192.168.1.42:554/stream1",
+  };
+
+  // A caller that HAS credentials -- someone re-typing them to check
+  // before saving -- must have them tested, not silently swapped for the
+  // stored ones and reported as working. Nothing routes this way today;
+  // the point is that it can't start doing so by accident.
+  const typed = mergeStoredSecrets({ id: "cam-1", username: "admin", password: "new-password" }, stored);
+  assert.equal(typed.password, "new-password");
+
+  // A deliberately blank password is a value, not a gap.
+  assert.equal(mergeStoredSecrets({ id: "cam-1", password: "" }, stored).password, "");
+
+  // The starred URI is the renderer's copy, not a real one: it looks
+  // present but would connect to nothing. It has to be replaced, which is
+  // the opposite rule from the password (dropped outright, so absence is
+  // the signal there).
+  const starred = mergeStoredSecrets({ id: "cam-1", streamUri: "rtsp://***:***@192.168.1.42:554/stream1" }, stored);
+  assert.equal(starred.streamUri, "rtsp://admin:old-password@192.168.1.42:554/stream1");
+
+  // A genuinely different URI supplied by a caller is left alone.
+  const supplied = mergeStoredSecrets({ id: "cam-1", streamUri: "rtsp://admin:new@10.0.0.9:554/ch1" }, stored);
+  assert.equal(supplied.streamUri, "rtsp://admin:new@10.0.0.9:554/ch1");
+});

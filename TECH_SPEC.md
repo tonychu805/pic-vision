@@ -835,20 +835,60 @@ pic-vision/
 │   │   │                              # than fetch(), which sends chunked
 │   │   │                              # transfer-encoding for a stream body -- S3-style
 │   │   │                              # presigned PUTs (R2 included) reject that
+│   │   │                              # putStream() (2026-09-08, ADR-092) is that same
+│   │   │                              # request with any readable body, so the Diagnostics
+│   │   │                              # tab's upload benchmark measures the real transport
+│   │   │                              # rather than a lookalike; uploadFile() is now a
+│   │   │                              # two-line wrapper over it
+│   │   ├── bandwidth.js                 # ADR-092 (2026-09-08): venue upstream benchmark --
+│   │   │                              # synthetic bytes to a presigned R2 PUT, size ladder
+│   │   │                              # (8/64/256MB) until one run is long enough to trust,
+│   │   │                              # throughput measured after a 2s warmup so TLS setup
+│   │   │                              # and the socket buffer aren't counted as wire speed,
+│   │   │                              # then 3 samples at that size reported as a median --
+│   │   │                              # the same connection measured 3.4 and 29 Mbps minutes
+│   │   │                              # apart, so one sample isn't reproducible (cause
+│   │   │                              # unexplained; NOT the IP family, runtime or TLS).
+│   │   │                              # Reports in venue terms (minutes per 2-hour session)
+│   │   ├── bandwidth.test.js            # 9 tests: the throughput maths (incl. both
+│   │   │                              # fallbacks) plus a real local HTTP server proving
+│   │   │                              # putStream/uploadFile still send Content-Length and
+│   │   │                              # not chunked encoding -- the paired assertion for
+│   │   │                              # the refactor above
+│   │   ├── diagnostics.js               # ADR-092: the rest of the venue survey -- console
+│   │   │                              # round-trip (same route the heartbeat uses), per-
+│   │   │                              # camera reachability + stored stream profile against
+│   │   │                              # the 30fps floor (ADR-086/087), free space where
+│   │   │                              # recordings land. Returns renderer-safe summaries
+│   │   │                              # only, never a camera record (ADR-088)
 │   │   ├── version.js                   # ADR-090: semver compare for the update check.
 │   │   │                              # "unknown" is a distinct state from "current" --
 │   │   │                              # unreachable/unpublished/unparseable never report
 │   │   │                              # "up to date", the one wrong answer with a cost.
 │   │   ├── version.test.js              # 5 tests; asserts unparseable returns null, not 0
-│   │   ├── storeFiles.js                # runs once at startup: chmod 0600 on every
-│   │   │                              # electron-store JSON, and re-encrypts any
-│   │   │                              # secret a pre-ADR-082 build left in
-│   │   │                              # plaintext. Both were real on 2026-09-07 --
-│   │   │                              # auth.json still held a plaintext Supabase
-│   │   │                              # refresh token (written 43 min before the
-│   │   │                              # encryption shipped; nothing migrated it),
-│   │   │                              # and every store file was mode 664, i.e.
-│   │   │                              # readable by any other local user.
+│   │   ├── storeFiles.js                # one-time REPAIR at startup of what older
+│   │   │                              # builds left on disk: re-encrypts any secret
+│   │   │                              # a pre-ADR-082 build wrote in plaintext, and
+│   │   │                              # chmods files an older build created 664.
+│   │   │                              # Both were real on 2026-09-07 -- auth.json
+│   │   │                              # still held a plaintext Supabase refresh
+│   │   │                              # token (written 43 min before the encryption
+│   │   │                              # shipped; nothing migrated it), and every
+│   │   │                              # store file was readable by any other local
+│   │   │                              # user. Ongoing permissions are NOT this
+│   │   │                              # file's job: each `new Store()` passes
+│   │   │                              # configFileMode 0o600. A chmod here alone
+│   │   │                              # was the first attempt and did nothing --
+│   │   │                              # conf writes atomically (temp file, rename),
+│   │   │                              # so the next write discarded the chmod'd
+│   │   │                              # inode, seconds later for activityLog.json.
+│   │   ├── storeFiles.test.js           # the paired assertion that chmod-at-startup
+│   │   │                              # lacked: 0600 must SURVIVE repeated writes,
+│   │   │                              # not merely be applied once. Also ties
+│   │   │                              # STORE_FILES to the real `new Store({name})`
+│   │   │                              # call sites, so a store added later can't be
+│   │   │                              # silently skipped (the list named a
+│   │   │                              # schedules.json nothing has ever created).
 │   │   ├── ipc-contract.test.js         # 2026-09-07 gate: every IPC handler taking
 │   │   │                              # an OBJECT from the renderer must be
 │   │   │                              # classified as receiving a stored entity
@@ -860,6 +900,13 @@ pic-vision/
 │   │   │                              # which then authenticated with no password.
 │   │   │                              # Caught a 6th object-taking handler on its
 │   │   │                              # first run that a manual grep had missed.
+│   │   │                              # Its own first version matched object-ish
+│   │   │                              # parameter NAMES, which missed a destructured
+│   │   │                              # parameter -- `(_event, {cameraId, ...})`,
+│   │   │                              # already present at pipeline:run -- and any
+│   │   │                              # object under an unlisted name. Now inverted:
+│   │   │                              # anything not recognisably a scalar must be
+│   │   │                              # classified.
 │   │   ├── packaged-paths.test.js       # ADR-090: static check that every
 │   │   │                              # path.join(__dirname, "..", X) at startup targets
 │   │   │                              # a directory build.files actually ships, or sits
@@ -936,6 +983,10 @@ pic-vision/
 │   │   │                              # streamUri, nor the raw calibPath/
 │   │   │                              # sampleClipPath (local filesystem paths).
 │   │   │                              # Court/reel data still doesn't cross this.
+│   │   ├── auth.test.js                # ADR-094 (2026-09-09): 6 tests over
+│   │   │                              # registrationState()'s four answers -- the
+│   │   │                              # mismatch that was reported, and the same-account
+│   │   │                              # case the original condition existed to protect
 │   │   ├── auth.js                     # 2026-09-05: account sign-in (Supabase Auth
 │   │   │                              # REST, same project as the console) --
 │   │   │                              # signIn/signOut/getSession/getBrand, plus
@@ -944,6 +995,14 @@ pic-vision/
 │   │   │                              # sign-in (ADR-079) -- there is no separate
 │   │   │                              # pairing-code step anymore; signing in IS
 │   │   │                              # what connects this device to the console.
+│   │   │                              # ADR-094 (2026-09-09) added registrationState():
+│   │   │                              # the connection records WHICH account registered
+│   │   │                              # this device, so signing in as a different one is
+│   │   │                              # noticed instead of silently keeping the old
+│   │   │                              # brand's agent id and token. A mismatch is never
+│   │   │                              # resolved automatically -- moving a machine takes
+│   │   │                              # its cameras to another venue, so a person decides
+│   │   │                              # (src/components/AccountMismatchDialog.jsx).
 │   │   ├── secureField.js              # 2026-09-05 (ADR-082, PIC-79): OS-vault
 │   │   │                              # encryption (Electron safeStorage) for
 │   │   │                              # individual secret strings before they
@@ -969,6 +1028,32 @@ pic-vision/
 │   │       │                              # Digest auth, no ffmpeg dep) -- the
 │   │       │                              # fallback for cameras whose ONVIF doesn't
 │   │       │                              # work at all but a stream exists anyway
+│   │       ├── probeResult.js              # turns a failed connection check into a
+│   │       │                              # state chosen by WHAT THE OPERATOR SHOULD
+│   │       │                              # DO (auth / service / missing / offline),
+│   │       │                              # not by what broke. Written 2026-09-07,
+│   │       │                              # when every failure collapsed into "Not
+│   │       │                              # answering" -- including a camera
+│   │       │                              # answering 401, where the fix is a
+│   │       │                              # password, not a cable. Takes the
+│   │       │                              # camera's connectionType: "service" is
+│   │       │                              # meaningless for an RTSP-direct camera,
+│   │       │                              # which has no ONVIF service and is probed
+│   │       │                              # on its stream port. Raw error text goes
+│   │       │                              # to `detail` for the Log tab, never the
+│   │       │                              # badge (PIC-93). No Electron imports.
+│   │       ├── probeResult.test.js         # pinned against error strings this app
+│   │       │                              # has actually produced, copied from its
+│   │       │                              # own log, not invented ones
+│   │       ├── frameRate.js                # ADR-087: the 30fps gate (15fps halved
+│   │       │                              # recall). No Electron imports either
+│   │       ├── frameRate.test.js
+│   │       ├── redaction.test.js           # what the renderer may see (PIC-97), and
+│   │       │                              # the round trip back: publicCamera()
+│   │       │                              # strips, mergeStoredSecrets() restores,
+│   │       │                              # and the result must still authenticate.
+│   │       │                              # The second half is the assertion whose
+│   │       │                              # absence let ADR-088 ship broken
 │   │       └── store.js                  # persisted camera list + connect/test,
 │   │                                       # incl. an optional ONVIF path override
 │   │                                       # and addCameraViaRtsp (the RTSP fallback),
@@ -983,8 +1068,12 @@ pic-vision/
 │   │                                       # "sampleClip", no hostname/credentials)
 │   │                                       # for exercising calibration/the cloud
 │   │                                       # pipeline without a real camera
-│   │                                       # (electron-store; POC stores camera
-│   │                                       # passwords in plaintext, see README)
+│   │                                       # (electron-store; passwords and stream
+│   │                                       # URIs encrypted at rest since ADR-082,
+│   │                                       # and withStoredSecrets()/publicCamera()
+│   │                                       # are the boundary the renderer sees --
+│   │                                       # the older "plaintext, see README" note
+│   │                                       # here was left behind by that change)
 │   ├── .npmrc                            # ADR-090: tag-version-prefix=desktop-v, so
 │   │                                       # `npm version` tags what the release
 │   │                                       # workflow triggers on. Without it the tag
@@ -1061,11 +1150,26 @@ pic-vision/
 │       │                                    # migrated to the cloud console entirely
 │       │                                    # 2026-09-04 (ADR-071/PIC-73) -- removed
 │       │                                    # from here, not kept in both places.
+│       │                                    # AccountMismatchDialog (2026-09-09,
+│       │                                    # ADR-094) blocks the app when this
+│       │                                    # machine is registered to one venue
+│       │                                    # and someone signs in from another --
+│       │                                    # move it, or sign out; no "later",
+│       │                                    # since it's reporting to the wrong
+│       │                                    # venue every 30s meanwhile.
 │       │                                    # LogPage (2026-09-05, real -- replaced
 │       │                                    # the mock "Alerts" page; polls
 │       │                                    # logAPI.list() for activityLog.js's
 │       │                                    # real event history, "Clear log"
-│       │                                    # button), SettingsPage (2026-09-05,
+│       │                                    # button), DiagnosticsPage (2026-09-08,
+│       │                                    # ADR-092 -- the venue-survey tab: upload
+│       │                                    # benchmark (electron/bandwidth.js, started
+│       │                                    # then polled like a cloud job), console
+│       │                                    # reachability, per-camera fps/bitrate,
+│       │                                    # disk headroom; every row answers in the
+│       │                                    # failure's own terms, e.g. "a 2-hour
+│       │                                    # session would take 40 minutes to
+│       │                                    # upload"), SettingsPage (2026-09-05,
 │       │                                    # real -- renamed "Scan settings";
 │       │                                    # scanSettingsAPI-backed real extra
 │       │                                    # RTSP-sweep ranges + per-address
@@ -1266,6 +1370,17 @@ pic-vision/
 │   │       │                            # deletes whatever's NOT in that payload
 │   │       │                            # anymore (handles a removed camera, or
 │   │       │                            # the whole list going empty)
+│   │       ├── bandwidth-test/route.ts    # ADR-092 (2026-09-08): POST mints a presigned
+│   │       │                              # PUT to a throwaway bwtest/<agent_id>/ key so
+│   │       │                              # the desktop's Diagnostics tab can measure a
+│   │       │                              # venue's real upstream against R2 (the agent
+│   │       │                              # holds no R2 credentials, ADR-084); DELETE
+│   │       │                              # removes it, prefix-scoped to that agent.
+│   │       │                              # POST also sweeps that agent's own test objects
+│   │       │                              # older than 20 min -- the agent's cleanup DELETE
+│   │       │                              # is best-effort (the console can be unreachable
+│   │       │                              # exactly when a test ends), and a stray object
+│   │       │                              # from that case was found on day one
 │   │       └── reels/route.ts             # ADR-074, extended ADR-076, 2026-09-04.
 │   │                                    # Bearer-token authenticated, same pattern
 │   │                                    # as heartbeat -- cloud_pipeline/

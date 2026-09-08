@@ -903,6 +903,84 @@ will find it faster to just add each camera by its known IP once (the
 section exists for the case where automatic discovery specifically
 matters (e.g. camera IPs aren't fixed/known ahead of time).
 
+## Diagnostics tab (`electron/bandwidth.js` + `electron/diagnostics.js`, 2026-09-08 -- ADR-092)
+
+The venue-survey screen: run it standing in the venue with the laptop
+that will actually do the recording, before committing to a pilot.
+
+**Upload speed is the load-bearing one.** Since `ADR-084` this machine
+converts nothing -- it records with `-c copy` and uploads the raw
+segments -- so a whole session leaves the building at full camera
+bitrate. Real recordings measure 1.6-2.8 Mbps per camera, i.e. ~2.5 GB
+for a two-hour single-court session. What that costs:
+
+| Upstream (effective) | 2-hour session |
+|---|---|
+| 2 Mbps | ~2.8 hours -- never catches up |
+| 5 Mbps | ~67 min |
+| 10 Mbps | ~34 min |
+| 25 Mbps | ~13 min |
+
+Ask a venue for **25 Mbps per active court**; 10 Mbps is the "acceptable,
+reels land late" line. Below ~3 Mbps per camera the upload is slower than
+the recording, so back-to-back sessions fall permanently behind -- the tab
+calls that out in as many words rather than just printing a number.
+
+How the measurement works, and why it can be trusted:
+
+- It PUTs **synthetic bytes to a presigned R2 URL** the console mints
+  (`/api/agents/bandwidth-test` -- the agent holds no R2 credentials),
+  through `consoleApi.js`'s `putStream()`, which is the exact request a
+  real recording segment goes out on. A speedtest app measures a nearby
+  server over parallel connections and routinely reports several times
+  what a single stream to our own storage achieves.
+- Nothing from the cameras is uploaded, no temp file is written, and the
+  test object is deleted afterwards.
+- **The first 2 seconds are excluded** -- progress fires when a chunk
+  reaches the socket, not the wire, and TLS setup and TCP slow start sit
+  in that window too.
+- **The size ladder is 8 -> 64 -> 256 MB**, climbing only while a run
+  finishes in under 6s. Measured here against real R2: the 8 MB rung
+  reported 26.9 Mbps and the 64 MB rung 37.7 Mbps on the same link, so a
+  short run understates by ~30%.
+- **It takes three samples at the settled size and reports the median**,
+  because one sample is not reproducible on this network. Consecutive
+  8 MB PUTs measured 28.8, 3.4, 29.0 and 32.3 Mbps minutes apart --
+  roughly 3.5 or roughly 30, per connection, for that connection's whole
+  life. When fastest/slowest exceeds 2x the tab says so in its own row
+  and shows both session estimates rather than one confident number.
+  **Whatever causes that also affects real recording uploads**, which go
+  out through the same code and the same connection shape.
+
+  Investigated 2026-09-08 (`ADR-092`); the cause is outside this system.
+  Ruled out by measurement: the IP family (both produce both modes), the
+  Electron runtime and TLS (in-app PUTs to a local server ran at gigabit),
+  packet loss (slow flows have *zero* retransmissions), a burst allowance
+  (a 128 MB upload held 30-38 Mbps for 37s), and the storage vendor --
+  alternating 8 MB uploads between R2 and `speed.cloudflare.com` showed
+  both modes on both, uncorrelated. It's a per-flow effect on the ISP
+  uplink. **Parallel uploads do not help**: four at once totalled 15-23
+  Mbps, less than one good flow, so the link caps around 30 Mbps.
+
+**Measure at the venue's busy hour, over ethernet and over wifi
+separately.** Shared uplinks degrade exactly when the building is full,
+which is when sessions record, and the laptop's own wifi is often the
+real bottleneck rather than the ISP.
+
+The other three rows read what the app already knows: a console round
+trip over the same route the heartbeat uses; each camera's reachability
+plus the resolution/fps/bitrate measured on its last connect, checked
+against the 30fps floor (see "Camera setup" above); and free space where
+recordings land, expressed as hours of recording.
+
+**On the fps row specifically:** it reports what the stream actually
+delivers, which is the right thing to gate on -- but a camera configured
+at 15fps and a wifi camera dropping frames produce the same row and need
+different fixes. Court 2 on this network is wifi and reads 17fps, which
+is exactly the RTSP-over-wifi frame loss `DECISIONS.md` ADR-030/032
+measured. Check how the camera is attached before changing its
+settings.
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
@@ -940,6 +1018,15 @@ matters (e.g. camera IPs aren't fixed/known ahead of time).
   verified live. Per-venue scoped cloud credentials (`PIC-71`) are also
   still a hard prerequisite before this can point at anything but the
   operator's own `.env`.
+- The Diagnostics tab is verified end to end against real R2 and a real
+  agent token, but only through a *locally run* console -- the route has
+  never run on deployed Netlify, and the tab has never run on a venue
+  machine. The speeds in `ADR-092` are the operator's own workstation.
+- Why the same connection delivers ~3.5 Mbps one minute and ~30 the next
+  is unexplained. Ruled out so far: the IP family, the Electron runtime,
+  and TLS (in-app PUTs to a local server ran at gigabit). Left: the ISP,
+  a Cloudflare edge, or R2. It affects real recording uploads too, so
+  it's worth measuring from a second network.
 - The Schedule page's on/off toggle still has no real effect -- capture
   now exists, but nothing reads a camera's booked sessions to
   automatically start/stop it yet (`PIC-72`). See Linear `PIC-66`/`PIC-68`

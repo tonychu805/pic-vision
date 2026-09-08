@@ -27,10 +27,12 @@ import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
-import { signIn, signOut, getSession, getBrand, registerDevice } from "./auth.js";
+import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession } from "./auth.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 import { getEvents, clearEvents } from "./activityLog.js";
+import { runChecks } from "./diagnostics.js";
+import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -93,14 +95,24 @@ function registerCameraHandlers() {
   // a password, not a cable. testConnection itself still throws, because
   // cloud.js's heartbeat and store.js's pre-save check both rely on that.
   ipcMain.handle("cameras:testConnection", async (_event, config) => {
+    // Declared out here so the catch can read the camera's connectionType;
+    // the call itself stays INSIDE the try, so a failure reading the store
+    // still returns a state rather than rejecting the IPC call.
+    let camera;
     try {
       // withStoredSecrets: the renderer's copy has no password (ADR-088),
       // and it hands that copy straight back here. Without this every
       // configured camera fails its own check with a 401.
-      const result = await testConnection(withStoredSecrets(config));
+      camera = withStoredSecrets(config);
+      const result = await testConnection(camera);
       return { ok: true, state: "ok", ...result };
     } catch (err) {
-      return { ok: false, ...classifyProbeError(err) };
+      // connectionType decides whether "the ONVIF service is unreachable"
+      // is even a possible reading of the failure -- an RTSP-direct camera
+      // has no such service. Falls back to the renderer's copy, which
+      // carries connectionType (publicCamera doesn't strip it), for the
+      // case where withStoredSecrets itself is what threw.
+      return { ok: false, ...classifyProbeError(err, camera?.connectionType ?? config?.connectionType) };
     }
   });
   ipcMain.handle("system:networkInfo", async () => {
@@ -265,6 +277,12 @@ function registerPipelineHandlers() {
 // and at startup below) -- `cloud:register` here is just the manual retry
 // CloudPage.jsx offers if that didn't succeed the first time.
 function registerCloudHandlers() {
+  // Is this device waiting on a decision about who it belongs to?
+  // Polled by the renderer at launch and after sign-in (ADR-094) -- takes
+  // nothing from the renderer, reads the session and connection in main.
+  ipcMain.handle("cloud:registrationStatus", async () => {
+    return registrationStatus();
+  });
   ipcMain.handle("cloud:register", async () => {
     return registerDevice();
   });
@@ -336,6 +354,33 @@ function registerActivityLogHandlers() {
   ipcMain.handle("log:clear", async () => {
     clearEvents();
     return null;
+  });
+}
+
+// Diagnostics tab: the venue-survey checks (console reachable, cameras
+// reachable and at 30fps, disk headroom) plus the upload benchmark.
+//
+// The benchmark runs for up to a couple of minutes, so it's started and
+// then polled -- the same start/poll shape pipeline.js already uses for
+// a cloud job, rather than one IPC call the renderer waits on.
+//
+// Every handler here takes an id or nothing at all: no stored entity
+// crosses back from the renderer, so there is no secret to restore
+// (ADR-088, electron/ipc-contract.test.js).
+function registerDiagnosticsHandlers() {
+  ipcMain.handle("diagnostics:run", async () => {
+    return runChecks();
+  });
+  // Fire-and-forget: the renderer polls bandwidthStatus() for progress
+  // and the result. Failures land in that status, not as a rejected
+  // invoke nobody is awaiting.
+  ipcMain.handle("diagnostics:startBandwidth", async () => {
+    const cameras = listCameras().length || 1;
+    runBandwidthTest({ cameras }).catch(() => {});
+    return bandwidthStatus();
+  });
+  ipcMain.handle("diagnostics:bandwidthStatus", async () => {
+    return bandwidthStatus();
   });
 }
 
@@ -433,6 +478,7 @@ app.whenReady().then(() => {
   registerAuthHandlers();
   registerAnalyticsHandlers();
   registerActivityLogHandlers();
+  registerDiagnosticsHandlers();
   registerLiveViewHandlers();
   registerWindowControlHandlers();
   // BrowserWindow's icon option (createWindow) only ever reaches the
@@ -470,13 +516,15 @@ app.whenReady().then(() => {
     };
   });
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
-  // Catches the case where a device is signed in but registration never
-  // succeeded (console unreachable the first time, or this is a relaunch
-  // right after that failure) -- signIn() only tries once, at sign-in
-  // time, so a launch that skips signIn() entirely (an existing session)
-  // needs its own chance to retry.
-  if (getSession() && !getCloudConnection()) {
-    registerDevice().catch((err) => console.error(`[auth] device registration retry failed: ${err.message}`));
+  // Catches two cases where sign-in's own registration didn't happen or
+  // didn't stick: registration never succeeded (console unreachable the
+  // first time, or this is a relaunch right after that failure), and a
+  // device still connected as a previously signed-in account (ADR-094).
+  // signIn() only runs at sign-in time, so a launch that skips it
+  // entirely (an existing session) needs its own chance.
+  if (getSession()) {
+    resolveRegistrationForSession().catch((err) =>
+      console.error(`[auth] device registration retry failed: ${err.message}`));
   }
   capture("app_launched");
 

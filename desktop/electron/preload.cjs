@@ -78,6 +78,7 @@ contextBridge.exposeInMainWorld("pipelineAPI", {
 
 contextBridge.exposeInMainWorld("cloudAPI", {
   register: () => ipcRenderer.invoke("cloud:register"),
+  registrationStatus: () => ipcRenderer.invoke("cloud:registrationStatus"),
   status: () => ipcRenderer.invoke("cloud:status"),
   disconnect: () => ipcRenderer.invoke("cloud:disconnect"),
   getAgentName: () => ipcRenderer.invoke("cloud:getAgentName"),
@@ -104,6 +105,12 @@ contextBridge.exposeInMainWorld("analyticsAPI", {
 contextBridge.exposeInMainWorld("logAPI", {
   list: () => ipcRenderer.invoke("log:list"),
   clear: () => ipcRenderer.invoke("log:clear"),
+});
+
+contextBridge.exposeInMainWorld("diagnosticsAPI", {
+  run: () => ipcRenderer.invoke("diagnostics:run"),
+  startBandwidth: () => ipcRenderer.invoke("diagnostics:startBandwidth"),
+  bandwidthStatus: () => ipcRenderer.invoke("diagnostics:bandwidthStatus"),
 });
 
 contextBridge.exposeInMainWorld("liveViewAPI", {

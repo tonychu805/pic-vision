@@ -22,7 +22,9 @@ import { vendorsForIps } from "./vendorLookup.js";
 import { RECORDINGS_ROOT, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
 
-const store = new Store({ name: "cameras" });
+// configFileMode 0600: owner-only, and set here rather than chmod-ed
+// afterwards -- see activityLog.js for why that distinction matters.
+const store = new Store({ name: "cameras", configFileMode: 0o600 });
 
 // password and streamUri (the RTSP-direct fallback embeds credentials
 // directly in the URL, see addCameraViaRtsp below) are the only fields
@@ -114,7 +116,29 @@ export function withStoredSecrets(config) {
 // and the app was broken) but never that anything still worked without it.
 export function mergeStoredSecrets(config, stored) {
   if (!config || !stored) return config;
-  return { ...config, password: stored.password, streamUri: stored.streamUri };
+  return {
+    ...config,
+    // FILL a gap, don't overwrite. The first version replaced both fields
+    // unconditionally, which is a trap rather than a bug today: nothing
+    // currently sends fresh credentials through a handler that calls this.
+    // But "verify these before I save them" is the obvious next button to
+    // build, and routed through cameras:testConnection it would have had
+    // the typed password swapped for the stored one, passed against the
+    // OLD credentials, and told the operator the new ones work.
+    password: config.password ?? stored.password,
+    // streamUri needs the opposite default. publicCamera() DROPS the
+    // password but only STARS the URI, so the renderer's copy is a
+    // present, plausible-looking, unusable string -- `??` would happily
+    // keep "rtsp://***:***@host/stream1". Anything still bearing the
+    // redaction marker is the renderer's copy and must be replaced.
+    streamUri: isRedactedStreamUri(config.streamUri) || config.streamUri == null ? stored.streamUri : config.streamUri,
+  };
+}
+
+// The marker redactStreamUri() leaves behind. Kept next to it so the two
+// can't drift apart: if that starring changes shape, this must too.
+function isRedactedStreamUri(uri) {
+  return typeof uri === "string" && uri.includes("://***:***@");
 }
 
 // The list the renderer gets. listCameras() stays internal: capture.js,

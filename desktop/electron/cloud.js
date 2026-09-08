@@ -19,7 +19,9 @@ import { runCloudJob } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 
-const store = new Store({ name: "cloud" });
+// configFileMode 0600: owner-only, and set here rather than chmod-ed
+// afterwards -- see activityLog.js for why that distinction matters.
+const store = new Store({ name: "cloud", configFileMode: 0o600 });
 
 // Defaults to the real production console -- same pattern as auth.js's
 // SUPABASE_URL/SUPABASE_ANON_KEY, overridable via env var for local dev
@@ -213,15 +215,15 @@ export function setAgentName(name) {
 // The returned long-lived API token is OS-vault-encrypted at rest the
 // same way camera passwords are (secureField.js, PIC-79) -- see
 // saveConnection above.
-export function registerAgent(accessToken, consoleUrl = DEFAULT_CONSOLE_URL) {
+export function registerAgent(accessToken, userId, consoleUrl = DEFAULT_CONSOLE_URL) {
   if (registrationInFlight) return registrationInFlight;
 
-  registrationInFlight = registerAgentOnce(accessToken, consoleUrl)
+  registrationInFlight = registerAgentOnce(accessToken, userId, consoleUrl)
     .finally(() => { registrationInFlight = null; });
   return registrationInFlight;
 }
 
-async function registerAgentOnce(accessToken, consoleUrl) {
+async function registerAgentOnce(accessToken, userId, consoleUrl) {
   const res = await fetch(`${consoleUrl}/api/agents/register`, {
     method: "POST",
     headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
@@ -235,6 +237,12 @@ async function registerAgentOnce(accessToken, consoleUrl) {
     agentId: body.agentId,
     apiToken: body.apiToken,
     brandName: body.brandName,
+    // Which account this device is registered AS. Without it, signing out
+    // and signing in as a different account left the old account's agent
+    // id, token and brand in place -- the app said "Connected as <the
+    // other brand>" and, worse, kept heartbeating and would have filed
+    // every camera and reel under it (2026-09-09, ADR-094).
+    userId,
     connectedAt: new Date().toISOString(),
   };
   saveConnection(connection);
@@ -242,6 +250,23 @@ async function registerAgentOnce(accessToken, consoleUrl) {
   logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
   startHeartbeatLoop();
   return connection;
+}
+
+/**
+ * Stamps the signed-in account onto a connection that predates `userId`
+ * (any build before 2026-09-09), without re-registering.
+ *
+ * Used only when the stored brand still matches the signed-in account's
+ * brand -- i.e. nothing actually changed hands, the record was just
+ * missing a field. A genuine mismatch is never resolved silently; it
+ * asks (ADR-094).
+ */
+export function adoptConnection(userId) {
+  const connection = getCloudConnection();
+  if (!connection) return null;
+  const adopted = { ...connection, userId };
+  saveConnection(adopted);
+  return adopted;
 }
 
 export function disconnectCloud() {
@@ -298,7 +323,7 @@ async function cameraStatuses() {
         // -- which is what made the 2026-09-07 report undiagnosable from
         // inside the app. The badge stays two words; this is where the
         // detail lives (Log tab rows expand).
-        const { state, detail } = classifyProbeError(results[i].reason);
+        const { state, detail } = classifyProbeError(results[i].reason, c.connectionType);
         logEvent("camera_offline", describeProbeState(state, c.label), detail);
       }
     }
