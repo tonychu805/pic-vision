@@ -544,6 +544,33 @@ async function processCommands() {
   }
 }
 
+// Runs the same pending-commands pass the heartbeat tick does, on demand.
+//
+// Debounced because the realtime channel fires per inserted row: the
+// console sending two commands at once would otherwise start two
+// overlapping passes, and processCommands() is deliberately sequential.
+let commandsRunning = null;
+let commandsQueued = false;
+
+export async function processCommandsNow() {
+  if (commandsRunning) {
+    commandsQueued = true; // something arrived mid-pass; sweep again after
+    return commandsRunning;
+  }
+  commandsRunning = (async () => {
+    try {
+      await processCommands();
+    } finally {
+      commandsRunning = null;
+      if (commandsQueued) {
+        commandsQueued = false;
+        await processCommandsNow();
+      }
+    }
+  })();
+  return commandsRunning;
+}
+
 export function startHeartbeatLoop() {
   if (heartbeatTimer) return; // already running
   if (!getCloudConnection()) return;
@@ -553,7 +580,7 @@ export function startHeartbeatLoop() {
     // that cameraStatuses() reads; running the heartbeat first would report
     // the *old* state and make the console wait a full extra cycle to see
     // a change that already happened this tick.
-    await processCommands();
+    await processCommandsNow();
     sendHeartbeat(); // don't wait a full interval for the first "online" signal
   };
   tick();

@@ -983,6 +983,19 @@ pic-vision/
 │   │   │                              # streamUri, nor the raw calibPath/
 │   │   │                              # sampleClipPath (local filesystem paths).
 │   │   │                              # Court/reel data still doesn't cross this.
+│   │   ├── commandChannel.js            # ADR-100 (2026-09-09): Supabase Realtime
+│   │   │                              # subscription on agent_commands, so a console
+│   │   │                              # command lands in ~640ms instead of waiting up
+│   │   │                              # to 30s for the heartbeat (measured: 28.7s and
+│   │   │                              # 31.4s before). A DOORBELL, not the payload --
+│   │   │                              # the agent still fetches commands over its own
+│   │   │                              # authenticated route. The 30s poll is unchanged
+│   │   │                              # and remains the floor: a signed-out machine
+│   │   │                              # can't authenticate a subscription and must
+│   │   │                              # still obey commands
+│   │   ├── commandChannel.test.js       # 5 tests over the guards -- unregistered,
+│   │   │                              # signed out, refresh failure -- i.e. every case
+│   │   │                              # that must fall back to polling, not break
 │   │   ├── auth.test.js                # ADR-094 (2026-09-09): 6 tests over
 │   │   │                              # registrationState()'s four answers -- the
 │   │   │                              # mismatch that was reported, and the same-account

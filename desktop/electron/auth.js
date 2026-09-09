@@ -64,8 +64,8 @@ function loadSession() {
 // values are baked into that app's client bundle, so they're public by
 // design, not a secret this file is newly exposing). Overridable for
 // local dev against a different Supabase project.
-const SUPABASE_URL = process.env.PIC_VISION_SUPABASE_URL || "https://evceszapbiuwdmqfisqx.supabase.co";
-const SUPABASE_ANON_KEY = process.env.PIC_VISION_SUPABASE_ANON_KEY || "sb_publishable_vx_czTeMEFsky1w0qf2xVQ_IH-Ekstq";
+export const SUPABASE_URL = process.env.PIC_VISION_SUPABASE_URL || "https://evceszapbiuwdmqfisqx.supabase.co";
+export const SUPABASE_ANON_KEY = process.env.PIC_VISION_SUPABASE_ANON_KEY || "sb_publishable_vx_czTeMEFsky1w0qf2xVQ_IH-Ekstq";
 
 // Strips the tokens before anything crosses back to the renderer -- unlike
 // cloud.js's `connection` (whose apiToken is a long-lived agent credential
@@ -240,6 +240,15 @@ export function getSession() {
 // token turns over doesn't race a 401. Clears the stored session on a
 // failed refresh (revoked/expired refresh token) rather than leaving a
 // dead session getSession() would keep reporting as signed-in.
+/**
+ * Exported for the realtime command channel (ADR-100), which needs a live
+ * token to authenticate its subscription and a fresh one periodically.
+ * Still the same single place that decides when a session is over.
+ */
+export async function currentAccessToken() {
+  return getValidAccessToken();
+}
+
 async function getValidAccessToken() {
   const session = loadSession();
   if (!session) return null;

@@ -28,8 +28,9 @@ import { identitiesForIps } from "./cameras/vendorLookup.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState } from "./cloud.js";
-import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession } from "./auth.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
+import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
+import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 import { getEvents, clearEvents } from "./activityLog.js";
@@ -38,6 +39,35 @@ import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+/**
+ * Point the realtime command channel at whatever this machine is
+ * currently registered as -- or tear it down when it isn't registered.
+ *
+ * Wired here rather than inside cloud.js so the session (auth.js) and the
+ * connection (cloud.js) stay separately owned: cloud.js imports nothing
+ * from auth.js today, and an import cycle between the two isn't worth a
+ * shorter call site (ADR-100).
+ *
+ * Failure is silent on purpose. Every reason this can fail -- signed out,
+ * Realtime unreachable, a token that wouldn't refresh -- leaves the 30s
+ * heartbeat poll doing exactly what it did before.
+ */
+async function syncCommandChannel() {
+  const connection = getCloudConnection();
+  if (!connection?.agentId) return stopCommandChannel();
+  try {
+    await startCommandChannel({
+      url: SUPABASE_URL,
+      anonKey: SUPABASE_ANON_KEY,
+      agentId: connection.agentId,
+      getAccessToken: currentAccessToken,
+      onCommand: () => { processCommandsNow().catch(() => {}); },
+    });
+  } catch (err) {
+    console.error(`[cloud] realtime command channel unavailable, polling only: ${err.message}`);
+  }
+}
 const isDev = !app.isPackaged;
 
 // Where the app asks "is there a newer version?". Deliberately a constant:
@@ -322,7 +352,12 @@ function registerCloudHandlers() {
     return registrationStatus();
   });
   ipcMain.handle("cloud:register", async () => {
-    return registerDevice();
+    const connection = await registerDevice();
+    // Registration mints a new agent id and token, so the channel has to
+    // be rebound to it -- a subscription filtered on the old id would go
+    // quiet without ever erroring.
+    await syncCommandChannel();
+    return connection;
   });
   ipcMain.handle("cloud:status", async () => {
     // apiToken stripped (PIC-97): it's the long-lived credential a revoked
@@ -335,6 +370,7 @@ function registerCloudHandlers() {
     return rest;
   });
   ipcMain.handle("cloud:disconnect", async () => {
+    await stopCommandChannel();
     disconnectCloud();
     return null;
   });
@@ -554,6 +590,7 @@ app.whenReady().then(() => {
     };
   });
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
+  syncCommandChannel().catch(() => {}); // instant commands where possible; the poll above is the floor
   // Catches two cases where sign-in's own registration didn't happen or
   // didn't stick: registration never succeeded (console unreachable the
   // first time, or this is a relaunch right after that failure), and a

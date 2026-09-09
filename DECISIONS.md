@@ -1945,3 +1945,30 @@ Both are already live conditions rather than hypotheticals: **Pickle Day Social 
 **Verification.** Driven in a real browser against a preview route, since these pages are auth-gated: venue filter 5 → 2, "Last 7 days" 5 → 3, a specific day 5 → 1, Clear back to 5, and the alignment measured rather than eyeballed. Console tests and typecheck pass.
 
 **Not verified:** the Cameras and Schedule venue columns were not driven live — they render only for a signed-in brand, and their change is one conditional cell each. They will appear immediately for this brand, which has three machines.
+
+---
+
+## ADR-100 — Commands are pushed, not waited for: Calibrate went from ~30s to under a second
+
+**Date:** 2026-09-09 · **Status:** accepted, built, measured against the real project
+
+**Context.** Operator: *"when i click calibrate on console, it is extremely slow."*
+
+Measured from their own two attempts rather than guessed at — `agent_commands` records when each command was created and completed: **28.7s and 31.4s** end to end. The camera grab and the R2 upload are a few seconds of that. The rest is the agent's 30-second heartbeat coming round to notice a command exists, because that poll is the only thing that looks.
+
+ADR-071 chose polling deliberately and said so: *"a persistent channel is a reasonable later upgrade if command latency becomes a real problem, not a day-one requirement."* It became one — a person is sitting watching a spinner.
+
+**Decision. Supabase Realtime as a fast path, with the poll untouched underneath.**
+
+- `electron/commandChannel.js` subscribes to `INSERT` on `agent_commands` filtered to this agent, and calls `processCommandsNow()` when one arrives.
+- **The push is a doorbell, not the payload.** It carries a row, but the agent ignores it and fetches its pending commands over its own authenticated route, so what actually executes has been through the same server-side check as before.
+- **The 30s heartbeat poll is unchanged.** Not a fallback bolted on afterwards — the floor. A machine whose operator signed out has no Supabase session to authenticate a subscription, and that machine may be recording tonight; it must keep obeying commands. A dropped socket, an unreachable Realtime, a refresh that failed: all degrade to exactly the behaviour of yesterday.
+- **No new polling cost.** The alternative — polling commands every 5s — would have multiplied Netlify function invocations sixfold for a latency win this gets for free.
+- Wired from `main.js` rather than inside `cloud.js`, so the session (auth.js) and the connection (cloud.js) stay separately owned instead of gaining an import cycle.
+- `processCommandsNow()` is debounced: the console sending two commands at once fires two pushes, and `processCommands()` is deliberately sequential.
+
+**A migration was required, and it revealed something.** `alter publication supabase_realtime add table public.agent_commands` — **nothing at all was in that publication**, so no table published changes. Only this one is added: it is the single place where latency is a person waiting, and its RLS SELECT policy (verified in `pg_policies`, not inferred) already scopes rows to the brand owner, so Realtime inherits that boundary rather than needing its own.
+
+**Verification.** Against the real project, not a mock: a subscription filtered to a real agent, then a real `INSERT`, and the push arrived in **638ms** — versus 28.7s and 31.4s on the poll. The test row named a camera that doesn't exist, because `runCommand()` throws "camera not found" *before* dispatching on type, so even a live agent picking it up would touch nothing; it was deleted seconds later and the table confirmed clean afterwards.
+
+**Second finding, fixed alongside: the calibration fit has never run in production.** The `jobs` table is empty — no job of any kind has ever been created there. So after clicking 14 points, the console would poll a job nobody claims and fail after three minutes with a message about "the processing service". Now: if nothing has claimed the job after 20 seconds it says so in place ("Waiting for the processing machine to pick this up — it may not be running"), and the timeout names `job_runner.py` and warns that the clicked points are not saved. A live runner claims within ~5s, so 20s of silence is a real signal, not impatience.
