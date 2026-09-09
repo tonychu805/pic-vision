@@ -6,7 +6,7 @@
 // which cjs-module-lexer can't statically detect as named exports -- import
 // the module object and destructure at runtime instead.
 import onvifPromises from "onvif/promises/index.js";
-import { vendorsForIps } from "./vendorLookup.js";
+import { identitiesForIps } from "./vendorLookup.js";
 const { Discovery } = onvifPromises;
 
 const DEFAULT_TIMEOUT_MS = 5000;
@@ -36,15 +36,61 @@ function declaresNetworkVideoTransmitter(xml) {
   return /NetworkVideoTransmitter/i.test(match[1]);
 }
 
+/**
+ * The identity a camera advertises in its own discovery reply.
+ *
+ * These were being received and thrown away. A real C200 on this network
+ * answers with:
+ *
+ *   onvif://www.onvif.org/name/C200
+ *   onvif://www.onvif.org/hardware/C200
+ *   onvif://www.onvif.org/location/Hong Kong
+ *
+ * `name` and `location` are set in the camera's own settings on most
+ * models, so at a venue they read "Court 3 baseline" rather than a model
+ * number -- which is the difference between recognising a camera in a
+ * scan result and guessing.
+ */
+export function parseScopes(xml) {
+  const raw = xml.match(/<[\w:]*Scopes>([^<]*)<\/[\w:]*Scopes>/i)?.[1] ?? "";
+  const scopes = raw.split(/\s+/).filter(Boolean);
+  const value = (kind) => {
+    const hit = scopes.find((s) => s.toLowerCase().includes(`/${kind}/`));
+    if (!hit) return null;
+    const tail = hit.slice(hit.toLowerCase().lastIndexOf(`/${kind}/`) + kind.length + 2);
+    try {
+      return decodeURIComponent(tail) || null;
+    } catch {
+      return tail || null; // a scope with a stray % is still worth showing
+    }
+  };
+  return { name: value("name"), hardware: value("hardware"), location: value("location") };
+}
+
+/**
+ * The device's own stable id, from the discovery envelope's
+ * EndpointReference -- `uuid:3fa1fe68-...` on the C200 here.
+ *
+ * Survives a DHCP address change, so it answers "is this the camera I
+ * added last week, or a new one?" -- which an IP cannot. Read from the
+ * XML rather than `cam.urn`, which this version of `onvif` leaves
+ * undefined (the bug documented below).
+ */
+export function parseEndpointUuid(xml) {
+  const address = xml.match(/<[\w:]*Address>([^<]*)<\/[\w:]*Address>/i)?.[1]?.trim();
+  return address && /^urn:uuid:|^uuid:/i.test(address) ? address.replace(/^urn:/i, "") : null;
+}
+
 // Cam instances aren't safely IPC-serializable (internal EventEmitter state,
 // circular refs) -- reduce each hit to the plain fields the renderer needs.
-function toPlainDevice(cam) {
+function toPlainDevice(cam, identity = {}) {
   return {
     hostname: cam.hostname,
     port: cam.port,
     path: cam.path ?? "/",
     urn: cam.urn,
     xaddrs: (cam.xaddrs ?? []).map((u) => u.toString()),
+    ...identity,
   };
 }
 
@@ -79,11 +125,13 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
   // camera's XAddr actually identifies it by, so it's the natural key.
   const confirmed = new Map();
   const sourceIpByHostname = new Map();
+  const identityByHostname = new Map();
 
   const onDevice = (cam, rinfo, xml) => {
     if (declaresNetworkVideoTransmitter(xml)) {
       confirmed.set(cam.hostname, cam);
       sourceIpByHostname.set(cam.hostname, rinfo.address);
+      identityByHostname.set(cam.hostname, { scopes: parseScopes(xml), deviceUuid: parseEndpointUuid(xml) });
     }
   };
   const onError = () => {}; // required per onvif's own docs -- a bad-XML reply
@@ -94,7 +142,7 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
   try {
     await Discovery.probe({ timeout }); // resolved value unused -- only
                                          // awaited for completion/timeout
-    const devices = [...confirmed.values()].map(toPlainDevice);
+    const devices = [...confirmed.values()].map((cam) => toPlainDevice(cam, identityByHostname.get(cam.hostname)));
     // cam.hostname comes from the device's own XAddr URL, which some
     // responders (e.g. the two NAS boxes this filter rejects) give as a
     // symbolic hostname rather than an IP -- ARP only indexes IPs.
@@ -103,8 +151,11 @@ export async function discoverCameras({ timeout = DEFAULT_TIMEOUT_MS } = {}) {
     // cam.hostname to be one. Real ONVIF cameras almost always report a
     // plain IP XAddr anyway, but this doesn't depend on that being true.
     const sourceIps = devices.map((d) => sourceIpByHostname.get(d.hostname)).filter(Boolean);
-    const vendors = vendorsForIps(sourceIps);
-    return devices.map((d) => ({ ...d, vendor: vendors[sourceIpByHostname.get(d.hostname)] ?? null }));
+    const identities = identitiesForIps(sourceIps);
+    return devices.map((d) => {
+      const ip = sourceIpByHostname.get(d.hostname);
+      return { ...d, ip: ip ?? null, vendor: identities[ip]?.vendor ?? null, mac: identities[ip]?.mac ?? null };
+    });
   } finally {
     Discovery.off("device", onDevice);
     Discovery.off("error", onError);

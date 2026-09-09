@@ -85,19 +85,28 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
   const configuredCards = configured.map((c) => configuredCard(c, statusById[c.id] ?? "checking"));
 
   // Plain-language names for anything not yet added -- a venue owner has
-  // no use for a raw IP or protocol name as the headline. Vendor (from
-  // vendorLookup.js's MAC lookup, generic across brands) is included when
-  // known since "which camera is this" is exactly what a first-time,
-  // non-technical user needs to recognize their own device by.
+  // no use for a raw IP or protocol name as the headline.
+  //
+  // The headline is now whatever the device calls ITSELF, in this order:
+  // the name someone set on the camera (SSDP friendlyName, or the ONVIF
+  // name scope), then its model, then the MAC vendor, then a generic
+  // fallback. Measured on real hardware 2026-09-09: the Synology answers
+  // only SSDP ("pic-vision-test-001-BC500", model BC500, serial
+  // 2310VSRCJY482) and the Tapo only ONVIF (name/hardware C200, location
+  // "Hong Kong"), so both sources feed this and neither alone is enough.
   const discoveredCards = discovered
     .filter((d) => !configuredHostnames.has(d.hostname))
     .map((d) => ({
       key: d.hostname,
       kind: "discovered",
       device: d,
-      name: d.vendor ? `${d.vendor} camera` : "Camera found",
+      name: deviceHeadline(d) ?? (d.vendor ? `${d.vendor} camera` : "Camera found"),
+      detail: deviceDetail(d),
       ip: `${d.hostname}:${d.port}`,
-      subtitle: "Tap to sign in",
+      // Identity beats an action prompt here: the state tag already says
+      // what to do ("Needs sign-in"), and "Tap to sign in" told nobody
+      // WHICH camera they were about to sign in to.
+      subtitle: deviceDetail(d) ?? "Tap to sign in",
       state: "auth",
     }));
 
@@ -112,19 +121,50 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
       // handshake happened -- safe to call it a camera. `unconfirmed`
       // means only that a port answered -- could be anything, so it's
       // called a "device," not a "camera," until proven otherwise.
-      name: s.confirmed
-        ? s.vendor
-          ? `${s.vendor} camera found`
-          : "Camera found"
-        : s.vendor
-          ? `${s.vendor} device found`
-          : "Possible device found",
+      name:
+        deviceHeadline(s) ??
+        (s.confirmed
+          ? s.vendor
+            ? `${s.vendor} camera found`
+            : "Camera found"
+          : s.vendor
+            ? `${s.vendor} device found`
+            : "Possible device found"),
+      detail: deviceDetail(s),
       ip: `${s.hostname}:${s.port}`,
-      subtitle: s.confirmed ? "Tap to set up" : "Tap to check",
-      state: s.confirmed ? "rtsp" : "unconfirmed",
+      subtitle: deviceDetail(s) ?? (s.confirmed ? "Tap to set up" : "Tap to check"),
+      // A device that declares itself a camera over SSDP
+      // (deviceType IPCamera:1) is a camera, whatever the port sweep
+      // could infer on its own.
+      state: s.confirmed || s.declaredCamera ? "rtsp" : "unconfirmed",
     }));
 
   return [...configuredCards, ...discoveredCards, ...sweepCards];
+}
+
+// The name the device gives itself, if it gives one. A model number is
+// better than "Camera found" but worse than "Court 3 baseline", so the
+// operator-set name wins where there is one.
+export function deviceHeadline(device) {
+  const ssdpName = device.ssdp?.friendlyName;
+  const onvifName = device.scopes?.name;
+  const model = device.ssdp?.model ?? device.scopes?.hardware;
+  const named = ssdpName ?? onvifName ?? null;
+  if (named && model && !named.includes(model)) return `${named} · ${model}`;
+  return named ?? model ?? null;
+}
+
+// The line underneath: what distinguishes two of the same model on the
+// same pole. Serial and MAC are both printed on the camera's own body,
+// which is what someone standing next to it can compare against.
+export function deviceDetail(device) {
+  const parts = [];
+  if (device.ssdp?.manufacturer && device.ssdp.manufacturer !== device.vendor) parts.push(device.ssdp.manufacturer);
+  else if (device.vendor) parts.push(device.vendor);
+  if (device.scopes?.location) parts.push(device.scopes.location);
+  if (device.ssdp?.serial) parts.push(`serial ${device.ssdp.serial}`);
+  if (device.mac) parts.push(`MAC ${device.mac.slice(-8)}`);
+  return parts.length ? parts.join(" · ") : null;
 }
 
 export function cardVisuals(card) {

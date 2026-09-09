@@ -23,6 +23,8 @@ import {
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
 import { classifyProbeError } from "./cameras/probeResult.js";
+import { probeSsdp, describeSsdpHosts, declaresCamera } from "./cameras/ssdp.js";
+import { identitiesForIps } from "./cameras/vendorLookup.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
@@ -55,7 +57,18 @@ const UPDATE_FEED_URL =
 // out of).
 function registerCameraHandlers() {
   ipcMain.handle("cameras:discover", async (_event, options) => {
-    return discoverCameras(options);
+    // Same enrichment as the sweep. The two protocols find different
+    // cameras and describe them differently -- on this network the
+    // Synology answers only SSDP and the Tapo only ONVIF -- so each path
+    // asks the other for what it's missing (2026-09-09).
+    const ssdpResponders = probeSsdp();
+    const devices = await discoverCameras(options);
+    const ips = devices.map((d) => d.ip).filter(Boolean);
+    const descriptions = await describeSsdpHosts(await ssdpResponders, ips);
+    return devices.map((d) => {
+      const ssdp = d.ip ? descriptions[d.ip] ?? null : null;
+      return { ...d, ssdp, declaredCamera: declaresCamera(ssdp) };
+    });
   });
   // Calibration state is merged in from the console's last heartbeat
   // response rather than stored locally (ADR-084) -- the fit runs on the
@@ -127,6 +140,11 @@ function registerCameraHandlers() {
   ipcMain.handle("cameras:sweep", async () => {
     const { cidr, address } = getNetworkInfo();
     const timeoutMs = getTimeoutMs();
+    // Started now, awaited after the sweep: SSDP is a fixed listening
+    // window, so running it alongside the port scan costs nothing, and
+    // the descriptions can only be fetched once we know which hosts the
+    // scan actually found (2026-09-09).
+    const ssdpResponders = probeSsdp();
     const primaryHits = await sweepNetwork({ cidr, timeoutMs, excludeHost: address });
 
     const extraRanges = getExtraRanges().filter((r) => r !== cidr);
@@ -147,7 +165,27 @@ function registerCameraHandlers() {
         merged.push(hit);
       }
     });
-    return merged;
+
+    // Everything a found host says about itself without being asked for a
+    // password: its own name, model and serial over SSDP, and the MAC on
+    // its body. A sweep hit is otherwise just "something answered on 554
+    // at an address", which is no help when four identical cameras sit on
+    // four poles.
+    const ips = merged.map((hit) => hit.hostname);
+    const [descriptions, identities] = await Promise.all([
+      describeSsdpHosts(await ssdpResponders, ips),
+      Promise.resolve(identitiesForIps(ips)),
+    ]);
+    return merged.map((hit) => {
+      const ssdp = descriptions[hit.hostname] ?? null;
+      return {
+        ...hit,
+        mac: identities[hit.hostname]?.mac ?? null,
+        vendor: identities[hit.hostname]?.vendor ?? null,
+        ssdp,
+        declaredCamera: declaresCamera(ssdp),
+      };
+    });
   });
   // RTSP-direct fallback (2026-09-01) -- for cameras where ONVIF doesn't
   // work at all but a real stream exists anyway. See store.js's own

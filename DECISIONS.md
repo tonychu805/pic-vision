@@ -1885,3 +1885,39 @@ That happens in the **main process** — the one supervising `ffmpeg`, running t
 **Five tests** (`electron/cameras/networkSweep.test.js`), including one that asserts the refusal takes under a second — the only shape of test that actually catches this returning, since a correct answer arrived slowly is exactly what the bug was.
 
 **What this doesn't change.** A 10.x LAN on a /24 was always fine, and ONVIF discovery is unaffected by any of it — that's UDP multicast, indifferent to address class. A venue on a /16 or /8 still can't sweep its whole range, by design: the answer there is to add the camera's own address in Scan settings, which expands to the /24 around it, or to add the camera manually. Worth saying to a venue rather than leaving them to discover it.
+
+---
+
+## ADR-098 — A found camera says its own name: SSDP alongside ONVIF, and the MAC we already had
+
+**Date:** 2026-09-09 · **Status:** accepted, built, verified against both real cameras
+
+**Context.** Operator: *"when the scan result comes back, what unique identifiers can you also display (before even signing in) to help users recognize the camera"* — because a scan result read `Synology camera · 192.168.1.121:554` and nothing else, which is no help when four identical cameras sit on four poles.
+
+Measured on the two real cameras here rather than reasoned about, and the measurement changed the plan twice:
+
+- **RTSP `Server:` header — my first instinct, and wrong.** Both cameras answer `OPTIONS` with a bare `RTSP/1.0 200 OK` plus CSeq, Date and Public. No product string at all.
+- **HTTP :80/:8080** — the Synology answers 200 with no Server header and no parseable title; the Tapo refuses the connection.
+- **SSDP/UPnP — not used anywhere in this codebase, and the richest source.** The Synology BC500 volunteers `friendlyName pic-vision-test-001-BC500`, `modelName BC500`, `serialNumber 2310VSRCJY482`, `UDN uuid:Upnp-IPCamera-1_0-9009D03B7A38`, `presentationURL`, and `deviceType urn:schemas-upnp-org:device:IPCamera:1` — the device *declaring* it is a camera, which beats inferring one from an open port.
+- **ONVIF scopes — already arriving, thrown away.** `discovery.js` regexes the reply for `Types` and discards the `Scopes` beside it: the C200 sends `name/C200`, `hardware/C200`, `location/Hong Kong`, plus a stable EndpointReference uuid.
+- **The MAC — already looked up, then dropped.** `vendorLookup.js` read it via ARP only to derive a vendor string.
+
+**The finding that decided the design: the two cameras identify themselves over opposite protocols.** The Synology never answers ONVIF WS-Discovery at all and describes itself fully over SSDP; the Tapo is silent on SSDP and describes itself over ONVIF. Either source alone leaves half the cameras anonymous, so both scan paths now enrich from both.
+
+**Decision.**
+
+1. **`cameras/ssdp.js`** — one multicast `M-SEARCH`, then a description fetch *only* for hosts the camera scan already found. Everything on a LAN answers SSDP (here: a Chromecast, a Windows box, two NAS boxes), and none of them need an HTTP request from us.
+2. **The LOCATION is not trusted.** It arrives in an unauthenticated UDP packet, so a description is fetched only when its host matches the responder's own address, with `redirect: "error"`, a 2.5s timeout and a 64 KB cap. Otherwise any device on the venue LAN could aim this process at a URL of its choosing by answering a probe.
+3. **`parseScopes`/`parseEndpointUuid`** keep what ONVIF discovery already receives.
+4. **`identitiesForIps`** returns the MAC as well as the vendor; `vendorsForIps` stays, implemented over it.
+5. **The card headline is what the device calls itself** — SSDP `friendlyName`, else the ONVIF `name` scope, else the model, else the old vendor phrasing. The subtitle becomes real identity (manufacturer · location · serial · MAC tail) instead of "Tap to sign in", which said nothing about *which* camera you were about to sign in to; the state tag already carries the action.
+6. **`deviceType: IPCamera:1` promotes a sweep hit to "camera"** rather than leaving it "Unconfirmed" on port evidence alone.
+
+**Verification.** 6 tests over the real captured payloads — the BC500's actual description XML and the C200's actual scopes string, not invented fixtures, including the empty-element case (`<UPC></UPC>` must be absent, not `""`) and the NAS boxes' scope-less replies. Then end to end in the app against both cameras, from a throwaway profile so they appeared as fresh finds:
+
+```
+C200                        TP-Link Systems · Hong Kong · MAC cf:d8:7a      [Sign-in needed]
+pic-vision-test-001-BC500   Synology · serial 2310VSRCJY482 · MAC 3b:7a:38  [Ready to add]
+```
+
+**Consequences.** A venue installer reads the name they set on the camera, and can match a serial or MAC against the sticker on its body. What this cannot do is identify a camera that answers neither protocol — a bare RTSP responder still shows as vendor-plus-address, which is what both of these looked like before today.

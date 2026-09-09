@@ -88,6 +88,25 @@ function readArpTable() {
 // /proc/net/arp, no `arp` binary, permission issues) -- this is a nice-to-
 // have enrichment, never load-bearing for discovery itself.
 export function vendorsForIps(ips) {
+  const identities = identitiesForIps(ips);
+  const result = {};
+  for (const ip of ips) result[ip] = identities[ip]?.vendor ?? null;
+  return result;
+}
+
+/**
+ * { [ip]: { mac, vendor } } -- the MAC as well as the vendor it implies.
+ *
+ * Split out 2026-09-09: the address itself was being looked up and then
+ * discarded, but it is the one identifier that is unique, stable across
+ * DHCP, and printed on the camera's own body -- which is how somebody at
+ * a venue tells two identical cameras apart in a scan result.
+ *
+ * Same failure behaviour as before: {} on any lookup problem (no
+ * /proc/net/arp, no `arp` binary, permissions). This enriches discovery,
+ * it never gates it.
+ */
+export function identitiesForIps(ips) {
   let arpTable;
   try {
     arpTable = readArpTable();
@@ -97,7 +116,7 @@ export function vendorsForIps(ips) {
   const result = {};
   for (const ip of ips) {
     const mac = arpTable.get(ip);
-    result[ip] = mac ? vendorForMac(mac) : null;
+    result[ip] = mac ? { mac, vendor: vendorForMac(mac) } : null;
   }
   return result;
 }

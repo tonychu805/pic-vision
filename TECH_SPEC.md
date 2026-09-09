@@ -1011,6 +1011,15 @@ pic-vision/
 │   │   │                              # session, cloud.js's agent apiToken. Falls
 │   │   │                              # back to plaintext if no OS vault is
 │   │   │                              # available, rather than throwing.
+│   │   ├── cameras/ssdp.js              # ADR-098 (2026-09-09): SSDP/UPnP identity for
+│   │   │                              # found cameras -- friendlyName/model/serial/
+│   │   │                              # deviceType, pre-auth. Exists alongside ONVIF
+│   │   │                              # discovery because the two real cameras here
+│   │   │                              # answer OPPOSITE protocols (Synology: SSDP only,
+│   │   │                              # Tapo: ONVIF only). Descriptions fetched only for
+│   │   │                              # hosts the scan already found, and only from the
+│   │   │                              # host that answered -- the LOCATION arrives in an
+│   │   │                              # unauthenticated UDP packet
 │   │   └── cameras/
 │   │       ├── discovery.js             # ONVIF WS-Discovery probe (`onvif` pkg);
 │   │       │                              # filters by the responder's own declared
