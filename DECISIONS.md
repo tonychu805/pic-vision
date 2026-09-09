@@ -1829,3 +1829,31 @@ Two real bugs came out of driving it, neither of which any amount of typecheckin
 2. **Hour labels sat half a row above their lines**, which reads as every booking being an hour earlier than it is. They're positioned against the grid's own origin now.
 
 Worth recording about the harness itself: the Next **dev** server 403s its own JS chunks for this browser, so nothing hydrates and every interaction silently does nothing. A production build (`npm run build && npm start`) hydrates normally. Anyone testing console UI this way should build first, or they'll debug a page that was never alive.
+
+---
+
+## ADR-096 — Signing in *is* connecting: one status, and an hour is the smallest booking
+
+**Date:** 2026-09-09 · **Status:** accepted, built, driven in both apps
+
+**Context.** Two operator questions on the same day, both about a thing being finer-grained than the business it serves.
+
+**1. "Am I able to merge them so I can simply sign in / establish connection altogether?"**
+
+Functionally this was already true and badly told. Signing in registers this machine (ADR-079); the "Connect to the cloud console" button is only a retry for a registration that failed. But the page presented a *Connection* card above a separate *Signed in as* row, which reads as two links you must establish and maintain.
+
+What can't merge, and why: **the machine's identity has to outlive any one person's session.** The connection holds the agent token the heartbeat, camera sync and every job use; the session is who is administering the machine right now. Make sign-out also disconnect and an unattended venue Mac stops recording the moment somebody signs out — including the operator tidying up at the end of a visit. That is a worse failure than a confusing page. It is also exactly the distinction that made ADR-094's wrong-venue bug possible.
+
+So the merge is presentational, and complete at that level:
+
+- One card: **"Recording for <venue>"**, with "Signed in as <email>" under it, and **Sign out** stating in place that *this machine keeps recording and reporting*.
+- The page is titled **"This machine"**, and so is its nav entry — naming it "Cloud console" implied a second place to go and connect.
+- The old **Disconnect** button — an equal-looking peer of Sign out, which is the confusing part — becomes **"Remove this machine from <venue>"**, moved to the foot of the page and two-step, because it is the handover action, not the everyday one.
+
+**2. "I want the minimum unit to be 1 hour not 30 min."**
+
+Courts are booked by the hour, so half-hour slots offered precision the business doesn't use, and made a stray click a 30-minute booking nobody meant. `SLOT_MINUTES` is 60 and the row height doubled to keep the grid legible. A click books one hour; a drag books whole hours.
+
+**Bookings that don't fall on the hour still render exactly where they are** — the ones made through the exact-time fields, and any made before this. Block positions come from real timestamps, not from slot indices, so the grid's granularity is a property of *input*, not of display. Verified with a 5:30–7pm booking sitting correctly between the 5pm and 7pm lines.
+
+**Verification.** Both driven for real, not compiled and assumed. In the console: a single click created `2026-09-10T00:00Z → 01:00Z` (8–9am Taipei) and a three-row drag created `01:00Z → 04:00Z` (9am–12pm), with the off-hour booking still in place. In the desktop app: the merged card renders "Recording for Pickle Day Social Club / Signed in as …", the Details block keeps Device ID, version, registered-at and console URL, and "Remove this machine from …" opens its confirm and cancels cleanly. 64 desktop tests and 15 console tests pass.

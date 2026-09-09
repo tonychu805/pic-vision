@@ -16,7 +16,11 @@ const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
   { key: "log", label: "Log", icon: "ph-list-bullets" },
   { key: "diagnostics", label: "Diagnostics", icon: "ph-gauge" },
-  { key: "cloud", label: "Cloud console", icon: "ph-cloud" },
+  // "This machine" rather than "Cloud console": the page is about this
+  // machine's identity and who it reports for, and sign-in IS the
+  // connection (ADR-096) -- naming it after the remote thing implied a
+  // second place to go and connect.
+  { key: "cloud", label: "This machine", icon: "ph-cloud" },
 ];
 
 function navButtonStyle(active) {

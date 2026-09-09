@@ -127,6 +127,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
   const [savingName, setSavingName] = useState(false);
   const [deviceId, setDeviceId] = useState("");
   const [signingOut, setSigningOut] = useState(false);
+  const [confirmingRemove, setConfirmingRemove] = useState(false);
 
   const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(err.message));
   useEffect(() => {
@@ -203,10 +204,10 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
 
   return (
     <div className="page">
-      <div className="page-title" style={{ marginBottom: 4 }}>Cloud console</div>
+      <div className="page-title" style={{ marginBottom: 4 }}>This machine</div>
       <p className="page-sub" style={{ marginBottom: 16 }}>
-        This machine reports its status to the console on its own. The top of this page is what you can change;
-        everything under "Details" is read-only.
+        Signing in is what connects this machine to a venue — there is no separate step. It keeps reporting on its
+        own from then on, including while nobody is signed in here.
       </p>
 
       {/* One error line for the whole page. It used to live inside the
@@ -216,23 +217,45 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
         <p style={{ maxWidth: 420, color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: "0 0 12px" }}>{error}</p>
       )}
 
+      {/* One status, not two. Sign-in and the machine's registration used
+          to sit in separate cards -- a "Connection" card above a "Signed
+          in as" row -- which read as two independent connections you had
+          to establish. They aren't: signing in registers the machine
+          (ADR-079), and the two exist separately underneath only because
+          the machine's identity has to outlive any one person's session,
+          or an unattended venue Mac would stop recording the moment
+          somebody signed out (ADR-094/096). So: one line saying what this
+          machine is doing and who is signed in, and the rarer "hand the
+          machine to another venue" action kept away from the everyday
+          sign-out. */}
       <div className="card" style={{ maxWidth: 420, marginBottom: 12 }}>
-        <div className="section-label">Connection</div>
         {connection === undefined ? (
           <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>Checking connection…</p>
         ) : connection ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12 }}>
-              <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-accent)" }} />
-              <span style={{ fontWeight: 500 }}>Connected as {connection.brandName}</span>
+            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-success)" }} />
+              <span style={{ fontWeight: 500 }}>Recording for {connection.brandName}</span>
             </div>
-            <button type="button" className="btn btn-secondary" onClick={disconnect}>Disconnect</button>
+            {session?.user && (
+              <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>
+                Signed in as {session.user.email}
+              </p>
+            )}
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
+              <button type="button" className="btn btn-secondary" onClick={signOut} disabled={signingOut}>
+                {signingOut ? "Signing out…" : "Sign out"}
+              </button>
+              <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", lineHeight: 1.45 }}>
+                This machine keeps recording and reporting.
+              </span>
+            </div>
           </>
         ) : (
           <>
             <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "0 0 12px" }}>
-              This device usually registers itself automatically right after you sign in. If it hasn't yet (e.g. the
-              console was unreachable at the time), try again below.
+              This machine isn't attached to a venue. That normally happens by itself when you sign in — if it
+              didn't (the console was unreachable), or you removed it from a venue on purpose, connect it here.
             </p>
             <button type="button" className="btn btn-primary" onClick={retryRegister} disabled={registering}>
               {registering ? "Connecting…" : "Connect to the cloud console"}
@@ -271,13 +294,6 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           a readOnly <input> is what made the Device ID look editable. */}
       <div className="card-quiet" style={{ maxWidth: 420 }}>
         <div className="section-label section-label-quiet">Details</div>
-        {session?.user && (
-          <DetailRow label="Signed in as" value={session.user.email}>
-            <button type="button" className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", padding: 0 }} onClick={signOut} disabled={signingOut}>
-              {signingOut ? "Signing out…" : "Sign out"}
-            </button>
-          </DetailRow>
-        )}
         <DetailRow label="Device ID" value={deviceId} mono hint="Fixed — identifies this machine to the console across re-registrations." />
         <UpdateRow />
         {connection && (
@@ -291,6 +307,34 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           </>
         )}
       </div>
+
+      {/* Deliberately down here and two-step. This is the handover action
+          -- the machine stops reporting to this venue until someone
+          reconnects it -- not the everyday sign-out it used to sit next
+          to as an equal-looking "Disconnect" button. */}
+      {connection && (
+        <div style={{ maxWidth: 420, marginTop: 14 }}>
+          {confirmingRemove ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span className="text-3" style={{ fontSize: "var(--fs-body)" }}>
+                Stop this machine reporting to {connection.brandName}?
+              </span>
+              <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} onClick={() => setConfirmingRemove(false)}>Cancel</button>
+              <button
+                className="btn btn-primary"
+                style={{ fontSize: "var(--fs-fine)", color: "var(--color-danger)", borderColor: "var(--color-danger)" }}
+                onClick={async () => { await disconnect(); setConfirmingRemove(false); }}
+              >
+                Remove it
+              </button>
+            </div>
+          ) : (
+            <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", padding: 0 }} onClick={() => setConfirmingRemove(true)}>
+              Remove this machine from {connection.brandName}
+            </button>
+          )}
+        </div>
+      )}
     </div>
   );
 }
