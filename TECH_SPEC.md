@@ -1284,7 +1284,15 @@ pic-vision/
 │   │   │   │                             # IPC; polls agent_commands directly (RLS-
 │   │   │   │                             # readable by the browser client already)
 │   │   │   │                             # rather than a dedicated status endpoint
-│   │   │   ├── schedule/, schedule/[cameraId]/  # REAL as of 2026-09-04
+│   │   │   │   ├── schedule/[cameraId]/week-calendar.tsx  # ADR-095 (2026-09-09):
+│   │   │   │                             # dated drag-to-book week grid, restoring
+│   │   │   │                             # the interaction desktop's WeekGrid.jsx had
+│   │   │   │                             # and the 2026-09-04 migration dropped. Dated,
+│   │   │   │                             # not recurring -- a column is Wed the 9th.
+│   │   │   │                             # Blocks positioned from real ms offsets
+│   │   │   │                             # against each day's own local midnight (DST-
+│   │   │   │                             # safe); overlapping bookings refused
+│   │   ├── schedule/, schedule/[cameraId]/  # REAL as of 2026-09-04
 │   │   │   │                             # (ADR-071/PIC-73 -- migrated wholesale
 │   │   │   │                             # from desktop/, not rebuilt from
 │   │   │   │                             # scratch). Overview lists every camera's
@@ -1468,6 +1476,15 @@ pic-vision/
 │   │   │                                    # no CLOUDFLARE_R2_* credentials
 │   │   │                                    # needed here anymore (the presigned-
 │   │   │                                    # URL version this replaced did)
+│   │   ├── timezone.ts                        # ADR-095: venue wall clock <-> stored UTC
+│   │   │                              # instants, extracted from the schedule editor when
+│   │   │                              # the week calendar needed the same maths. Two-pass
+│   │   │                              # DST correction; weekday/month labels spelled out
+│   │   │                              # rather than from toLocaleDateString (ICU builds
+│   │   │                              # disagree, and these render on both server and
+│   │   │                              # client -- a disagreement is a hydration mismatch)
+│   │   ├── timezone.test.ts                   # 8 tests incl. the US DST changeover and
+│   │   │                              # "today" differing between venue and viewer
 │   │   ├── schedule.ts                        # ADR-071/PIC-73, 2026-09-04. Client-side
 │   │   │                                    # CRUD against schedule_sessions --
 │   │   │                                    # createSession's overlap-trim logic

@@ -25,6 +25,12 @@ export default function App() {
   // somebody else is reporting to the wrong venue right now, so it's
   // asked about before anything else (ADR-094).
   const [registration, setRegistration] = useState(null);
+  // Bumped whenever this device's cloud connection changes underneath the
+  // UI -- moving the machine to another venue rewrites the brand, agent id
+  // and token at once. Sidebar and CloudPage read the connection on their
+  // own; without this they showed the old venue's name until their 30s
+  // poll came round, which read as "the move didn't work".
+  const [connectionEpoch, setConnectionEpoch] = useState(0);
 
   const checkRegistration = () =>
     window.cloudAPI?.registrationStatus().then(setRegistration).catch(() => setRegistration(null));
@@ -71,7 +77,7 @@ export default function App() {
       {session && registration?.state === "mismatch" && (
         <AccountMismatchDialog
           status={registration}
-          onMoved={checkRegistration}
+          onMoved={() => { setConnectionEpoch((n) => n + 1); checkRegistration(); }}
           onSignedOut={() => { setSession(null); setRegistration(null); }}
         />
       )}
@@ -89,6 +95,7 @@ export default function App() {
           nav={nav === "detail" || nav === "settings" ? "cameras" : nav}
           onNavigate={(k) => { setSelectedCard(null); setNav(k); }}
           deviceCount={cameraCount}
+          connectionEpoch={connectionEpoch}
         />
         <div style={{ flex: 1, minWidth: 0, display: "flex", flexDirection: "column" }}>
           {/* Stays mounted (just hidden) even while another page is showing,
@@ -126,7 +133,14 @@ export default function App() {
           {nav === "log" && <LogPage />}
           {nav === "diagnostics" && <DiagnosticsPage />}
           {nav === "settings" && <SettingsPage onBack={() => setNav("cameras")} />}
-          {nav === "cloud" && <CloudPage session={session} onSignedOut={() => setSession(null)} />}
+          {nav === "cloud" && (
+            <CloudPage
+              session={session}
+              onSignedOut={() => setSession(null)}
+              connectionEpoch={connectionEpoch}
+              onConnectionChanged={() => setConnectionEpoch((n) => n + 1)}
+            />
+          )}
         </div>
       </div>
       )}

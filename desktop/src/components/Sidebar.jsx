@@ -36,7 +36,7 @@ function navButtonStyle(active) {
   };
 }
 
-export default function Sidebar({ nav, onNavigate, deviceCount }) {
+export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch = 0 }) {
   const [network, setNetwork] = useState(null);
   const [brandName, setBrandName] = useState(null);
 
@@ -62,7 +62,10 @@ export default function Sidebar({ nav, onNavigate, deviceCount }) {
     poll();
     const id = setInterval(poll, 30_000);
     return () => clearInterval(id);
-  }, []);
+    // connectionEpoch re-reads immediately when the connection is
+    // replaced under us (moving this machine to another venue), instead
+    // of leaving the old venue's name up for the rest of the 30s tick.
+  }, [connectionEpoch]);
 
   return (
     <div

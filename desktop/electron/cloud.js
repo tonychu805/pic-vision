@@ -232,6 +232,7 @@ async function registerAgentOnce(accessToken, userId, consoleUrl) {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) throw new Error(body.error || `device registration failed (HTTP ${res.status})`);
 
+  store.delete("disconnectedByUser"); // a deliberate reconnection
   const connection = {
     consoleUrl,
     agentId: body.agentId,
@@ -272,6 +273,17 @@ export function adoptConnection(userId) {
 export function disconnectCloud() {
   stopHeartbeatLoop();
   store.delete("connection");
+  // Remembered, because the app re-registers a signed-in device that has
+  // no connection every time it launches (that retry exists for a first
+  // registration that failed). Without this flag, Disconnect undid itself
+  // on the next launch and the button was quietly lying. Cleared by any
+  // deliberate reconnection: signing in again, or the Connect button.
+  store.set("disconnectedByUser", true);
+}
+
+/** Did someone press Disconnect, rather than never having connected? */
+export function wasDisconnectedByUser() {
+  return store.get("disconnectedByUser", false) === true;
 }
 
 // startRecording's outDir name is new Date().toISOString() with ':' and

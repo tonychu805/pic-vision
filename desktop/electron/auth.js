@@ -12,7 +12,7 @@
 // already scopes a `brands` select to the signed-in user, whether the JWT
 // arrived via a cookie session (the console) or a bearer header (here).
 import Store from "electron-store";
-import { registerAgent, getCloudConnection, adoptConnection } from "./cloud.js";
+import { registerAgent, getCloudConnection, adoptConnection, wasDisconnectedByUser } from "./cloud.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 
@@ -107,7 +107,9 @@ export async function signIn(email, password) {
   // Sign-in itself still succeeds even if this fails (e.g. console
   // unreachable) -- it runs again on every launch.
   try {
-    await resolveRegistration(session.accessToken, session.user.id);
+    // force: signing in is itself the intent to connect this machine, so
+    // it clears an earlier Disconnect.
+    await resolveRegistration(session.accessToken, session.user.id, { force: true });
   } catch (err) {
     console.error(`[auth] device registration failed: ${err.message}`);
   }
@@ -165,7 +167,7 @@ export function registrationState(connection, userId, sessionBrandName) {
  * Acts on the above, and returns what it did so the caller (and the UI)
  * can tell a settled device from one waiting on a decision.
  */
-export async function resolveRegistration(accessToken, userId) {
+export async function resolveRegistration(accessToken, userId, { force = false } = {}) {
   const connection = getCloudConnection();
   // Only fetched when it could matter -- a settled device makes no
   // network call on every launch just to confirm what it already knows.
@@ -173,6 +175,11 @@ export async function resolveRegistration(accessToken, userId) {
   const state = registrationState(connection, userId, brand?.name);
 
   if (state === "none") {
+    // Someone pressed Disconnect. Only a deliberate act reconnects --
+    // signing in (force), or the Connect button -- not the launch-time
+    // retry, which exists for a registration that failed, not one that
+    // was refused.
+    if (!force && wasDisconnectedByUser()) return "disconnected";
     await registerAgent(accessToken, userId);
   } else if (state === "adopt") {
     adoptConnection(userId);

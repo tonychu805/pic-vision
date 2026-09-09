@@ -1784,4 +1784,48 @@ The console side already did the right thing: `/api/agents/register` sets `brand
 
 **Verification.** Six tests in `electron/auth.test.js`, paired on purpose: a mismatch is noticed, the same account is still left alone (the behaviour the original condition existed to protect — a fix that lost it would be its own bug), a legacy connection on the same brand is adopted rather than interrogated, one on a *different* brand still asks, and a failed brand lookup asks rather than assuming the comfortable answer. Then the dialog itself was driven in the real app against a synthetic session: it renders, it blocks, and its failure path was exercised live (the console rejected the fake token and the dialog reported "invalid or expired session" in place, staying open). That last check also caught the raw `Error invoking remote method 'cloud:register'` wrapper leaking into user-facing text — the PIC-93 class of problem — now stripped in this dialog.
 
+**Two follow-ups the same day, both from the operator using it.**
+
+- **Moving a machine took a manual refresh to show.** The dialog moved the device correctly, but the Cloud page and the sidebar each read the connection on their own — the sidebar on a 30-second poll — so the old venue's name stayed on screen, which reads as "the move didn't work". `App` now holds a connection epoch that both read, bumped whenever the connection is replaced.
+- **Disconnect undid itself on the next launch.** The launch-time retry registers any signed-in device that has no connection — it exists for a first registration that failed — and could not tell that apart from one that had been deliberately disconnected. The button was quietly lying. A `disconnectedByUser` flag now survives the relaunch; signing in again or pressing Connect clears it, because both are deliberate acts, and the retry is not.
+
+These are the presentational half of a real distinction the operator questioned — *"connection and account sign in seem a bit redundant?"* They aren't: the **session** is who is administering this machine, the **connection** is the machine's own identity and the credential it reports with. That is precisely why this ADR's bug was possible, and why a venue machine keeps recording after whoever set it up signs out. What was redundant was showing them as two independent connections; what was wrong was one of them lying.
+
 **Filed, not fixed: any signed-in account can reclaim any device it can name.** `/api/agents/register` looks a device up by `device_id` globally and re-homes it to the caller's brand, authenticated only as "some signed-in user". That is what makes legitimate re-homing work, and it is also a cross-tenant takeover path: `device_id` is a UUID, but the desktop prints it on screen, and re-homing an agent takes its `cameras` rows with it. The fix is not obvious — refusing the reclaim would break the legitimate case this ADR depends on — so it is a Linear issue with the trade written down rather than a change made in passing.
+
+---
+
+## ADR-095 — Bookings are made on a dated week calendar, not two datetime fields
+
+**Date:** 2026-09-09 · **Status:** accepted, built, driven in a real browser
+
+**Context.** Operator: *"cloud console's schedule tab, calendar view is gone. i want calendar view booking instead of a traditional start / end style booking mechanism."*
+
+Correct, and it was a regression rather than an omission. The desktop app had `WeekGrid.jsx` — a 7×24 grid where you dragged across cells to book and clicked a booking to remove it. When scheduling migrated to the console (ADR-071/PIC-73, 2026-09-04) the *data* moved faithfully but the *interface* did not: two `datetime-local` inputs and a list of timestamps. That is a fine way to enter a booking you have already worked out, and a bad way to see a week — which is what someone deciding when to record actually needs.
+
+**Decision.** A dated week calendar (`week-calendar.tsx`) is the primary control: drag down a column to book, click a booking to remove it, arrows to move between weeks. The old fields remain, collapsed behind "Book by exact time instead", for the two things a grid is bad at — a booking months out, and a time the 30-minute slots can't land on.
+
+**Dated, not recurring — the one real difference from the desktop original.** The desktop grid stored `{day: 0-6, start, end}`: a repeating weekly template. The console stores real instants (`schedule_sessions.starts_at`), so a column here is *Wednesday the 9th*, and next week can differ from this one. That matches how a venue actually books — a tournament weekend is not every weekend — and it is why this is a new component rather than a port.
+
+**Everything is drawn in the venue's timezone**, from `lib/timezone.ts` (extracted from the editor, which already had the conversion inline). Two details worth stating because both are easy to get silently wrong:
+
+- Block positions come from real millisecond offsets against **each day's own local midnight**, not from an assumed 1440-minute day, so the two days a year that aren't 24 hours long render correctly.
+- Labels (`Mon`, `9 Sep`) are spelled out rather than taken from `toLocaleDateString`. ICU builds disagree — `en-GB` renders "Sept", `en-US` "Sep" — and these render on the server *and* in the browser, where a disagreement is a hydration mismatch, not a typographic preference.
+
+**Overlapping bookings are refused**, with a message naming why. A camera records one session at a time, so two overlapping bookings aren't a display problem, they're two commands that can't both be obeyed.
+
+**Semantic colour tokens were added to the console** (`--color-danger`, `--color-warning`, `--color-success`, plus `-bg` variants, in all three theme blocks). The console had none, so anything that failed was drawn in `--color-accent-2-400` — a muted lavender a shade from the accent. That is exactly how the desktop's log came to render a failed job and a finished one alike (fixed there 2026-09-06); the console had the same latent problem, and this component would have inherited it.
+
+**Verification.** 8 tests in `lib/timezone.test.ts` cover the conversions, including the US DST changeover, where a single-pass conversion lands an hour out, and "today" differing between the venue and the viewer. Then the calendar itself was **driven in a real browser over CDP** — not screenshotted and eyeballed:
+
+- Dragging Thursday 8:00–10:30 created exactly `2026-09-10T00:00Z → 03:00Z` (8:00–11:00 Taipei).
+- A drag from empty space into an existing booking was refused with the overlap message and created nothing; the same drag stopping short created 7:30–9:00, butting against it.
+- Clicking a booking selected it and Remove deleted it (3 blocks → 2).
+- Hour-label alignment was measured, not judged: the "9am" label centre and the 9–11am block's top edge both sit at y=170.
+
+Two real bugs came out of driving it, neither of which any amount of typechecking would have found:
+
+1. **A plain click booked nothing.** Press and release inside one frame, and the mouseup handler still closed over the render where no drag had started. The drag now lives in a ref and is mirrored into state only for drawing; a click books one 30-minute slot.
+2. **Hour labels sat half a row above their lines**, which reads as every booking being an hour earlier than it is. They're positioned against the grid's own origin now.
+
+Worth recording about the harness itself: the Next **dev** server 403s its own JS chunks for this browser, so nothing hydrates and every interaction silently does nothing. A production build (`npm run build && npm start`) hydrates normally. Anyone testing console UI this way should build first, or they'll debug a page that was never alive.

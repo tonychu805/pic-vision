@@ -118,7 +118,7 @@ function UpdateRow() {
   );
 }
 
-export default function CloudPage({ session, onSignedOut }) {
+export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, onConnectionChanged }) {
   const [connection, setConnection] = useState(undefined); // undefined = loading
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
@@ -138,7 +138,9 @@ export default function CloudPage({ session, onSignedOut }) {
       });
       window.cloudAPI.getDeviceId().then(setDeviceId);
     }
-  }, []);
+    // Re-reads when the connection is replaced elsewhere in the app --
+    // the account-mismatch dialog moving this machine to another venue.
+  }, [connectionEpoch]);
 
   const saveAgentName = async () => {
     const trimmed = agentName.trim();
@@ -160,6 +162,7 @@ export default function CloudPage({ session, onSignedOut }) {
     try {
       const conn = await window.cloudAPI.register();
       setConnection(conn);
+      onConnectionChanged?.();
     } catch (err) {
       setError(err.message);
     }
@@ -170,6 +173,7 @@ export default function CloudPage({ session, onSignedOut }) {
     try {
       await window.cloudAPI.disconnect();
       setConnection(null);
+      onConnectionChanged?.();
     } catch (err) {
       setError(err.message);
     }
