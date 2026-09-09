@@ -43,6 +43,23 @@ function intToIp(int) {
   return [24, 16, 8, 0].map((shift) => (int >> shift) & 255).join(".");
 }
 
+/**
+ * How many assignable addresses a CIDR covers -- arithmetic only, no list.
+ *
+ * Exists because the cap below used to be applied to
+ * `hostsInCidr(cidr).length`, which builds the whole list first. That is
+ * fine for a /24 and ruinous for a /8: a venue whose LAN is 10.x with a
+ * 255.0.0.0 netmask made Scan build 16,777,214 strings -- measured at
+ * 6.5 seconds and ~1 GB of RSS on a dev workstation -- and only then
+ * refuse. In the main process, which is also where recording and the
+ * heartbeat live, so it stalls those too. Count first, build second.
+ */
+export function hostCount(cidr) {
+  const prefix = Number(cidr.split("/")[1]);
+  if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) return 0;
+  return Math.max(0, 2 ** (32 - prefix) - 2);
+}
+
 // Host IPs in a CIDR block, excluding the network and broadcast addresses
 // (the standard convention for what's actually assignable).
 export function hostsInCidr(cidr) {
@@ -121,11 +138,13 @@ export async function sweepNetwork({
   excludeHost = null,
 } = {}) {
   if (!cidr) throw new Error("sweepNetwork requires a cidr (e.g. from system:networkInfo)");
+  // Counted before anything is built -- see hostCount().
+  const total = hostCount(cidr);
+  if (total > MAX_HOSTS) {
+    throw new Error(`Refusing to sweep ${total} addresses (cap is ${MAX_HOSTS}) -- ${cidr} is bigger than a normal venue LAN`);
+  }
   let hosts = hostsInCidr(cidr);
   if (excludeHost) hosts = hosts.filter((h) => h !== excludeHost);
-  if (hosts.length > MAX_HOSTS) {
-    throw new Error(`Refusing to sweep ${hosts.length} addresses (cap is ${MAX_HOSTS}) -- ${cidr} is bigger than a normal venue LAN`);
-  }
 
   const hits = await runPool(hosts, concurrency, async (host) => {
     for (const port of ports) {

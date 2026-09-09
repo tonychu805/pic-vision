@@ -1857,3 +1857,31 @@ Courts are booked by the hour, so half-hour slots offered precision the business
 **Bookings that don't fall on the hour still render exactly where they are** — the ones made through the exact-time fields, and any made before this. Block positions come from real timestamps, not from slot indices, so the grid's granularity is a property of *input*, not of display. Verified with a 5:30–7pm booking sitting correctly between the 5pm and 7pm lines.
 
 **Verification.** Both driven for real, not compiled and assumed. In the console: a single click created `2026-09-10T00:00Z → 01:00Z` (8–9am Taipei) and a three-row drag created `01:00Z → 04:00Z` (9am–12pm), with the off-hour booking still in place. In the desktop app: the merged card renders "Recording for Pickle Day Social Club / Signed in as …", the Details block keeps Device ID, version, registered-at and console URL, and "Remove this machine from …" opens its confirm and cancels cleanly. 64 desktop tests and 15 console tests pass.
+
+---
+
+## ADR-097 — Count the addresses before building them: a 10.x venue LAN froze Scan
+
+**Date:** 2026-09-09 · **Status:** accepted, fixed, measured
+
+**Context.** Operator: *"what happens when my camera's ip falls under 10.17....., class A private range"* — a fair question to ask before a venue install, and the answer turned out to depend entirely on the netmask, with one case bad enough to matter.
+
+Scan doesn't take an address class; it takes whatever range `system.js`'s `guessCidr()` derives from the interface. So:
+
+| Netmask on the venue LAN | Derived range | What happened |
+|---|---|---|
+| `255.255.255.0` | `10.17.3.0/24` | 254 addresses — works exactly as on a 192.168 LAN |
+| `255.255.0.0` | `10.17.0.0/16` | 65,534 — refused in ~40ms with a clear message |
+| `255.0.0.0` | `10.0.0.0/8` | 16,777,214 — **6.5 seconds and ~1 GB of RSS, then refused** |
+
+The last row is the bug, and the cause is ordering: `sweepNetwork` applied its `MAX_HOSTS` cap to `hostsInCidr(cidr).length`, which materialises every address as a string *before* anyone asks whether it should. `scanSettings.addExtraRange` did the same to validate a typed range, so `10.0.0.0/8` in the Add box cost the same.
+
+That happens in the **main process** — the one supervising `ffmpeg`, running the heartbeat, and answering every IPC call — so it isn't a slow dialog, it's the whole app stalling, on a machine that may be recording at the time.
+
+**Decision.** `hostCount(cidr)` does the arithmetic (`2 ** (32 - prefix) - 2`) with no allocation, and both callers check the cap with it *before* building anything. The renderer's live "= N addresses" hint already counted this way, which is why typing an oversized range felt instant while adding it did not.
+
+**Measured, before and after:** `10.0.0.0/8` went from 6.5s / ~1 GB RSS to **1ms** and no list at all. `10.17.0.0/16`, from ~40ms to 0ms. Both still refuse with the same message naming the count and the cap.
+
+**Five tests** (`electron/cameras/networkSweep.test.js`), including one that asserts the refusal takes under a second — the only shape of test that actually catches this returning, since a correct answer arrived slowly is exactly what the bug was.
+
+**What this doesn't change.** A 10.x LAN on a /24 was always fine, and ONVIF discovery is unaffected by any of it — that's UDP multicast, indifferent to address class. A venue on a /16 or /8 still can't sweep its whole range, by design: the answer there is to add the camera's own address in Scan settings, which expands to the /24 around it, or to add the camera manually. Worth saying to a venue rather than leaving them to discover it.

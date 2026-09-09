@@ -11,7 +11,7 @@
 // all, and auto-scan-on-launch was already explicitly removed once,
 // 2026-09-03, "operator's call").
 import Store from "electron-store";
-import { hostsInCidr, MAX_HOSTS } from "./cameras/networkSweep.js";
+import { hostCount, MAX_HOSTS } from "./cameras/networkSweep.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -48,9 +48,9 @@ export function addExtraRange(input) {
     trimmed = trimmed.replace(/\.\d{1,3}$/, ".0") + "/24";
   }
   if (!CIDR_RE.test(trimmed)) throw new Error("Enter an address like 192.168.1.50 or a range like 192.168.1.0/24");
-  const hostCount = hostsInCidr(trimmed).length;
-  if (hostCount > MAX_HOSTS) {
-    throw new Error(`${trimmed} covers ${hostCount} addresses (cap is ${MAX_HOSTS}) -- narrow it to the block your cameras actually sit on`);
+  const count = hostCount(trimmed);
+  if (count > MAX_HOSTS) {
+    throw new Error(`${trimmed} covers ${count} addresses (cap is ${MAX_HOSTS}) -- narrow it to the block your cameras actually sit on`);
   }
   const ranges = getExtraRanges();
   if (ranges.includes(trimmed)) return ranges;

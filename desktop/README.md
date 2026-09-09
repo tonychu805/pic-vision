@@ -993,6 +993,31 @@ is exactly the RTSP-over-wifi frame loss `DECISIONS.md` ADR-030/032
 measured. Check how the camera is attached before changing its
 settings.
 
+## A venue LAN that isn't a /24 (10.x, and friends)
+
+Scan doesn't care about address class -- it sweeps whatever range the
+machine's own interface implies, so what matters is the netmask, not
+whether the address starts with 10, 172 or 192.168:
+
+| Netmask | Range Scan derives | What happens |
+|---|---|---|
+| `255.255.255.0` | `10.17.3.0/24` | 254 addresses -- normal, works |
+| `255.255.0.0` | `10.17.0.0/16` | 65,534 -- refused, over the 512 cap |
+| `255.0.0.0` | `10.0.0.0/8` | 16.7M -- refused |
+
+The cap exists because sweeping 65,000 addresses at a few hundred
+milliseconds each is not a scan, it's an afternoon. **On a /16 or /8, add
+the camera's own IP under Scan settings instead** -- a bare address
+expands to the /24 around it, which is where the cameras almost always
+sit -- or add the camera manually from its IP.
+
+ONVIF discovery is unaffected by any of this (it's multicast, which
+doesn't care about netmasks); only the RTSP port sweep is bounded.
+
+Until `ADR-097` (2026-09-09) the /8 case *was* a real problem: the cap was
+applied after the address list had been built, so Scan froze the app for
+~6.5 seconds and ~1 GB before refusing. Counted first now.
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
