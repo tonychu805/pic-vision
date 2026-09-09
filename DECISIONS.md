@@ -1921,3 +1921,27 @@ pic-vision-test-001-BC500   Synology · serial 2310VSRCJY482 · MAC 3b:7a:38  [R
 ```
 
 **Consequences.** A venue installer reads the name they set on the camera, and can match a serial or MAC against the sticker on its body. What this cannot do is identify a camera that answers neither protocol — a bare RTSP responder still shows as vendor-plus-address, which is what both of these looked like before today.
+
+---
+
+## ADR-099 — Every list says which venue, and Reels gets filters and a straight edge
+
+**Date:** 2026-09-09 · **Status:** accepted, built, measured in a browser
+
+**Context.** Two operator reports on the console, with a screenshot: *"camera tab, schedule tab, and reels tab need to list which venue (agent name), or theres a chance i'd have two court 1"*, and *"reels tab, the design needs to be fix and algined. Also, i hope there's a date and venue filter."*
+
+Both are already live conditions rather than hypotheticals: **Pickle Day Social Club has three machines connected right now** (`Zhonghe Store`, `office`, `MacBook-Air-9.local`), and every venue calls its first camera "Court 1".
+
+**Decision.**
+
+**1. The venue appears wherever a camera or reel is listed** — Cameras gets a column, Schedule a suffix on each camera row, Reels a line on each card. Shown only when the brand has more than one machine: with one, a column repeating the same name on every row is noise; with two, it is the only thing telling two "Court 1"s apart. The name is the agent's own (`agents.name`), which the operator sets on the desktop and has already used for exactly this — one of the three is now called "office".
+
+**2. Reels cards are a column with the action pinned to the bottom.** They were plain boxes in a grid, so a session with both a full and a quick-hits reel stood one line taller than a full-only one and its "Open reel page" button sat lower — visible in the screenshot, across every row. Each card is now `display: flex; flex-direction: column; height: 100%` with the body growing (`flex: 1`), so the buttons line up whatever a card contains. Measured after: five cards of differing content, all buttons at y=310, all cards 160px.
+
+**3. Reels gets three filters** — venue, a relative range (all / 7 / 30 / 90 days), and a specific day. The relative ranges are what a venue owner actually asks ("what did we produce this week?"); the exact day is for "the reels from Saturday", matched in the *viewer's* timezone, because that is whose Saturday they mean. The header counts "3 of 5 reels" while filtered, and a Clear appears only when something is filtered.
+
+**One deliberate difference between the pages:** Cameras and Schedule exclude revoked (`unpaired`) agents; **Reels does not**. A reel a venue already produced is still theirs to hand out, and retiring the machine that made it doesn't unmake the reel.
+
+**Verification.** Driven in a real browser against a preview route, since these pages are auth-gated: venue filter 5 → 2, "Last 7 days" 5 → 3, a specific day 5 → 1, Clear back to 5, and the alignment measured rather than eyeballed. Console tests and typecheck pass.
+
+**Not verified:** the Cameras and Schedule venue columns were not driven live — they render only for a signed-in brand, and their change is one conditional cell each. They will appear immediately for this brand, which has three machines.
