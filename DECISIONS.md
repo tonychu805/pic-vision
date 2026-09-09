@@ -1972,3 +1972,14 @@ ADR-071 chose polling deliberately and said so: *"a persistent channel is a reas
 **Verification.** Against the real project, not a mock: a subscription filtered to a real agent, then a real `INSERT`, and the push arrived in **638ms** — versus 28.7s and 31.4s on the poll. The test row named a camera that doesn't exist, because `runCommand()` throws "camera not found" *before* dispatching on type, so even a live agent picking it up would touch nothing; it was deleted seconds later and the table confirmed clean afterwards.
 
 **Second finding, fixed alongside: the calibration fit has never run in production.** The `jobs` table is empty — no job of any kind has ever been created there. So after clicking 14 points, the console would poll a job nobody claims and fail after three minutes with a message about "the processing service". Now: if nothing has claimed the job after 20 seconds it says so in place ("Waiting for the processing machine to pick this up — it may not be running"), and the timeout names `job_runner.py` and warns that the clicked points are not saved. A live runner claims within ~5s, so 20s of silence is a real signal, not impatience.
+
+**Follow-up the same day — the wait is now the person, not the system.** Operator: *"will it be even faster? for example, for cameras that need to be calibrated/recalibrated, the console just extract snapshot before even accessing the cloud console"*.
+
+Yes, and two of the three remaining seconds were ours:
+
+1. **The console's own poll was the new bottleneck.** It asked whether the command had finished every 3 seconds — so an agent that now answers in 640ms sat with the answer ready while nobody asked. Polling is fast first (400ms), then backs off (1.5s, then 3s) so a genuinely offline agent isn't hammered.
+2. **The frame is fetched ahead of time, on intent** — when someone opens a camera's actions menu, which is the menu Calibrate lives in. Clicking Calibrate then finds it already there.
+
+**What was deliberately NOT built: capture on a schedule.** The operator's phrasing allowed for it, and it is the wrong trade twice over. A frame is a picture of a real room, and taking one *because a person is looking at that camera* keeps a human in the loop that a timer removes — on this network a live grab once produced a private, non-court frame. And a cached frame goes stale: you recalibrate **because the camera moved**, so clicking 14 points against a pre-move frame saves a calibration that silently doesn't match the court. That is ADR-049's failure arriving by a new route.
+
+So the rule (`lib/calibrationTiming.ts`, tested): reuse only under two minutes old, never a future timestamp, and always show the frame's age in the dialog — turning warning-coloured past five minutes — with Retake beside it. The pre-warm is best-effort and silent; if it fails, opening Calibrate grabs one the normal way and reports the error where somebody actually asked.
