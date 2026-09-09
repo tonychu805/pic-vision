@@ -90,17 +90,29 @@ npm_config_arch=x64   npm ci && npm run build -- --mac --x64
 ```
 cd desktop
 npm version minor          # or patch / major -- see below
+cd ..
+git commit -am "desktop-v1.1.0"          # the number npm just printed
+git tag -a desktop-v1.1.0 -m "desktop-v1.1.0"
 git push --follow-tags
 ```
 
-That is the whole process. `npm version` bumps `package.json`, commits it,
-and creates the matching tag; `.npmrc` sets the `desktop-v` prefix the
-workflow triggers on. Pushing the tag builds both architectures and
-attaches the DMGs to a GitHub Release.
+**`npm version` does NOT commit or tag from here, whatever its output
+suggests.** It prints `desktop-v1.1.0` and bumps `package.json` +
+`package-lock.json`, and stops there -- it looks for a `.git` in the
+package's own directory, and `desktop/` has none; the repo root does.
+Observed twice on npm 9.2.0 (2026-09-09), once by hand and once here,
+both leaving a bumped-but-unreleased version sitting in the working tree
+-- which is exactly the "next attempt starts from a number that looks
+already-released" trap `.npmrc` warns about. Hence the three explicit
+steps above.
 
-**Never tag by hand.** The tag names the release, but `package.json` is
-what the built app reports as its own version and what the update check
-compares against. If they disagree, the release says 1.2.0 while every
+`.npmrc` still matters: it sets the `desktop-v` prefix, so the tag name
+npm prints is the one to use. Pushing the tag builds and attaches the DMG
+to a GitHub Release.
+
+**The tag must match `package.json` exactly.** The tag names the release,
+but `package.json` is what the built app reports as its own version and
+what the update check compares against. If they disagree, the release says 1.2.0 while every
 copy of it calls itself 1.1.0 -- so the update check tells those operators
 they're up to date forever, and nothing anywhere looks broken. The
 workflow fails the build if they don't match, but the point is not to get
