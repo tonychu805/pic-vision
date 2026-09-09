@@ -1,7 +1,7 @@
 {
   "name": "pic-vision-desktop",
-  "version": "1.0.0",
-  "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md \u00a75)",
+  "version": "1.1.0",
+  "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
   "author": "picvision ai",
   "private": true,
   "main": "electron/main.js",
