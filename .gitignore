@@ -36,6 +36,10 @@ webapp/jobs/
 cloud_pipeline/jobs/
 webapp/webapp.log
 
+# RunPod Serverless spike state (template/endpoint ids from a real account) --
+# see cloud_pipeline/serverless_spike.py.
+cloud_pipeline/serverless_spike_state.json
+
 # Pipeline inference outputs (regenerable from footage + pod_infer.py).
 # NOTE: the old pattern was `predictions*.csv`, which only matched files whose
 # NAME STARTS WITH "predictions" — so every real output (IMG_7743_predictions_k14.csv

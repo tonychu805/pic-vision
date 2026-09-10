@@ -1,0 +1,23 @@
+# Serverless-spike image: the existing baked Pod image
+# (cloud_pipeline/Dockerfile, already on Docker Hub as
+# tonychu805/pic-vision-tracknet:tf215-cuda118) plus the `runpod` SDK and a
+# handler entrypoint, so it can be deployed as a RunPod Serverless endpoint
+# instead of a raw Pod.
+#
+# Deliberately a separate file, not an edit to cloud_pipeline/Dockerfile:
+# that image is also the one used unmodified by the raw-Pod path
+# (runpod_pod.py's DEFAULT_IMAGE candidate) this spike exists to compare
+# against -- changing its base would contaminate that comparison.
+#
+# Build/push (only the new layers below are new; the 17.7GB base is
+# already on Docker Hub from the 2026-08-26 build):
+#   docker build -f cloud_pipeline/Dockerfile.serverless \
+#     -t tonychu805/pic-vision-tracknet:serverless-spike .
+#   docker push tonychu805/pic-vision-tracknet:serverless-spike
+FROM tonychu805/pic-vision-tracknet:tf215-cuda118
+
+RUN pip install --no-cache-dir runpod
+
+COPY cloud_pipeline/serverless_handler.py /handler.py
+
+CMD ["python3", "-u", "/handler.py"]
