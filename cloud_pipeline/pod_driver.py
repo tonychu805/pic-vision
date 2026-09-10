@@ -150,6 +150,19 @@ def _check_cancel(stage, message):
 INFERENCE_TIMEOUT_SEC = 7200  # same ceiling run_cloud_job.py's ssh_run(infer_cmd) used
 
 
+def _run_ffmpeg(args):
+    """`-v error` makes ffmpeg print only real errors, not verbose logs --
+    but a plain `check=True` with no output capture throws that away,
+    leaving nothing but "exit status 1" in the console's error field
+    (exactly what happened the first time this ran for real, 2026-09-10).
+    Captures stderr and puts it in the exception so a real failure is
+    diagnosable from the console alone, no pod SSH access needed (there
+    is none)."""
+    result = subprocess.run(args, capture_output=True, text=True)
+    if result.returncode != 0:
+        raise RuntimeError(f"{' '.join(args)}\n{result.stderr.strip()}")
+
+
 def _run_inference_streaming(cmd):
     """Runs pod_infer.py, patching the console with real progress every
     PROGRESS_PATCH_INTERVAL_SEC -- not just at stage start/end. Without
@@ -280,8 +293,8 @@ def run():
         with open(list_path, "w") as f:
             for p in sorted(local_segments):
                 f.write(f"file '{p}'\n")
-        subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-                        "-i", list_path, "-c", "copy", raw_video], check=True)
+        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
+                     "-i", list_path, "-c", "copy", raw_video])
 
     # --- Same input gate run_cloud_job.py ran locally before spending
     # anything on this session -- cheapest check, still first. ---
@@ -304,10 +317,9 @@ def run():
     # old local version -- only WHERE it runs changed. ---
     _check_cancel("convert", "converting to 30fps CFR...")
     cfr_video = os.path.join(WORKDIR, "video_cfr.mp4")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",
-                     "-i", raw_video, "-c:v", "h264_nvenc", "-preset", "p4",
-                     "-cq", "20", "-an", "-fps_mode", "cfr", "-r", "30", cfr_video],
-                    check=True)
+    _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",
+                 "-i", raw_video, "-c:v", "h264_nvenc", "-preset", "p4",
+                 "-cq", "20", "-an", "-fps_mode", "cfr", "-r", "30", cfr_video])
 
     _check_cancel("proxy", "preparing the inference/upload resolution...")
     if not calib.get("calibration_resolution"):
@@ -323,9 +335,9 @@ def run():
             proxy_video = cfr_video
         else:
             proxy_video = os.path.join(WORKDIR, "video_proxy_1080p.mp4")
-            subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", cfr_video,
-                             "-vf", "scale=-2:1080", "-c:v", "h264_nvenc", "-preset", "p4",
-                             "-cq", "20", "-an", proxy_video], check=True)
+            _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", cfr_video,
+                         "-vf", "scale=-2:1080", "-c:v", "h264_nvenc", "-preset", "p4",
+                         "-cq", "20", "-an", proxy_video])
 
     # --- Weights: same R2-cached tarball every pod-based run already used. ---
     _check_cancel("inference", "fetching model weights...")
