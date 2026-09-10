@@ -505,6 +505,23 @@ async function runCommand(command) {
   // apply_calibration is no longer an agent command (ADR-084): the fit
   // needs OpenCV, so it runs on the operator's job runner instead and the
   // console turns those clicks into a `jobs` row, not a command for us.
+  //
+  // send_to_cloud (PIC-136 follow-up, 2026-09-10): deliberately sample-clip
+  // only. A live camera has a *history* of past recordings and no console
+  // button could say which one it means without the bigger footage-upload-
+  // order redesign PIC-136 punted on; a sample-clip camera has exactly one
+  // recording (its own file -- see listRecordings' sampleClip branch), so
+  // there's no ambiguity and nothing new to build: this just calls the same
+  // sendRecordingToCloud() a scheduled booking's auto-send already uses.
+  if (command.type === "send_to_cloud") {
+    if (camera.connectionType !== "sampleClip") {
+      throw new Error("send_to_cloud is only supported for sample-clip cameras");
+    }
+    const [recording] = listRecordings(camera);
+    if (!recording) throw new Error("no sample clip file found for this camera");
+    sendRecordingToCloud(camera, recording.dir);
+    return { queued: true };
+  }
   throw new Error(`unknown command type: ${command.type}`);
 }
 
