@@ -297,6 +297,18 @@ function CloudJobRow({ camera, recording }) {
 
   const hasRun = status?.stage != null;
   const running = hasRun && !TERMINAL_STAGES.has(status.stage);
+  // A failed or cancelled attempt must not be the end of the road -- until
+  // this fix, hasRun stayed true forever once anything had run once, and
+  // the only button ever shown again was Cancel (which only renders while
+  // running). A real venue recording hit this live, 2026-09-10: the pod
+  // failed on a bad RunPod host and there was no way to try again short of
+  // deleting local state by hand. runCloudJob() itself already tolerates a
+  // second call once the first job reaches a terminal state (pollUntilDone
+  // clears the `active` guard) -- this was purely a renderer-side gap.
+  // Deliberately excludes "done": a successful job is not a failure, and a
+  // live check against a real completed job (Court 3) caught an earlier
+  // version of this line offering "Retry" on a job that had actually worked.
+  const failed = status?.stage === "error" || status?.stage === "cancelled";
   const stageLabel = status?.stage ? (CLOUD_STAGE_LABELS[status.stage] || status.stage) : null;
 
   return (
@@ -304,9 +316,9 @@ function CloudJobRow({ camera, recording }) {
       <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
         {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
       </span>
-      {!hasRun && (
+      {(!hasRun || failed) && (
         <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} disabled={starting || recording.recording || !camera.isCalibrated} onClick={start}>
-          {starting ? "Starting…" : recording.recording ? "Still recording" : !camera.isCalibrated ? "Calibrate first" : "Send to cloud"}
+          {starting ? "Starting…" : recording.recording ? "Still recording" : !camera.isCalibrated ? "Calibrate first" : failed ? "Retry" : "Send to cloud"}
         </button>
       )}
       {error && <span style={{ flex: "none", color: "var(--color-danger)" }}>{error}</span>}
