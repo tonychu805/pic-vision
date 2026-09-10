@@ -313,13 +313,18 @@ def run():
              f"{max(span_x, span_y):.0f}px (ADR-049) -- continuing anyway")
 
     # --- The step that used to need the operator's own NVIDIA card
-    # (ADR-093 reason 1). Identical ffmpeg invocation to run_cloud_job.py's
-    # old local version -- only WHERE it runs changed. ---
+    # (ADR-093 reason 1). Same ffmpeg recipe run_cloud_job.py's old local
+    # version used, with one real change found live: `-fps_mode cfr`
+    # (ffmpeg 5.1+) isn't recognized by the pod's own apt-installed
+    # ffmpeg (Ubuntu 22.04's default package predates it) -- this flag
+    # never ran on a pod's ffmpeg before today; the old design always
+    # did this step on the operator's own, much newer, ffmpeg. `-vsync
+    # cfr` is the older, universally-supported equivalent.
     _check_cancel("convert", "converting to 30fps CFR...")
     cfr_video = os.path.join(WORKDIR, "video_cfr.mp4")
     _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",
                  "-i", raw_video, "-c:v", "h264_nvenc", "-preset", "p4",
-                 "-cq", "20", "-an", "-fps_mode", "cfr", "-r", "30", cfr_video])
+                 "-cq", "20", "-an", "-vsync", "cfr", "-r", "30", cfr_video])
 
     _check_cancel("proxy", "preparing the inference/upload resolution...")
     if not calib.get("calibration_resolution"):
