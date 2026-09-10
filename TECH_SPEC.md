@@ -632,9 +632,14 @@ pic-vision/
 │   │                              # inventing a second one, so desktop/'s the only new
 │   │                              # import direction (desktop -> webapp, still never
 │   │                              # webapp -> desktop or cloud_pipeline -> either)
-│   ├── run_cloud_job.py            # orchestrator: local drift+CFR -> 1080p proxy -> R2 upload
-│   │                                # -> RunPod runs pod_infer.py unmodified, then pod_cut.py
-│   │                                # (ADR-074, 2026-09-04) -> R2 upload of the finished reel(s).
+│   ├── run_cloud_job.py            # SSH-driven orchestrator: local drift+CFR -> 1080p proxy
+│   │                                # -> R2 upload -> RunPod runs pod_infer.py unmodified,
+│   │                                # then pod_cut.py (ADR-074, 2026-09-04) -> R2 upload of
+│   │                                # the finished reel(s). Still real, working code --
+│   │                                # what webapp/pipeline.py's local dashboard calls
+│   │                                # unchanged -- but job_runner.py no longer calls this
+│   │                                # for real venue jobs as of ADR-093 (2026-09-10, see
+│   │                                # job_runner.py and pod_driver.py below).
 │   │                                # predictions.csv never leaves the pod; only the finished
 │   │                                # mp4(s) + a small stats.json come back (ranked only per
 │   │                                # reel, no chronological version at all -- same-day
@@ -661,28 +666,62 @@ pic-vision/
 │   │                                # the same thing, driven by the console's job queue
 │   │                                # rather than by a local subprocess. Kept for the
 │   │                                # operator's own one-off runs until those move too
-│   ├── job_runner.py                 # ADR-084 (2026-09-06): the operator-side half of the
+│   ├── job_runner.py                 # ADR-084 (2026-09-06), reel-job dispatch rebuilt
+│   │                                # ADR-093 (2026-09-10): the operator-side half of the
 │   │                                # thin-agent split. Polls the cloud console
-│   │                                # (POST /api/runner/jobs/claim, RUNNER_TOKEN-authed)
-│   │                                # for jobs venues' desktop agents enqueued, downloads
-│   │                                # their uploaded segments from R2, joins them with the
-│   │                                # same ffmpeg concat pipeline.js used to run locally,
-│   │                                # then calls webapp.pipeline's run_cloud_job(job_dir)
-│   │                                # unchanged -- mirroring status.json to the console
-│   │                                # every few seconds, and calling cancel_job() (which
-│   │                                # terminates the RunPod pod) when the console reports
-│   │                                # the venue asked to cancel. Never holds a venue
-│   │                                # agent's token: the console inserts the `reels` rows
-│   │                                # itself from the job's agent_id. Also runs
-│   │                                # kind='calibration' jobs via save_calibration's
-│   │                                # build_calibration(). See pic-vision-runner.service
+│   │                                # (POST /api/runner/jobs/claim, RUNNER_TOKEN-authed).
+│   │                                # kind='calibration' jobs still run locally via
+│   │                                # save_calibration's build_calibration(). kind='reel'
+│   │                                # jobs no longer download/join segments or call
+│   │                                # webapp.pipeline's run_cloud_job at all -- instead
+│   │                                # tars pod_driver.py's dependency closure fresh (not
+│   │                                # cached -- it's source code), uploads it to R2, and
+│   │                                # creates a self-driving pod (runpod_pod.py's
+│   │                                # create_selfdriving_pod) that does everything else
+│   │                                # itself and reports straight to the console over
+│   │                                # HTTPS. This process just waits for the pod to
+│   │                                # disappear (or hits a 3h deadline and terminates it
+│   │                                # itself, marking the job errored -- also the fallback
+│   │                                # if a pod vanishes for ANY reason without reporting a
+│   │                                # terminal status first). See pic-vision-runner.service
 │   ├── pic-vision-runner.service     # systemd unit for the above (Restart=always)
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
 │   │                                    # generate_presigned_url, ADR-074) -- also
 │   │                                    # what upload_calibration_snapshot.py's
 │   │                                    # upload_file() call goes through
-│   ├── runpod_pod.py                  # RunPod pod lifecycle (create/SSH/exec/terminate)
-│   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2 I/O
+│   ├── runpod_pod.py                  # RunPod pod lifecycle. create_pod()/ssh_run()/
+│   │                                    # scp_to() (create/SSH/exec/terminate) is the
+│   │                                    # original SSH-driven path, still what
+│   │                                    # run_cloud_job.py and webapp/pipeline.py's local
+│   │                                    # dashboard use unchanged. create_selfdriving_pod()
+│   │                                    # (ADR-093, 2026-09-10) is the new one job_runner.py
+│   │                                    # actually calls for real reel jobs: stock,
+│   │                                    # never-modified base image + a dockerStartCmd
+│   │                                    # bootstrap, no SSH key or port mapping at all --
+│   │                                    # built this way after a custom baked image
+│   │                                    # reliably failed to start on RunPod for a reason
+│   │                                    # never identified (see pod_driver.py, below)
+│   ├── pod_driver.py                  # ADR-093 (2026-09-10): the self-driving pod's own
+│   │                                    # entrypoint, run via create_selfdriving_pod's
+│   │                                    # dockerStartCmd bootstrap (curl a presigned R2
+│   │                                    # tarball of this file + its src/scripts deps,
+│   │                                    # extract, apt-get ffmpeg, run). Pulls the venue's
+│   │                                    # raw segments straight from R2 (not through this
+│   │                                    # workstation), converts, checks, runs
+│   │                                    # pod_infer.py unmodified, cuts (build_reel/
+│   │                                    # build_burst_reel called in-process, no SSH
+│   │                                    # round-trip needed), uploads, and reports every
+│   │                                    # stage to the console over HTTPS -- every status
+│   │                                    # PATCH doubles as the cancellation check. Has one
+│   │                                    # full verified real production-shaped run behind
+│   │                                    # it (DECISIONS.md ADR-093); job_runner.py hasn't
+│   │                                    # been switched over to route real venue traffic
+│   │                                    # through it yet -- every real test so far was a
+│   │                                    # manually inserted job, not the real claim queue
+│   ├── pod_r2_helper.py                # standalone script copied onto the pod for its R2
+│   │                                    # I/O -- run_cloud_job.py's SSH-driven path only;
+│   │                                    # pod_driver.py has its own R2 calls, no SSH to
+│   │                                    # copy this over even if it wanted to reuse it
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
 │   │                                    # run_cloud_job.py has no calibration logic of its own)
 │   ├── save_calibration.py               # 2026-09-03: computes+writes calib.json from 14

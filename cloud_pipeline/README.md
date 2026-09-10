@@ -55,7 +55,19 @@ So "isolated from the local pipeline" means, specifically:
 - `pod_r2_helper.py` — copied onto the pod alongside `pod_infer.py`; a small
   standalone script (not an inline `python3 -c` one-liner over SSH, which
   gets fragile fast with nested shell/Python quoting) for the pod's R2
-  download/upload calls.
+  download/upload calls. Used by the SSH-driven `run_cloud_job.py` path
+  only -- `pod_driver.py` (below) has its own R2 calls, it doesn't shell out
+  to this.
+- `pod_driver.py` (ADR-093, 2026-09-10) — the *other*, now-live way a job
+  gets processed: a self-driving pod's own entrypoint, run via a
+  `dockerStartCmd` bootstrap (see "The job runner" below), not SSH. Pulls
+  the venue's raw segments straight from R2 itself, converts, runs
+  inference, cuts, uploads, and reports progress to the console over HTTPS
+  -- no SSH, no per-step remote-control from this workstation. See its own
+  module docstring and `DECISIONS.md` ADR-093 for the real, hard-won story
+  of how it got here (a custom Docker image reliably failed to start on
+  RunPod for a reason never identified; a `dockerStartCmd` bootstrap
+  against the stock image sidestepped it instead).
 - `setup_venue_calibration.py` — the *only* place calibration logic lives now
   (see below). Not imported by `run_cloud_job.py` at all.
 
@@ -97,7 +109,7 @@ route still collects calibration fresh, in-browser, *per job* — unchanged,
 and arguably has the same "should this really run every session" question,
 just not one raised or touched today.
 
-## The job runner (ADR-084)
+## The job runner (ADR-084, reel-job dispatch rebuilt under ADR-093)
 
 `job_runner.py` is how venues' recordings get processed now. Venue machines
 run a thin desktop agent that can't run any of this (no credentials, no
@@ -108,13 +120,39 @@ to R2 and enqueue a job on the cloud console. This runner is the other half:
 make runner        # or: .venv/bin/python -m cloud_pipeline.job_runner
 ```
 
-It polls the console for queued jobs, downloads the segments, joins them,
-and calls `webapp.pipeline.run_cloud_job(job_dir)` — the same function the
-Flask dashboard and the old desktop path both used, unchanged. Progress is
-mirrored back to the console every few seconds, which is what the venue
-sees; a cancel from the venue comes back on that same call and terminates
-the RunPod pod. The console creates the `reels` rows itself, so this
-process never holds a venue agent's token.
+It polls the console for queued jobs. Calibration jobs still run right
+here, locally, unchanged (CPU-only, seconds long, never needed a pod).
+**Reel jobs (2026-09-10, ADR-093) no longer download anything or call
+`webapp.pipeline.run_cloud_job` at all** — that description is what this
+file used to say and is now wrong for the live path. Instead:
+
+1. `_upload_pod_deps()` tars `pod_driver.py` + its `src/`/`scripts/`
+   dependency closure and uploads it to R2 *fresh, every job* (not cached
+   like the model weights — it's source code, and a stale cached copy
+   would silently run old code on a real pod).
+2. `runpod_pod.create_selfdriving_pod()` creates a pod from the stock,
+   unmodified base image with a `dockerStartCmd` override: `curl` that
+   tarball via a presigned URL, extract it, `apt-get install ffmpeg`, run
+   `pod_driver.py`. No SSH key, no port mapping.
+3. `job_runner.py`'s only remaining job is to wait for the pod to
+   disappear (self-terminated, via its own call to the RunPod API) or hit
+   a 3-hour deadline, at which point it terminates the pod itself and
+   marks the job errored — the same thing happens, defensively, if a pod
+   disappears for *any* reason without having reported a terminal status
+   first (found live, 2026-09-10: a pod killed out from under this loop
+   left its job stuck at `running` forever until this was added).
+
+The pod reports its own stage/progress/done/error to the console over
+plain HTTPS (`PATCH /api/runner/jobs/<id>`) — same route, same contract
+`job_runner.py`'s own polling already used, just called from a different
+place now. The console still creates the `reels` rows itself on `done`, so
+this process never holds a venue agent's token, same as before.
+
+The SSH-driven `run_cloud_job.py`/`runpod_pod.create_pod()` path described
+elsewhere in this file is still real, working code — `webapp/pipeline.py`'s
+local dashboard still uses it unchanged, and it's a fine way to run a
+session locally for dev/debugging. It's just no longer what `job_runner.py`
+calls for a real venue job.
 
 **While it isn't running, nothing gets processed** — jobs sit `queued` and
 venues see "Waiting for processing". For an always-on install:
@@ -239,6 +277,19 @@ gaps a real production system would have between jobs (hours, not the ~15
 minutes these tests spanned) is untested. `DEFAULT_IMAGE` stays on the
 generic base until that's checked. Treat neither the 113.4s nor the ~53s
 average as the final word on their own.
+
+**Superseded, 2026-09-10 (`DECISIONS.md` ADR-093): the pre-baked-image idea
+above was tried again for the new self-driving pod, and abandoned.** A
+custom image built on `tf215-cuda118` (a few `COPY` layers + `pod_driver.py`
+baked in) reliably hung at container start on RunPod -- zero output ever,
+across 5 real attempts on 4+ different hosts -- despite working perfectly in
+plain local Docker every time; root cause was never found even after real
+differential testing (unmodified image: always works; the same image with
+literally anything added: reliably breaks). Replaced with a
+`dockerStartCmd` bootstrap against the stock, never-modified image instead
+of a derived one at all -- see `pod_driver.py`'s own docstring and the "job
+runner" section above. That approach worked on the very next real attempt
+and has one full, verified successful production-shaped run behind it.
 
 **Uploads a 720p proxy instead of full resolution (2026-08-27, `DECISIONS.md`
 ADR-069).** Less to move over the network both ways; `build_reel()` still
