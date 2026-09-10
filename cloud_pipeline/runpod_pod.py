@@ -112,7 +112,36 @@ def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
     raise RuntimeError(f"could not create pod on any GPU type: {last_error}")
 
 
-def create_selfdriving_pod(name, env, gpu_type_ids=None, image="tonychu805/pic-vision-tracknet:selfdriving-v1",
+# The one shell command every self-driving pod starts with: fetch its own
+# code from a presigned R2 URL (BOOTSTRAP_URL, minted fresh per job by the
+# caller -- see job_runner.py) and run it. ffmpeg isn't baked into
+# tf215-cuda118 (it never was -- the SSH-era POD_SETUP_CMD always
+# installed it per-job too), so that's still an install here, not new
+# overhead.
+#
+# 2026-09-10: this replaces an earlier, abandoned approach -- a custom
+# Docker image (tf215-cuda118 + a few COPY layers + pod_driver.py baked
+# in) that reliably hung at container start on RunPod specifically,
+# across 8 real attempts on different hosts, despite working perfectly in
+# plain local Docker every time. Differential-tested down to: the
+# *unmodified* tf215-cuda118 image always works (18.5s-158.8s,
+# repeatedly); a byte-identical retag of it also works (58.8s); adding
+# literally any content -- a pip install, a few COPY layers, a CMD
+# override or not -- reliably broke it. No root cause was ever found;
+# create_selfdriving_pod's `image` default (the stock, unmodified,
+# already-proven tf215-cuda118) plus a `dockerStartCmd` override
+# sidesteps the whole mystery instead of solving it, since it never
+# builds or runs a derived image at all. See DECISIONS.md ADR-093.
+_BOOTSTRAP_CMD = (
+    "curl -sL \"$BOOTSTRAP_URL\" -o /tmp/deps.tar && "
+    "mkdir -p /workspace && tar -xf /tmp/deps.tar -C /workspace --no-same-owner && "
+    "apt-get update -qq && apt-get install -y -qq ffmpeg && "
+    "cd /workspace && python3 -u pod_driver.py"
+)
+
+
+def create_selfdriving_pod(name, env, gpu_type_ids=None,
+                            image="tonychu805/pic-vision-tracknet:tf215-cuda118",
                             container_disk_gb=20):
     """ADR-093: a pod that runs cloud_pipeline/pod_driver.py as its own
     entrypoint and reports progress to the console over HTTPS -- no SSH
@@ -122,18 +151,22 @@ def create_selfdriving_pod(name, env, gpu_type_ids=None, image="tonychu805/pic-v
     terminate_pod() -- ADR-093's still-open "who kills an orphaned pod"
     risk means the caller must not assume the pod polices itself).
 
-    `env` carries the whole job: JOB_ID, BUCKET, SEGMENT_KEYS_JSON,
-    CALIB_JSON, TARGET_SEC, SESSION_ID, REEL_ID, BURST_REEL_ID, SHARE_ID,
-    CONSOLE_URL, RUNNER_TOKEN, the CLOUDFLARE_R2_* keys, and RUNPOD_API_KEY
-    (so the pod can delete itself when done) -- see pod_driver.py's module
-    docstring for the accepted gap this implies (these are the operator's
-    account-wide credentials, not scoped to this one job)."""
+    `env` must include BOOTSTRAP_URL (a presigned R2 GET URL for a tar of
+    pod_driver.py + its src/scripts dependency closure -- job_runner.py
+    mints one fresh per job) alongside the rest of the job: JOB_ID,
+    BUCKET, SEGMENT_KEYS_JSON, CALIB_JSON, TARGET_SEC, SESSION_ID,
+    REEL_ID, BURST_REEL_ID, SHARE_ID, CONSOLE_URL, RUNNER_TOKEN, the
+    CLOUDFLARE_R2_* keys, and RUNPOD_API_KEY (so the pod can delete
+    itself when done) -- see pod_driver.py's module docstring for the
+    accepted gap this implies (these are the operator's account-wide
+    credentials, not scoped to this one job)."""
     body = {
         "name": name,
         "imageName": image,
         "gpuCount": 1,
         "containerDiskInGb": container_disk_gb,
         "env": env,
+        "dockerStartCmd": ["bash", "-c", _BOOTSTRAP_CMD],
     }
     last_error = None
     for gpu_type in (gpu_type_ids or DEFAULT_GPU_TYPES):

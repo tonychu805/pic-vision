@@ -1,0 +1,6 @@
+# Diagnostic only (2026-09-10) -- not part of the pipeline. Pure passthrough
+# of tf215-cuda118, zero modifications, to test whether ANY freshly-built/
+# pushed image derived from the base fails to start on RunPod, or whether
+# something specific to Dockerfile.selfdriving's content is the cause.
+# See DECISIONS.md ADR-093 addendum for the full investigation.
+FROM tonychu805/pic-vision-tracknet:tf215-cuda118

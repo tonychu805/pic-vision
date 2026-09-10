@@ -13,6 +13,24 @@
 # run_cloud_job.py's own POD_REEL_DEPS comment: a new unrelated src/
 # module shouldn't silently ride along into every pod's image.
 #
+# Deliberately does NOT override CMD (2026-09-10, found live): a
+# `CMD ["python3", "-u", "pod_driver.py"]` here worked perfectly in plain
+# local Docker but made every real RunPod pod hang at container start --
+# zero output ever, not even the base image's own CUDA license banner,
+# across 5 real attempts on different physical hosts, while the
+# unmodified base image (same GPU type, same account, tested seconds
+# apart) started in 18.5s. Differential-tested, not guessed: the *only*
+# variable that flipped success to failure was which image was used, with
+# every other part of the request held identical. The one Dockerfile
+# difference that changes what runs as the container's actual PID 1 is
+# the CMD override -- RunPod's own platform apparently depends on (or is
+# far more reliable with) the base image's own /start.sh being that PID 1,
+# not a bare Python process. Riding on /start.sh's existing
+# `execute_script "/post_start.sh"` extension point (see post_start.sh)
+# keeps every real pod on the exact startup path production has already
+# run for weeks, with this image's own work hooked in rather than
+# replacing it.
+#
 # Build/push:
 #   docker build -f cloud_pipeline/Dockerfile.selfdriving \
 #     -t tonychu805/pic-vision-tracknet:selfdriving-v1 .
@@ -29,5 +47,4 @@ COPY src/__init__.py src/job_log.py src/calib.py src/ball.py src/track.py \
 COPY scripts/check_drift.py scripts/rank_and_reel.py \
      scripts/burst_moment_reel.py scripts/pod_infer.py scripts/
 COPY cloud_pipeline/pod_driver.py .
-
-CMD ["python3", "-u", "pod_driver.py"]
+COPY cloud_pipeline/post_start.sh /post_start.sh

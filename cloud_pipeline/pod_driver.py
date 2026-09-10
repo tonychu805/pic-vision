@@ -4,10 +4,13 @@ Everything `cloud_pipeline/run_cloud_job.py` used to do by SSH'ing into a
 pod step-by-step from the operator's own workstation (and, before that
 script even started, the CFR-convert + proxy encode `run_cloud_job.py` did
 *locally* with the operator's own NVIDIA card) happens here instead, as one
-process running ON the rented pod. This script IS the pod's entrypoint
-(baked into the image via Dockerfile.selfdriving) -- nothing SSHes in, and
-the operator's workstation never touches a video byte or a GPU cycle for a
-job that runs this way.
+process running ON the rented pod. Run via the base image's own
+`/start.sh` -> `/post_start.sh` hook (Dockerfile.selfdriving deliberately
+does NOT make this the container's CMD -- see that file for why: doing so
+made every real RunPod pod hang at container start, differential-tested
+against the unmodified base image). Nothing SSHes in, and the operator's
+workstation never touches a video byte or a GPU cycle for a job that runs
+this way.
 
 Reads its whole job from environment variables (set at pod-creation time,
 `runpod_pod.create_selfdriving_pod`) rather than a command line, since

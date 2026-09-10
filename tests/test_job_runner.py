@@ -24,6 +24,16 @@ JOB = {
 }
 
 
+def _no_real_r2_upload(monkeypatch):
+    # run_reel_job() uploads a real deps tarball to R2 before creating a
+    # pod -- stood in by every test that calls run_reel_job() (not
+    # test_upload_pod_deps_..., which tests this function itself) so a
+    # test can't silently start making real R2 calls, the same mistake
+    # already made once this session with patch_job() before it was
+    # mocked everywhere it needed to be.
+    monkeypatch.setattr(job_runner, "_upload_pod_deps", lambda bucket: "https://example.invalid/fake-deps.tar")
+
+
 def test_a_job_with_no_segments_is_refused_before_any_pod_is_created(monkeypatch):
     created = []
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
@@ -34,6 +44,7 @@ def test_a_job_with_no_segments_is_refused_before_any_pod_is_created(monkeypatch
 
 
 def test_happy_path_creates_one_pod_and_returns_once_it_disappears(monkeypatch):
+    _no_real_r2_upload(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
     exists_calls = {"n": 0}
@@ -66,6 +77,7 @@ def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypa
     # reported a terminal status before treating its disappearance as
     # success. This is the fix: unconditionally try to mark it errored:
     # if it DID report already, the console's own guard makes this a no-op.
+    _no_real_r2_upload(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: ("pod-1", "gpu"))
@@ -82,6 +94,7 @@ def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypa
 
 
 def test_env_carries_the_real_job_and_fresh_reel_ids(monkeypatch):
+    _no_real_r2_upload(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
     captured = {}
@@ -104,12 +117,40 @@ def test_env_carries_the_real_job_and_fresh_reel_ids(monkeypatch):
     for key in ("REEL_ID", "BURST_REEL_ID", "SHARE_ID"):
         assert env[key], f"{key} must be a real minted id"
     assert env["REEL_ID"] != env["BURST_REEL_ID"] != env["SHARE_ID"]
+    assert env["BOOTSTRAP_URL"] == "https://example.invalid/fake-deps.tar"
+
+
+def test_upload_pod_deps_packages_pod_driver_and_its_real_dependency_closure(monkeypatch):
+    # The one thing worth testing for real here, unmocked: a wrong file
+    # list silently breaks every future pod (ImportError on the pod, not
+    # locally), so this builds a real tarball from the real repo files
+    # and checks what's actually in it -- not just that upload_file() got
+    # called with some path.
+    import tarfile
+
+    uploaded = {}
+    monkeypatch.setattr(job_runner.r2_storage, "upload_file",
+                        lambda bucket, local_path, key: uploaded.update(
+                            bucket=bucket, key=key,
+                            members=sorted(tarfile.open(local_path).getnames())))
+    monkeypatch.setattr(job_runner.r2_storage, "generate_presigned_url",
+                        lambda bucket, key, expires_in=3600: "https://example.invalid/real-deps.tar")
+
+    url = job_runner._upload_pod_deps("test-bucket")
+
+    assert url == "https://example.invalid/real-deps.tar"
+    assert uploaded["bucket"] == "test-bucket"
+    assert uploaded["key"] == job_runner.POD_DEPS_KEY
+    assert "pod_driver.py" in uploaded["members"]
+    for rel in job_runner.POD_DEPS_FILES:
+        assert rel in uploaded["members"], f"{rel} missing from the deps tarball"
 
 
 def test_a_pod_that_never_finishes_is_terminated_and_reported_as_an_error(monkeypatch):
     # The one path with no live test yet: a pod that hangs past its
     # deadline (host failure, OOM -- anything pod_driver.py's own
     # exception handling never got a chance to catch).
+    _no_real_r2_upload(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 0.05)
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",

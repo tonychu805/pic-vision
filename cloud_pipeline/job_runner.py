@@ -1,14 +1,22 @@
 """Operator-side job runner (ADR-084, thin agent).
 
 Polls the cloud console for queued jobs. Reel jobs (ADR-093) are handed
-straight to a self-driving RunPod pod (cloud_pipeline/pod_driver.py,
-baked into the selfdriving-v1 image): this process creates it, hands it
-the job's R2 keys and calibration as environment variables, and then just
-waits for it to disappear (self-terminate) or hit a deadline -- it never
-downloads a video, runs ffmpeg, or holds an SSH connection anymore. The
-pod reports its own progress to the console over HTTPS
-(PATCH /api/runner/jobs/<id>) and inserts the finished `reels` rows itself
-via that same route; this process never sees a video byte for a reel job.
+straight to a self-driving RunPod pod (cloud_pipeline/pod_driver.py): this
+process packages pod_driver.py + its dependency closure as a tarball,
+uploads it to R2, creates the pod against the stock, unmodified
+DEFAULT_IMAGE with a `dockerStartCmd` that fetches and runs that tarball
+(runpod_pod.py's create_selfdriving_pod), and then just waits for the pod
+to disappear (self-terminate) or hit a deadline -- it never downloads a
+video, runs ffmpeg, or holds an SSH connection anymore. The pod reports
+its own progress to the console over HTTPS (PATCH /api/runner/jobs/<id>)
+and inserts the finished `reels` rows itself via that same route; this
+process never sees a video byte for a reel job.
+
+Deliberately NOT a custom baked image (tried first, abandoned 2026-09-10):
+see runpod_pod.py's create_selfdriving_pod for why -- a derived image
+reliably hung at container start on RunPod across 8 real attempts, for a
+reason never identified, despite working perfectly in local Docker every
+time.
 
 Calibration fits still run right here (kind = "calibration"): the operator
 clicked 14 points on a snapshot in the console; the fit is
@@ -27,6 +35,8 @@ import os
 import shutil
 import socket
 import sys
+import tarfile
+import tempfile
 import time
 import uuid
 
@@ -94,6 +104,40 @@ def patch_job(job_id, **fields):
     return bool(r.json().get("cancelRequested"))
 
 
+# pod_driver.py's own dependency closure -- same explicit-file-list
+# reasoning as run_cloud_job.py's old POD_REEL_DEPS comment (a new
+# unrelated src/ module shouldn't silently ride along), just tarred at
+# job time instead of baked into an image (see runpod_pod.py's
+# create_selfdriving_pod for why: baking it into an image was tried and
+# reliably broke container start on RunPod, for a reason never found).
+POD_DEPS_FILES = [
+    "src/__init__.py", "src/job_log.py", "src/calib.py", "src/ball.py",
+    "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
+    "src/drift.py", "src/video_quality.py",
+    "scripts/check_drift.py", "scripts/rank_and_reel.py",
+    "scripts/burst_moment_reel.py", "scripts/pod_infer.py",
+]
+POD_DEPS_KEY = "pipeline/pod_deps.tar"
+
+
+def _upload_pod_deps(bucket):
+    """Fresh every job, not cached like ensure_weights_in_r2() -- this
+    tarball is source code, and a stale copy would silently run old code
+    on the pod. It's a few hundred KB of Python, not 130MB of weights;
+    the upload cost of never risking staleness is negligible."""
+    with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
+        tar_path = tmp.name
+    try:
+        with tarfile.open(tar_path, "w") as tar:
+            tar.add(os.path.join(REPO_ROOT, "cloud_pipeline", "pod_driver.py"), arcname="pod_driver.py")
+            for rel in POD_DEPS_FILES:
+                tar.add(os.path.join(REPO_ROOT, rel), arcname=rel)
+        r2_storage.upload_file(bucket, tar_path, POD_DEPS_KEY)
+    finally:
+        os.remove(tar_path)
+    return r2_storage.generate_presigned_url(bucket, POD_DEPS_KEY, expires_in=3600)
+
+
 def run_reel_job(job):
     """ADR-093: hand the whole job to a self-driving pod and wait for it to
     disappear. Everything past this function -- downloading the venue's
@@ -106,6 +150,8 @@ def run_reel_job(job):
     if not segment_keys:
         raise RuntimeError("job has no recording segments")
 
+    bootstrap_url = _upload_pod_deps(job["bucket"])
+
     # Minted here, not on the pod: the console needs these ids to exist
     # (in the pod's final result) as soon as the pod reports done, and
     # there's no coordination reason they can't just be handed to the pod
@@ -113,6 +159,7 @@ def run_reel_job(job):
     env = {
         "JOB_ID": job_id,
         "BUCKET": job["bucket"],
+        "BOOTSTRAP_URL": bootstrap_url,
         "SEGMENT_KEYS_JSON": json.dumps(segment_keys),
         "CALIB_JSON": json.dumps(job["calib"]),
         "TARGET_SEC": str(job.get("target_sec") or 300),
