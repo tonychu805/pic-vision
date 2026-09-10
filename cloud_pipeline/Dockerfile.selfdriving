@@ -1,0 +1,33 @@
+# ADR-093 pod image: bakes in everything pod_driver.py needs so nothing
+# has to be scp'd over per-job (the whole reason a per-job scp/tar dance
+# existed was that a raw Pod starts with nothing but an OS -- baking it in
+# removes that entirely, same reasoning as ADR-093 decision item 2).
+#
+# Built on the SAME base as cloud_pipeline/Dockerfile (tf215-cuda118), not
+# the leaner rebuild tried and rejected 2026-09-10 (DECISIONS.md ADR-093
+# addendum) -- that test showed cold-start speed tracks fleet-wide
+# familiarity with the base image, not size, and runpod/pytorch has that
+# advantage in a way a from-scratch base doesn't.
+#
+# Explicit file list, not `COPY src/ scripts/` -- matches
+# run_cloud_job.py's own POD_REEL_DEPS comment: a new unrelated src/
+# module shouldn't silently ride along into every pod's image.
+#
+# Build/push:
+#   docker build -f cloud_pipeline/Dockerfile.selfdriving \
+#     -t tonychu805/pic-vision-tracknet:selfdriving-v1 .
+#   docker push tonychu805/pic-vision-tracknet:selfdriving-v1
+FROM tonychu805/pic-vision-tracknet:tf215-cuda118
+
+RUN pip install --no-cache-dir requests
+
+WORKDIR /workspace
+
+COPY src/__init__.py src/job_log.py src/calib.py src/ball.py src/track.py \
+     src/select.py src/tracknet.py src/render.py src/drift.py \
+     src/video_quality.py src/
+COPY scripts/check_drift.py scripts/rank_and_reel.py \
+     scripts/burst_moment_reel.py scripts/pod_infer.py scripts/
+COPY cloud_pipeline/pod_driver.py .
+
+CMD ["python3", "-u", "pod_driver.py"]

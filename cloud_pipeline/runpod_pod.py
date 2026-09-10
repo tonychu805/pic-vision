@@ -112,6 +112,39 @@ def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
     raise RuntimeError(f"could not create pod on any GPU type: {last_error}")
 
 
+def create_selfdriving_pod(name, env, gpu_type_ids=None, image="tonychu805/pic-vision-tracknet:selfdriving-v1",
+                            container_disk_gb=20):
+    """ADR-093: a pod that runs cloud_pipeline/pod_driver.py as its own
+    entrypoint and reports progress to the console over HTTPS -- no SSH
+    key, no port mapping, no ssh_run/scp_to call site needed at all. The
+    caller's only job is to create this and then wait for the console's
+    job row to reach a terminal state (or hit its own deadline and
+    terminate_pod() -- ADR-093's still-open "who kills an orphaned pod"
+    risk means the caller must not assume the pod polices itself).
+
+    `env` carries the whole job: JOB_ID, BUCKET, SEGMENT_KEYS_JSON,
+    CALIB_JSON, TARGET_SEC, SESSION_ID, REEL_ID, BURST_REEL_ID, SHARE_ID,
+    CONSOLE_URL, RUNNER_TOKEN, the CLOUDFLARE_R2_* keys, and RUNPOD_API_KEY
+    (so the pod can delete itself when done) -- see pod_driver.py's module
+    docstring for the accepted gap this implies (these are the operator's
+    account-wide credentials, not scoped to this one job)."""
+    body = {
+        "name": name,
+        "imageName": image,
+        "gpuCount": 1,
+        "containerDiskInGb": container_disk_gb,
+        "env": env,
+    }
+    last_error = None
+    for gpu_type in (gpu_type_ids or DEFAULT_GPU_TYPES):
+        body["gpuTypeIds"] = [gpu_type]
+        r = requests.post(f"{API_BASE}/pods", headers=_headers(), json=body, timeout=30)
+        if r.status_code == 201:
+            return r.json()["id"], gpu_type
+        last_error = r.text
+    raise RuntimeError(f"could not create self-driving pod on any GPU type: {last_error}")
+
+
 def wait_for_ssh(pod_id, timeout_sec=180, poll_sec=5):
     """Poll until the pod has a public IP and SSH port mapping. Returns
     (ip, port)."""
