@@ -1,18 +1,20 @@
 """Operator-side job runner (ADR-084, thin agent).
 
-Polls the cloud console for queued jobs and runs them on this machine with
-the unchanged pipeline: a venue's desktop app uploads its recording
-segments to R2 and enqueues a job; this runner downloads them, joins them,
-and calls webapp.pipeline.run_cloud_job(job_dir) exactly the way
-run_desktop_job.py did when the desktop still ran Python itself. The
-console learns progress through PATCH /api/runner/jobs/<id> (a mirror of
-status.json) and creates the `reels` rows itself when a job finishes --
-this process never holds a venue agent's token.
+Polls the cloud console for queued jobs. Reel jobs (ADR-093) are handed
+straight to a self-driving RunPod pod (cloud_pipeline/pod_driver.py,
+baked into the selfdriving-v1 image): this process creates it, hands it
+the job's R2 keys and calibration as environment variables, and then just
+waits for it to disappear (self-terminate) or hit a deadline -- it never
+downloads a video, runs ffmpeg, or holds an SSH connection anymore. The
+pod reports its own progress to the console over HTTPS
+(PATCH /api/runner/jobs/<id>) and inserts the finished `reels` rows itself
+via that same route; this process never sees a video byte for a reel job.
 
-Calibration fits arrive the same way (kind = "calibration"): the operator
+Calibration fits still run right here (kind = "calibration"): the operator
 clicked 14 points on a snapshot in the console; the fit is
 save_calibration.build_calibration(), unchanged, and the result goes back
-onto the camera row for every later reel job to use.
+onto the camera row for every later reel job to use. That's CPU-only,
+seconds long, and never needed a pod in the first place.
 
 Needs, from .env: RUNNER_TOKEN (same value set on the console), the
 CLOUDFLARE_R2_* keys and RUNPOD_API_KEY the pipeline already needs.
@@ -24,10 +26,9 @@ import json
 import os
 import shutil
 import socket
-import subprocess
 import sys
-import threading
 import time
+import uuid
 
 import requests
 from dotenv import load_dotenv
@@ -36,7 +37,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
-from cloud_pipeline import r2_storage  # noqa: E402
+from cloud_pipeline import r2_storage, runpod_pod  # noqa: E402
 from cloud_pipeline.save_calibration import build_calibration  # noqa: E402
 
 CONSOLE_URL = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
@@ -45,9 +46,21 @@ WORK_DIR = os.environ.get("RUNNER_WORK_DIR", os.path.join(REPO_ROOT, "cloud_pipe
 RUNNER_ID = os.environ.get("RUNNER_ID", socket.gethostname())
 
 POLL_SEC = 5
-MIRROR_SEC = 3
-HEARTBEAT_SEC = 60
 TERMINAL_STAGES = ("done", "error", "cancelled")
+
+# How often to ask RunPod whether the pod is still there, and how long to
+# wait before deciding it's stuck rather than just slow. 15s is cheap
+# against RunPod's own API (unlike the old MIRROR_SEC=3, which was reading
+# a local file); 3 hours covers convert+proxy+inference+cut on the
+# longest realistic session with real margin -- pod_driver.py's own
+# inference step alone is capped at 7200s (2h), and every step before or
+# after it is minutes, not hours. A pod that hasn't self-terminated by
+# then almost certainly hit something pod_driver.py's own exception
+# handling didn't catch (a host failure, an OOM kill) -- ADR-093's still-
+# open "who kills an orphaned pod" risk, covered here rather than left to
+# an operator noticing a stuck billing pod by hand.
+POD_POLL_SEC = 15
+JOB_DEADLINE_SEC = 3 * 3600
 
 
 def _log(msg):
@@ -81,117 +94,79 @@ def patch_job(job_id, **fields):
     return bool(r.json().get("cancelRequested"))
 
 
-def _read_status(job_dir):
-    path = os.path.join(job_dir, "status.json")
-    if not os.path.exists(path):
-        return {}
-    try:
-        with open(path) as f:
-            return json.load(f)
-    except (OSError, json.JSONDecodeError):
-        return {}
-
-
-def _download_segments(job, job_dir):
-    keys = job.get("segment_keys") or []
-    if not keys:
-        raise RuntimeError("job has no recording segments")
-    seg_dir = os.path.join(job_dir, "segments")
-    os.makedirs(seg_dir, exist_ok=True)
-    patch_job(job["id"], stage="download", message=f"downloading {len(keys)} segment(s)...",
-              progress={"current": 0, "total": len(keys), "eta_sec": None})
-    local_paths = []
-    for i, key in enumerate(keys):
-        local = os.path.join(seg_dir, os.path.basename(key))
-        r2_storage.download_file(job["bucket"], key, local)
-        local_paths.append(local)
-        if patch_job(job["id"], progress={"current": i + 1, "total": len(keys), "eta_sec": None}):
-            raise _Cancelled()
-    return local_paths
-
-
-def _concat(job_dir, segments):
-    """Same stream-copy join desktop/electron/pipeline.js used to do locally
-    (ADR-030/032 segments, one continuous file for the pipeline)."""
-    if len(segments) == 1:
-        return segments[0]
-    list_path = os.path.join(job_dir, "concat_list.txt")
-    out = os.path.join(job_dir, "session_full.mkv")
-    with open(list_path, "w") as f:
-        for p in sorted(segments):
-            f.write(f"file '{p}'\n")
-    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "concat", "-safe", "0",
-                    "-i", list_path, "-c", "copy", out], check=True)
-    return out
-
-
-class _Cancelled(Exception):
-    pass
-
-
 def run_reel_job(job):
-    from webapp.pipeline import cancel_job, run_cloud_job
-
+    """ADR-093: hand the whole job to a self-driving pod and wait for it to
+    disappear. Everything past this function -- downloading the venue's
+    segments, converting, running inference, cutting, uploading, and
+    telling the console about all of it -- happens on the pod
+    (cloud_pipeline/pod_driver.py), not here. This process holds no video,
+    runs no ffmpeg, and opens no SSH connection for a reel job anymore."""
     job_id = job["id"]
-    job_dir = os.path.join(WORK_DIR, job_id)
-    os.makedirs(job_dir, exist_ok=True)
+    segment_keys = job.get("segment_keys") or []
+    if not segment_keys:
+        raise RuntimeError("job has no recording segments")
 
-    segments = _download_segments(job, job_dir)
-    video_path = _concat(job_dir, segments)
+    # Minted here, not on the pod: the console needs these ids to exist
+    # (in the pod's final result) as soon as the pod reports done, and
+    # there's no coordination reason they can't just be handed to the pod
+    # instead of round-tripped through it.
+    env = {
+        "JOB_ID": job_id,
+        "BUCKET": job["bucket"],
+        "SEGMENT_KEYS_JSON": json.dumps(segment_keys),
+        "CALIB_JSON": json.dumps(job["calib"]),
+        "TARGET_SEC": str(job.get("target_sec") or 300),
+        "SESSION_ID": job.get("session_id") or job_id,
+        "REEL_ID": str(uuid.uuid4()),
+        "BURST_REEL_ID": str(uuid.uuid4()),
+        "SHARE_ID": str(uuid.uuid4()),
+        "CONSOLE_URL": CONSOLE_URL,
+        "RUNNER_TOKEN": RUNNER_TOKEN,
+        "CLOUDFLARE_R2_ACCESS_KEY_ID": os.environ["CLOUDFLARE_R2_ACCESS_KEY_ID"],
+        "CLOUDFLARE_R2_SECRET_ACCESS_KEY": os.environ["CLOUDFLARE_R2_SECRET_ACCESS_KEY"],
+        "CLOUDFLARE_R2_ACCOUNT_ID": os.environ["CLOUDFLARE_R2_ACCOUNT_ID"],
+        "RUNPOD_API_KEY": os.environ["RUNPOD_API_KEY"],
+    }
 
-    calib_path = os.path.join(job_dir, "calib.json")
-    with open(calib_path, "w") as f:
-        json.dump(job["calib"], f, indent=2)
-    with open(os.path.join(job_dir, "job.json"), "w") as f:
-        json.dump({
-            "video_file": os.path.abspath(video_path),
-            "calib_path": os.path.abspath(calib_path),
-            "target_sec": float(job.get("target_sec") or 300),
-            "session_id": job.get("session_id") or job_id,
-        }, f)
+    _log(f"job {job_id}: creating self-driving pod...")
+    pod_id, gpu_type = runpod_pod.create_selfdriving_pod(
+        name=f"cloud-pipeline-{env['SESSION_ID']}", env=env,
+        gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
+    _log(f"job {job_id}: pod {pod_id} created ({gpu_type}), waiting for it to finish "
+         f"(it reports its own progress to the console from here)")
 
-    worker = threading.Thread(target=run_cloud_job, args=(job_dir,), daemon=True)
-    worker.start()
+    deadline = time.monotonic() + JOB_DEADLINE_SEC
+    while time.monotonic() < deadline:
+        time.sleep(POD_POLL_SEC)
+        if not runpod_pod.pod_exists(pod_id):
+            # A pod that disappeared having genuinely finished already put
+            # the job into a terminal state (done/error/cancelled) via its
+            # own PATCH -- this call then hits the console's own
+            # status != 'running' guard and does nothing (409, silently
+            # ignored here). But "the pod is gone" and "the pod told the
+            # console how it ended" are NOT the same fact: a crash, an
+            # OOM kill, or the pod being torn down by anything other than
+            # its own `finally` (confirmed for real, 2026-09-10 -- a pod
+            # killed out from under this exact loop left its job stuck at
+            # status='running' forever, because nothing here checked)
+            # skips pod_driver.py's own reporting entirely. This call is
+            # what turns that into an actual error instead of a job that
+            # silently never finishes.
+            patch_job(job_id, error="pod disappeared without reporting a final status")
+            _log(f"job {job_id}: pod {pod_id} finished")
+            return
 
-    last_sent = None
-    last_patch_at = time.monotonic()
-    cancel_sent = False
-    while worker.is_alive():
-        time.sleep(MIRROR_SEC)
-        status = _read_status(job_dir)
-        snapshot = json.dumps({k: status.get(k) for k in ("stage", "message", "progress")}, sort_keys=True)
-        due = time.monotonic() - last_patch_at >= HEARTBEAT_SEC
-        if snapshot == last_sent and not due:
-            continue
-        # progress is sent even when it's None: webapp/pipeline.py clears it
-        # on every stage change, and dropping the null would leave the
-        # console showing the previous stage's frame count against the new
-        # stage's name. stage/message are only sent when actually set, so a
-        # partially-written status.json can't blank them.
-        fields = {k: v for k, v in (("stage", status.get("stage")), ("message", status.get("message")))
-                  if v is not None}
-        fields["progress"] = status.get("progress")
-        cancel = patch_job(job_id, **fields)
-        last_sent, last_patch_at = snapshot, time.monotonic()
-        if cancel and not cancel_sent:
-            _log(f"job {job_id}: cancel requested, stopping (pod terminated if any)")
-            cancel_job(job_dir)
-            cancel_sent = True
-
-    status = _read_status(job_dir)
-    stage = status.get("stage")
-    if stage == "done":
-        patch_job(job_id, done=True, stage="done", message="done", progress=None, result={
-            "share_id": status.get("share_id"),
-            "reel_bucket": status.get("reel_bucket"),
-            "reels": status.get("reels") or [],
-            "stats": status.get("stats"),
-        })
-    elif stage == "cancelled" or cancel_sent:
-        patch_job(job_id, cancelled=True, message="cancelled")
-    else:
-        patch_job(job_id, error=str(status.get("error") or status.get("message") or "job failed"))
-    return job_dir
+    # Nothing but a hung/crashed pod gets here: pod_driver.py reports its
+    # own terminal status (done/error/cancelled) and self-terminates
+    # before this deadline in every path its own exception handling can
+    # catch. This is the backstop for what it can't -- a host failure, an
+    # OOM kill, anything that takes the process out before its own
+    # `finally` runs -- so the job doesn't sit "running" forever and the
+    # pod doesn't keep billing for nothing.
+    _log(f"job {job_id}: pod {pod_id} exceeded {JOB_DEADLINE_SEC}s without finishing -- "
+         f"terminating and marking errored")
+    runpod_pod.terminate_pod(pod_id)
+    patch_job(job_id, error=f"job exceeded {JOB_DEADLINE_SEC // 60} minutes without finishing")
 
 
 def run_calibration_job(job):
@@ -239,9 +214,6 @@ def run_one(job):
         else:
             run_reel_job(job)
         _log(f"job {job['id']} finished")
-    except _Cancelled:
-        _log(f"job {job['id']} cancelled during download")
-        patch_job(job["id"], cancelled=True, message="cancelled")
     except Exception as e:  # noqa: BLE001 - report every failure back, then keep serving
         _log(f"job {job['id']} FAILED: {e}")
         try:

@@ -51,6 +51,7 @@ console is answered with whether the operator asked to cancel (same
 """
 import json
 import os
+import re
 import subprocess
 import sys
 import tempfile
@@ -72,6 +73,21 @@ WORKDIR = "/workspace/job"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 BURST_TARGET_SEC = 30.0  # matches pod_cut.py's own pin, same reasoning
+
+# pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min"
+# -- printed every 300 frames (~5s at typical throughput), same regex
+# run_cloud_job.py's SSH-streaming path already used.
+_PROGRESS_RE = re.compile(r"^\s*(\d+)/(\d+)\s+(\d+)\s*fps\s+ETA\s+([\d.]+)\s*min")
+
+# A status PATCH every 5s would be ~700 requests over a long session's
+# inference stage -- fine for the console, but no reason to be that
+# chatty. This also doubles as the heartbeat that keeps
+# claim_next_job's stale-runner rule from reclaiming a job mid-inference
+# (job.kind's PATCH route bumps updated_at on every call) -- inference on
+# a full session can run far longer than that staleness window, so
+# something has to report in periodically for its whole duration, not
+# just at stage boundaries.
+PROGRESS_PATCH_INTERVAL_SEC = 20
 
 CONSOLE_URL = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
 RUNNER_TOKEN = os.environ["RUNNER_TOKEN"]
@@ -119,8 +135,97 @@ class Cancelled(Exception):
 
 
 def _check_cancel(stage, message):
-    if patch_job(stage=stage, message=message, stage_started_at=time.time(), progress=None):
+    # progress=None deliberately included here (unlike the inference
+    # heartbeat below): this always marks a real stage change, and the
+    # console route only clears the old stage's progress reading when the
+    # field is present -- an omitted field would leave the previous
+    # stage's frame count showing against this stage's name.
+    if patch_job(stage=stage, message=message, progress=None):
         raise Cancelled()
+
+
+INFERENCE_TIMEOUT_SEC = 7200  # same ceiling run_cloud_job.py's ssh_run(infer_cmd) used
+
+
+def _run_inference_streaming(cmd):
+    """Runs pod_infer.py, patching the console with real progress every
+    PROGRESS_PATCH_INTERVAL_SEC -- not just at stage start/end. Without
+    this, inference (which can run far longer than the console's
+    stale-runner reclaim window) would report in exactly once before going
+    silent for the whole run, risking another runner claiming this job out
+    from under a pod that's still working on it, and leaving the progress
+    bar frozen the whole time. Also the one place a cancel mid-inference
+    actually has to kill a live process, not just stop before the next
+    stage -- inference is the single longest step by far.
+
+    A plain `for line in proc.stdout` blocks on the read syscall itself
+    with no timeout -- a stall with zero output (e.g. GPU init hanging
+    before the first progress line) would never trip a heartbeat, the
+    exact failure mode runpod_pod.py's ssh_run() already documented and
+    fixed with a reader thread + queue. Same fix here, so a heartbeat and
+    a cancel-check both still happen even if pod_infer.py goes quiet."""
+    import queue
+    import threading
+
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             text=True, bufsize=1)
+    line_q = queue.Queue()
+
+    def _read_lines():
+        try:
+            for line in proc.stdout:
+                line_q.put(line.rstrip("\n"))
+        finally:
+            line_q.put(None)
+
+    reader = threading.Thread(target=_read_lines, daemon=True)
+    reader.start()
+
+    deadline = time.time() + INFERENCE_TIMEOUT_SEC
+    last_patch_at = 0.0
+    try:
+        while True:
+            remaining = deadline - time.time()
+            if remaining <= 0:
+                proc.kill()
+                raise TimeoutError(f"inference exceeded {INFERENCE_TIMEOUT_SEC}s")
+            try:
+                line = line_q.get(timeout=min(remaining, PROGRESS_PATCH_INTERVAL_SEC))
+            except queue.Empty:
+                line = None  # no output this interval -- still due for a heartbeat below
+            else:
+                if line is None:  # sentinel: process's stdout closed, it's finished
+                    break
+                _log(line)
+
+            due = time.time() - last_patch_at >= PROGRESS_PATCH_INTERVAL_SEC
+            if not due:
+                continue
+            m = _PROGRESS_RE.match(line) if line else None
+            # Only include progress when this tick actually has a fresh
+            # value -- omitting the field (not sending progress=None) on a
+            # plain heartbeat leaves the console's last real reading in
+            # place instead of flickering it to blank every
+            # PROGRESS_PATCH_INTERVAL_SEC.
+            fields = {"stage": "inference"}
+            if m:
+                current, total, _fps, eta_min = m.groups()
+                fields["progress"] = {"current": int(current), "total": int(total), "eta_sec": float(eta_min) * 60.0}
+            cancel = patch_job(**fields)
+            last_patch_at = time.time()
+            if cancel:
+                proc.terminate()
+                proc.wait(timeout=10)
+                raise Cancelled()
+        returncode = proc.wait(timeout=max(0.0, deadline - time.time()))
+    finally:
+        if proc.stdout:
+            proc.stdout.close()
+        reader.join(timeout=5.0)
+        if proc.poll() is None:
+            proc.kill()
+    if returncode != 0:
+        raise subprocess.CalledProcessError(returncode, cmd)
 
 
 def _self_terminate(pod_id):
@@ -232,7 +337,7 @@ def run():
     infer_cmd = ["python3", os.path.join(REPO_ROOT, "scripts", "pod_infer.py"),
                  "--video", proxy_video, "--model", WEIGHTS_LOCAL,
                  "--output", csv_path, "--calib", calib_path]
-    subprocess.run(infer_cmd, check=True, cwd=WORKDIR)
+    _run_inference_streaming(infer_cmd)
 
     # --- Cut, same as pod_cut.py did over SSH -- called directly now,
     # same functions, no subprocess/SSH round trip needed for something

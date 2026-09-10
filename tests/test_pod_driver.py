@@ -102,3 +102,55 @@ def test_check_cancel_raises_when_the_console_says_stop(console_url):
 def test_check_cancel_is_silent_when_the_console_says_continue(console_url):
     console_url([(200, '{"cancelRequested": false}')])
     pod_driver._check_cancel("cut", "detecting rallies...")  # must not raise
+
+
+# --- _run_inference_streaming: the reader-thread/queue path added because a
+# plain `for line in proc.stdout` would block forever with no heartbeat if
+# pod_infer.py ever went quiet -- exercised against a REAL subprocess (a
+# tiny Python script standing in for pod_infer.py), not a mocked Popen,
+# since the whole point is proving the queue/timeout mechanics actually
+# work under a real process, not that a mock does what the mock says.
+
+_FAKE_INFER_SCRIPT = """
+import time
+print("Video: 900 frames @ 30.0 fps = 30.0s", flush=True)
+for i in range(1, 4):
+    time.sleep(0.05)
+    print(f"  {i * 300}/900  60 fps  ETA {(3 - i) * 0.1:.1f} min", flush=True)
+"""
+
+_HANGING_INFER_SCRIPT = """
+import time
+print("Video: 900 frames @ 30.0 fps = 30.0s", flush=True)
+time.sleep(30)  # simulates a stall with zero output -- must not block the reader
+"""
+
+
+def test_inference_streaming_reports_real_progress_from_a_real_subprocess(console_url, monkeypatch):
+    monkeypatch.setattr(pod_driver, "PROGRESS_PATCH_INTERVAL_SEC", 0)  # patch on every line for this test
+    seen = console_url([(200, '{"cancelRequested": false}')] * 10)
+    pod_driver._run_inference_streaming(["python3", "-c", _FAKE_INFER_SCRIPT])
+    progress_bodies = [s["body"] for s in seen if b'"progress"' in s["body"]]
+    assert len(progress_bodies) >= 1, "at least one real progress line should have been parsed and sent"
+    assert b'"current": 300' in progress_bodies[0] or b'"current":300' in progress_bodies[0]
+
+
+def test_inference_streaming_sends_a_heartbeat_even_with_no_output_yet(console_url, monkeypatch):
+    # The hanging script prints one line then goes silent for 30s -- if the
+    # reader thread/queue fix regressed back to a plain blocking readline,
+    # this test would itself hang instead of completing quickly.
+    monkeypatch.setattr(pod_driver, "PROGRESS_PATCH_INTERVAL_SEC", 0.2)
+    monkeypatch.setattr(pod_driver, "INFERENCE_TIMEOUT_SEC", 0.6)
+    console_url([(200, '{"cancelRequested": false}')] * 10)
+    with pytest.raises(TimeoutError):
+        pod_driver._run_inference_streaming(["python3", "-c", _HANGING_INFER_SCRIPT])
+
+
+def test_inference_streaming_kills_the_process_on_a_real_cancel(console_url, monkeypatch):
+    monkeypatch.setattr(pod_driver, "PROGRESS_PATCH_INTERVAL_SEC", 0)
+    # First heartbeat says continue, second says stop -- proves a
+    # mid-inference cancel actually reaches and kills the subprocess
+    # rather than only being checked between stages.
+    console_url([(200, '{"cancelRequested": false}'), (200, '{"cancelRequested": true}')] + [(200, '{"cancelRequested": false}')] * 8)
+    with pytest.raises(pod_driver.Cancelled):
+        pod_driver._run_inference_streaming(["python3", "-c", _FAKE_INFER_SCRIPT])

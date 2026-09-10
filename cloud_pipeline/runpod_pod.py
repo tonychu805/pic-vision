@@ -145,6 +145,17 @@ def create_selfdriving_pod(name, env, gpu_type_ids=None, image="tonychu805/pic-v
     raise RuntimeError(f"could not create self-driving pod on any GPU type: {last_error}")
 
 
+def pod_exists(pod_id):
+    """False once a pod is gone -- confirmed 2026-09-10 against a real
+    terminated pod: RunPod returns a plain 404 ('pod not found'), same as
+    an id that never existed, not some other terminal-but-still-listed
+    state. That's what create_selfdriving_pod()'s caller polls to learn a
+    self-driving pod (which self-terminates when it finishes, no SSH
+    connection to watch) is done."""
+    r = requests.get(f"{API_BASE}/pods/{pod_id}", headers=_headers(), timeout=15)
+    return r.status_code == 200
+
+
 def wait_for_ssh(pod_id, timeout_sec=180, poll_sec=5):
     """Poll until the pod has a public IP and SSH port mapping. Returns
     (ip, port)."""
