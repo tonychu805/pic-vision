@@ -72,6 +72,20 @@ TERMINAL_STAGES = ("done", "error", "cancelled")
 POD_POLL_SEC = 15
 JOB_DEADLINE_SEC = 3 * 3600
 
+# ADR-101 documented a real, previously-unexplained RunPod failure mode:
+# a pod that gets created but never reports any progress at all -- stuck
+# retrying its own container start on a bad host, confirmed there via
+# manual observation (repeated "start container: begin" with no further
+# output), root cause never identified. Every real successful cold start
+# measured for this same image landed under ~160s; 8 minutes is generous
+# margin above that and comfortably under claim_next_job's own 15-minute
+# stale-'running' reclaim window, so this fires well before that RPC
+# could reclaim the same job out from under this still-live wait loop.
+# This does not explain *why* a pod gets stuck -- nothing here can, since
+# the container never runs any of this project's own code -- it only
+# stops the operator from waiting up to JOB_DEADLINE_SEC to find out.
+FIRST_CHECKIN_TIMEOUT_SEC = 8 * 60
+
 
 def _log(msg):
     print(f"[runner {time.strftime('%H:%M:%S')}] {msg}", flush=True)
@@ -102,6 +116,20 @@ def patch_job(job_id, **fields):
         return True
     r.raise_for_status()
     return bool(r.json().get("cancelRequested"))
+
+
+def get_job_updated_at(job_id):
+    """Best-effort read of a job's current updated_at -- None on any
+    failure (network hiccup, 404), so a transient read error is never
+    mistaken for "no progress" the way a genuinely stuck pod would be;
+    the caller only acts once this returns the same value repeatedly
+    across a real time window, not on a single failed read."""
+    try:
+        r = requests.get(f"{CONSOLE_URL}/api/runner/jobs/{job_id}", headers=_headers(), timeout=30)
+        r.raise_for_status()
+        return r.json().get("updated_at")
+    except Exception:  # noqa: BLE001 - a failed status check must not crash the wait loop
+        return None
 
 
 # pod_driver.py's own dependency closure -- same explicit-file-list
@@ -176,6 +204,15 @@ def run_reel_job(job):
         "RUNPOD_API_KEY": os.environ["RUNPOD_API_KEY"],
     }
 
+    # Captured before pod creation, from the row's own state as of the
+    # claim (claim_next_job's own UPDATE sets updated_at=now() as part of
+    # claiming it) -- the baseline the first-checkin check below compares
+    # against. Nothing in this wait loop itself ever PATCHes the job, so
+    # any change at all can only mean pod_driver.py actually started and
+    # ran its own first _check_cancel() call.
+    baseline_updated_at = job.get("updated_at")
+    first_checkin_seen = False
+
     _log(f"job {job_id}: creating self-driving pod...")
     pod_id, gpu_type = runpod_pod.create_selfdriving_pod(
         name=f"cloud-pipeline-{env['SESSION_ID']}", env=env,
@@ -183,9 +220,40 @@ def run_reel_job(job):
     _log(f"job {job_id}: pod {pod_id} created ({gpu_type}), waiting for it to finish "
          f"(it reports its own progress to the console from here)")
 
+    pod_created_at = time.monotonic()
     deadline = time.monotonic() + JOB_DEADLINE_SEC
     while time.monotonic() < deadline:
         time.sleep(POD_POLL_SEC)
+
+        if not first_checkin_seen:
+            current_updated_at = get_job_updated_at(job_id)
+            # None means this particular check failed (network hiccup,
+            # console blip) -- inconclusive, not evidence of a stuck pod,
+            # so it's left to the next poll rather than counted toward
+            # the timeout below. Only a CONFIRMED read showing no change
+            # counts.
+            if current_updated_at is not None and current_updated_at != baseline_updated_at:
+                first_checkin_seen = True
+            elif current_updated_at is not None and \
+                    time.monotonic() - pod_created_at > FIRST_CHECKIN_TIMEOUT_SEC:
+                # No progress signal at all, well past every successful
+                # cold start measured for this image (ADR-101: ~160s
+                # worst case) -- the known "stuck at container start"
+                # pattern, not a job that's just running slowly. Fails
+                # fast rather than waiting out JOB_DEADLINE_SEC; does not
+                # auto-retry, matching the deadline path below -- a human
+                # decides whether to try again, same as every other
+                # reel-job failure.
+                _log(f"job {job_id}: pod {pod_id} reported no progress within "
+                     f"{FIRST_CHECKIN_TIMEOUT_SEC}s of being created -- likely "
+                     f"stuck at container start (ADR-101), terminating")
+                runpod_pod.terminate_pod(pod_id)
+                patch_job(job_id, error=(
+                    f"pod reported no progress within {FIRST_CHECKIN_TIMEOUT_SEC // 60} "
+                    "minutes of being created -- terminated as a likely stuck "
+                    "container start (see DECISIONS.md ADR-101); click Retry"))
+                return
+
         if not runpod_pod.pod_exists(pod_id):
             # A pod that disappeared having genuinely finished already put
             # the job into a terminal state (done/error/cancelled) via its
