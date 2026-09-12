@@ -1,0 +1,26 @@
+# Companion to pic-vision-runner.service (ADR-084/101): restarts the
+# runner automatically whenever cloud_pipeline/ changes on disk, instead
+# of relying on someone remembering to `systemctl restart` after a
+# `git pull` -- the gap that let this service run stale code for two full
+# days (2026-09-10 to 2026-09-12) with nobody noticing, including through
+# the exact incident (ADR-101's fast-fail detection) this fix was built
+# to catch.
+#
+# Only watches cloud_pipeline/ -- job_runner.py's own process never
+# imports src/ or scripts/ directly at module load time (those are read
+# fresh off disk into the pod's deps tarball per job, not imported here),
+# so a change there doesn't need this process restarted.
+#
+# Install alongside the .service file:
+#   sudo cp cloud_pipeline/pic-vision-runner.path cloud_pipeline/pic-vision-runner-restart.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now pic-vision-runner.path
+[Unit]
+Description=Watch cloud_pipeline/ and restart pic-vision-runner.service on change
+
+[Path]
+PathModified=/home/tonychu/repository/pic-vision/cloud_pipeline
+Unit=pic-vision-runner-restart.service
+
+[Install]
+WantedBy=multi-user.target

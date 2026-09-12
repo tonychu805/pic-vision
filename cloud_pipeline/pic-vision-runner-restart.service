@@ -1,0 +1,12 @@
+# Triggered by pic-vision-runner.path -- restarts the actual runner
+# service. Not meant to be started directly. A file-change burst (e.g. a
+# `git pull` touching several files in cloud_pipeline/ at once) can queue
+# more than one restart in quick succession -- harmless, since restarting
+# an already-stopped-or-idle runner is idempotent, just a few redundant
+# seconds.
+[Unit]
+Description=Restart pic-vision-runner.service (triggered by pic-vision-runner.path)
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/systemctl restart pic-vision-runner.service

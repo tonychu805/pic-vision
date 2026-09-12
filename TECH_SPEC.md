@@ -695,6 +695,13 @@ pic-vision/
 │   │                                # if a pod vanishes for ANY reason without reporting a
 │   │                                # terminal status first). See pic-vision-runner.service
 │   ├── pic-vision-runner.service     # systemd unit for the above (Restart=always)
+│   ├── pic-vision-runner.path         # ADR-101 (2026-09-12): watches cloud_pipeline/ and
+│   │                                    # restarts the runner service on change -- a
+│   │                                    # job_runner.py fix sat live-but-unused for 2 days
+│   │                                    # because the running process never restarted after
+│   │                                    # `git pull`; closes that gap instead of relying on
+│   │                                    # remembering to restart by hand
+│   ├── pic-vision-runner-restart.service  # oneshot unit the .path file above triggers
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
 │   │                                    # generate_presigned_url, ADR-074) -- also
 │   │                                    # what upload_calibration_snapshot.py's
