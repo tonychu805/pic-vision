@@ -59,6 +59,7 @@ import subprocess
 import sys
 import tempfile
 import time
+import uuid
 
 import boto3
 import requests
@@ -69,6 +70,7 @@ sys.path.insert(0, REPO_ROOT)
 from scripts.check_drift import measure as drift_measure  # noqa: E402
 from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
+from scripts.top_rallies_reel import build_top_rallies  # noqa: E402
 from src.drift import drift_span, find_bumps  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
@@ -76,6 +78,7 @@ WORKDIR = "/workspace/job"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 BURST_TARGET_SEC = 30.0  # matches pod_cut.py's own pin, same reasoning
+TOP_RALLIES_N = 10  # matches pod_cut.py's own pin, operator request 2026-09-12
 
 # pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min"
 # -- printed every 300 frames (~5s at typical throughput), same regex
@@ -264,7 +267,7 @@ def run():
 
     segment_keys = json.loads(os.environ["SEGMENT_KEYS_JSON"])
     calib = json.loads(os.environ["CALIB_JSON"])
-    target_sec = float(os.environ.get("TARGET_SEC", "300"))
+    target_sec = float(os.environ.get("TARGET_SEC", "180"))
     session_id = os.environ.get("SESSION_ID", JOB_ID)
 
     calib_path = os.path.join(WORKDIR, "calib.json")
@@ -369,14 +372,30 @@ def run():
     burst_result = build_burst_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "burst"),
                                      BURST_TARGET_SEC, session_id)
     has_burst = burst_result["chronological"] is not None
-    stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None}
+    top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
+                                    session_id, n=TOP_RALLIES_N)
+    stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
+             "top_rallies": top_result["stats"]}
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
     burst_reel_id = os.environ.get("BURST_REEL_ID")
     ranked_key = f"reels/{reel_id}.mp4"
     s3.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), BUCKET, ranked_key)
-    reels = [{"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]}]
+    reels = []
+    # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
+    # pre-minted by job_runner.py before this pod even started), the count
+    # here is only known now, so each clip mints its own id at upload time.
+    for clip in top_result["manifest"]:
+        clip_reel_id = str(uuid.uuid4())
+        clip_key = f"reels/{clip_reel_id}.mp4"
+        s3.upload_file(os.path.join(reel_dir, "top", clip["file"]), BUCKET, clip_key)
+        reels.append({
+            "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
+            "rank": clip["rank"],
+            "stats": {"total_duration_sec": clip["duration"], "n_chosen": 1},
+        })
+    reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
         burst_key = f"reels/{burst_reel_id}.mp4"
         s3.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), BUCKET, burst_key)

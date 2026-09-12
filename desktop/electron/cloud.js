@@ -534,7 +534,7 @@ function sendRecordingToCloud(camera, recordingDir) {
   runCloudJob({
     recordingDir,
     videoPath: camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined,
-    targetSec: 300,
+    targetSec: 180,
     sessionId,
     cameraId: camera.id,
     cameraLabel: camera.label,

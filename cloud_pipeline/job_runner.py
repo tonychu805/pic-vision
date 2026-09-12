@@ -115,7 +115,8 @@ POD_DEPS_FILES = [
     "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
     "src/drift.py", "src/video_quality.py",
     "scripts/check_drift.py", "scripts/rank_and_reel.py",
-    "scripts/burst_moment_reel.py", "scripts/pod_infer.py",
+    "scripts/burst_moment_reel.py", "scripts/top_rallies_reel.py",
+    "scripts/pod_infer.py",
 ]
 POD_DEPS_KEY = "pipeline/pod_deps.tar"
 
@@ -162,7 +163,7 @@ def run_reel_job(job):
         "BOOTSTRAP_URL": bootstrap_url,
         "SEGMENT_KEYS_JSON": json.dumps(segment_keys),
         "CALIB_JSON": json.dumps(job["calib"]),
-        "TARGET_SEC": str(job.get("target_sec") or 300),
+        "TARGET_SEC": str(job.get("target_sec") or 180),
         "SESSION_ID": job.get("session_id") or job_id,
         "REEL_ID": str(uuid.uuid4()),
         "BURST_REEL_ID": str(uuid.uuid4()),

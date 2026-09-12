@@ -644,20 +644,30 @@ pic-vision/
 │   │                                # mp4(s) + a small stats.json come back (ranked only per
 │   │                                # reel, no chronological version at all -- same-day
 │   │                                # operator request, build_reel()'s include_chronological=
-│   │                                # False). ADR-076 (same day): mints THREE uuids now, not
-│   │                                # one -- reel_id (full), burst_reel_id, and share_id (the
-│   │                                # public grouping id both reels are reported under, see
-│   │                                # pod_cut.py/run_desktop_job.py below)
-│   ├── pod_cut.py                     # ADR-074, extended ADR-076 (2026-09-04): runs ON the pod
-│   │                                # right after inference -- thin wrapper around BOTH
+│   │                                # False). ADR-076 (2026-09-04): mints THREE uuids up
+│   │                                # front -- reel_id (full), burst_reel_id, and share_id (the
+│   │                                # public grouping id every reel is reported under, see
+│   │                                # pod_cut.py/run_desktop_job.py below). ADR-102
+│   │                                # (2026-09-12): a variable-count fourth product (up to 10
+│   │                                # individual top-rally clips) can't be pre-minted this way
+│   │                                # -- each gets its own id, minted here once stats.json comes
+│   │                                # back and its actual count is known
+│   ├── pod_cut.py                     # ADR-074, extended ADR-076 (2026-09-04) and ADR-102
+│   │                                # (2026-09-12): runs ON the pod right after inference --
+│   │                                # thin wrapper around THREE independent scripts:
 │   │                                # scripts/rank_and_reel.py's build_reel() (full rally,
-│   │                                # reel/full/) and scripts/burst_moment_reel.py's
-│   │                                # build_burst_reel() (each rally's peak-intensity moment
-│   │                                # only, "quick hits", reel/burst/, fixed 30s target --
-│   │                                # burst clips are ~5s each, the caller's own --target-sec
-│   │                                # is a full-reel number). stats.json is now
-│   │                                # {"full": {...}, "burst": {...}|null} -- null when
-│   │                                # burst's own candidate pool comes up empty. Deployed via a
+│   │                                # reel/full/, now a 3-minute default target, down from 5),
+│   │                                # scripts/burst_moment_reel.py's build_burst_reel() (each
+│   │                                # rally's peak-intensity moment only, "quick hits",
+│   │                                # reel/burst/, fixed 30s target -- burst clips are ~5s
+│   │                                # each, the caller's own --target-sec is a full-reel
+│   │                                # number), and scripts/top_rallies_reel.py's
+│   │                                # build_top_rallies() (top 10 ranked rallies, each its own
+│   │                                # un-concatenated clip, reel/top/). stats.json is now
+│   │                                # {"full": {...}, "burst": {...}|null,
+│   │                                # "top_rallies": [{...}]} -- burst is null (not the same as
+│   │                                # top_rallies' empty list) when its own candidate pool
+│   │                                # comes up empty. Deployed via a
 │   │                                # small tarball (run_cloud_job.py's POD_REEL_DEPS) since
 │   │                                # the pod has no other way to get src/'s modules
 │   ├── run_desktop_job.py            # PIC-68: CLI wrapper originally spawned by desktop/'s
@@ -1685,6 +1695,12 @@ pic-vision/
 │   │                                      # peak_window), not the whole rally -- "quick hits".
 │   │                                      # Was dev-only until this ADR; build_burst_reel() is
 │   │                                      # now also called by cloud_pipeline/pod_cut.py
+│   ├── top_rallies_reel.py                 # ADR-102 (2026-09-12): cuts the top N (default
+│   │                                      # 10) ranked rallies into their own un-concatenated
+│   │                                      # clips -- same ranking/weights as rank_and_reel.py's
+│   │                                      # build_reel(), just delivered as separate files
+│   │                                      # instead of one reel. build_top_rallies() is called
+│   │                                      # by cloud_pipeline/pod_cut.py and pod_driver.py
 │   ├── rank_and_reel_split.py             # same, for a session whose calibration is only
 │   │                                      # valid in pieces (e.g. IMG_7743's camera bump)
 │   ├── validate_ranking.py                 # checks rank_segments' score against real

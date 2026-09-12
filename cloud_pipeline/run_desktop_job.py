@@ -66,6 +66,7 @@ def _report_reels(console_url, api_token, session_id, camera_id, camera_label, s
                     "rankedKey": reel["key"],
                     "durationSec": (reel.get("stats") or {}).get("total_duration_sec"),
                     "rallyCount": (reel.get("stats") or {}).get("n_chosen"),
+                    "rank": reel.get("rank"),
                 },
                 timeout=30,
             )
@@ -85,7 +86,7 @@ def main():
     p = argparse.ArgumentParser(description="Run one cloud-pipeline job for the desktop agent")
     p.add_argument("--video", required=True)
     p.add_argument("--calib", required=True)
-    p.add_argument("--target-sec", type=float, default=300.0)
+    p.add_argument("--target-sec", type=float, default=180.0)
     p.add_argument("--session-id", required=True)
     p.add_argument("--out-dir", required=True)
     p.add_argument("--camera-id", default=None)

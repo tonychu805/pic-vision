@@ -202,7 +202,7 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
       sessionId,
       cameraId,
       cameraLabel,
-      targetSec: targetSec || 300,
+      targetSec: targetSec || 180,
       files: files.map((f) => ({ name: path.basename(f), sizeBytes: statSync(f).size })),
     },
   });
