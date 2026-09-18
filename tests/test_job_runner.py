@@ -189,8 +189,9 @@ def test_a_pod_with_no_first_checkin_is_terminated_fast_rather_than_waiting_for_
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)  # must not be what fires here
+    created = []
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
-                        lambda **kw: ("pod-1", "gpu"))
+                        lambda **kw: created.append(kw["image"]) or ("pod-1", "gpu"))
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: True)
     # Same value every read -- confirms the row is genuinely unchanged,
     # not just "we couldn't tell this time".
@@ -203,12 +204,83 @@ def test_a_pod_with_no_first_checkin_is_terminated_fast_rather_than_waiting_for_
     job = {**JOB, "updated_at": "2026-01-01T00:00:00Z"}
     job_runner.run_reel_job(job)  # must not raise
 
-    assert terminated == ["pod-1"]
+    # Every attempt's pod is killed -- a stuck container still bills.
+    assert terminated == ["pod-1", "pod-1"]
+    # ...and the second one uses the backup image (2026-09-18), so a
+    # missing or broken primary tag is survivable without a code change.
+    assert created == job_runner.runpod_pod.POD_IMAGES
+    # One error, reported only once both attempts are spent: a job that
+    # would have succeeded on the retry must never flash an error at the
+    # venue on its way there.
     assert len(patched) == 1
     reported_job_id, fields = patched[0]
     assert reported_job_id == "job-1"
     assert "error" in fields
     assert "no progress" in fields["error"] and "ADR-101" in fields["error"]
+
+
+def test_a_stuck_first_attempt_is_rescued_by_the_retry(monkeypatch):
+    # The case worth having: the first pod never checks in, the second
+    # one does and finishes normally. The venue gets its reel and never
+    # hears about any of it.
+    _no_real_r2_upload(monkeypatch)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    created = []
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: created.append(kw["image"]) or (f"pod-{len(created)}", "gpu"))
+    # The first pod stays put and silent; the second reports in, then
+    # disappears the way a finished pod does.
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: pod_id == "pod-1")
+    reads = {"n": 0}
+
+    def updated_at(job_id):
+        reads["n"] += 1
+        # Unchanged while pod-1 is up; moves once pod-2 exists.
+        return "2026-01-01T00:00:00Z" if len(created) < 2 else "2026-01-01T00:05:00Z"
+
+    monkeypatch.setattr(job_runner, "get_job_updated_at", updated_at)
+    monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: None)
+    patched = []
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields))
+
+    job_runner.run_reel_job({**JOB, "updated_at": "2026-01-01T00:00:00Z"})
+
+    assert created == job_runner.runpod_pod.POD_IMAGES, "should have moved on to the backup image"
+    # The rescued attempt ends the ordinary way -- the pod vanishes, and
+    # this loop sends its usual "disappeared" line, which the console drops
+    # with a 409 when the pod has already reported done itself. What must
+    # NOT appear is the stuck-container error: the first attempt's failure
+    # is the retry's business, not the venue's.
+    assert not any("ADR-101" in (f.get("error") or "") for f in patched), \
+        f"a rescued job must not report the stuck-container failure: {patched}"
+
+
+def test_a_pod_that_checks_in_is_never_retried(monkeypatch):
+    # The other half: a working job must not create a second pod. Getting
+    # this wrong would double the GPU bill on every successful run.
+    _no_real_r2_upload(monkeypatch)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 5)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    created = []
+    calls = {"exists": 0}
+
+    def pod_exists(pod_id):
+        calls["exists"] += 1
+        return calls["exists"] < 3  # finishes on the third poll
+
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: created.append(kw["image"]) or ("pod-1", "gpu"))
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", pod_exists)
+    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: "2026-01-01T00:05:00Z")
+    monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: None)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: None)
+
+    job_runner.run_reel_job({**JOB, "updated_at": "2026-01-01T00:00:00Z"})
+
+    assert created == [job_runner.runpod_pod.POD_IMAGES[0]], "one pod, on the primary image"
 
 
 def test_a_pod_that_checks_in_is_not_mistaken_for_stuck(monkeypatch):

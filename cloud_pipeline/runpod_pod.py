@@ -140,8 +140,25 @@ _BOOTSTRAP_CMD = (
 )
 
 
+# The image RunPod has actually been observed to start, and a byte-identical
+# copy of it under a second tag (pushed 2026-09-18, same digest confirmed).
+#
+# Two different failures share one remedy here. A tag that goes missing
+# leaves every job failing at container start with nothing to fall back to,
+# since ADR-101's investigation means a REBUILT image is not a safe
+# substitute -- only this exact one is proven. And the unexplained
+# container-start hang ADR-101 gave up on looks identical from outside: pod
+# created, nothing ever checks in. job_runner.py retries a stuck attempt
+# once on the second entry here, which clears the first case (the tag is
+# gone) and, being a fresh pod, usually clears the second too.
+POD_IMAGES = [
+    "tonychu805/pic-vision-tracknet:tf215-cuda118",
+    "tonychu805/pic-vision-tracknet:tf215-cuda118-known-good-20260918",
+]
+
+
 def create_selfdriving_pod(name, env, gpu_type_ids=None,
-                            image="tonychu805/pic-vision-tracknet:tf215-cuda118",
+                            image=POD_IMAGES[0],
                             container_disk_gb=20):
     """ADR-093: a pod that runs cloud_pipeline/pod_driver.py as its own
     entrypoint and reports progress to the console over HTTPS -- no SSH

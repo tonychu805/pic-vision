@@ -211,17 +211,50 @@ def run_reel_job(job):
     # any change at all can only mean pod_driver.py actually started and
     # ran its own first _check_cancel() call.
     baseline_updated_at = job.get("updated_at")
+
+    # One deadline for the whole job, not per attempt -- a retry must not
+    # be able to double how long a venue waits, or how long a GPU can bill.
+    deadline = time.monotonic() + JOB_DEADLINE_SEC
+
+    for attempt, image in enumerate(runpod_pod.POD_IMAGES, start=1):
+        outcome = _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
+        if outcome != "no_checkin":
+            return
+        if attempt < len(runpod_pod.POD_IMAGES) and time.monotonic() < deadline:
+            # A stuck attempt is the one failure worth retrying by itself:
+            # it means the container never ran a line of our code, so
+            # nothing has been half-done and nothing has been uploaded.
+            # The second attempt uses the backup image, which covers both
+            # shapes of this failure at once -- see runpod_pod.POD_IMAGES.
+            _log(f"job {job_id}: retrying once on the backup image")
+            continue
+        patch_job(job_id, error=(
+            f"pod reported no progress within {FIRST_CHECKIN_TIMEOUT_SEC // 60} minutes "
+            f"of being created, on {attempt} attempt{'s' if attempt != 1 else ''} "
+            "-- terminated as a likely stuck container start (see DECISIONS.md ADR-101)"))
+        return
+
+
+def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt):
+    """One pod, start to finish. Returns:
+
+      "finished"   the pod is gone; the job has already been reported on
+                   (by the pod itself, or by this function)
+      "no_checkin" the pod never reported anything at all -- terminated
+                   here, job NOT yet marked errored, caller decides
+                   whether to try again
+      "deadline"   the whole job's deadline passed; terminated and errored
+    """
     first_checkin_seen = False
 
-    _log(f"job {job_id}: creating self-driving pod...")
+    _log(f"job {job_id}: creating self-driving pod (attempt {attempt}, {image})...")
     pod_id, gpu_type = runpod_pod.create_selfdriving_pod(
-        name=f"cloud-pipeline-{env['SESSION_ID']}", env=env,
+        name=f"cloud-pipeline-{env['SESSION_ID']}", env=env, image=image,
         gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
     _log(f"job {job_id}: pod {pod_id} created ({gpu_type}), waiting for it to finish "
          f"(it reports its own progress to the console from here)")
 
     pod_created_at = time.monotonic()
-    deadline = time.monotonic() + JOB_DEADLINE_SEC
     while time.monotonic() < deadline:
         time.sleep(POD_POLL_SEC)
 
@@ -248,11 +281,11 @@ def run_reel_job(job):
                      f"{FIRST_CHECKIN_TIMEOUT_SEC}s of being created -- likely "
                      f"stuck at container start (ADR-101), terminating")
                 runpod_pod.terminate_pod(pod_id)
-                patch_job(job_id, error=(
-                    f"pod reported no progress within {FIRST_CHECKIN_TIMEOUT_SEC // 60} "
-                    "minutes of being created -- terminated as a likely stuck "
-                    "container start (see DECISIONS.md ADR-101); click Retry"))
-                return
+                # Deliberately not reported to the console yet: the caller
+                # may still get this job done on another image, and a job
+                # that ends up succeeding should never have flashed an
+                # error at the venue on its way there.
+                return "no_checkin"
 
         if not runpod_pod.pod_exists(pod_id):
             # A pod that disappeared having genuinely finished already put
@@ -270,7 +303,7 @@ def run_reel_job(job):
             # silently never finishes.
             patch_job(job_id, error="pod disappeared without reporting a final status")
             _log(f"job {job_id}: pod {pod_id} finished")
-            return
+            return "finished"
 
     # Nothing but a hung/crashed pod gets here: pod_driver.py reports its
     # own terminal status (done/error/cancelled) and self-terminates
@@ -283,6 +316,7 @@ def run_reel_job(job):
          f"terminating and marking errored")
     runpod_pod.terminate_pod(pod_id)
     patch_job(job_id, error=f"job exceeded {JOB_DEADLINE_SEC // 60} minutes without finishing")
+    return "deadline"
 
 
 def run_calibration_job(job):
