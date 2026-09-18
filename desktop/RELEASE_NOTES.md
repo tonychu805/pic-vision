@@ -1,6 +1,6 @@
 # Release notes
 
-## Unreleased
+## 1.4.0 — 2026-09-18
 
 - **A wrong IP address now says so.** After a failed manual add, the app used
   to suggest the camera might have ONVIF switched off — unhelpful when
