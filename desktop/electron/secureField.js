@@ -13,6 +13,7 @@
 // everything in plaintext, so "no worse than before" is the floor here,
 // not a regression to guard against.
 import { safeStorage } from "electron";
+import { logEvent } from "./activityLog.js";
 
 export const PREFIX = "enc:v1:";
 
@@ -23,9 +24,40 @@ export function isEncrypted(value) {
   return typeof value === "string" && value.startsWith(PREFIX);
 }
 
+// Was silent -- encryptField() previously just returned the plaintext
+// value with no signal anywhere (PIC-146, security audit 2026-09-10:
+// "worth explicitly deciding whether that's still the right call, or
+// whether it should warn the operator instead of failing silently").
+// The fallback ITSELF is still the right call, unchanged: there is no
+// other place to put a camera password on a box with no vault, and this
+// app already shipped a while with everything in plaintext, so "no worse
+// than before" is still the honest floor. What was wrong was that an
+// operator on an affected machine -- a headless or minimal Linux box with
+// no keyring daemon running, the one real case this was written for --
+// had no way to know their camera passwords and API tokens are sitting in
+// plain JSON, ever.
+//
+// encryptField is called on nearly every save (a camera add, a session
+// refresh, a heartbeat-driven rename) -- logging every call on an affected
+// machine would flood the Log tab and bury everything else in it. Logged
+// once per launch instead, the same "state change, not every poll" idiom
+// cloud.js's own lastHeartbeatOk already uses for the heartbeat's
+// connected/disconnected line.
+let warnedThisLaunch = false;
+
 export function encryptField(value) {
   if (value == null) return value;
-  if (!safeStorage.isEncryptionAvailable()) return value;
+  if (!safeStorage.isEncryptionAvailable()) {
+    if (!warnedThisLaunch) {
+      warnedThisLaunch = true;
+      logEvent(
+        "secure_storage_unavailable",
+        "This machine's secure storage isn't available -- saved passwords and tokens are not encrypted",
+        "safeStorage.isEncryptionAvailable() returned false (no OS keyring/Secret Service running is common on a headless or minimal Linux box)",
+      );
+    }
+    return value;
+  }
   return PREFIX + safeStorage.encryptString(value).toString("base64");
 }
 
