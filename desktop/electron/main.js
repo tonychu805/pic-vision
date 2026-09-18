@@ -29,7 +29,7 @@ import { identitiesForIps } from "./cameras/vendorLookup.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -380,6 +380,12 @@ function registerCloudHandlers() {
   });
   ipcMain.handle("cloud:setAgentName", async (_event, name) => {
     return setAgentName(name);
+  });
+  // The other machines at this venue, by name -- so the rename field can
+  // warn before two of them end up called the same thing. Comes from the
+  // heartbeat response, so it's empty until the first one lands.
+  ipcMain.handle("cloud:getOtherAgentNames", async () => {
+    return getOtherAgentNames();
   });
   ipcMain.handle("cloud:getDeviceId", async () => {
     return getOrCreateDeviceId();
