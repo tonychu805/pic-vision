@@ -19,6 +19,7 @@ import {
   addCameraViaRtsp,
   parseRtspUrl,
   addCameraFromSampleClip,
+  migrateRecordingDirsToCameraIds,
 } from "./cameras/store.js";
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
@@ -28,7 +29,7 @@ import { identitiesForIps } from "./cameras/vendorLookup.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -380,6 +381,12 @@ function registerCloudHandlers() {
   ipcMain.handle("cloud:setAgentName", async (_event, name) => {
     return setAgentName(name);
   });
+  // The other machines at this venue, by name -- so the rename field can
+  // warn before two of them end up called the same thing. Comes from the
+  // heartbeat response, so it's empty until the first one lands.
+  ipcMain.handle("cloud:getOtherAgentNames", async () => {
+    return getOtherAgentNames();
+  });
   ipcMain.handle("cloud:getDeviceId", async () => {
     return getOrCreateDeviceId();
   });
@@ -544,6 +551,10 @@ app.whenReady().then(() => {
   // and re-encrypts anything a pre-ADR-082 version left in plaintext.
   // Both were real on 2026-09-07 -- see storeFiles.js.
   secureStoreFiles();
+  // Before anything lists or writes a recording: moves directories created
+  // under the old label-named layout to their camera's id (capture.js's
+  // cameraRecordingsDir). A no-op on every launch after the first.
+  migrateRecordingDirsToCameraIds();
   registerCameraHandlers();
   registerScanSettingsHandlers();
   registerCaptureHandlers();

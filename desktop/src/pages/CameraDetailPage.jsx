@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 import { cardVisuals, detailPanels, frameRateSummary } from "../lib/cameraView.js";
 
 function formatElapsed(startedAt) {
@@ -80,7 +81,7 @@ function LiveViewButton({ camera }) {
       const { url: liveUrl } = await window.liveViewAPI.start(camera.id);
       setUrl(liveUrl);
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setStarting(false);
   };
@@ -290,7 +291,7 @@ function CloudJobRow({ camera, recording }) {
       await window.pipelineAPI.run({ cameraId: camera.id, recordingDir: recording.dir });
       setStatus(await window.pipelineAPI.statusForRecording(recording.dir));
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setStarting(false);
   };
@@ -347,8 +348,38 @@ function CloudJobRow({ camera, recording }) {
 function CloudPipelineControl({ camera, onCameraUpdated }) {
   const [recordings, setRecordings] = useState([]);
 
-  const refresh = () => window.captureAPI.listRecordings(camera.id).then(setRecordings);
+  // Calibration state isn't local: it arrives from the console on the
+  // agent's heartbeat (cloud.js's calibrationByCameraId), and cameras:list
+  // merges whatever has arrived so far. On a fresh launch the renderer reads
+  // that list *before* the first heartbeat answers, so every camera looks
+  // uncalibrated -- and a camera opened in that window showed "Not
+  // calibrated" with the button below stuck on a disabled "Calibrate first",
+  // for a camera the console had calibrated days earlier (UAT, 2026-09-18).
+  // Only navigating back to the list fixed it, because that remounts and
+  // re-reads. Re-read here instead, and lift the corrected record so the
+  // button sees it too.
+  const syncCalibration = async () => {
+    const fresh = (await window.cameraAPI.list()).find((c) => c.id === camera.id);
+    if (!fresh) return; // removed elsewhere -- onCameraRemoved handles that path
+    if (fresh.isCalibrated !== camera.isCalibrated || fresh.calibrationRmseFt !== camera.calibrationRmseFt) {
+      onCameraUpdated?.(fresh);
+    }
+  };
+
+  const refresh = () => {
+    // Refresh sits directly above the calibration line, so it has to mean
+    // "re-read everything in this card", not just the recordings list.
+    syncCalibration();
+    return window.captureAPI.listRecordings(camera.id).then(setRecordings);
+  };
   useEffect(() => { refresh(); }, [camera.id]);
+
+  // One heartbeat is 30s, so a slower cadence than the 2s job poll is
+  // enough; this only has to correct itself once, shortly after launch.
+  useEffect(() => {
+    const interval = setInterval(syncCalibration, 5000);
+    return () => clearInterval(interval);
+  }, [camera.id, camera.isCalibrated, camera.calibrationRmseFt]);
 
   return (
     <div className="card" style={{ marginTop: 14 }}>

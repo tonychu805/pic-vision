@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
@@ -128,8 +129,11 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
   const [deviceId, setDeviceId] = useState("");
   const [signingOut, setSigningOut] = useState(false);
   const [confirmingRemove, setConfirmingRemove] = useState(false);
+  // This venue's other machines, by name, from the last heartbeat. Only
+  // used for the warning below.
+  const [otherAgentNames, setOtherAgentNames] = useState([]);
 
-  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(err.message));
+  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(cleanIpcError(err)));
   useEffect(() => {
     if (!CLOUD_API_MISSING) {
       refresh();
@@ -138,10 +142,21 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
         setSavedName(name);
       });
       window.cloudAPI.getDeviceId().then(setDeviceId);
+      // Optional-chained: an older preload (a renderer reload without a
+      // full relaunch) won't have this call, and a missing warning must not
+      // take the rest of the page down with it.
+      window.cloudAPI.getOtherAgentNames?.().then(setOtherAgentNames).catch(() => {});
     }
     // Re-reads when the connection is replaced elsewhere in the app --
     // the account-mismatch dialog moving this machine to another venue.
   }, [connectionEpoch]);
+
+  // Compared the way a person reads it -- trimmed and case-insensitive.
+  // "Front desk" and "front desk " are the same machine to everyone except
+  // a string comparison.
+  const typedName = agentName.trim().toLowerCase();
+  const nameClashesWithAnotherMachine =
+    typedName.length > 0 && otherAgentNames.some((n) => String(n).trim().toLowerCase() === typedName);
 
   const saveAgentName = async () => {
     const trimmed = agentName.trim();
@@ -152,7 +167,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setAgentNameField(saved);
       setSavedName(saved);
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setSavingName(false);
   };
@@ -165,7 +180,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(conn);
       onConnectionChanged?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setRegistering(false);
   };
@@ -176,7 +191,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(null);
       onConnectionChanged?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
   };
 
@@ -186,7 +201,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       await window.authAPI.signOut();
       onSignedOut?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
       setSigningOut(false);
     }
   };
@@ -235,7 +250,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-success)" }} />
-              <span style={{ fontWeight: 500 }}>Recording for {connection.brandName}</span>
+              <span style={{ fontWeight: 500 }}>Connected to {connection.brandName}</span>
             </div>
             {session?.user && (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>
@@ -284,6 +299,19 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
             {savingName ? "Saving…" : "Save"}
           </button>
         </div>
+        {nameClashesWithAnotherMachine && (
+          // A warning, not a block: nothing in the system identifies a
+          // machine by name (pairing is by device id, and every command,
+          // job and upload references ids), so a duplicate is legal and
+          // sometimes deliberate. What it costs is on the console, where
+          // Cameras, Schedule and Reels print this name to tell two
+          // venues' "Court 1"s apart.
+          <p style={{ fontSize: "var(--fs-fine)", color: "var(--color-warning, var(--color-danger))", margin: "8px 0 0", lineHeight: 1.5 }}>
+            Another machine at this venue is already called "{agentName.trim()}". The console shows
+            this name to tell cameras at different machines apart, so two the same makes them hard to
+            distinguish. You can still save it.
+          </p>
+        )}
         <p style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", margin: "8px 0 0", lineHeight: 1.5 }}>
           What this machine is called on the console's "Connected agents" list. Naming it after where it sits
           ("Front desk Mac") makes it easier to tell apart once a venue has more than one.

@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 // Same logo Sidebar.jsx already uses -- pic-vision-cloud-console/app/sign-in
 // uses this identical file at public/pic-vision-logo-white.png, so both
 // surfaces show the same mark.
@@ -43,7 +44,7 @@ export default function SignInPage({ onSignedIn }) {
       const session = await window.authAPI.signIn(email.trim(), password);
       onSignedIn(session);
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
       setSubmitting(false);
     }
   };

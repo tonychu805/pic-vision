@@ -253,7 +253,12 @@ export default function DiagnosticsPage() {
                         .filter(Boolean)
                         .join(" · ")
                 }
-                value={!c.reachable ? "Offline" : c.fpsOk === false ? "Check fps" : "Online"}
+                value={
+                  !c.reachable ? (c.isSampleClip ? "File missing" : "Offline")
+                  : c.fpsOk === false ? "Check fps"
+                  : c.isSampleClip ? "File ready"
+                  : "Online"
+                }
                 tone={!c.reachable ? "danger" : c.fpsOk === false ? "warning" : "success"}
               />
             ))

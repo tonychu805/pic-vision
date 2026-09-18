@@ -83,6 +83,7 @@ contextBridge.exposeInMainWorld("cloudAPI", {
   disconnect: () => ipcRenderer.invoke("cloud:disconnect"),
   getAgentName: () => ipcRenderer.invoke("cloud:getAgentName"),
   setAgentName: (name) => ipcRenderer.invoke("cloud:setAgentName", name),
+  getOtherAgentNames: () => ipcRenderer.invoke("cloud:getOtherAgentNames"),
   getDeviceId: () => ipcRenderer.invoke("cloud:getDeviceId"),
 });
 

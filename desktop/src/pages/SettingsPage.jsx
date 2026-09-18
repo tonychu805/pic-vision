@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 
 // Real scan configuration (2026-09-05) -- replaces the original mockup's
 // 4-panel layout. Only two of those panels mapped onto something real:
@@ -74,7 +75,7 @@ export default function SettingsPage({ onBack }) {
       setExtraRanges(await window.scanSettingsAPI.addRange(newRange));
       setNewRange("");
     } catch (err) {
-      setRangeError(err.message);
+      setRangeError(cleanIpcError(err));
     }
     setAddingRange(false);
   };
@@ -95,7 +96,7 @@ export default function SettingsPage({ onBack }) {
       setTimeoutSaved(true);
       setTimeout(() => setTimeoutSaved(false), 2200);
     } catch (err) {
-      setTimeoutError(err.message);
+      setTimeoutError(cleanIpcError(err));
     }
     setSavingTimeout(false);
   };
@@ -139,7 +140,7 @@ export default function SettingsPage({ onBack }) {
               className="input"
               placeholder="192.168.1.50 or 192.168.1.0/24"
               value={newRange}
-              onChange={(e) => setNewRange(e.target.value)}
+              onChange={(e) => { setNewRange(e.target.value); setRangeError(""); }}
               style={{ flex: 1, fontFamily: "var(--font-mono)" }}
             />
             <button className="btn btn-secondary" disabled={addingRange || !newRange.trim() || rangeHint?.ok === false}>

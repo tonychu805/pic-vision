@@ -115,10 +115,21 @@ def _r2_client():
     )
 
 
+# How hard to try on the one report that can't be dropped (see
+# report_final_job_status). Roughly 1+2+4+8+16+32 = ~63s of retrying, which
+# covers a console redeploy or a brief network blip without holding a billed
+# pod open for anything like a real outage.
+FINAL_REPORT_ATTEMPTS = 6
+FINAL_REPORT_BACKOFF_SEC = 1.0
+
+
 def patch_job(**fields):
     """Same contract as job_runner.py's patch_job: True means the console
     wants this job stopped (operator cancelled, or the row moved on
-    without us) -- checked by the caller before every stage."""
+    without us) -- checked by the caller before every stage.
+
+    Progress reports are best-effort on purpose; the report that ENDS a job
+    is not -- use report_final_job_status() for that."""
     try:
         r = requests.patch(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}",
                            json=fields, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
@@ -134,6 +145,45 @@ def patch_job(**fields):
         # stopped the pod under the old design either.
         _log(f"WARNING: status report failed ({e}), continuing")
         return False
+
+
+def report_final_job_status(**fields):
+    """The last report a pod ever sends (done / error / cancelled), retried.
+
+    Dropping a progress report costs a stale progress bar for 20 seconds.
+    Dropping THIS one costs the whole job: by the time it is sent the reels
+    are already uploaded to R2, and the console is the only thing that will
+    ever know they exist. The pod then self-terminates, `job_runner.py` sees
+    a pod that vanished without reporting and marks the job errored, and its
+    cleanup deletes the venue's uploaded segments from R2 -- so the operator
+    is asked to re-upload a session and re-run a GPU job whose output is
+    sitting in the bucket, complete, unreferenced. One momentary 500 from
+    the console at exactly the wrong second was enough, because patch_job()
+    swallows every failure by design.
+
+    Returns True if the console acknowledged (including a 409: the row
+    already moved on, which is an answer, not a failure to deliver)."""
+    for attempt in range(1, FINAL_REPORT_ATTEMPTS + 1):
+        try:
+            r = requests.patch(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}",
+                               json=fields, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
+                               timeout=30)
+            if r.status_code == 409:
+                return True
+            r.raise_for_status()
+            return True
+        except requests.RequestException as e:
+            if attempt == FINAL_REPORT_ATTEMPTS:
+                # Out of attempts. Say exactly what is now stranded, since
+                # this line in the pod's log is the only remaining record
+                # that the work was actually finished.
+                _log(f"ERROR: could not report the final job status after "
+                     f"{FINAL_REPORT_ATTEMPTS} attempts ({e}). Fields: {fields}")
+                return False
+            delay = FINAL_REPORT_BACKOFF_SEC * (2 ** (attempt - 1))
+            _log(f"WARNING: final status report failed ({e}), retrying in {delay:.0f}s "
+                 f"[{attempt}/{FINAL_REPORT_ATTEMPTS}]")
+            time.sleep(delay)
 
 
 class Cancelled(Exception):
@@ -304,7 +354,7 @@ def run():
     _check_cancel("input_check", "checking the recording's frame rate...")
     quality = check_video(raw_video)
     if not quality["passes"]:
-        patch_job(error=f"This recording can't be processed: {quality['reason']}")
+        report_final_job_status(error=f"This recording can't be processed: {quality['reason']}")
         return
 
     _check_cancel("drift_check", "checking for camera drift...")
@@ -401,7 +451,9 @@ def run():
         s3.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), BUCKET, burst_key)
         reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
-    patch_job(done=True, stage="done", message="done", progress=None, result={
+    # Retried, not best-effort: every reel above is already in R2 and this
+    # message is the only thing that will ever tell the console they exist.
+    report_final_job_status(done=True, stage="done", message="done", progress=None, result={
         "share_id": os.environ.get("SHARE_ID"), "reel_bucket": BUCKET,
         "reels": reels, "stats": stats,
     })
@@ -414,11 +466,15 @@ def main():
         run()
     except Cancelled:
         _log("cancelled by operator")
-        patch_job(cancelled=True, message="cancelled")
+        report_final_job_status(cancelled=True, message="cancelled")
     except Exception as e:  # noqa: BLE001 -- report every failure, this pod is billed either way
         _log(f"FAILED: {e}")
         try:
-            patch_job(error=str(e)[:2000])
+            # Also retried: a failure nobody is told about leaves the job
+            # sitting at 'running' until job_runner.py's own deadline, with
+            # the real reason only ever printed in this pod's log -- and the
+            # pod is about to delete itself.
+            report_final_job_status(error=str(e)[:2000])
         except Exception:  # noqa: BLE001
             pass
         raise

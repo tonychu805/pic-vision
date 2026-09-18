@@ -73,6 +73,19 @@ let lastHeartbeatOk = true;
 // or freshly-launched agent.
 const calibrationByCameraId = new Map(); // cameraId -> { isCalibrated, calibrationRmseFt, calibratedAt }
 
+// The other machines this venue has, by name, from the same heartbeat
+// response. Only used to warn before someone names two machines the same
+// thing: nothing enforces uniqueness (identity is the agent id), so a
+// duplicate breaks nothing technically -- it breaks the console's own
+// Cameras/Schedule/Reels pages, which show this name to tell two venues'
+// "Court 1"s apart. Empty until the first heartbeat lands, which reads as
+// "no known clash" -- the right default for a warning.
+let otherAgentNames = [];
+
+export function getOtherAgentNames() {
+  return otherAgentNames;
+}
+
 // Re-measuring what a camera is actually sending. Deliberately not
 // once-per-run: an operator who changes a camera's frame rate in its own
 // web page gets no signal from us otherwise, which is exactly what
@@ -398,6 +411,9 @@ async function sendHeartbeat() {
     const body = await res.json().catch(() => ({}));
     if (typeof body.brandName === "string" && body.brandName !== connection.brandName) {
       saveConnection({ ...connection, brandName: body.brandName });
+    }
+    if (Array.isArray(body.otherAgentNames)) {
+      otherAgentNames = body.otherAgentNames.filter((n) => typeof n === "string");
     }
     if (Array.isArray(body.cameras)) {
       calibrationByCameraId.clear();

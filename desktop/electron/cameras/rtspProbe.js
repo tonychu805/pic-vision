@@ -77,6 +77,8 @@ function openRtspConnection(hostname, port, timeoutMs) {
   const socket = new net.Socket();
   let buffer = "";
   let pending = null; // { resolve, reject } for the in-flight request
+  let connected = false;
+  let failConnect = null; // rejects `ready`, set synchronously below
 
   const settlePending = (value, err) => {
     if (!pending) return;
@@ -86,7 +88,20 @@ function openRtspConnection(hostname, port, timeoutMs) {
   };
 
   socket.setTimeout(timeoutMs);
-  socket.once("timeout", () => settlePending(null, new Error("Timed out")));
+  // `timeout` fires during the CONNECT phase too, and settlePending() is a
+  // no-op there because no request is in flight yet -- so before 2026-09-18
+  // this listener did nothing at all for an address that never answers, and
+  // the wait fell through to the OS's own connect timeout instead of
+  // timeoutMs. Measured: 134s per attempt on Linux, and findWorkingRtspPath
+  // walks seven paths in series, so one mistyped IP in "Add a camera" left
+  // the dialog on "Looking for a video stream…" (no Cancel button on that
+  // step) for about 15 minutes. Fail the connect explicitly instead.
+  socket.once("timeout", () => {
+    const err = new Error("Timed out");
+    if (connected) return settlePending(null, err);
+    socket.destroy();
+    failConnect?.(err);
+  });
   socket.once("error", (e) => settlePending(null, e));
   socket.on("data", (chunk) => {
     buffer += chunk.toString("latin1");
@@ -98,9 +113,14 @@ function openRtspConnection(hostname, port, timeoutMs) {
   });
 
   const ready = new Promise((resolve, reject) => {
-    socket.once("connect", resolve);
+    failConnect = reject;
+    socket.once("connect", () => { connected = true; resolve(); });
     socket.once("error", reject);
   });
+  // Nobody awaits `ready` until request() is called, and a connect that
+  // fails before then would otherwise surface as an unhandled rejection --
+  // this marks it handled without changing what request() sees.
+  ready.catch(() => {});
   socket.connect(port, hostname);
 
   return {
