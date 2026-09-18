@@ -1,5 +1,17 @@
 # Release notes
 
+## Unreleased
+
+- **Fixed a frame-rate measurement that could read far higher than a
+  camera's real rate.** A live-stream frame-rate check could read a steady
+  30fps camera as 50+ fps if its packet spacing happened to alternate
+  short and long — measured for real on a configured camera (51.55fps, then
+  49fps, on a camera reporting 30 the whole time). This matters because the
+  recording gate trusts this number: an over-read in the wrong direction
+  could let a genuinely too-slow camera pass. Recording, calibration,
+  Diagnostics, and the periodic background check all use the fixed
+  calculation now.
+
 ## 1.4.0 — 2026-09-18
 
 - **A wrong IP address now says so.** After a failed manual add, the app used

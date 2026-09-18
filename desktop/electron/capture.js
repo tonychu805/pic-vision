@@ -148,6 +148,63 @@ export function probeDuration(filePath) {
   return Number.isFinite(seconds) ? seconds : 0;
 }
 
+// How many frames actually arrived per second, from raw packet timestamps.
+//
+// Replaces a median-of-gaps estimate (`fps = 1 / median(gap)`) that was
+// chosen to solve one real problem and turned out to create a worse one.
+//
+// The problem it solved: an RTSP stream ramps up, so the first second
+// carries fewer packets while the connection settles. Averaging naively
+// over that (frames / total span) under-read a genuine 30fps camera as
+// 24.9 -- reported to a venue as "your network is dropping frames" when
+// nothing was wrong. The median ignores that slow start, since it only
+// cares which gap is typical, not how many outliers surround it.
+//
+// The problem it created: a median is blind to a BIMODAL gap pattern, and
+// picks whichever gap is more common rather than the true average. A
+// stream whose packet spacing genuinely alternates -- 20ms, 47ms, 20ms,
+// 47ms, averaging 33.3ms per frame, a true ~30fps -- has its median sitting
+// on the 20ms side, reading ~50fps. Found live: Diagnostics measured the
+// same physical camera (declaring 30fps the entire time) at 51.55fps one
+// heartbeat and 49fps a few hours later, on a camera nothing else suggests
+// is actually running that fast (PIC-150, 2026-09-18).
+//
+// The fix keeps the slow-start correction but gets it from trimming a
+// warm-up window off the front, not from picking a "typical" gap: discard
+// the packets within WARMUP_SEC of the very first one, then take frames
+// over the remaining span. Frames-over-span is immune to the ORDER of
+// gaps -- an alternating 20/47ms pattern and a steady 33.3ms pattern give
+// the same answer, because both spend the same total time on the same
+// number of frames. Only trims when there's enough left to be confident;
+// a short probe isn't crippled by discarding a whole second of it.
+//
+// A genuine stall in the middle of the sample (not at the start) still
+// pulls the reading down under this method, where a median would have
+// hidden it entirely -- treated as correct behaviour, not a regression:
+// frames that didn't arrive are exactly what this number exists to catch.
+const WARMUP_SEC = 1.0;
+const MIN_TRIMMED_SPAN_SEC = 2.0;
+const MIN_TRIMMED_PACKETS = 10;
+
+export function estimateFpsFromPacketTimes(times) {
+  if (!Array.isArray(times) || times.length < 10) return null;
+  const sorted = [...times].sort((a, b) => a - b);
+  const totalSpan = sorted[sorted.length - 1] - sorted[0];
+  if (!(totalSpan > 0)) return null;
+
+  const warmupCutoff = sorted[0] + WARMUP_SEC;
+  const trimmed = sorted.filter((t) => t >= warmupCutoff);
+  const trimmedSpan = trimmed.length ? trimmed[trimmed.length - 1] - trimmed[0] : 0;
+  const useTrimmed = trimmed.length >= MIN_TRIMMED_PACKETS && trimmedSpan >= MIN_TRIMMED_SPAN_SEC;
+
+  const sample = useTrimmed ? trimmed : sorted;
+  const span = useTrimmed ? trimmedSpan : totalSpan;
+  if (!(span > 0)) return null;
+
+  const fps = (sample.length - 1) / span;
+  return 1 <= fps && fps <= 240 ? fps : null;
+}
+
 // Reads what a stream is actually sending -- codec, resolution, frame rate
 // and bitrate -- by sampling a few seconds of it.
 //
@@ -203,21 +260,12 @@ export function measureStreamProfile(uri, { seconds = 5, timeoutMs = 20_000 } = 
         .filter((t) => Number.isFinite(t)).sort((a, b) => a - b);
       if (times.length < 10) return resolve(null); // too little to conclude anything
 
-      const span = times[times.length - 1] - times[0];
-      if (span <= 0) return resolve(null);
-
-      // Median gap between frames, not frames-divided-by-span. An RTSP
-      // stream ramps up: the first second carries fewer frames while the
-      // connection settles, and averaging over it under-reads the rate.
-      // A real camera configured at 30 measured 24.9 that way, which would
-      // have been reported to the venue as "your network is dropping
-      // frames" -- a false alarm sending them to check working Wi-Fi. The
-      // median ignores a slow start and any isolated stall.
-      const gaps = times.slice(1).map((t, i) => t - times[i]).filter((g) => g > 0).sort((a, b) => a - b);
-      if (!gaps.length) return resolve(null);
-      const median = gaps[Math.floor(gaps.length / 2)];
-      const fps = 1 / median;
-      if (!(1 <= fps && fps <= 240)) return resolve(null);
+      // See estimateFpsFromPacketTimes's own comment for why this isn't a
+      // median-of-gaps anymore (PIC-150): that estimate read a steady
+      // ~30fps camera as high as 51.55fps when its packet spacing happened
+      // to alternate rather than stay even.
+      const fps = estimateFpsFromPacketTimes(times);
+      if (fps == null) return resolve(null);
 
       const bits = packets.reduce((sum, pk) => sum + (Number(pk.size) || 0), 0) * 8;
       const positive = (v) => (Number.isFinite(v) && v > 0 ? v : null);
