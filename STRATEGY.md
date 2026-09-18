@@ -195,6 +195,20 @@ Personalized per-court highlights require linking **court → the people who pla
 
 The practical read: **the current system is a highlights-only product.** Everything in §7's "free second product surface" and most of the original table above is real, plausible future work — but it's a from-scratch build on top of what exists, not a byproduct already sitting there.
 
+### Two candidate mechanisms for the unbuilt half (reviewed 2026-09-18, nothing tested here)
+
+Prompted by a Roboflow write-up doing tennis analytics with a fixed camera behind the baseline — a pose model on every frame, a general-purpose vision-language model (VLM) reasoning on short chunks on top ([blog](https://blog.roboflow.com/gpt6-astra-video-understanding/)). That split is the same shape as this pipeline's own (cheap per-frame detector, expensive reasoning only on shortlisted material), so both halves are worth naming here rather than re-deriving later.
+
+**1. Pose (RF-DETR Keypoint, Apache 2.0 — code and weights, commercial use, no copyleft).** The cheapest available answer to §10's open question 7 (far-court pose reliability, also `PRD.md`'s "far-court pose estimation too noisy to trigger on" risk, untested since it was written). It runs on the same GPU the pod already rents for TrackNet, so the test costs GPU minutes, not API spend: run it over a few already-labelled rallies (`brickwall`, `IMG_7743`), then judge the far-court skeletons **from playback, not stills** (`CLAUDE.md`'s verification rule; PIC-42 relearned it for detector reliability specifically, after a single-frame test of YOLOWorld looked fine and the detector then failed across the real rally). A usable answer here is the first real step toward the movement analytics this section has listed as "not built" since ADR-047 — and the licensing is clean, unlike the weight-license gap PIC-47 had to clear before TrackNetV3 could have shipped.
+
+**2. VLM event tagging (serve / hit / point / fault, with timestamps).** Would fill the one row above that reads "No" for a reason other than ball tracking — paddle-contact and error attribution, where PIC-42 got detection close to usable and never built contact logic. Three things bound it:
+
+- **Cost rules out running it over sessions.** Published figures are ~$1 per 20-second chunk at 5 fps / 768×432 (~$10–12.50 per M input tokens, batch at half). That is ~$180 per court-hour — ~$1,440 for a 2-hour 4-court session. Only affordable *after* this pipeline has already picked the clips: the top 10 rallies per camera at ~20 s each is ~$10 per camera-session. Any design that sends raw footage to a VLM is dead on arrival; the detector-first ordering is not optional.
+- **The published result is one clip, eyeballed.** All 7 serves and 17 hits found (even at 1 fps), but point outcomes missed below 4 fps, and the scoreboard reconstruction was never scored at all. Finding every hit at 1 fps means it is reading *swings*, not ball contact — which is the part that should transfer worst to pickleball dinks on the far court, and to telling four doubles players apart rather than two.
+- **This project has already retired one VLM judge.** `DECISIONS.md` ADR-085: the Gemini rally verifier's verdicts changed on video re-encoding alone, and it was never scored. Same two gaps as the demo. Preconditions for any rebuild are unchanged — reproduce the encoding sensitivity first, then score against hand labels, remembering that `PIC-6`'s ~1/3 labeller agreement caps how good any such comparison can look. No hand-labelled hit or point ground truth exists in this project, so **making those labels is the real cost, not the API bill.**
+
+**Neither is scheduled.** Movement analytics stays deferred until venue rollout (operator's call, 2026-08-26); this subsection exists so the cost arithmetic and the ADR-085 preconditions don't get re-derived when it comes back. Tracked as `PIC-147` (pose) and `PIC-148` (VLM event tagging), both Backlog under the Player Analytics project.
+
 ---
 
 ## 9. Business model & monetization (directional)
@@ -233,7 +247,7 @@ From a business-model exploration (2026-08-10). Distilled here because it's soun
 4. **Live or batch** for the venue product? (Currently batch.)
 5. **How much labeled data per new angle category** before it works?
 6. **Is 30 minutes a firm user-facing promise** (→ Option B rolling) or is ~1 hour fine (→ Option A, less code)?
-7. **Far-court pose reliability** — usable as a trigger, or position/motion only? (Now a prototype risk.)
+7. **Far-court pose reliability** — usable as a trigger, or position/motion only? (Now a prototype risk.) Still untested; §8's 2026-09-18 subsection names a concrete, no-API-cost way to answer it — `PIC-147`.
 8. **What's the real BOM** once detection quality is pinned down (yolov8x-class, not Nano; camera resolution to resolve the ball)? Decides whether the HaaS ~$150/court/month math holds.
 9. **Does the A/B-test wedge hold** — will a proven "smart court" actually command a booking premium, or do players value the clips but not enough to pay/switch?
 10. **HaaS vs buyout vs rev-share** as the lead motion — which one gets the first venues to yes?
