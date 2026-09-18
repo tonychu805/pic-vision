@@ -65,6 +65,11 @@ export async function checkCameras() {
     results.push({
       id: camera.id,
       label: camera.label,
+      // A sample clip has no connection to be online or offline -- it has a
+      // file that is either there or not. Reported as its own kind so this
+      // page stops calling it "Online" while every other screen calls the
+      // same camera "File ready" (PIC-152).
+      isSampleClip: camera.connectionType === "sampleClip",
       reachable,
       detail,
       codec: profile.codec ?? null,

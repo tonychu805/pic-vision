@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { cleanIpcError, describeAddFailure } from "../lib/ipcError.js";
 import CameraCard from "../components/CameraCard.jsx";
 import { buildCards } from "../lib/cameraView.js";
 
@@ -37,6 +38,10 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   // raw-URL field as the last resort.
   const [phase, setPhase] = useState("form");
   const [rtspUrl, setRtspUrl] = useState("");
+  // Which attempt `error` belongs to. Without this the ONVIF failure would
+  // be reprinted under the stream-URL field as though the operator's own
+  // URL had just been rejected, before they had typed anything.
+  const [urlAttempted, setUrlAttempted] = useState(false);
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const [clipLabel, setClipLabel] = useState("");
@@ -62,7 +67,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
       const picked = await window.systemAPI.pickVideoFile();
       if (picked) setClipPath(picked);
     } catch (err) {
-      setClipError(err.message);
+      setClipError(cleanIpcError(err));
     }
   };
 
@@ -74,7 +79,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     try {
       onAdded(await window.cameraAPI.addSampleClip({ label: clipLabel, filePath: clipPath }));
     } catch (err) {
-      setClipError(err.message);
+      setClipError(cleanIpcError(err));
       setClipSaving(false);
     }
   };
@@ -115,7 +120,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
         // fall through to the manual RTSP-URL offer below
       }
       setPhase("rtspUrl");
-      setError(onvifErr.message);
+      setError(onvifErr);
       setSaving(false);
     }
   };
@@ -129,7 +134,8 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
       const camera = await window.cameraAPI.addRtsp({ label: form.label, ...parsed });
       onAdded(camera);
     } catch (err) {
-      setError(err.message);
+      setError(err);
+      setUrlAttempted(true);
       setSaving(false);
     }
   };
@@ -198,30 +204,30 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   }
 
   if (phase === "rtspUrl") {
+    // `error` here is whatever the ONVIF attempt threw, until the operator
+    // submits a stream URL of their own -- after which it's that attempt's
+    // failure instead, and no longer says anything about ONVIF.
+    const failure = describeAddFailure(error, form.hostname);
+    const urlError = urlAttempted ? error : null;
     return (
       <div className="dialog-backdrop">
         <form className="dialog" onSubmit={submitRtspUrl}>
-          <div className="dialog-title">Couldn't connect automatically</div>
-          <div className="dialog-body">
-            This camera might have ONVIF turned off — check its own app or settings for a network option called
-            "ONVIF" and make sure it's turned on, then try again above. In the meantime, if your camera's app shows
-            you a video stream address (sometimes called an "RTSP URL" or "stream URL"), you can paste it here to
-            add it directly.
-          </div>
+          <div className="dialog-title">{failure.title}</div>
+          <div className="dialog-body">{failure.body}</div>
           <div className="field">
             <label>Video stream address</label>
             <input
               className="input"
               value={rtspUrl}
-              onChange={(e) => setRtspUrl(e.target.value)}
+              onChange={(e) => { setRtspUrl(e.target.value); if (urlAttempted) { setUrlAttempted(false); setError(""); } }}
               placeholder="rtsp://192.168.1.42:554/..."
               required
               autoFocus
             />
           </div>
-          {error && (
+          {urlError && (
             <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>
-              Couldn't connect with that either. ({error})
+              Couldn't connect with that either. ({cleanIpcError(urlError)})
             </p>
           )}
           <div className="dialog-actions">
@@ -253,7 +259,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             </>
           )}
         </div>
-        <div className="field"><label>Name (optional)</label><input className="input" value={form.label} onChange={update("label")} placeholder="Court 1 camera" /></div>
+        <div className="field"><label>Name (optional)</label><input className="input" value={form.label} onChange={update("label")} placeholder="e.g. Court 1" /></div>
         <div className="field">
           <label>Camera IP address</label>
           <input className="input" value={form.hostname} onChange={update("hostname")} required autoFocus={!foundIt} />
@@ -484,7 +490,13 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
               ? "Looking for cameras — this takes a few seconds…"
               : mine.length === 0 && found.length === 0
                 ? "None added yet"
-                : `${mine.length} added${found.length ? ` · ${found.length} found on your network` : ""}`}
+                // A scan that turns up only cameras already added used to
+                // leave this line reading exactly as it did before the
+                // click, so there was no way to tell the scan had run at
+                // all (PIC-152). Say what happened until something changes.
+                : hasScanned && found.length === 0
+                  ? `${mine.length} added · scan finished, nothing new found`
+                  : `${mine.length} added${found.length ? ` · ${found.length} found on your network` : ""}`}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>

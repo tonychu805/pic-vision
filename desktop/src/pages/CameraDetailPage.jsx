@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 import { cardVisuals, detailPanels, frameRateSummary } from "../lib/cameraView.js";
 
 function formatElapsed(startedAt) {
@@ -80,7 +81,7 @@ function LiveViewButton({ camera }) {
       const { url: liveUrl } = await window.liveViewAPI.start(camera.id);
       setUrl(liveUrl);
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setStarting(false);
   };
@@ -290,7 +291,7 @@ function CloudJobRow({ camera, recording }) {
       await window.pipelineAPI.run({ cameraId: camera.id, recordingDir: recording.dir });
       setStatus(await window.pipelineAPI.statusForRecording(recording.dir));
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setStarting(false);
   };

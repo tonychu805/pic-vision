@@ -234,7 +234,7 @@ export async function runBandwidthTest({ cameras = 1 } = {}) {
       `${samples.length} × ${(run.sizeBytes / 1e6).toFixed(0)} MB (${samples.map((m) => m.toFixed(1)).join(", ")} Mbps) — ` +
         `a 2-hour session on ${cameras} camera${cameras === 1 ? "" : "s"} would take about ` +
         `${Math.round(result.sessionMinutes)} minutes to upload` +
-        (result.unstable ? `, or ${Math.round(result.slowestSessionMinutes)} at the slowest speed measured` : ""),
+        (result.unstable ? `, or ${Math.round(result.slowestSessionMinutes)} minutes at the slowest speed measured` : ""),
     );
     return result;
   } catch (err) {

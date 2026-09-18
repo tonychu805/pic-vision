@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { cleanIpcError } from "../lib/ipcError.js";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
@@ -132,7 +133,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
   // used for the warning below.
   const [otherAgentNames, setOtherAgentNames] = useState([]);
 
-  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(err.message));
+  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(cleanIpcError(err)));
   useEffect(() => {
     if (!CLOUD_API_MISSING) {
       refresh();
@@ -166,7 +167,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setAgentNameField(saved);
       setSavedName(saved);
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setSavingName(false);
   };
@@ -179,7 +180,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(conn);
       onConnectionChanged?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
     setRegistering(false);
   };
@@ -190,7 +191,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(null);
       onConnectionChanged?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
     }
   };
 
@@ -200,7 +201,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       await window.authAPI.signOut();
       onSignedOut?.();
     } catch (err) {
-      setError(err.message);
+      setError(cleanIpcError(err));
       setSigningOut(false);
     }
   };
@@ -249,7 +250,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           <>
             <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
               <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-success)" }} />
-              <span style={{ fontWeight: 500 }}>Recording for {connection.brandName}</span>
+              <span style={{ fontWeight: 500 }}>Connected to {connection.brandName}</span>
             </div>
             {session?.user && (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>

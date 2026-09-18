@@ -2,6 +2,21 @@
 
 ## Unreleased
 
+- **A wrong IP address now says so.** After a failed manual add, the app used
+  to suggest the camera might have ONVIF switched off — unhelpful when
+  nothing answered at that address at all. It now distinguishes the two and
+  tells you to check the address.
+- **Error messages lost their plumbing.** Failures used to appear as "Error
+  invoking remote method 'cameras:add': Error: …". Just the message now. A
+  stale error also no longer sits under a field you are retyping.
+- **A scan that finds nothing says so** ("scan finished, nothing new found")
+  instead of leaving the page looking untouched.
+- **Sample clips read "File ready" in Diagnostics**, matching the rest of the
+  app, rather than "Online" — there is no connection to be online.
+- **"This machine" no longer says "Recording for …"** when nothing is
+  recording; it says what it means, which is that the machine is connected.
+- **Fixed:** the upload-speed log line said "or 395 at the slowest speed
+  measured", missing the word minutes.
 - **Renaming a camera no longer hides its recordings.** Recordings were
   filed in a folder named after the camera, so renaming one pointed the app
   at a folder that didn't exist: every past recording disappeared from that
