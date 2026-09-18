@@ -114,10 +114,16 @@ def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
 
 # The one shell command every self-driving pod starts with: fetch its own
 # code from a presigned R2 URL (BOOTSTRAP_URL, minted fresh per job by the
-# caller -- see job_runner.py) and run it. ffmpeg isn't baked into
-# tf215-cuda118 (it never was -- the SSH-era POD_SETUP_CMD always
-# installed it per-job too), so that's still an install here, not new
-# overhead.
+# caller -- see job_runner.py) and run it. ffmpeg used to be `apt-get
+# install`'d here per job (never baked into tf215-cuda118, not even under
+# the old SSH-era POD_SETUP_CMD) -- 2026-09-18: replaced with a static
+# binary pod_driver.py fetches from R2 itself (FFMPEG_R2_KEY), same
+# pattern as the model weights. Two real problems with the apt-get version
+# this removes: a dependency on Ubuntu's package mirrors being reachable
+# from inside RunPod's network on every single job, and Ubuntu 22.04's
+# ffmpeg being old enough that `-fps_mode cfr` wasn't recognized (the
+# `-vsync cfr` workaround pod_driver.py still uses is no longer required
+# by this, just left as-is -- out of scope for this change).
 #
 # 2026-09-10: this replaces an earlier, abandoned approach -- a custom
 # Docker image (tf215-cuda118 + a few COPY layers + pod_driver.py baked
@@ -135,7 +141,6 @@ def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
 _BOOTSTRAP_CMD = (
     "curl -sL \"$BOOTSTRAP_URL\" -o /tmp/deps.tar && "
     "mkdir -p /workspace && tar -xf /tmp/deps.tar -C /workspace --no-same-owner && "
-    "apt-get update -qq && apt-get install -y -qq ffmpeg && "
     "cd /workspace && python3 -u pod_driver.py"
 )
 

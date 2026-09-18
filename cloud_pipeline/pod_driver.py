@@ -86,6 +86,25 @@ from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 WORKDIR = "/workspace/job"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
+# Static Linux x86_64 builds (ffmpeg-static/ffprobe-static's own binaries,
+# the same npm packages desktop/electron/binaries.js already ships to
+# venues -- proven, self-contained, no dynamic-lib dependency on whatever
+# the pod's base image happens to have). Uploaded to R2 once by hand, not
+# per job -- see runpod_pod.py's _BOOTSTRAP_CMD comment for why this
+# replaced an `apt-get install ffmpeg` that ran on every job. The version
+# in each key name is the binary's own `-version` output, not the npm
+# package's "b6.1.1" release tag -- that tag turned out stale/inaccurate
+# (real binaries: ffmpeg 7.0.2, ffprobe 4.0.2, confirmed 2026-09-18), and
+# ffprobe trailing ffmpeg by that much is a real property of the upstream
+# johnvansickle.com static builds this package vendors, not a mistake here.
+# Landing at /usr/local/bin puts them ahead of any apt-installed ffmpeg on
+# PATH (Debian convention), so every later bare "ffmpeg"/"ffprobe"
+# subprocess call -- here and in src/video_quality.py,
+# scripts/rank_and_reel.py -- picks these up with no call-site changes.
+FFMPEG_R2_KEY = "pipeline/ffmpeg-static-linux-x64-7.0.2"
+FFPROBE_R2_KEY = "pipeline/ffprobe-static-linux-x64-4.0.2"
+FFMPEG_LOCAL = "/usr/local/bin/ffmpeg"
+FFPROBE_LOCAL = "/usr/local/bin/ffprobe"
 BURST_TARGET_SEC = 30.0  # matches pod_cut.py's own pin, same reasoning
 TOP_RALLIES_N = 10  # matches pod_cut.py's own pin, operator request 2026-09-12
 
@@ -337,6 +356,13 @@ def _self_terminate(pod_id):
 def run():
     s3 = _r2_client()
     os.makedirs(WORKDIR, exist_ok=True)
+
+    # Must land before anything below shells out to "ffmpeg"/"ffprobe" --
+    # the first such call is the segment concat a few lines down.
+    _check_cancel("setup", "fetching ffmpeg...")
+    for local_path, key in ((FFMPEG_LOCAL, FFMPEG_R2_KEY), (FFPROBE_LOCAL, FFPROBE_R2_KEY)):
+        s3.download_file(BUCKET, key, local_path)
+        os.chmod(local_path, 0o755)
 
     segment_keys = json.loads(os.environ["SEGMENT_KEYS_JSON"])
     calib = json.loads(os.environ["CALIB_JSON"])

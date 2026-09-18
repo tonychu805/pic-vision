@@ -722,7 +722,9 @@ pic-vision/
 │   │                                    # entrypoint, run via create_selfdriving_pod's
 │   │                                    # dockerStartCmd bootstrap (curl a presigned R2
 │   │                                    # tarball of this file + its src/scripts deps,
-│   │                                    # extract, apt-get ffmpeg, run). Pulls the venue's
+│   │                                    # extract, run -- ffmpeg/ffprobe are static binaries
+│   │                                    # pod_driver.py fetches from R2 itself, not apt-get'd
+│   │                                    # per job since 2026-09-18). Pulls the venue's
 │   │                                    # raw segments straight from R2 (not through this
 │   │                                    # workstation), converts, checks, runs
 │   │                                    # pod_infer.py unmodified, cuts (build_reel/

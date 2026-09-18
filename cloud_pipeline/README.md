@@ -132,8 +132,14 @@ file used to say and is now wrong for the live path. Instead:
    would silently run old code on a real pod).
 2. `runpod_pod.create_selfdriving_pod()` creates a pod from the stock,
    unmodified base image with a `dockerStartCmd` override: `curl` that
-   tarball via a presigned URL, extract it, `apt-get install ffmpeg`, run
-   `pod_driver.py`. No SSH key, no port mapping.
+   tarball via a presigned URL, extract it, run `pod_driver.py`. No SSH
+   key, no port mapping. `pod_driver.py` fetches its own static
+   ffmpeg/ffprobe binaries from R2 (`FFMPEG_R2_KEY`/`FFPROBE_R2_KEY`) as
+   its first action, the same cached-once pattern as the model weights —
+   this replaced an `apt-get install ffmpeg` that ran on every job
+   (2026-09-18), which depended on Ubuntu's package mirrors being
+   reachable per job and installed whatever ffmpeg version Ubuntu 22.04
+   happened to ship.
 3. `job_runner.py`'s only remaining job is to wait for the pod to
    disappear (self-terminated, via its own call to the RunPod API) or hit
    a 3-hour deadline, at which point it terminates the pod itself and
