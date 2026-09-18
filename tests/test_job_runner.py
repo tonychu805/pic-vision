@@ -19,7 +19,8 @@ os.environ.setdefault("RUNPOD_API_KEY", "fake")
 from cloud_pipeline import job_runner  # noqa: E402
 
 JOB = {
-    "id": "job-1", "bucket": "test-bucket", "calib": {"homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]},
+    "id": "job-1", "bucket": "test-bucket", "brand_id": "11111111-1111-1111-1111-111111111111",
+    "calib": {"homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]},
     "segment_keys": ["segments/a.mkv", "segments/b.mkv"], "target_sec": 300, "session_id": "sess-1",
 }
 
@@ -41,6 +42,41 @@ def test_a_job_with_no_segments_is_refused_before_any_pod_is_created(monkeypatch
     with pytest.raises(RuntimeError, match="no recording segments"):
         job_runner.run_reel_job({**JOB, "segment_keys": []})
     assert created == [], "must not spend money creating a pod for a job that can't run"
+
+
+def test_a_job_with_no_brand_id_is_refused_rather_than_guessing_a_reel_key(monkeypatch):
+    # PIC-153 (2026-09-18): a reel key with no brand prefix, or a wrong
+    # one, either breaks lib/reels.ts's validation or -- worse -- silently
+    # lands in the wrong venue's data. Refusing outright beats guessing.
+    _no_real_r2_upload(monkeypatch)
+    created = []
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: created.append(kw) or ("pod-1", "gpu"))
+    with pytest.raises(RuntimeError, match="no brand_id"):
+        job_runner.run_reel_job({**JOB, "brand_id": None})
+    assert created == [], "must not spend money creating a pod for a job it can't safely finish"
+
+
+def test_the_pod_receives_the_brand_id_and_a_separate_output_bucket(monkeypatch):
+    # BUCKET (job["bucket"]) is where this job's raw segments actually
+    # are -- the private bucket, since PIC-153. OUTPUT_BUCKET is the
+    # separate, public one the finished reel goes to. Conflating the two
+    # would either write a private bucket key the public CDN can't serve,
+    # or (the dangerous direction) write raw footage into the public one.
+    _no_real_r2_upload(monkeypatch)
+    monkeypatch.setenv("R2_INGEST_BUCKET", "the-public-bucket")
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    captured = {}
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: captured.update(kw) or ("pod-1", "gpu"))
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: None)
+
+    job_runner.run_reel_job({**JOB, "bucket": "the-private-bucket", "brand_id": "brand-xyz"})
+
+    assert captured["env"]["BRAND_ID"] == "brand-xyz"
+    assert captured["env"]["BUCKET"] == "the-private-bucket"
+    assert captured["env"]["OUTPUT_BUCKET"] == "the-public-bucket"
 
 
 def test_happy_path_creates_one_pod_and_returns_once_it_disappears(monkeypatch):

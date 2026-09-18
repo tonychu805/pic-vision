@@ -181,13 +181,36 @@ def run_reel_job(job):
 
     bootstrap_url = _upload_pod_deps(job["bucket"])
 
+    # job["brand_id"] comes from the claim response (app/api/runner/jobs/
+    # claim/route.ts), not from the jobs row itself -- jobs has no brand_id
+    # column, only agent_id, and this process never talks to Supabase
+    # directly to join it (ADR-084, thin agent: HTTP to the console only).
+    # Required, not optional: a job that somehow claims without one would
+    # otherwise need pod_driver.py to guess where to put a brand-prefixed
+    # reel key, and guessing there is exactly the kind of thing that
+    # reopens PIC-153 rather than fixing it.
+    brand_id = job.get("brand_id")
+    if not brand_id:
+        raise RuntimeError(f"job {job_id} has no brand_id -- refusing rather than guessing a reel key")
+
+    # job["bucket"] is the PRIVATE ingest bucket (PIC-153, 2026-09-18) --
+    # where this job's raw segments actually are, set by the console when
+    # the job was created. OUTPUT_BUCKET is the separate, public one the
+    # finished reel/burst/clips get written to -- same bucket, same env
+    # var name and default, the console's own ingestBucket() already uses
+    # for this (lib/r2Presign.ts), kept in sync deliberately rather than
+    # invented fresh here.
+    output_bucket = os.environ.get("R2_INGEST_BUCKET", "test-ingest-runpod")
+
     # Minted here, not on the pod: the console needs these ids to exist
     # (in the pod's final result) as soon as the pod reports done, and
     # there's no coordination reason they can't just be handed to the pod
     # instead of round-tripped through it.
     env = {
         "JOB_ID": job_id,
+        "BRAND_ID": brand_id,
         "BUCKET": job["bucket"],
+        "OUTPUT_BUCKET": output_bucket,
         "BOOTSTRAP_URL": bootstrap_url,
         "SEGMENT_KEYS_JSON": json.dumps(segment_keys),
         "CALIB_JSON": json.dumps(job["calib"]),

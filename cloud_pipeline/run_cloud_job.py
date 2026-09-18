@@ -50,6 +50,16 @@ from scripts.check_drift import measure as drift_measure
 from cloud_pipeline import r2_storage
 from cloud_pipeline import runpod_pod
 
+# Known, accepted gap left by PIC-153 (2026-09-18): a real run of this
+# script would still upload the operator's video into the PUBLIC bucket
+# (the one cdn.picvisionai.com fronts), which is exactly the exposure that
+# fix closed for the live path. Not remediated here because, unlike
+# pod_driver.py, this script was never a live multi-tenant ingest path in
+# the first place -- it's an operator-invoked CLI tool that uploads
+# footage already on the operator's own disk, one run at a time, and per
+# this file's own docstring has never been run end-to-end with real GPU
+# inference. If this script becomes live again, it needs the same
+# private/public bucket split pod_driver.py got, not just this comment.
 BUCKET = os.environ.get("CLOUD_PIPELINE_BUCKET", "test-ingest-runpod")
 WEIGHTS_LOCAL = "/mnt/fast_scratch/tracknet_weights/weights_k14_epoch19"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"

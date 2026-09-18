@@ -17,7 +17,16 @@ Reads its whole job from environment variables (set at pod-creation time,
 that's the one interface RunPod's own pod-creation API gives a caller:
 
     JOB_ID              -- the console's job row id
-    BUCKET               R2 bucket name
+    BRAND_ID             the venue's brand id -- leads every key this pod
+                           writes to OUTPUT_BUCKET (PIC-153, 2026-09-18)
+    BUCKET               R2 bucket holding THIS job's raw segments --
+                           private since PIC-153, never the one the public
+                           CDN domain fronts
+    OUTPUT_BUCKET         separate R2 bucket the finished reel/burst/clips
+                           get uploaded to -- the public one, same as
+                           before PIC-153. Deliberately not the same value
+                           as BUCKET: that conflation is the mistake
+                           PIC-153 found.
     SEGMENT_KEYS_JSON     JSON list of R2 keys, the venue's raw recording
                            segments (already uploaded by the desktop app --
                            this is the actual "delete the operator's
@@ -98,7 +107,21 @@ PROGRESS_PATCH_INTERVAL_SEC = 20
 CONSOLE_URL = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
 RUNNER_TOKEN = os.environ["RUNNER_TOKEN"]
 JOB_ID = os.environ["JOB_ID"]
+# BUCKET is where this job's own raw segments are (private since PIC-153,
+# 2026-09-18 -- see r2_storage.py-adjacent lib/r2Presign.ts's
+# privateIngestBucket on the console side). OUTPUT_BUCKET is the separate,
+# public one the finished reel/burst/clips get uploaded to -- conflating
+# the two is exactly the mistake PIC-153 found: private data and public
+# data sharing one bucket that a CDN domain then fronts in full.
 BUCKET = os.environ["BUCKET"]
+OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
+# Every key this pod writes to OUTPUT_BUCKET leads with this. Required,
+# not defaulted to anything -- job_runner.py already refuses to create a
+# pod at all if a job has no brand_id (PIC-153's "refuse rather than
+# guess" rule applies here too), so reaching this line with none unset
+# would mean that guard was bypassed somehow; better to crash loudly here
+# than write an un-prefixed key by accident.
+BRAND_ID = os.environ["BRAND_ID"]
 
 
 def _log(msg):
@@ -430,16 +453,22 @@ def run():
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
     burst_reel_id = os.environ.get("BURST_REEL_ID")
-    ranked_key = f"reels/{reel_id}.mp4"
-    s3.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), BUCKET, ranked_key)
+    # Brand-prefixed, and uploaded to OUTPUT_BUCKET (the public one), not
+    # BUCKET (this job's private input) -- PIC-153, 2026-09-18. Before this,
+    # every reel/burst/clip key was a flat reels/<id>.mp4 with no venue
+    # attached to it at all; lib/reels.ts (console) still accepts that
+    # exact old shape too, for the separate SSH-driven path that wasn't
+    # migrated in the same change (see that file's own comment).
+    ranked_key = f"{BRAND_ID}/reels/{reel_id}.mp4"
+    s3.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), OUTPUT_BUCKET, ranked_key)
     reels = []
     # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
     # pre-minted by job_runner.py before this pod even started), the count
     # here is only known now, so each clip mints its own id at upload time.
     for clip in top_result["manifest"]:
         clip_reel_id = str(uuid.uuid4())
-        clip_key = f"reels/{clip_reel_id}.mp4"
-        s3.upload_file(os.path.join(reel_dir, "top", clip["file"]), BUCKET, clip_key)
+        clip_key = f"{BRAND_ID}/reels/{clip_reel_id}.mp4"
+        s3.upload_file(os.path.join(reel_dir, "top", clip["file"]), OUTPUT_BUCKET, clip_key)
         reels.append({
             "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
             "rank": clip["rank"],
@@ -447,14 +476,17 @@ def run():
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
-        burst_key = f"reels/{burst_reel_id}.mp4"
-        s3.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), BUCKET, burst_key)
+        burst_key = f"{BRAND_ID}/reels/{burst_reel_id}.mp4"
+        s3.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), OUTPUT_BUCKET, burst_key)
         reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
     # Retried, not best-effort: every reel above is already in R2 and this
     # message is the only thing that will ever tell the console they exist.
+    # reel_bucket is OUTPUT_BUCKET here, not BUCKET (this job's private
+    # input) -- reels.r2_bucket has to name where the reel actually landed,
+    # or a later read of that row would look in the wrong bucket.
     report_final_job_status(done=True, stage="done", message="done", progress=None, result={
-        "share_id": os.environ.get("SHARE_ID"), "reel_bucket": BUCKET,
+        "share_id": os.environ.get("SHARE_ID"), "reel_bucket": OUTPUT_BUCKET,
         "reels": reels, "stats": stats,
     })
     _log(f"done: {reels}")
