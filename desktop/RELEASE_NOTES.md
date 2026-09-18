@@ -2,6 +2,17 @@
 
 ## Unreleased
 
+- **Adding a camera by IP now fails fast when the address is wrong.** Typing an
+  address with nothing on it used to leave the dialog on "Connecting…" and then
+  "Looking for a video stream…" — a step with no Cancel button — for about
+  15 minutes before giving up. It now gives up in about 30 seconds.
+- **A calibrated camera no longer reads "Not calibrated" just after launch.**
+  Calibration comes from the cloud console on the app's first check-in, and a
+  camera opened before that arrived showed as uncalibrated, with "Send to
+  cloud" disabled and labelled "Calibrate first". The camera page now corrects
+  itself, and the Refresh button on that card refreshes the calibration line
+  too, not only the recordings list.
+
 - **macOS camera discovery:** the packaged app now declares why it needs
   local-network access, allowing macOS to show the permission prompt needed
   to discover and connect to cameras. A scan reports a failure only when both

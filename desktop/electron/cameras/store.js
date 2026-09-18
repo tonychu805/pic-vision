@@ -151,6 +151,17 @@ function saveCameras(cameras) {
   store.set("cameras", cameras.map(encryptCamera));
 }
 
+// The `onvif` library defaults to 120s per request (its own cam.js:94), and
+// that default is what "Add a camera by IP address" spent before it even
+// reached the RTSP fallback: UAT on 2026-09-18 typed an address with nothing
+// on it and watched "Connecting…" sit for ~2 minutes, ending in the
+// library's bare "Network timeout". Every caller here is either an operator
+// waiting at the dialog or the 30s heartbeat's own status check, and a
+// camera on the venue's own LAN answers in well under a second -- so a
+// two-minute ceiling only ever means "nothing is there", slowly. 10s is
+// generous for a slow camera and still bounded for a person watching.
+const ONVIF_TIMEOUT_MS = 10_000;
+
 export async function testConnection({ hostname, port, username, password, path: connectPath, connectionType, sampleClipPath }) {
   // A sample-clip "camera" has no network connection to test at all --
   // the closest equivalent check is just confirming its one video file is
@@ -180,7 +191,7 @@ export async function testConnection({ hostname, port, username, password, path:
   // Digest realm="IPCam" there, plain 404 at the lowercase path) -- WS-
   // Discovery never found it either, so manual add is the only way in,
   // and it needs this override to actually reach the right endpoint.
-  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined });
+  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined, timeout: ONVIF_TIMEOUT_MS });
   await cam.connect();
   const info = await cam.getDeviceInformation();
   let streamUri = null;
