@@ -1,7 +1,7 @@
 // PIC-151: what an operator is told when adding a camera goes wrong.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { cleanIpcError, describeAddFailure } from "./ipcError.js";
+import { cleanIpcError, describeAddFailure, describeRegisterError } from "./ipcError.js";
 
 test("Electron's IPC wrapper is stripped", () => {
   // Verbatim from the UAT session, 2026-09-18.
@@ -59,4 +59,39 @@ test("a camera that did answer still gets the ONVIF advice", () => {
 
 test("the address is left out gracefully when unknown", () => {
   assert.match(describeAddFailure(new Error("Network timeout"), "").title, /Nothing answered at that address/);
+});
+
+// PIC-93: what an operator is told when connecting this machine to the
+// cloud console fails. cloud.js's registerAgentOnce classifies the real
+// failure into one of three sentinel words before it ever crosses IPC
+// (see cloud.test.js for that half) -- these tests are the other side,
+// the plain-language mapping the renderer actually shows.
+test("each classified failure gets a plain, actionable sentence", () => {
+  assert.match(describeRegisterError(new Error("network")), /check your internet connection/);
+  assert.match(describeRegisterError(new Error("auth")), /sign.*out.*sign.*back in/i);
+  assert.match(describeRegisterError(new Error("server")), /try again in a few minutes/i);
+});
+
+test("the classified word itself never reaches the screen", () => {
+  // A regression here would be a real one: showing the bare code "server"
+  // or "auth" instead of translating it would be as confusing as the raw
+  // text this was built to replace.
+  for (const code of ["network", "auth", "server"]) {
+    assert.notEqual(describeRegisterError(new Error(code)), code);
+  }
+});
+
+test("the IPC wrapper is stripped before classifying, same as everywhere else", () => {
+  assert.match(
+    describeRegisterError(new Error("Error invoking remote method 'cloud:register': Error: server")),
+    /try again in a few minutes/i,
+  );
+});
+
+test("a genuinely unclassified error still says something real, not a guess", () => {
+  // Anything reaching here that ISN'T one of the three sentinel words is a
+  // failure this classification scheme didn't anticipate -- shown as-is
+  // (cleaned of IPC plumbing) rather than silently mapped to the wrong
+  // bucket, or swallowed.
+  assert.equal(describeRegisterError(new Error("something truly unexpected")), "something truly unexpected");
 });

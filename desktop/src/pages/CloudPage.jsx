@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { cleanIpcError } from "../lib/ipcError.js";
+import { cleanIpcError, describeRegisterError } from "../lib/ipcError.js";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
@@ -180,7 +180,12 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(conn);
       onConnectionChanged?.();
     } catch (err) {
-      setError(cleanIpcError(err));
+      // Not cleanIpcError here -- this specific failure is classified on
+      // the main-process side (cloud.js's registerAgentOnce), because by
+      // the time an error reaches the renderer the HTTP status that
+      // distinguishes "you aren't signed in" from "the console's database
+      // hiccupped" is already gone (PIC-93).
+      setError(describeRegisterError(err));
     }
     setRegistering(false);
   };

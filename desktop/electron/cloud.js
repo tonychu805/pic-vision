@@ -236,14 +236,79 @@ export function registerAgent(accessToken, userId, consoleUrl = DEFAULT_CONSOLE_
   return registrationInFlight;
 }
 
-async function registerAgentOnce(accessToken, userId, consoleUrl) {
-  const res = await fetch(`${consoleUrl}/api/agents/register`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-    body: JSON.stringify({ deviceId: getOrCreateDeviceId(), agentName: getAgentName() }),
-  });
+// Found live, and the reason this exists at all (PIC-93): a bare network
+// failure surfaced as "Error invoking remote method 'cloud:register':
+// TypeError: fetch failed" -- meaningless to a venue operator, useless
+// even to a technical one without also knowing the URL it failed against
+// (which the earlier version discarded along with everything else).
+//
+// The three throw sites below use short, deliberate sentinel messages
+// ("network"/"auth"/"server") instead of whatever the real failure said --
+// contract with src/lib/ipcError.js's describeRegisterError, which maps
+// each to a plain sentence CloudPage shows, the same "classify near the
+// source, translate at the edge" split probeResult.js already established
+// for camera failures (PIC-93's own resolution note names that as the
+// pattern to copy). The real text isn't lost, just moved: logEvent puts it
+// in the Log tab, exactly where a raw camera error already goes.
+//
+// No timeout on this fetch until now, either -- an unreachable console (a
+// host that accepts the connection but never answers, or a network that
+// drops the packets silently rather than refusing) left it to whatever
+// Node's own default eventually gives up at, long enough that
+// "Connecting…" on the button had no real ceiling. Same fix, same
+// reasoning, as rtspProbe.js's connect-phase timeout from earlier today --
+// found here by this fix's own test hanging past the harness's 300s
+// budget against exactly that shape of failure.
+const REGISTER_TIMEOUT_MS = 20_000;
+
+// Exported, and timeoutMs is a parameter rather than only the module
+// constant above, for cloud.test.js: the classification is worth pinning
+// directly against a real local HTTP server (same reasoning
+// bandwidth.test.js's own withServer already uses -- a mocked request
+// object would only prove the mock), and a test exercising the timeout
+// path needs milliseconds, not 20 real seconds, to prove the mechanism
+// without a slow test run.
+//
+// registerAgent() above is still the only real entry point that adds the
+// single-flight guard on top of this -- but a successful call through
+// EITHER one starts the heartbeat loop (see the tail of this function), so
+// a test exercising the success path has to stop that loop again, or the
+// interval it creates keeps the process alive indefinitely. Found exactly
+// that way: the happy-path test hung past the harness's whole budget with
+// no failing assertion anywhere, because the test itself had already
+// passed by the time the leftover interval kept running.
+export async function registerAgentOnce(accessToken, userId, consoleUrl, timeoutMs = REGISTER_TIMEOUT_MS) {
+  let res;
+  try {
+    res = await fetch(`${consoleUrl}/api/agents/register`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
+      body: JSON.stringify({ deviceId: getOrCreateDeviceId(), agentName: getAgentName() }),
+      signal: AbortSignal.timeout(timeoutMs),
+    });
+  } catch (err) {
+    // A timeout (AbortError/TimeoutError) and a real connection failure
+    // both mean the same thing to an operator -- the console couldn't be
+    // reached -- so both fall into the same "network" bucket rather than
+    // needing their own message.
+    logEvent("cloud_register_failed", "Couldn't reach the cloud console to connect this machine",
+      `${consoleUrl}: ${err.message}`);
+    throw new Error("network");
+  }
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(body.error || `device registration failed (HTTP ${res.status})`);
+  if (!res.ok) {
+    // 5xx here is very often a raw Postgres error string in body.error
+    // (the console API's own known gap, PIC-144) -- never shown as-is
+    // regardless of what it says, only ever "server" plus the real text
+    // kept in the Log tab. 4xx (not signed in / session expired / this
+    // device's local state is wrong somehow) is real, addressable text
+    // from the console, and IS worth keeping close to verbatim -- so it
+    // goes to the log too, but classified as "auth" for the plain-language
+    // side rather than folded into the same generic bucket as a 500.
+    logEvent("cloud_register_failed", "Connecting this machine to the cloud console failed",
+      `HTTP ${res.status}: ${body.error || "(no error body)"}`);
+    throw new Error(res.status >= 500 ? "server" : "auth");
+  }
 
   store.delete("disconnectedByUser"); // a deliberate reconnection
   const connection = {

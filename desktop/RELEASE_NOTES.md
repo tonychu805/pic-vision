@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Connecting to the cloud console now fails with a real sentence.**
+  "Connect to the cloud console" or a rename that pings the console could
+  show raw technical text like "TypeError: fetch failed". It now says one
+  of three things depending on what actually happened: no internet
+  connection, your sign-in has expired, or the cloud console is having
+  trouble right now — each with what to do about it. A connection that
+  hangs instead of failing outright now also gives up after 20 seconds
+  instead of leaving "Connecting…" with no way out.
 - **Fixed a frame-rate measurement that could read far higher than a
   camera's real rate.** A live-stream frame-rate check could read a steady
   30fps camera as 50+ fps if its packet spacing happened to alternate

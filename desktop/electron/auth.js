@@ -111,6 +111,12 @@ export async function signIn(email, password) {
     // it clears an earlier Disconnect.
     await resolveRegistration(session.accessToken, session.user.id, { force: true });
   } catch (err) {
+    // Not logged again here -- registerAgent (cloud.js) already calls
+    // logEvent with the real detail before it throws, so an operator can
+    // already see WHY in the Log tab (PIC-93). This console.error is only
+    // for a main-process terminal watching a dev run; the visible trail
+    // -- what an operator or support actually reads -- was written one
+    // level down, where the HTTP status/real error text still existed.
     console.error(`[auth] device registration failed: ${err.message}`);
   }
 
