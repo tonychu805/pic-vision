@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+- **Renaming a camera no longer hides its recordings.** Recordings were
+  filed in a folder named after the camera, so renaming one pointed the app
+  at a folder that didn't exist: every past recording disappeared from that
+  camera's page, along with the button that sends it to the cloud, while the
+  files sat on disk under the old name. Recordings are now filed by camera
+  rather than by name. Existing folders are moved across automatically the
+  first time this version starts — in `~/pic-vision-recordings`, expect
+  folders named after each camera's id instead of its label.
 - **Adding a camera by IP now fails fast when the address is wrong.** Typing an
   address with nothing on it used to leave the dialog on "Connecting…" and then
   "Looking for a video stream…" — a step with no Cancel button — for about

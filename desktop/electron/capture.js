@@ -30,13 +30,30 @@ export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 // particular page being open).
 const active = new Map();
 
-// Exported for calibration.js: a calib.json lives at the same per-camera
-// directory level as this camera's recordings
-// (RECORDINGS_ROOT/sanitizeForPath(label)/), not inside one particular
-// recording's timestamped subfolder, since a calibration outlives any one
-// session.
+// Only the legacy layout below still needs this -- kept exported for
+// store.js's one-time migration off it.
 export function sanitizeForPath(label) {
   return label.replace(/[^a-zA-Z0-9._-]+/g, "_").replace(/^_+|_+$/g, "") || "camera";
+}
+
+// Where one camera's recordings live: RECORDINGS_ROOT/<camera id>/<ISO
+// timestamp>/.
+//
+// Keyed by id since 2026-09-18. It was keyed by sanitizeForPath(label),
+// which meant a rename silently pointed both startRecording and
+// listRecordings at a directory that did not exist yet: every past
+// recording disappeared from the camera's page, taking its "Send to cloud"
+// row with it, while the files sat on disk under the old name with nothing
+// saying so. Two cameras sharing a label also shared one directory, which
+// had already caused a real bug once (the Court 3 sample clip).
+//
+// The label is what an operator recognises, so this trades some
+// browsing-the-disk legibility for a path that survives a rename. The app
+// shows the real path on the camera's own page; store.js's
+// migrateRecordingDirsToCameraIds() moves directories created under the old
+// layout across, once, at startup.
+export function cameraRecordingsDir(camera) {
+  return path.join(RECORDINGS_ROOT, camera.id);
 }
 
 // A camera added via ONVIF (`GetStreamUri`) reports its stream URL
@@ -261,7 +278,7 @@ export function startRecording(camera) {
   // silently, hours later, as a thin reel with no explanation.
   assertUsableFrameRate(camera);
 
-  const outDir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label), new Date().toISOString().replace(/[:.]/g, "-"));
+  const outDir = path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });
 
   const url = authenticatedStreamUri(camera);
@@ -359,7 +376,7 @@ export function newestSegment(outDir) {
 // cloud-pipeline trigger needs something to list and pick from, since
 // nothing before this tracked recordings anywhere but the filesystem
 // itself. One entry per outDir this module has ever created for this
-// camera (sanitizeForPath(camera.label)/<ISO timestamp>/), newest first.
+// camera (cameraRecordingsDir(camera)/<ISO timestamp>/), newest first.
 export function listRecordings(camera) {
   // A sample-clip camera (2026-09-03) has exactly one "recording": the
   // file it was added with. No segments, nothing to concatenate -- the
@@ -375,7 +392,7 @@ export function listRecordings(camera) {
     }];
   }
 
-  const cameraDir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label));
+  const cameraDir = cameraRecordingsDir(camera);
   if (!existsSync(cameraDir)) return [];
   const activeOutDir = active.get(camera.id)?.outDir;
   return readdirSync(cameraDir)

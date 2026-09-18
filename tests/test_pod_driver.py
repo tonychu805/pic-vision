@@ -154,3 +154,47 @@ def test_inference_streaming_kills_the_process_on_a_real_cancel(console_url, mon
     console_url([(200, '{"cancelRequested": false}'), (200, '{"cancelRequested": true}')] + [(200, '{"cancelRequested": false}')] * 8)
     with pytest.raises(pod_driver.Cancelled):
         pod_driver._run_inference_streaming(["python3", "-c", _FAKE_INFER_SCRIPT])
+
+
+# --- The final report is the one that can't be dropped -------------------
+#
+# patch_job() swallows every failure by design, which is right for progress
+# and wrong for the report that ends a job: by then the reels are already in
+# R2 and the console is the only thing that will ever know. A single 500 at
+# that moment left the pod self-terminating, job_runner.py marking the job
+# errored ("pod disappeared without reporting"), and its cleanup deleting
+# the venue's uploaded segments -- asking for a re-upload and a second GPU
+# job for output that was already complete.
+
+
+def test_final_report_retries_until_the_console_answers(console_url, monkeypatch):
+    monkeypatch.setattr(pod_driver, "FINAL_REPORT_BACKOFF_SEC", 0)
+    seen = console_url([(500, "{}"), (502, "{}"), (200, "{}")])
+    assert pod_driver.report_final_job_status(done=True, stage="done") is True
+    assert len(seen) == 3, "should have kept trying until one landed"
+
+
+def test_final_report_gives_up_rather_than_holding_a_billed_pod_forever(console_url, monkeypatch):
+    monkeypatch.setattr(pod_driver, "FINAL_REPORT_BACKOFF_SEC", 0)
+    monkeypatch.setattr(pod_driver, "FINAL_REPORT_ATTEMPTS", 3)
+    seen = console_url([(500, "{}")] * 3)
+    assert pod_driver.report_final_job_status(error="boom") is False
+    assert len(seen) == 3
+
+
+def test_final_report_treats_409_as_delivered(console_url, monkeypatch):
+    # 409 means the row already moved on (cancelled, or reclaimed) -- an
+    # answer, not a delivery failure. Retrying it would be pointless and
+    # would delay self-termination on a billed pod.
+    monkeypatch.setattr(pod_driver, "FINAL_REPORT_BACKOFF_SEC", 0)
+    seen = console_url([(409, "{}")])
+    assert pod_driver.report_final_job_status(done=True) is True
+    assert len(seen) == 1
+
+
+def test_progress_reports_are_still_best_effort(console_url):
+    # The other half of the contract: a failed *progress* report must not
+    # retry or raise, or a console blip would stall a running GPU job.
+    seen = console_url([(500, "{}")])
+    assert pod_driver.patch_job(stage="inference") is False
+    assert len(seen) == 1

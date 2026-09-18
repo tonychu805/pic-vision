@@ -15,11 +15,11 @@ import Store from "electron-store";
 import onvifPromises from "onvif/promises/index.js";
 const { Cam } = onvifPromises;
 import { randomUUID } from "node:crypto";
-import { copyFileSync, existsSync, mkdirSync } from "node:fs";
+import { copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { vendorsForIps } from "./vendorLookup.js";
-import { RECORDINGS_ROOT, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
+import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
@@ -319,11 +319,11 @@ export async function addCameraFromSampleClip({ label, filePath }) {
     addedAt: new Date().toISOString(),
   };
   // Copied into this camera's own recordings folder (capture.js's
-  // RECORDINGS_ROOT/sanitizeForPath(label)/ layout) rather than referenced
-  // in place -- the original file could be moved or deleted by the
-  // operator afterward, and this "camera" needs its one video to keep
-  // existing for as long as the camera entry does.
-  const dir = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label));
+  // cameraRecordingsDir layout) rather than referenced in place -- the
+  // original file could be moved or deleted by the operator afterward, and
+  // this "camera" needs its one video to keep existing for as long as the
+  // camera entry does.
+  const dir = cameraRecordingsDir(camera);
   mkdirSync(dir, { recursive: true });
   const dest = path.join(dir, "sample-clip" + ext);
   copyFileSync(filePath, dest);
@@ -338,6 +338,67 @@ export async function addCameraFromSampleClip({ label, filePath }) {
   cameras.push(camera);
   saveCameras(cameras);
   return camera;
+}
+
+// Recording directories were named after the camera's label until
+// 2026-09-18 (see capture.js's cameraRecordingsDir for why that broke).
+// Machines that recorded under the old layout still have those directories,
+// and a fix that only changes where new recordings go would strand them --
+// the same disappearing act the rename caused, just permanently. So they
+// get moved across, once.
+//
+// Pure, so the awkward cases are actually testable:
+//   - already migrated (the id directory exists) -- leave it alone
+//   - two cameras sharing one label, which the old layout allowed: the
+//     first one in list order takes the directory. Their recordings were
+//     commingled in it and there is no way to tell afterwards which
+//     recording belonged to which camera, so this doesn't guess.
+//   - a sample clip, whose absolute path is stored on the camera and points
+//     inside the directory being moved -- rewritten, or the camera loses
+//     its only video.
+export function planRecordingDirMigration(cameras, exists) {
+  const plan = [];
+  const claimed = new Set();
+  for (const camera of cameras) {
+    const to = path.join(RECORDINGS_ROOT, camera.id);
+    if (exists(to)) continue;
+    const from = path.join(RECORDINGS_ROOT, sanitizeForPath(camera.label));
+    if (from === to || claimed.has(from) || !exists(from)) continue;
+    claimed.add(from);
+    const move = { cameraId: camera.id, from, to };
+    if (typeof camera.sampleClipPath === "string" && camera.sampleClipPath.startsWith(from + path.sep)) {
+      move.sampleClipPath = path.join(to, path.relative(from, camera.sampleClipPath));
+    }
+    plan.push(move);
+  }
+  return plan;
+}
+
+// Runs at startup, before anything reads or writes a recording -- which is
+// also why it doesn't worry about a recording being in progress: nothing is
+// recording yet in a process that has just started.
+export function migrateRecordingDirsToCameraIds() {
+  const cameras = listCameras();
+  const moved = new Map();
+  for (const move of planRecordingDirMigration(cameras, existsSync)) {
+    try {
+      renameSync(move.from, move.to);
+      moved.set(move.cameraId, move);
+      console.log(`[cameras] moved recordings ${move.from} -> ${move.to}`);
+    } catch (err) {
+      // A directory that can't be moved (permissions, a cross-device
+      // recordings root, a file held open) keeps the old layout and stays
+      // readable where it is -- worth saying out loud, not worth refusing
+      // to start over.
+      console.error(`[cameras] couldn't move ${move.from} -> ${move.to}: ${err.message}`);
+    }
+  }
+  if (!moved.size) return 0;
+  saveCameras(cameras.map((camera) => {
+    const move = moved.get(camera.id);
+    return move?.sampleClipPath ? { ...camera, sampleClipPath: move.sampleClipPath } : camera;
+  }));
+  return moved.size;
 }
 
 export function removeCamera(id) {

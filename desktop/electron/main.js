@@ -19,6 +19,7 @@ import {
   addCameraViaRtsp,
   parseRtspUrl,
   addCameraFromSampleClip,
+  migrateRecordingDirsToCameraIds,
 } from "./cameras/store.js";
 import { getNetworkInfo, pickVideoFile, openExternal } from "./system.js";
 import { updateState } from "./version.js";
@@ -544,6 +545,10 @@ app.whenReady().then(() => {
   // and re-encrypts anything a pre-ADR-082 version left in plaintext.
   // Both were real on 2026-09-07 -- see storeFiles.js.
   secureStoreFiles();
+  // Before anything lists or writes a recording: moves directories created
+  // under the old label-named layout to their camera's id (capture.js's
+  // cameraRecordingsDir). A no-op on every launch after the first.
+  migrateRecordingDirsToCameraIds();
   registerCameraHandlers();
   registerScanSettingsHandlers();
   registerCaptureHandlers();
