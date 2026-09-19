@@ -1,5 +1,26 @@
 # Release notes
 
+## 1.5.3 — 2026-09-20
+
+- **Fixed: the app could vanish while still running.** Clicking Retry on a
+  recording made the whole app disappear — but it was never crashing. An
+  error inside the interface removed everything being drawn, and because
+  this window is deliberately transparent (that's how it gets its rounded
+  corners), a window with nothing drawn on it isn't blank, it's invisible.
+  You were seeing your desktop through it. The app kept running the whole
+  time, still connected and still recording.
+
+  The interface now catches its own errors and shows a readable screen —
+  what broke, where, and a button to reload — instead of removing itself.
+  Errors that screen can't catch, like a failure inside a click handler or
+  a background request nobody waited on, are now recorded too.
+
+- **Known issue: clicking Retry can still fail.** What goes wrong there is
+  not fixed, because we still don't know what it is. What's changed is
+  that it can no longer fail invisibly: you'll get an error on screen and
+  a line in the Log tab. **If you hit it, that text is exactly what we
+  need.**
+
 ## 1.5.2 — 2026-09-20
 
 - **Known issue, not yet fixed: the app can quit when you click Retry on a
