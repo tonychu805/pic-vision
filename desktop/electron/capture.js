@@ -268,13 +268,29 @@ export function measureStreamProfile(uri, { seconds = 5, timeoutMs = 20_000 } = 
       if (fps == null) return resolve(null);
 
       const bits = packets.reduce((sum, pk) => sum + (Number(pk.size) || 0), 0) * 8;
+      // The window those bits arrived over. Restored 2026-09-19: PIC-150
+      // moved the fps maths into estimateFpsFromPacketTimes and deleted
+      // this line with the old estimator, but the bitrate below still
+      // referenced it -- so every call threw `ReferenceError: span is not
+      // defined` from inside the ffprobe close handler, where nothing
+      // catches it, and the packaged app died on launch with an uncaught
+      // exception dialog.
+      //
+      // Deliberately the TOTAL span, not the trimmed one the fps estimate
+      // uses: `bits` counts every packet, so pairing it with a window that
+      // drops the first second would over-report the rate.
+      const span = times[times.length - 1] - times[0];
       const positive = (v) => (Number.isFinite(v) && v > 0 ? v : null);
       resolve({
         codec: stream.codec_name ? String(stream.codec_name).toUpperCase() : null,
         width: positive(Number(stream.width)),
         height: positive(Number(stream.height)),
         fps: Math.round(fps * 100) / 100,
-        bitrateKbps: positive(Math.round(bits / span / 1000)),
+        // A zero-length span drops the bitrate alone rather than the whole
+        // profile. The old code bailed out of the entire measurement on
+        // `span <= 0`, taking codec/resolution/fps with it; those are
+        // perfectly good without it, and fps has its own guard now.
+        bitrateKbps: span > 0 ? positive(Math.round(bits / span / 1000)) : null,
       });
     });
   });

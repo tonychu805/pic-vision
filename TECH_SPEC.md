@@ -1032,6 +1032,18 @@ pic-vision/
 │   │   │                              # indefinitely -- real gap found the
 │   │   │                              # same day, where one such leftover
 │   │   │                              # was a live, private frame
+│   │   ├── capture-profile.test.js      # ADR-105: runs measureStreamProfile end to end
+│   │   │                              # against a real ffprobe on a clip ffmpeg
+│   │   │                              # generates from a synthetic pattern (no real
+│   │   │                              # hardware -- the rule is about cameras, not
+│   │   │                              # about never executing the function). Exists
+│   │   │                              # because capture.test.js's 9 passing tests of
+│   │   │                              # the pure estimator said the frame-rate work
+│   │   │                              # was fine while the wrapper around it could
+│   │   │                              # not run at all: PIC-150 deleted a variable
+│   │   │                              # the bitrate line still used, and the
+│   │   │                              # ReferenceError killed the packaged app on
+│   │   │                              # launch. Shipped in 1.5.0
 │   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
 │   │   │                              # to pic-vision-cloud-console (ADR-071) --
 │   │   │                              # registerAgent (2026-09-05, ADR-079 --

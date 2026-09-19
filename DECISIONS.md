@@ -2159,3 +2159,34 @@ The in-flight-job map's own comment documented its shape as `{ jobId, cancelled 
 **Verified:** 143 desktop tests (3 new), renderer builds clean. The new tests run against a real local HTTP server that stalls mid-body — the state a real upload spends nearly all its time in — and assert that an abort in flight rejects as a cancellation *and that the server never receives the whole segment*, which is the assertion that actually distinguishes this fix from the bug. **The tests were confirmed to fail with the fix removed**, not merely to pass with it: tests 1 and 3 fail, while the paired happy-path test still passes. They carry explicit timeouts because the regression's natural failure mode is a hang, not an assertion.
 
 **Not verified:** no live cancel has been pressed against a real in-flight upload since the change. The next real "Send to cloud" is the first chance, and is the same run that will first exercise the five never-yet-successful pod stages.
+
+## ADR-105 — A tested pure function said the feature worked; nothing ever ran the function around it
+
+**Date:** 2026-09-19 · **Status:** fixed
+
+**Context.** Operator, opening the freshly released 1.5.0 build:
+
+```
+A JavaScript error occurred in the main process
+Uncaught Exception:
+ReferenceError: span is not defined
+    at ChildProcess.<anonymous> (.../app.asar/electron/capture.js:277:49)
+```
+
+**Root cause.** `d4f8be9` (PIC-150, 2026-09-18) moved the frame-rate maths out of `measureStreamProfile` into a new pure `estimateFpsFromPacketTimes`, and deleted the old estimator along with the `const span = times[times.length - 1] - times[0]` line it used. The bitrate field in the enclosing function still referenced `span`. The new `span` lives inside the extracted function, a different scope, so the reference resolved to nothing.
+
+Every call therefore threw — and threw from inside the ffprobe `close` handler, which is registered inside a `new Promise` executor but runs long after it, so the rejection path doesn't exist. An uncaught exception in the main process is a modal crash dialog, and `measureStreamProfile` runs when a camera's profile needs checking, which is on launch. The app was unopenable for anyone with a camera configured.
+
+**Why the tests passed.** `capture.test.js` covers `estimateFpsFromPacketTimes` with nine cases and its header explains, correctly, that keeping the maths pure makes it testable "without a real camera or a real ffprobe process". That reasoning is sound about cameras and was silently extended to the wrapper: **nothing in the suite ever executed `measureStreamProfile` itself.** So a refactor that moved logic out of a function could break what remained, and nine green tests reported the frame-rate work as fine.
+
+This is the same shape as the `redaction.test.js` lesson already in CLAUDE.md — a test asserting the new behaviour passed while the feature was broken — arriving from the other direction: there, removal was proven without proving the feature still worked; here, the extracted logic was proven without proving its caller still ran.
+
+**Why review didn't catch it either.** The release that shipped it (1.5.0) bundled five commits that had never been in an installed build, and the app was never opened against any of them. A ~12-second dev launch earlier the same day checked only that the process started; it never reached a camera profile measurement.
+
+**Fix.** `span` restored in `measureStreamProfile`, deliberately as the *total* packet span rather than the trimmed one the fps estimate now uses — `bits` counts every packet, so pairing it with a window that drops the first second would over-report the rate. A zero-length span now drops the bitrate field alone instead of failing the whole measurement; codec, resolution and fps are perfectly good without it, and fps has its own guard.
+
+**The test that should have existed.** `capture-profile.test.js` runs `measureStreamProfile` end to end against a real ffprobe, on a clip ffmpeg generates from a synthetic pattern. This project's standing rule is against pulling frames or streams from **real hardware**; a generated file is not that, and treating "no real camera" as "never execute the function" is what left this uncovered. Paired, per CLAUDE.md: one test that a measurable clip returns every field including the bitrate, one that an unreadable file still comes back as a clean `null` rather than a throw — they share the close handler, so a throw in there takes both down.
+
+**Verified:** the new tests were confirmed to fail with the fix removed, reproducing the operator's exact `ReferenceError`, and to pass with it. 145 desktop tests.
+
+**Scope:** 1.5.0 only. `d4f8be9` landed after the `desktop-v1.4.0` tag, so 1.4.0 is unaffected and remains the last good build.

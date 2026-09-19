@@ -1,6 +1,16 @@
 # Release notes
 
-## 1.5.0 — 2026-09-19
+## 1.5.1 — 2026-09-19
+
+- **Fixed: 1.5.0 crashed on launch.** Opening the app showed "A JavaScript
+  error occurred in the main process" and it never got any further, for
+  anyone with a camera set up. A variable removed during last week's
+  frame-rate fix was still being used by the line that measures a camera's
+  bitrate, so checking a camera's stream — which happens on launch — threw
+  every time. **If you installed 1.5.0, replace it with this build.** 1.4.0
+  was not affected.
+
+## 1.5.0 — 2026-09-19 (withdrawn — crashes on launch, use 1.5.1)
 
 - **Cancel now actually stops a cloud upload.** Pressing Cancel during
   "Send to cloud" told the cloud console to cancel the job, and then
