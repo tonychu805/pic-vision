@@ -2190,3 +2190,32 @@ This is the same shape as the `redaction.test.js` lesson already in CLAUDE.md �
 **Verified:** the new tests were confirmed to fail with the fix removed, reproducing the operator's exact `ReferenceError`, and to pass with it. 145 desktop tests.
 
 **Scope:** 1.5.0 only. `d4f8be9` landed after the `desktop-v1.4.0` tag, so 1.4.0 is unaffected and remains the last good build.
+
+## ADR-106 — The app is no longer allowed to disappear without saying why
+
+**Date:** 2026-09-20 · **Status:** built
+
+**Context.** Two crashes in two days, and the difference between them was entirely about what they reported. The first said `ReferenceError: span is not defined at capture.js:277` and was diagnosed and fixed in minutes (ADR-105). The second, on Retry in 1.5.1, produced nothing: "there's no error text, it just disappears." That left no file, no line, no log entry, and no way to ask the operator for more — only a round trip asking them to reproduce it under a terminal.
+
+**Decision.** Reporting a failure is a feature, not a debugging convenience, and it should not depend on which kind of failure happened. `crashReport.js` records every way the app can go away — to the Log tab, to `crash.log` in userData, and to stderr — and, more importantly, distinguishes cases that are indistinguishable from outside:
+
+| what happened | what it looks like to the operator |
+|---|---|
+| `uncaughtException` | a dialog, or nothing |
+| `unhandledRejection` | **nothing** — Node 22 throws by default, and the process can go without a dialog |
+| `render-process-gone` | a blank window, or nothing |
+| `child-process-gone` | usually nothing |
+| a clean quit | the window vanishes |
+
+The last row is why a clean quit is logged too. "It crashed" and "something asked it to quit" look identical to someone watching a window disappear, and they lead to completely different investigations. Logging only crashes would leave that ambiguity exactly where it is.
+
+**Two deliberate choices.**
+
+- **Additive to Electron's own dialog, never replacing it.** Electron installs its own `uncaughtException` listener that shows "A JavaScript error occurred in the main process"; both listeners run, and this module neither exits nor swallows. That dialog is what made ADR-105 a five-minute fix, and a test asserts this module isn't the only handler so a later change can't quietly make it so.
+- **The `unhandledRejection` listener does change behaviour, knowingly.** Node 22's default is to throw, which can take the process down with no dialog. With a listener attached it doesn't. Staying alive with a logged failure is better than vanishing with nothing — and it is exactly the failure shape the operator hit.
+
+**What this deliberately cannot do:** a native crash in the main process itself. No JavaScript runs after that. macOS writes those to `~/Library/Logs/DiagnosticReports`, so *nothing recorded at all* becomes a signal in its own right rather than a dead end.
+
+**Verified:** 151 desktop tests (6 new). The tests run `installCrashReporting` for real against a stand-in process and app and a real temp directory, then fire each event — ADR-105's lesson applied to the module written because of it, instead of testing only the pure wording helper next to it. One covers the reporter's own failure path: a logging call that throws must not become the crash, since this runs while the app is already falling over. The app was also launched and confirmed to boot with the handlers installed.
+
+**This is instrumentation, not a fix.** The 1.5.1 Retry crash is still unexplained. What changes is that its next occurrence names itself instead of costing a round trip.

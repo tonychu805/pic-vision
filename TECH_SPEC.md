@@ -1044,6 +1044,27 @@ pic-vision/
 │   │   │                              # the bitrate line still used, and the
 │   │   │                              # ReferenceError killed the packaged app on
 │   │   │                              # launch. Shipped in 1.5.0
+│   │   ├── crashReport.js               # ADR-106 (2026-09-20): every way the app can go
+│   │   │                              # away, written down before it goes -- Log tab,
+│   │   │                              # crash.log in userData, and stderr. Separates
+│   │   │                              # uncaughtException / unhandledRejection /
+│   │   │                              # render-process-gone / child-process-gone /
+│   │   │                              # a clean quit, which all look identical from
+│   │   │                              # outside ("the window vanished") and lead to
+│   │   │                              # different investigations. Additive to
+│   │   │                              # Electron's own error dialog, never replacing
+│   │   │                              # it; the unhandledRejection listener DOES
+│   │   │                              # change behaviour (Node 22 otherwise throws),
+│   │   │                              # knowingly. Cannot cover a native crash in
+│   │   │                              # the main process -- nothing recorded at all
+│   │   │                              # is itself the signal to check macOS's
+│   │   │                              # DiagnosticReports
+│   │   ├── crashReport.test.js          # 6 tests that RUN installCrashReporting
+│   │   │                              # against a stand-in process/app and a real
+│   │   │                              # temp dir, then fire each event -- ADR-105's
+│   │   │                              # lesson applied to the module written
+│   │   │                              # because of it, rather than testing only the
+│   │   │                              # wording helper beside it
 │   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
 │   │   │                              # to pic-vision-cloud-console (ADR-071) --
 │   │   │                              # registerAgent (2026-09-05, ADR-079 --

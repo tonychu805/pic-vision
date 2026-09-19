@@ -35,12 +35,25 @@ import { signIn, signOut, getSession, getBrand, registerDevice, registrationStat
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
-import { getEvents, clearEvents } from "./activityLog.js";
+import { getEvents, clearEvents, logEvent } from "./activityLog.js";
 import { runChecks } from "./diagnostics.js";
 import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
+import { installCrashReporting } from "./crashReport.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
+// Installed before anything else can fail. 2026-09-20: a crash on Retry
+// produced no dialog, no message and no log line -- the app simply went
+// away -- which left nothing to diagnose from and no way to ask the
+// operator for more. Every exit now leaves a trace in the Log tab, in
+// crash.log next to it, and on stderr. See crashReport.js for what this
+// deliberately cannot cover (a native crash in this very process).
+installCrashReporting({
+  app,
+  logEvent,
+  userDataDir: app.getPath("userData"),
+});
 
 /**
  * Point the realtime command channel at whatever this machine is
