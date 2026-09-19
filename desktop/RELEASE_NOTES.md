@@ -1,5 +1,24 @@
 # Release notes
 
+## 1.5.2 — 2026-09-20
+
+- **Known issue, not yet fixed: the app can quit when you click Retry on a
+  recording.** This build does not fix that. What it does is stop it
+  happening silently — see below — so the next time it happens there is
+  something to read.
+- **The app now says why it stopped, instead of just going away.** A crash
+  in 1.5.1 produced no message at all: the window simply vanished, which
+  left nothing to work from. Every way the app can stop is now written to
+  the Log tab and to a `crash.log` file beside it, and it distinguishes an
+  error, a background failure, the window's process dying, a helper
+  process dying, and a plain quit — all of which previously looked the
+  same from the outside. Some background failures could also take the app
+  down with no warning at all; those are now reported and survived rather
+  than fatal.
+
+  **If the Retry crash happens to you again**, the Log tab will have a line
+  for it. That line is what we need.
+
 ## 1.5.1 — 2026-09-19
 
 - **Fixed: 1.5.0 crashed on launch.** Opening the app showed "A JavaScript
