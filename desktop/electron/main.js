@@ -49,7 +49,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // operator for more. Every exit now leaves a trace in the Log tab, in
 // crash.log next to it, and on stderr. See crashReport.js for what this
 // deliberately cannot cover (a native crash in this very process).
-installCrashReporting({
+const recordExit = installCrashReporting({
   app,
   logEvent,
   userDataDir: app.getPath("userData"),
@@ -508,6 +508,13 @@ function registerLiveViewHandlers() {
 // createWindow() call (e.g. macOS dock re-activate).
 function registerWindowControlHandlers() {
   const focused = () => BrowserWindow.getFocusedWindow() ?? BrowserWindow.getAllWindows()[0];
+  // The renderer's own failures, into the same Log tab and crash.log as
+  // the main process's (ADR-107). Two strings, never an object -- see
+  // ipc-contract.test.js on why an object crossing this boundary has to
+  // be classified, and there is nothing here worth classifying.
+  ipcMain.handle("app:reportRendererError", async (_event, message, stack) => {
+    recordExit("renderer-error", { message, stack });
+  });
   ipcMain.handle("window:minimize", () => focused()?.minimize());
   ipcMain.handle("window:maximize", () => {
     const win = focused();

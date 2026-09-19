@@ -57,6 +57,16 @@ export function describeExit(kind, payload) {
         title: `The app hit an unhandled failure: ${payload?.message ?? payload}`,
         detail: payload?.stack ?? String(payload),
       };
+    case "renderer-error":
+      return {
+        type: "app_crashed",
+        // Distinct from render-process-gone: the window's process is
+        // alive and well, its React tree just died. With a transparent
+        // window that looks identical to the app vanishing, which is
+        // exactly how it was reported.
+        title: `The app window hit an error: ${payload?.message ?? payload}`,
+        detail: payload?.stack ?? null,
+      };
     case "render-process-gone":
       return {
         type: "app_crashed",

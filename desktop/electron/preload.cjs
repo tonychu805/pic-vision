@@ -55,6 +55,11 @@ contextBridge.exposeInMainWorld("platformAPI", {
   platform: process.platform, // 'darwin' | 'win32' | 'linux'
 });
 
+// Reporting only -- the renderer can say what broke, and nothing else.
+contextBridge.exposeInMainWorld("appAPI", {
+  reportError: (message, stack) => ipcRenderer.invoke("app:reportRendererError", message, stack),
+});
+
 contextBridge.exposeInMainWorld("windowAPI", {
   minimize: () => ipcRenderer.invoke("window:minimize"),
   maximize: () => ipcRenderer.invoke("window:maximize"),

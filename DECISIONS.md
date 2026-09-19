@@ -2219,3 +2219,33 @@ The last row is why a clean quit is logged too. "It crashed" and "something aske
 **Verified:** 151 desktop tests (6 new). The tests run `installCrashReporting` for real against a stand-in process and app and a real temp directory, then fire each event — ADR-105's lesson applied to the module written because of it, instead of testing only the pure wording helper next to it. One covers the reporter's own failure path: a logging call that throws must not become the crash, since this runs while the app is already falling over. The app was also launched and confirmed to boot with the handlers installed.
 
 **This is instrumentation, not a fix.** The 1.5.1 Retry crash is still unexplained. What changes is that its next occurrence names itself instead of costing a round trip.
+
+## ADR-107 — A transparent window turns any renderer error into a disappearing app
+
+**Date:** 2026-09-20 · **Status:** fixed
+
+**Context.** Operator on 1.5.1 and 1.5.2: clicking Retry on a recording made the app "just disappear" — no dialog, no message, nothing in the Log tab, nothing in `crash.log`, nothing on stderr when launched from a terminal.
+
+**What it actually was.** Nothing crashed. Two observations settled it: launched from a terminal, the shell **did not** return to a prompt when the window vanished, and the only line ever printed was `[crash] quit` — hours later, when the operator quit the app themselves. So the process was alive the whole time, with no window.
+
+Three things compounded into that:
+
+1. **There is no error boundary in the renderer.** `src/main.jsx` rendered `<App/>` straight into the root. React 18 unmounts the *entire* root on an uncaught render error, by design.
+2. **The window is deliberately transparent** — `frame: false`, `transparent: true`, `backgroundColor: "#00000000"` — so `App.jsx` can draw its own rounded corners (the alternative was the OS painting squared-off fill outside the CSS radius). With the tree unmounted there is nothing to paint, so the window isn't blank. It's invisible. You see the desktop through it.
+3. **On macOS the app deliberately outlives its windows** (`window-all-closed` doesn't quit there, per the tray work), so the process stays up and nothing anywhere reports a problem.
+
+Every one of those is individually correct and deliberate. Together they mean any error in the React tree presents as the application ceasing to exist, silently, with the process still running.
+
+ADR-106's crash reporting, added the day before for exactly this complaint, could not have caught it: it covers the main process, and this happened in the other one. That is worth recording as its own lesson — instrumentation aimed at the half you were looking at proves nothing about the half you weren't.
+
+**Fix.** Three parts, none of which depends on knowing what threw:
+
+- **An error boundary at the root**, whose fallback paints an **opaque** background. That is the load-bearing detail, not styling: on a transparent window a fallback without its own background is exactly as invisible as the unmounted tree it replaces, which would make the whole component decorative. It shows the message and stack directly rather than behind a disclosure — that text is precisely what the last two crashes cost a round trip to obtain — and offers a reload, which recovers without restarting the app.
+- **`window.onerror` and `unhandledrejection` handlers**, for the failures a boundary never sees: a throw in an event handler or a timer, and a promise nobody caught. Both were previously printed only to a DevTools console nobody has open.
+- **A reporting channel to main**, so renderer failures land in the same Log tab and `crash.log` as the main process's, under their own `renderer-error` kind — distinct from `render-process-gone`, because "React died in a healthy process" and "the process died" look identical from outside and send you looking in different places.
+
+**Verified:** 160 desktop tests (9 new). The crash screen is **actually rendered** and asserted on — bundled with the esbuild already in `node_modules` and run through `react-dom/server`, no jsdom and no new dependency — including that it paints an opaque background, and the paired assertion that with no error it renders its children and nothing else. The wiring is exercised too, not just the formatter beside it: real `addEventListener` dispatch, and the reporter's own failure path, since it runs while the app is already broken.
+
+**Still unknown: what actually throws on Retry.** This makes it visible rather than fixing it. The next occurrence puts the message, the JS stack and the React component stack on screen and in the log.
+
+**The general rule this project keeps relearning, from a third direction:** a window that can render nothing must never be able to render nothing silently. ADR-105 was logic no test executed; ADR-106 was a process that could die without reporting; this is a UI that could vanish without reporting. Same shape each time.

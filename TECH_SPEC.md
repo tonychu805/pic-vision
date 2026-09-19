@@ -1059,7 +1059,7 @@ pic-vision/
 │   │   │                              # the main process -- nothing recorded at all
 │   │   │                              # is itself the signal to check macOS's
 │   │   │                              # DiagnosticReports
-│   │   ├── crashReport.test.js          # 6 tests that RUN installCrashReporting
+│   │   ├── crashReport.test.js          # 7 tests that RUN installCrashReporting
 │   │   │                              # against a stand-in process/app and a real
 │   │   │                              # temp dir, then fire each event -- ADR-105's
 │   │   │                              # lesson applied to the module written
@@ -1270,6 +1270,36 @@ pic-vision/
 │   │                                       # on non-Intel/no-iGPU machines
 │   └── src/                          # React (Vite) renderer
 │       ├── App.jsx                      # TitleBar + Sidebar + page switch
+│       ├── ErrorBoundary.jsx             # ADR-107 (2026-09-20): the app's last line of
+│       │                                  # defence. Without it a React error unmounts
+│       │                                  # the whole root, and since the window is
+│       │                                  # transparent (frame:false/transparent:true,
+│       │                                  # so App.jsx can draw its own rounded
+│       │                                  # corners) an unmounted tree is an INVISIBLE
+│       │                                  # window, not a blank one -- reported, twice,
+│       │                                  # as the app "just disappearing" while its
+│       │                                  # process stayed alive. Its opaque background
+│       │                                  # is load-bearing, not styling
+│       ├── main.jsx                       # renderer entry: installs the window.onerror
+│       │                                  # / unhandledrejection reporters BEFORE the
+│       │                                  # first render, then mounts App inside the
+│       │                                  # boundary above
+│       ├── lib/rendererErrors.js          # ADR-107: formats a renderer failure into the
+│       │                                  # two strings main stores, and wires the two
+│       │                                  # failures a boundary never sees (a throw in
+│       │                                  # an event handler or timer, and an uncaught
+│       │                                  # promise). Pure + injected DOM target, so
+│       │                                  # `node --test` runs it with no jsdom
+│       ├── lib/rendererErrors.test.js     # 5 tests: real addEventListener dispatch,
+│       │                                  # React's component stack kept alongside the
+│       │                                  # JS stack, non-Error throws, and a reporter
+│       │                                  # that throws not becoming the failure
+│       ├── lib/errorBoundary.test.js      # 3 tests that RENDER the crash screen --
+│       │                                  # bundled with node_modules' own esbuild and
+│       │                                  # run through react-dom/server (no jsdom, no
+│       │                                  # new dep) -- incl. that it paints an opaque
+│       │                                  # background, without which it would be as
+│       │                                  # invisible as the crash it replaces
 │       ├── index.css                     # "Nocturne" design tokens, ported from
 │       │                                  # the handoff bundle's styles.css
 │       ├── components/                    # TitleBar, Sidebar, CameraCard (WeekGrid/

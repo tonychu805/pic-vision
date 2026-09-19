@@ -95,6 +95,20 @@ test("a dead window or helper process names which one and why", () => {
   }
 });
 
+test("a renderer error is told apart from the renderer's process dying", () => {
+  // Two very different situations that both look like the window going
+  // away: one is React unmounting inside a perfectly healthy process (the
+  // 2026-09-20 report), the other is that process actually dying. Reading
+  // "The app window hit an error" and going to look for a dead process --
+  // or the reverse -- is a wasted afternoon.
+  const crashed = describeExit("renderer-error", { message: "boom", stack: "at CloudJobRow" });
+  const gone = describeExit("render-process-gone", { reason: "crashed", exitCode: 5 });
+  assert.match(crashed.title, /window hit an error: boom/);
+  assert.equal(crashed.detail, "at CloudJobRow");
+  assert.match(gone.title, /window's process stopped/);
+  assert.notEqual(crashed.title, gone.title);
+});
+
 test("a reporter that can't write still doesn't become the crash", () => {
   // It runs while the app is already falling over. A throw in here turns
   // one lost diagnosis into two.

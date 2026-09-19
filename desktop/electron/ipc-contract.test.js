@@ -74,7 +74,11 @@ const FRESH_INPUT_ONLY = new Set([
 // as an object and must be classified. Adding a name here is a deliberate
 // claim that the value is a string/number and cannot carry a stripped
 // secret -- cheap to do, and visible in review when it's wrong.
-const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec)$/;
+// `message`/`stack`: the two strings app:reportRendererError carries.
+// Listing them is the deliberate claim the rule above describes -- they
+// are an error's text, never an entity, and carry no secret that could
+// have been stripped on the way out.
+const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack)$/;
 
 function isObjectParam(param) {
   // `{ a, b }` / `[a, b]` -- destructured, therefore an object.
