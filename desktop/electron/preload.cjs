@@ -30,6 +30,9 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   // single source of truth main.js's own handler reads internally now,
   // same pattern as getNetworkInfo() already being computed server-side.
   sweep: () => ipcRenderer.invoke("cameras:sweep"),
+  // Only called after a scan that completed and found nothing -- see the
+  // handler in main.js for why it takes no arguments.
+  explainEmptyScan: () => ipcRenderer.invoke("cameras:explainEmptyScan"),
   probeRtspFallback: (config) => ipcRenderer.invoke("cameras:probeRtspFallback", config),
   addRtsp: (config) => ipcRenderer.invoke("cameras:addRtsp", config),
   parseRtspUrl: (raw, fallbackUsername, fallbackPassword) =>

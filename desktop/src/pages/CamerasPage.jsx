@@ -311,6 +311,12 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
   const [hasScanned, setHasScanned] = useState(false);
   const [scanError, setScanError] = useState(null);
   const [sweepError, setSweepError] = useState(null);
+  // Why an empty scan was empty (electron/cameras/networkPresence.js).
+  // Null until a completed scan finds nothing; `diagnosing` covers the few
+  // seconds it takes, so the empty state doesn't flash the generic text
+  // and then replace it.
+  const [scanVerdict, setScanVerdict] = useState(null);
+  const [diagnosing, setDiagnosing] = useState(false);
   const [selectMode, setSelectMode] = useState(false);
   const [picked, setPicked] = useState(new Set());
   const [manualOpen, setManualOpen] = useState(false);
@@ -375,6 +381,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
     setScanning(true);
     setScanError(null);
     setSweepError(null);
+    setScanVerdict(null);
     setScanPct(4);
     const start = Date.now();
     scanTimer.current = setInterval(() => {
@@ -408,12 +415,34 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
     setScanPct(100);
     setHasScanned(true);
     setTimeout(() => setScanning(false), 200);
+
+    // Only when the sweep actually COMPLETED and still found nothing, and
+    // only when there's an empty page to explain. A sweep that errored has
+    // no standing to say anything about the network -- that case already
+    // renders its own message -- and an operator who has cameras set up
+    // isn't looking at the empty state at all.
+    const foundNothing =
+      (discoverResult.value?.length ?? 0) + (sweepResult.value?.length ?? 0) === 0;
+    if (sweepResult.status !== "fulfilled" || !foundNothing || configured.length > 0) return;
+
+    setDiagnosing(true);
+    try {
+      const verdict = await window.cameraAPI.explainEmptyScan();
+      if (run === scanRun.current) setScanVerdict(verdict);
+    } catch {
+      // Falls back to the generic wording. An explanation that can't be
+      // produced is not worth an error of its own -- the operator's actual
+      // problem is still "nothing was found".
+    } finally {
+      if (run === scanRun.current) setDiagnosing(false);
+    }
   };
 
   const stopScan = () => {
     scanRun.current += 1;
     clearInterval(scanTimer.current);
     setScanning(false);
+    setDiagnosing(false);
   };
 
   useEffect(() => () => clearInterval(scanTimer.current), []);
@@ -425,6 +454,14 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
   // most to explain. Both cases show the empty state now; only the wording
   // differs.
   const isEmpty = !scanning && cards.length === 0;
+  // An isolating network is a different problem from an empty one, and
+  // looks like one before the text is read.
+  const emptyIcon =
+    scanVerdict?.state === "isolated"
+      ? "ph ph-wifi-slash"
+      : hasScanned
+        ? "ph ph-binoculars"
+        : "ph ph-radar";
   const mine = cards.filter((c) => c.kind === "configured");
   const found = cards.filter((c) => c.kind !== "configured");
 
@@ -565,13 +602,19 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
         <div style={{ flex: 1, display: "grid", placeItems: "center", padding: "0 22px 40px" }}>
           <div style={{ maxWidth: 420, textAlign: "center" }}>
             <div style={{ width: 104, height: 104, margin: "0 auto 18px", borderRadius: "50%", display: "grid", placeItems: "center", background: "radial-gradient(circle, var(--color-accent-900), transparent 70%)" }}>
-              <i className={hasScanned ? "ph ph-binoculars" : "ph ph-radar"} style={{ fontSize: 44, color: "var(--color-accent)" }} />
+              <i className={emptyIcon} style={{ fontSize: 44, color: "var(--color-accent)" }} />
             </div>
             <div style={{ fontFamily: "var(--font-heading)", fontSize: 22, marginBottom: 6 }}>
-              {hasScanned ? "Nothing found on this network" : "No cameras added yet"}
+              {/* The verdict's own headline when there is one. "Nothing
+                  found on this network" is true of all four situations
+                  networkPresence.js separates, which is why it was no help
+                  at the venue this was built for (2026-09-19). */}
+              {scanVerdict?.title ?? (hasScanned ? "Nothing found on this network" : "No cameras added yet")}
             </div>
             <p className="text-2" style={{ fontSize: "var(--fs-strong)", lineHeight: 1.6 }}>
-              {hasScanned ? (
+              {scanVerdict?.detail ?? (diagnosing ? (
+                <>Working out why — checking what this network lets you see…</>
+              ) : hasScanned ? (
                 <>
                   The scan finished without finding anything. A camera on a different network, or one that doesn't
                   answer discovery, won't show up here — you can still add it yourself using its IP address.
@@ -581,8 +624,16 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
                   picvision can look for cameras on your Wi-Fi network for you — usually takes just a few seconds. If it
                   doesn't find yours, you can add it yourself using its IP address instead.
                 </>
-              )}
+              ))}
             </p>
+            {/* The numbers the paragraph above is a reading of, so the
+                reading can be checked rather than taken on faith. */}
+            {scanVerdict?.facts?.cidr && (
+              <div className="text-3" style={{ fontSize: "var(--fs-body)", marginTop: 10 }}>
+                {scanVerdict.facts.cidr} · {scanVerdict.facts.addressesChecked} addresses checked ·{" "}
+                {scanVerdict.facts.neighbors === 1 ? "1 device" : `${scanVerdict.facts.neighbors} devices`} visible
+              </div>
+            )}
             <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
               <button className="btn btn-primary" onClick={startScan}>
                 <i className="ph ph-radar" style={{ fontSize: 16 }} />{hasScanned ? "Scan again" : "Scan this network"}

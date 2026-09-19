@@ -75,6 +75,26 @@ export function hostsInCidr(cidr) {
   return hosts;
 }
 
+/**
+ * Is `ip` inside `cidr`? Arithmetic only -- never builds the host list,
+ * so it stays cheap for a membership test on a big block.
+ *
+ * Added for networkPresence.js, which has to tell "a device on the venue's
+ * subnet" apart from the docker bridges and other interfaces that also sit
+ * in a machine's ARP table. Lives here rather than there because the
+ * address arithmetic it needs is already in this file.
+ */
+export function ipInCidr(ip, cidr) {
+  if (!ip || !cidr) return false;
+  const [base, prefixStr] = cidr.split("/");
+  const prefix = Number(prefixStr);
+  if (!Number.isFinite(prefix) || prefix < 0 || prefix > 32) return false;
+  // >>> 0 on both sides: ipToInt can exceed 2^31, and `&` coerces to a
+  // signed int32, so the comparison has to be made unsigned consistently.
+  const mask = prefix === 0 ? 0 : (~0 << (32 - prefix)) >>> 0;
+  return ((ipToInt(ip) & mask) >>> 0) === ((ipToInt(base) & mask) >>> 0);
+}
+
 // Opens the TCP connection, then -- if that succeeds -- sends a real RTSP
 // OPTIONS request and checks for a genuine RTSP status line in the reply.
 // Returns { open, confirmed }: `open` on a bare TCP accept (the old

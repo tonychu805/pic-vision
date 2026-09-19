@@ -83,6 +83,24 @@ function readArpTable() {
   return table;
 }
 
+/**
+ * Every IP the OS currently has a real MAC for -- the neighbour cache as a
+ * list, rather than a lookup for addresses we already have in hand.
+ *
+ * networkPresence.js counts these to tell an isolating network (the router
+ * resolves, nothing else does) from an ordinary one. Same failure
+ * behaviour as the lookups below: [] on any problem reading the table,
+ * never a throw, because every caller treats this as one signal among
+ * several rather than something to gate on.
+ */
+export function neighborIps() {
+  try {
+    return [...readArpTable().keys()];
+  } catch {
+    return [];
+  }
+}
+
 // { [ip]: vendorName | null } for every ip in `ips` that's in the ARP
 // table right now. Silently returns {} on any lookup failure (missing
 // /proc/net/arp, no `arp` binary, permission issues) -- this is a nice-to-

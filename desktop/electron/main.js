@@ -26,6 +26,7 @@ import { updateState } from "./version.js";
 import { classifyProbeError } from "./cameras/probeResult.js";
 import { probeSsdp, describeSsdpHosts, declaresCamera } from "./cameras/ssdp.js";
 import { identitiesForIps } from "./cameras/vendorLookup.js";
+import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
@@ -217,6 +218,18 @@ function registerCameraHandlers() {
         declaredCamera: declaresCamera(ssdp),
       };
     });
+  });
+  // Why the scan came up empty. Called by the renderer only when a scan
+  // that actually COMPLETED found nothing -- a scan that errored out is
+  // already reported as an error, and has no business claiming anything
+  // about what's on the network.
+  //
+  // Takes no arguments for the same reason cameras:sweep stopped taking
+  // them: the network it's describing is the one this process detects, not
+  // one the renderer gets to name.
+  ipcMain.handle("cameras:explainEmptyScan", async () => {
+    const { cidr, address } = getNetworkInfo();
+    return explainEmptyScan({ cidr, address });
   });
   // RTSP-direct fallback (2026-09-01) -- for cameras where ONVIF doesn't
   // work at all but a real stream exists anyway. See store.js's own

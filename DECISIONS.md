@@ -2099,3 +2099,34 @@ Nine real pod-creation attempts happened before this landed. The custom Docker i
 **Fix.** `SendToCloudControl` now polls `jobs` (same `POLL_INTERVAL_MS` cadence the rest of this page already uses, RLS already scopes it to the signed-in brand owner's own agents) for any non-terminal (`queued`/`uploading`/`running`) `kind='reel'` row matching this camera's `camera_id`, and disables the button with a reason while one exists. A second, narrower gap the DB alone can't cover: the desktop agent only picks up a queued command on its own ~30s heartbeat cadence, so for a few seconds after a click there is no `jobs` row yet to find — a `justQueued` flag (cleared after 45s, matching the notice text's own "usually reflects within 30 seconds" promise) blocks a second click during exactly that window.
 
 **Verified:** confirmed live against the real `jobs` table (the actual in-flight "Sample 1" row from this incident, `status='running'`, `camera_id` matching `cameras.camera_id` — the join field the new query relies on) matches the guard's query shape; `tsc --noEmit` clean.
+
+## ADR-103 — An empty scan gets explained, not scanned harder; and the explanation never probes anyone's devices
+
+**Date:** 2026-09-19 · **Status:** built
+
+**Context.** A venue visit: the operator was on the venue's guest WiFi looking for cameras that belong to the venue owner (confirmed afterwards to be Tapo — TP-Link cloud cameras). Nothing was findable. The desktop app would have reported exactly what a manual scan did: nothing. Its empty state said **"Nothing found on this network"**, which is equally true of four situations that need four different responses:
+
+1. there are no cameras here,
+2. the cameras are on a different subnet,
+3. the network isolates its clients, so nothing is reachable from here at all,
+4. a camera is reachable in principle, but its RTSP/ONVIF was never switched on in the vendor's app.
+
+Only (2) is something the operator can act on alone. (3) and (4) both require asking the venue owner for something specific, and the app gave no way to tell which.
+
+**Decision, part one: the fix is explanation, not more detection.** The detection half was already complete — WS-Discovery (`discovery.js`), SSDP (`ssdp.js`), an RTSP port sweep with operator-configurable extra ranges (`networkSweep.js`, `scanSettings.js`), ARP/OUI vendor lookup, and manual add by IP or full RTSP URL. None of it would have helped, because client isolation and VLAN separation are enforced at the access point. No client-side change crosses them; `scanSettings.js` already said so in a comment nobody surfaced to the operator. Wider port lists, vendor fingerprinting and auto-expanding into neighbouring subnets were all considered and rejected: they don't cross the obstacle, and they turn the agent into a network scanner running on infrastructure we don't own.
+
+**Decision, part two: the explanation uses only signals that aren't probes of third-party devices.** This is the load-bearing constraint, and it comes straight from the visit — the session that prompted this declined to scan for the venue's cameras, and it would be incoherent to then ship an automated version of the same thing. `networkPresence.js` uses three signals, none of which touches anyone's device:
+
+- **The OS's own ARP table** (`vendorLookup.js`'s `neighborIps()`, filtered to our subnet). Reading our own kernel's neighbour cache is not a probe. It is also the *load-bearing* signal, because of a specific property: under client isolation the access point still forwards to the gateway but drops client-to-client frames, so ARP for every other host goes unanswered and the cache ends up holding the router and nothing else — even though the sweep just asked about all 254 addresses. That signature is the thing being recognised.
+- **SSDP M-SEARCH responder count** — a multicast question every scan already asks. Not new behaviour, just a count that was previously discarded.
+- **A passive mDNS listen** — we join the group and read what devices volunteer, and never transmit.
+
+**Decision, part three: the verdict errs against claiming isolation.** `ISOLATION_MAX_NEIGHBORS = 1` (the gateway, and nothing above it), and *any* peer seen by *any* of the three signals rules isolation out. A wrong "this network is isolated" verdict sends the operator to argue with a venue owner about their WiFi configuration, which is a far worse failure than falling through to the vaguer "devices here, none of them a camera". States are named by what the operator should do — `isolated` / `no-cameras` / `off-network` / `unknown` — the same rule `probeResult.js` follows, for the same reason.
+
+**Measured, and it changed the design.** On a real LAN with 11 live devices, one 3-second mDNS window heard 2 peers and the *next heard none*. mDNS is bursty, so silence over a few seconds is not evidence of an empty network. That is why mDNS is allowed to argue only *against* isolation and never for it, and why an mDNS listen that never bound at all (something else holding 5353 — macOS runs mDNSResponder) reports `supported: false` rather than a zero: "we didn't look" and "nothing was there" are different facts, and only the second is evidence.
+
+**Cost:** the check runs only when a sweep that actually *completed* found nothing, and only when there is an empty page to explain. Zero cost on the normal path; ~3 seconds at the one moment the operator is stuck.
+
+**Verified:** 140 desktop tests pass (8 new for the verdict, 1 new for `ipInCidr`'s subnet-membership arithmetic including the above-2^31 signed-int32 case and the /23 boundary); renderer builds clean; and the module was run end-to-end against this machine's real network, where all three signals fired (11 ARP neighbours, 7 SSDP responders, mDNS bound successfully) and produced the correct `no-cameras` verdict. **Not verified at runtime:** the renderer's new empty-state branch. CDP was unreachable from this session (the DevTools endpoint served exactly one HTTP request and then stopped answering, on two fresh launches), so the JSX is backed by a clean build and the pure verdict tests, not by a screenshot of the real panel. The app itself boots clean.
+
+**Still open, deliberately not built here:** a per-vendor "what to ask the owner for" card (Tapo's RTSP account lives behind Settings → Advanced → Camera Account), an exportable venue-readiness sheet from the Diagnostics tab (ADR-092), and — the governance question this visit raised — the fact that `cameras:sweep` port-scans the whole local /24 on a button press with no notion of whose network it is. That is plainly authorised on a venue where the agent was installed as part of a deal, and not authorised on an exploratory visit over guest WiFi. Today they are the same button.

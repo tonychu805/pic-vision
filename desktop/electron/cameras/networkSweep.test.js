@@ -11,7 +11,7 @@
 // heartbeat live.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { MAX_HOSTS, hostCount, hostsInCidr, sweepNetwork } from "./networkSweep.js";
+import { MAX_HOSTS, hostCount, hostsInCidr, ipInCidr, sweepNetwork } from "./networkSweep.js";
 
 test("counting agrees with listing, where listing is affordable", () => {
   // The arithmetic has to mean the same thing as the list it replaced,
@@ -57,4 +57,31 @@ test("a /16 is refused too, and says what to do about it", async () => {
       return true;
     },
   );
+});
+
+test("subnet membership, including the addresses that break signed arithmetic", () => {
+  assert.ok(ipInCidr("192.168.1.42", "192.168.1.0/24"));
+  assert.ok(!ipInCidr("192.168.2.42", "192.168.1.0/24"));
+  // A docker bridge on a dev machine's ARP table, which is exactly what
+  // networkPresence.js has to exclude before counting "devices on the
+  // venue's network".
+  assert.ok(!ipInCidr("172.17.0.2", "192.168.1.0/24"));
+  // Above 2^31, where `&` coerces to a signed int32 -- both sides have to
+  // be normalised the same way or this reads as a mismatch.
+  assert.ok(ipInCidr("200.0.0.5", "200.0.0.0/24"));
+  assert.ok(ipInCidr("255.255.255.254", "255.255.255.0/24"));
+  // Wider and narrower masks, since a venue LAN isn't always a /24 -- and
+  // the /23 boundary specifically, which is where a mask that isn't a
+  // whole octet stops agreeing with reading the address by eye:
+  // 10.17.2.0/23 spans 10.17.2.0-10.17.3.255, so .3.9 is inside it and
+  // .4.9 is not.
+  assert.ok(ipInCidr("10.17.3.9", "10.0.0.0/8"));
+  assert.ok(!ipInCidr("10.17.3.9", "10.17.2.0/24"));
+  assert.ok(ipInCidr("10.17.3.9", "10.17.2.0/23"));
+  assert.ok(!ipInCidr("10.17.4.9", "10.17.2.0/23"));
+  // Nothing to compare against is false, never a throw -- callers pass a
+  // cidr straight from system.js, which returns null off-network.
+  assert.ok(!ipInCidr("10.0.0.1", null));
+  assert.ok(!ipInCidr(null, "10.0.0.0/8"));
+  assert.ok(!ipInCidr("10.0.0.1", "10.0.0.0/nonsense"));
 });

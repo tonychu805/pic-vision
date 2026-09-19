@@ -1104,6 +1104,21 @@ pic-vision/
 │   │       ├── vendorLookup.js             # MAC (via ARP) -> manufacturer (IEEE OUI
 │   │       │                              # registry, `oui-data` dep, no network
 │   │       │                              # calls); generic, not vendor-curated
+│   │       ├── networkPresence.js          # ADR-103 (2026-09-19): WHY a scan found
+│   │       │                              # nothing -- "this network hides its
+│   │       │                              # devices" vs. "no cameras here", which
+│   │       │                              # need opposite responses and used to
+│   │       │                              # render as one dead end. Three signals,
+│   │       │                              # none of them a probe of anyone's
+│   │       │                              # device: the OS's own ARP table (the
+│   │       │                              # load-bearing one -- under client
+│   │       │                              # isolation only the gateway resolves),
+│   │       │                              # SSDP M-SEARCH responder count (already
+│   │       │                              # collected every scan), and a passive
+│   │       │                              # mDNS listen (supporting only; measured
+│   │       │                              # silent for 3s on a live 11-device LAN)
+│   │       ├── networkPresence.test.js     # the four situations the verdict
+│   │       │                              # separates, pure -- no sockets, no ARP
 │   │       ├── rtspProbe.js                # confirms a real RTSP stream (DESCRIBE +
 │   │       │                              # Digest auth, no ffmpeg dep) -- the
 │   │       │                              # fallback for cameras whose ONVIF doesn't
