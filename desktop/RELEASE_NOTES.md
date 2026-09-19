@@ -1,7 +1,28 @@
 # Release notes
 
-## Unreleased
+## 1.5.0 — 2026-09-19
 
+- **Cancel now actually stops a cloud upload.** Pressing Cancel during
+  "Send to cloud" told the cloud console to cancel the job, and then
+  uploaded every remaining segment anyway — gigabytes over a venue's
+  connection, after you asked it to stop — before finally reporting
+  "upload failed". The upload now stops immediately, including the segment
+  already in flight, and the row says "Stopping…" the moment you click,
+  settling to "Cancelled" once the job has really stopped. Cancel also
+  works now on a job that was started before the app was last restarted;
+  previously it silently did nothing.
+- **A scan that finds nothing now tells you why.** "Nothing found on this
+  network" was equally true whether there are no cameras here, the cameras
+  are on a different network, or the Wi-Fi you're on deliberately hides
+  devices from each other — and only one of those is something you can fix
+  yourself. The app now works out which, and on a guest network that hides
+  its devices it says so and tells you what to ask the venue for. It shows
+  the numbers behind that reading, so you can check it.
+- **A machine that can't encrypt stored passwords now says so once.** On a
+  machine with no OS keyring available, camera passwords and cloud tokens
+  have always been saved as plain text — there is nowhere else to put
+  them — but nothing ever told you. The Log tab now gets one line the
+  first time it happens.
 - **Connecting to the cloud console now fails with a real sentence.**
   "Connect to the cloud console" or a rename that pings the console could
   show raw technical text like "TypeError: fetch failed". It now says one
