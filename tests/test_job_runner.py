@@ -375,3 +375,79 @@ def test_failed_status_reads_never_count_toward_the_first_checkin_timeout(monkey
     # proves None reads didn't get mistaken for a confirmed-stuck pod.
     assert "minutes without finishing" in fields["error"]
     assert "ADR-101" not in fields["error"]
+
+
+# --- _cleanup: the venue's upload must survive a failure (2026-09-19) ---
+#
+# These are a deliberately paired set. The "keeps on failure" assertions are
+# the fix; the "still deletes on success" one is its other half, because a
+# fix that only ever keeps segments would pass the first three and quietly
+# leak every session a venue ever uploads. That pairing is the standing rule
+# in CLAUDE.md, and skipping it is how the 2026-09-06 redaction bug shipped.
+
+
+def _cleanup_probe(monkeypatch, status, tmp_path):
+    """Run _cleanup against a stubbed console status; return deleted keys."""
+    deleted = []
+    monkeypatch.setattr(job_runner, "get_job_status", lambda job_id: status)
+    monkeypatch.setattr(job_runner.r2_storage, "delete_object",
+                        lambda bucket, key: deleted.append((bucket, key)))
+    monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
+    job_runner._cleanup(dict(JOB), str(tmp_path / "job-1"))
+    return deleted
+
+
+def test_a_failed_job_keeps_its_uploaded_segments_so_a_retry_needs_no_reupload(monkeypatch, tmp_path):
+    # The real 2026-09-19 case: the pod reported an error, and deleting the
+    # input meant the only way to retry was re-uploading the whole session.
+    assert _cleanup_probe(monkeypatch, "error", tmp_path) == []
+
+
+def test_a_cancelled_job_also_keeps_its_segments(monkeypatch, tmp_path):
+    assert _cleanup_probe(monkeypatch, "cancelled", tmp_path) == []
+
+
+def test_an_unknown_status_keeps_the_segments_rather_than_guessing(monkeypatch, tmp_path):
+    # get_job_status returns None when the console can't be read. That is
+    # "don't know", not "failed" -- and certainly not licence to delete. The
+    # cost of keeping wrongly is storage; the cost of deleting wrongly is a
+    # venue's whole session going back up their uplink.
+    assert _cleanup_probe(monkeypatch, None, tmp_path) == []
+
+
+def test_a_successful_job_still_deletes_its_segments(monkeypatch, tmp_path):
+    # The paired half: without this, "never delete anything" would pass
+    # every test above while leaking every session ever uploaded.
+    deleted = _cleanup_probe(monkeypatch, "done", tmp_path)
+    assert deleted == [("test-bucket", "segments/a.mkv"), ("test-bucket", "segments/b.mkv")]
+
+
+def test_cleanup_reads_the_status_back_instead_of_trusting_the_caller(monkeypatch, tmp_path):
+    # Why this matters: pod_driver.py reports its own terminal status and
+    # self-terminates, so a job that errored ON THE POD returns through
+    # run_one's SUCCESS path -- both of 2026-09-19's failed runs logged
+    # "finished". Inferring success from "no exception was raised" is
+    # exactly the bug, so pin that _cleanup actually asks the console.
+    asked = []
+    monkeypatch.setattr(job_runner, "get_job_status",
+                        lambda job_id: asked.append(job_id) or "error")
+    monkeypatch.setattr(job_runner.r2_storage, "delete_object",
+                        lambda bucket, key: pytest.fail("deleted input for a job that errored"))
+    monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
+    job_runner._cleanup(dict(JOB), str(tmp_path / "job-1"))
+    assert asked == ["job-1"]
+
+
+def test_cleanup_always_removes_the_local_scratch_directory(monkeypatch, tmp_path):
+    # Local scratch is unconditional in both directions -- it's rebuildable
+    # and it's on our own disk, unlike the venue's upload.
+    job_dir = tmp_path / "job-1"
+    job_dir.mkdir()
+    (job_dir / "log.txt").write_text("some log output")
+    monkeypatch.setattr(job_runner, "get_job_status", lambda job_id: "error")
+    monkeypatch.setattr(job_runner.r2_storage, "delete_object",
+                        lambda bucket, key: pytest.fail("should not delete on error"))
+    monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
+    job_runner._cleanup(dict(JOB), str(job_dir))
+    assert not job_dir.exists()
+    assert (tmp_path / "logs" / "job-1.log").read_text() == "some log output"

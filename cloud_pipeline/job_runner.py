@@ -118,6 +118,22 @@ def patch_job(job_id, **fields):
     return bool(r.json().get("cancelRequested"))
 
 
+def get_job_status(job_id):
+    """Best-effort read of a job's current status -- None on any failure.
+
+    None means "could not find out", never "it failed": _cleanup treats an
+    unknown status the same as a failure, i.e. it keeps the segments. The
+    cost of being wrong that way is some storage; the cost of the other
+    way is a venue re-uploading a 2.5GB session.
+    """
+    try:
+        r = requests.get(f"{CONSOLE_URL}/api/runner/jobs/{job_id}", headers=_headers(), timeout=30)
+        r.raise_for_status()
+        return r.json().get("status")
+    except Exception:  # noqa: BLE001 - never crash cleanup over a status read
+        return None
+
+
 def get_job_updated_at(job_id):
     """Best-effort read of a job's current updated_at -- None on any
     failure (network hiccup, 404), so a transient read error is never
@@ -364,12 +380,47 @@ def run_calibration_job(job):
 
 
 def _cleanup(job, job_dir):
+    """Local scratch always goes; the venue's uploaded segments only go if
+    the job actually succeeded.
+
+    This used to delete the segments unconditionally, from a `finally`, so
+    ANY failure destroyed the job's own input and the only way to retry was
+    for the venue to upload the whole session again (2026-09-19: it ate a
+    271MB clip between two failed attempts, which is how this was found).
+    On a real two-hour session that is ~2.5GB back over a venue's uplink --
+    on the bimodal link ADR-092 measured, potentially hours -- spent
+    because a pod hit a transient error. The pod-level one-shot retry does
+    not help: it only covers a stuck container *within* a run, and by the
+    time a failure is reported the input was already gone.
+
+    Note the status has to be READ BACK from the console, not inferred from
+    whether run_one caught an exception: pod_driver.py reports its own
+    terminal status and self-terminates, so a job that errored on the pod
+    returns through run_one's success path -- both of 2026-09-19's failed
+    runs logged "finished". An exception here is the rare case, not the
+    normal one.
+
+    Segments for a job that never reaches `done` are left for an R2
+    lifecycle rule on the ingest/ prefix to reclaim, which is the right
+    tool for "delete this eventually" and does not need to be correct
+    on the first try to avoid costing a venue an upload.
+    """
     logs = os.path.join(WORK_DIR, "logs")
     os.makedirs(logs, exist_ok=True)
     log_src = os.path.join(job_dir, "log.txt")
     if os.path.exists(log_src):
         shutil.copyfile(log_src, os.path.join(logs, f"{job['id']}.log"))
     shutil.rmtree(job_dir, ignore_errors=True)
+
+    status = get_job_status(job["id"])
+    if status != "done":
+        keys = job.get("segment_keys") or []
+        if keys:
+            _log(f"job {job['id']}: status is {status or 'unknown'}, not done -- "
+                 f"keeping {len(keys)} uploaded segment(s) so a retry doesn't "
+                 f"need a re-upload")
+        return
+
     for key in job.get("segment_keys") or []:
         try:
             r2_storage.delete_object(job["bucket"], key)
