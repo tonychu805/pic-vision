@@ -1,5 +1,20 @@
 # Release notes
 
+## 1.5.4 — 2026-09-20
+
+- **Fixed: clicking Retry on a recording broke the interface.** This is the
+  bug 1.5.3's new error screen was built to expose, and it exposed it on
+  the first try: a piece of the Cancel work added two days ago was declared
+  in the wrong place, so the Cancel button — which is only drawn while a
+  job is running — referred to something that didn't exist. Retry starts a
+  job, the button gets drawn, and the interface fell over.
+- **The kind of mistake that caused it is now caught before a build is
+  made.** Both crashes this week were references to a variable that didn't
+  exist, and nothing in the build or the tests could see either one. A
+  check for exactly that now runs ahead of the test suite. Both of this
+  week's crashes were re-tested against it, and both would have been
+  stopped.
+
 ## 1.5.3 — 2026-09-20
 
 - **Fixed: the app could vanish while still running.** Clicking Retry on a
