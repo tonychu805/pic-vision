@@ -2249,3 +2249,36 @@ ADR-106's crash reporting, added the day before for exactly this complaint, coul
 **Still unknown: what actually throws on Retry.** This makes it visible rather than fixing it. The next occurrence puts the message, the JS stack and the React component stack on screen and in the log.
 
 **The general rule this project keeps relearning, from a third direction:** a window that can render nothing must never be able to render nothing silently. ADR-105 was logic no test executed; ADR-106 was a process that could die without reporting; this is a UI that could vanish without reporting. Same shape each time.
+
+## ADR-108 — Two shipped crashes were undefined variables; a linter is now a test
+
+**Date:** 2026-09-20 · **Status:** fixed
+
+**Context.** The Retry crash, finally named by ADR-107's error boundary on its first real use:
+
+```
+cancelling is not defined
+ReferenceError: cancelling is not defined
+    at Qf (.../app.asar/dist/assets/index-Bec8qfbR.js:40:96533)
+```
+
+**Root cause, and it is mine.** ADR-104's cancel work added `const [cancelling, setCancelling] = useState(false)` to `CameraDetailPage.jsx` with a scripted edit anchored on `const [starting, setStarting] = useState(false);`. That string's **first** occurrence in the file is in `LiveViewButton` (line 63), not `CloudJobRow` (line 282) where the code using it lives. So the declaration landed in a component that never referenced it, and `CloudJobRow` referenced a free identifier that resolved to nothing.
+
+It only surfaced on Retry because the Cancel button renders solely while a job is running, so nothing evaluated `cancelling` until a job was started — and then, per ADR-107, the whole interface vanished rather than reporting it.
+
+**The pattern, not the instance.** This is the *second* release in three days whose crash was a reference to a variable that did not exist:
+
+| build | error | how it got there |
+|---|---|---|
+| 1.5.0 | `span is not defined` | a refactor deleted the variable, left one use three lines below (ADR-105) |
+| 1.5.3 | `cancelling is not defined` | a scripted edit put a declaration in the wrong component |
+
+Neither is subtle. Neither was catchable by what was running: a bundler resolves a free identifier to "some global, decided at runtime" and says nothing, and the test suite only fails on code it executes — neither line was executed by any test. Both reached an operator.
+
+**Decision: `no-undef` is a test, not a style preference.** ESLint (flat config, `eslint.config.js`) runs as the first step of `npm test`, so a lint error fails the suite before 160 tests pass over code that cannot run.
+
+Deliberately minimal — one error-level rule plus `no-unused-vars` as a warning, no formatting, no hook rules, nothing opinionated. A gate that emits a wall of findings on existing code trains everyone to ignore its output, and this one has to be believed. `no-unused-vars` earns its place as the other half of the same mistake: in `LiveViewButton`, the misplaced declaration was *exactly* an unused variable.
+
+**Verified the gate, not just the fix.** Both shipped bugs were reintroduced and the linter was run against them: `cancelling` produces 4 errors, `span` produces 2. Both releases would have been blocked. With the fix in place: 0 errors, 2 pre-existing warnings, 160 tests still passing.
+
+**What could not be verified here, and why.** The actual re-render of `CloudJobRow`'s Cancel button was not exercised on a running app: this machine's app sits at a sign-in screen (its session expired), and reaching the camera detail page would mean signing in against production. For this specific class that is an acceptable gap rather than a hand-wave — a `ReferenceError` on a free identifier is purely a scope question, and static scope analysis answers it completely. Running React would confirm the same fact less directly.

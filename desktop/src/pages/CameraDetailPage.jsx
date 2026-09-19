@@ -61,7 +61,6 @@ function LiveViewButton({ camera }) {
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
-  const [cancelling, setCancelling] = useState(false);
 
   const openLiveView = async () => {
     setOpen(true);
@@ -280,6 +279,7 @@ function CloudJobRow({ camera, recording }) {
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   useEffect(() => {
     const poll = () => window.pipelineAPI.statusForRecording(recording.dir).then(setStatus);

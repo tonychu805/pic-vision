@@ -1268,6 +1268,16 @@ pic-vision/
 │   │                                       # (N100 etc.) -- checks real Intel
 │   │                                       # GPU PCI vendor ID, refuses to run
 │   │                                       # on non-Intel/no-iGPU machines
+│   ├── eslint.config.js              # ADR-108 (2026-09-20): `no-undef` as a TEST, run as
+│   │                              # the first step of `npm test`. Two releases in
+│   │                              # three days shipped a crash that was a reference
+│   │                              # to a variable that did not exist (1.5.0 `span`,
+│   │                              # 1.5.3 `cancelling`) -- a bundler resolves a free
+│   │                              # identifier to "some global" and says nothing, and
+│   │                              # the suite only fails on code it executes.
+│   │                              # Deliberately one error rule + no-unused-vars as a
+│   │                              # warning: a gate that floods trains people to
+│   │                              # ignore it, and this one has to be believed
 │   └── src/                          # React (Vite) renderer
 │       ├── App.jsx                      # TitleBar + Sidebar + page switch
 │       ├── ErrorBoundary.jsx             # ADR-107 (2026-09-20): the app's last line of
