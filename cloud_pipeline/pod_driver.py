@@ -86,23 +86,40 @@ from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 WORKDIR = "/workspace/job"
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
-# Static Linux x86_64 builds (ffmpeg-static/ffprobe-static's own binaries,
-# the same npm packages desktop/electron/binaries.js already ships to
-# venues -- proven, self-contained, no dynamic-lib dependency on whatever
-# the pod's base image happens to have). Uploaded to R2 once by hand, not
-# per job -- see runpod_pod.py's _BOOTSTRAP_CMD comment for why this
-# replaced an `apt-get install ffmpeg` that ran on every job. The version
-# in each key name is the binary's own `-version` output, not the npm
-# package's "b6.1.1" release tag -- that tag turned out stale/inaccurate
-# (real binaries: ffmpeg 7.0.2, ffprobe 4.0.2, confirmed 2026-09-18), and
-# ffprobe trailing ffmpeg by that much is a real property of the upstream
-# johnvansickle.com static builds this package vendors, not a mistake here.
-# Landing at /usr/local/bin puts them ahead of any apt-installed ffmpeg on
-# PATH (Debian convention), so every later bare "ffmpeg"/"ffprobe"
-# subprocess call -- here and in src/video_quality.py,
+# Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
+# variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
+# _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
+# that ran on every job. Landing at /usr/local/bin puts them ahead of any
+# apt-installed ffmpeg on PATH (Debian convention), so every later bare
+# "ffmpeg"/"ffprobe" subprocess call -- here and in src/video_quality.py,
 # scripts/rank_and_reel.py -- picks these up with no call-site changes.
-FFMPEG_R2_KEY = "pipeline/ffmpeg-static-linux-x64-7.0.2"
-FFPROBE_R2_KEY = "pipeline/ffprobe-static-linux-x64-4.0.2"
+#
+# PIC-156 (2026-09-19): these REPLACE the ffmpeg-static/ffprobe-static npm
+# binaries this originally used. Those are johnvansickle.com portable
+# builds, which deliberately ship no NVIDIA encoder -- so `-c:v h264_nvenc
+# ... -cq 20` below died on argument parsing ("Unrecognized option 'cq'")
+# on the first real pod job, meaning every reel job failed at the convert
+# step. Reusing the desktop app's binaries looked free because the desktop
+# never encodes anything (recording is -c copy, live view an MJPEG remux,
+# per ADR-101) -- the pod is the one consumer that needs an encoder the
+# desktop never touches.
+#
+# Verified before upload, on this project's own RTX 2000 Ada (the same GPU
+# model RunPod rents us) rather than by `-version` alone, since a passing
+# `-version` is exactly what hid the defect last time: h264_nvenc present
+# in -encoders, a real NVENC encode completed, no missing shared libs, and
+# both `-vsync cfr` and `-fps_mode cfr` accepted (so the older spelling
+# used below still works and needs no change). The tarball was checked
+# against BtbN's published checksums.sha256 -- a first attempt was
+# byte-perfect on SIZE and still corrupt, so size is not the gate.
+#
+# The key names carry the binary's own `-version` string including the
+# upstream git hash, because BtbN's release tag is the rolling `latest`:
+# the R2 object is the real pin, and the hash makes which build it is
+# recoverable. ffmpeg and ffprobe are now the matched pair from one build,
+# which also retires the odd 7.0.2/4.0.2 version gap the npm packages had.
+FFMPEG_R2_KEY = "pipeline/ffmpeg-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
+FFPROBE_R2_KEY = "pipeline/ffprobe-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
 FFMPEG_LOCAL = "/usr/local/bin/ffmpeg"
 FFPROBE_LOCAL = "/usr/local/bin/ffprobe"
 BURST_TARGET_SEC = 30.0  # matches pod_cut.py's own pin, same reasoning
@@ -416,12 +433,13 @@ def run():
 
     # --- The step that used to need the operator's own NVIDIA card
     # (ADR-093 reason 1). Same ffmpeg recipe run_cloud_job.py's old local
-    # version used, with one real change found live: `-fps_mode cfr`
-    # (ffmpeg 5.1+) isn't recognized by the pod's own apt-installed
-    # ffmpeg (Ubuntu 22.04's default package predates it) -- this flag
-    # never ran on a pod's ffmpeg before today; the old design always
-    # did this step on the operator's own, much newer, ffmpeg. `-vsync
-    # cfr` is the older, universally-supported equivalent.
+    # version used, except `-vsync cfr` in place of `-fps_mode cfr`
+    # (ffmpeg 5.1+). That substitution was originally forced by the pod's
+    # apt-installed ffmpeg (Ubuntu 22.04's package predates the newer
+    # spelling); that ffmpeg is gone as of PIC-154/PIC-156 and the pinned
+    # BtbN build now used accepts BOTH spellings -- verified directly, not
+    # assumed. Kept as `-vsync cfr` because it works on both old and new
+    # and this is not the change to fold a cosmetic rename into.
     _check_cancel("convert", "converting to 30fps CFR...")
     cfr_video = os.path.join(WORKDIR, "video_cfr.mp4")
     _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",

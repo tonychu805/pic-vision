@@ -139,7 +139,12 @@ file used to say and is now wrong for the live path. Instead:
    this replaced an `apt-get install ffmpeg` that ran on every job
    (2026-09-18), which depended on Ubuntu's package mirrors being
    reachable per job and installed whatever ffmpeg version Ubuntu 22.04
-   happened to ship.
+   happened to ship. The binaries are BtbN `linux64-gpl` builds, **not**
+   the `ffmpeg-static` npm ones the desktop app ships: those carry no
+   NVIDIA encoder, so the pod's `h264_nvenc` convert failed on every job
+   until PIC-156 (2026-09-19). Anything replacing them again has to be
+   checked with a real NVENC encode — `-version` succeeding is what hid
+   that defect the first time.
 3. `job_runner.py`'s only remaining job is to wait for the pod to
    disappear (self-terminated, via its own call to the RunPod API) or hit
    a 3-hour deadline, at which point it terminates the pod itself and
