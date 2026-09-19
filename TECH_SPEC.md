@@ -884,9 +884,18 @@ pic-vision/
 │   │   │                              # change when the work moved off this machine. No
 │   │   │                              # local concat (the runner joins them), no calibPath
 │   │   │                              # (the console attaches the camera's calibration),
-│   │   │                              # no Python. Cancel is a PATCH, which reaches the
-│   │   │                              # runner on its next status poll and terminates the
-│   │   │                              # RunPod pod. Uploads hold a powerSaveBlocker
+│   │   │                              # no Python. Uploads hold a powerSaveBlocker.
+│   │   │                              # Cancel (ADR-104, 2026-09-19) stops the LOCAL
+│   │   │                              # upload first -- an AbortController tears down the
+│   │   │                              # segment in flight, and the loop refuses the next
+│   │   │                              # one -- then PATCHes the console, which cancels a
+│   │   │                              # queued/uploading job outright and, for one already
+│   │   │                              # running, flags cancel_requested so the runner
+│   │   │                              # terminates the RunPod pod on its next status poll.
+│   │   │                              # Until that fix Cancel told only the console and
+│   │   │                              # the agent uploaded every remaining segment anyway.
+│   │   │                              # A job id is recovered from job.json when `active`
+│   │   │                              # is empty, so Cancel works after an app restart
 │   │   ├── consoleApi.js                # ADR-084: the one place that knows the console URL
 │   │   │                              # and bearer token. uploadFile() deliberately uses
 │   │   │                              # node:https with an explicit Content-Length rather
@@ -897,7 +906,12 @@ pic-vision/
 │   │   │                              # request with any readable body, so the Diagnostics
 │   │   │                              # tab's upload benchmark measures the real transport
 │   │   │                              # rather than a lookalike; uploadFile() is now a
-│   │   │                              # two-line wrapper over it
+│   │   │                              # two-line wrapper over it. Both take an optional
+│   │   │                              # AbortSignal (ADR-104): a segment is hundreds of
+│   │   │                              # MB, so stopping at the next segment boundary is
+│   │   │                              # not stopping -- the request itself is destroyed,
+│   │   │                              # and the rejection is marked `aborted` so a caller
+│   │   │                              # doesn't retry it or call it a failed upload
 │   │   ├── bandwidth.js                 # ADR-092 (2026-09-08): venue upstream benchmark --
 │   │   │                              # synthetic bytes to a presigned R2 PUT, size ladder
 │   │   │                              # (8/64/256MB) until one run is long enough to trust,
@@ -913,6 +927,13 @@ pic-vision/
 │   │   │                              # putStream/uploadFile still send Content-Length and
 │   │   │                              # not chunked encoding -- the paired assertion for
 │   │   │                              # the refactor above
+│   │   ├── upload-cancel.test.js        # ADR-104: 3 tests against a real local server that
+│   │   │                              # stalls mid-body -- an abort in flight rejects as a
+│   │   │                              # cancellation and the server never receives the
+│   │   │                              # whole segment, an already-aborted signal opens no
+│   │   │                              # connection, and (the paired half) an unused signal
+│   │   │                              # leaves a normal upload alone. Bounded timeouts:
+│   │   │                              # without the fix these HANG rather than fail
 │   │   ├── diagnostics.js               # ADR-092: the rest of the venue survey -- console
 │   │   │                              # round-trip (same route the heartbeat uses), per-
 │   │   │                              # camera reachability + stored stream profile against

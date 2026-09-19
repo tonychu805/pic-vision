@@ -29,7 +29,7 @@ const POLL_INTERVAL_MS = 5_000;
 const UPLOAD_RETRIES = 3;
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 
-// recordingDir -> { jobId, cancelled }. Keyed by the recording's own
+// recordingDir -> { jobId, label, cancelled, abort }. Keyed by the recording's own
 // directory (== capture.js's per-session outDir) rather than sessionId
 // alone, since that's also where status.json ends up (in a cloud_job/
 // subdirectory) and where a second "send to cloud" click for the same
@@ -77,12 +77,16 @@ function segmentsIn(recordingDir) {
     .map((f) => path.join(recordingDir, f));
 }
 
-async function uploadWithRetry(jobId, upload, filePath, onProgress) {
+async function uploadWithRetry(jobId, upload, filePath, onProgress, rec) {
   let url = upload.url;
   for (let attempt = 1; ; attempt++) {
     try {
-      return await uploadFile(url, filePath, onProgress);
+      return await uploadFile(url, filePath, onProgress, rec?.abort?.signal);
     } catch (err) {
+      // A cancel is not a transport failure. Without this the retry loop
+      // would helpfully start the very transfer the operator just stopped,
+      // twice, and the `refresh` below would 409 on the now-cancelled job.
+      if (err.aborted || rec?.cancelled) throw err;
       // A 403 here is almost always an expired signature rather than a
       // real permission problem -- a venue on slow Wi-Fi can take longer
       // to push a session than the URL's lifetime. Ask for a fresh one
@@ -101,12 +105,17 @@ async function uploadWithRetry(jobId, upload, filePath, onProgress) {
   }
 }
 
-async function uploadSegments(jobId, uploads, files, jobDir) {
+async function uploadSegments(jobId, uploads, files, jobDir, rec) {
   const sizes = files.map((f) => statSync(f).size);
   const grandTotal = sizes.reduce((a, b) => a + b, 0);
   let done = 0;
 
   for (let i = 0; i < files.length; i++) {
+    // Checked per segment as well as mid-transfer (the abort signal
+    // below): a cancel that lands in the gap between two segments has no
+    // in-flight request to tear down, and used to sail straight into the
+    // next one.
+    if (rec?.cancelled) throw cancelledError();
     const name = path.basename(files[i]);
     const upload = uploads.find((u) => u.name === name);
     if (!upload) throw new Error(`the console didn't issue an upload for ${name}`);
@@ -116,9 +125,13 @@ async function uploadSegments(jobId, uploads, files, jobDir) {
     });
     await uploadWithRetry(jobId, upload, files[i], (sent) => {
       writeStatus(jobDir, { progress: { current: done + sent, total: grandTotal, eta_sec: null } });
-    });
+    }, rec);
     done += sizes[i];
   }
+}
+
+function cancelledError() {
+  return Object.assign(new Error("upload cancelled"), { aborted: true });
 }
 
 // Mirrors the console's view of the job into the local status.json until
@@ -139,10 +152,17 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
       continue;
     }
 
+    // A pod that has been asked to stop keeps reporting whatever stage it
+    // is on until it actually stops, so mirroring that verbatim would
+    // replace "Stopping..." with "Running TrackNet inference" one tick
+    // after the operator hit Cancel -- looking, again, like the button did
+    // nothing. The console's own cancel_requested flag is the honest thing
+    // to show until a terminal state arrives.
+    const stopping = job.cancel_requested && !TERMINAL.has(job.status);
     writeStatus(jobDir, {
-      stage: job.stage ?? job.status,
-      message: job.message ?? null,
-      progress: job.progress ?? null,
+      stage: stopping ? "cancelling" : job.stage ?? job.status,
+      message: stopping ? "stopping..." : job.message ?? null,
+      progress: stopping ? null : job.progress ?? null,
       error: job.error ?? null,
       done: job.status === "done",
       ...(job.result ?? {}),
@@ -207,18 +227,33 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
     },
   });
 
-  active.set(recordingDir, { jobId });
-  writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ jobId, sessionId }, null, 2));
+  const rec = { jobId, label, cancelled: false, abort: new AbortController() };
+  active.set(recordingDir, rec);
+  writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ jobId, sessionId, label }, null, 2));
   logEvent("pipeline_started", `Sent ${label} to the cloud`);
 
   // Uploading a two-hour session takes a while; without this the Mac can
   // sleep mid-transfer and the job sits half-uploaded until it expires.
   const blocker = powerSaveBlocker.start("prevent-app-suspension");
   try {
-    await uploadSegments(jobId, uploads, files, jobDir);
+    await uploadSegments(jobId, uploads, files, jobDir, rec);
+    // A cancel landing in the gap between the last segment and this call
+    // would otherwise ask the console to queue a job it has already
+    // cancelled -- which answers 409, and used to surface as "upload
+    // failed" several minutes after the operator pressed Cancel.
+    if (rec.cancelled) throw cancelledError();
     await consoleFetch(`/api/agents/jobs/${jobId}`, { method: "PATCH", body: { action: "complete" } });
   } catch (err) {
     active.delete(recordingDir);
+    // A stop the operator asked for is not a failure and must not be
+    // reported as one. Nothing else will write this: pollUntilDone (the
+    // only other writer of a terminal state) doesn't start until the
+    // upload has finished, which is exactly what just didn't happen.
+    if (rec.cancelled || err.aborted) {
+      writeStatus(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
+      logEvent("pipeline_failed", `${label} cloud job cancelled`);
+      return { jobDir, cancelled: true };
+    }
     writeStatus(jobDir, { stage: "error", message: "upload failed", error: err.message, done: false });
     logEvent("pipeline_failed", `${label} upload failed`, err.message);
     throw err;
@@ -235,15 +270,94 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
   return { jobDir };
 }
 
-export function cancelCloudJob(recordingDir) {
-  const rec = active.get(recordingDir);
-  if (!rec) return { cancelled: false };
-  // Fire-and-forget: the console flips a queued job straight to cancelled
-  // and, for a running one, asks the runner to terminate its RunPod pod
-  // (which is what actually stops the billing). Either way the poll loop
-  // above sees the terminal state and cleans up.
-  consoleFetch(`/api/agents/jobs/${rec.jobId}`, { method: "PATCH", body: { action: "cancel" } }).catch((err) =>
-    console.error(`[pipeline] cancel failed: ${err.message}`),
-  );
-  return { cancelled: true };
+/**
+ * The job id for a recording whose upload this process isn't running --
+ * after a restart, `active` is empty but the job is still very much alive
+ * in the cloud. job.json has held the id on disk all along; nothing read
+ * it back, so Cancel silently did nothing in exactly the situation where
+ * the operator has least other recourse.
+ */
+function recoverJobRecord(recordingDir) {
+  const jobPath = path.join(recordingDir, "cloud_job", "job.json");
+  if (!existsSync(jobPath)) return null;
+  try {
+    const { jobId, label } = JSON.parse(readFileSync(jobPath, "utf8"));
+    return jobId ? { jobId, label: label || "camera" } : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Stop a job, locally and in the cloud, in that order.
+ *
+ * Local first, deliberately. The upload is the half that spends the
+ * venue's uplink, and until 2026-09-19 nothing stopped it: Cancel told the
+ * console (which did cancel the row, correctly) and then the agent
+ * uploaded every remaining segment anyway, several gigabytes of them, and
+ * finally reported "upload failed" when `complete` 409'd against the
+ * cancelled job. From the operator's side the button did nothing for
+ * minutes and then lied about why it stopped.
+ *
+ * Awaited rather than fire-and-forget so the answer can be acted on: a job
+ * already running on a pod only gets a cancel *request* (the pod reports
+ * the real terminal state back), while anything earlier is cancelled
+ * outright -- and those two deserve different words on screen.
+ */
+export async function cancelCloudJob(recordingDir) {
+  const jobDir = path.join(recordingDir, "cloud_job");
+  const rec = active.get(recordingDir) ?? recoverJobRecord(recordingDir);
+  if (!rec?.jobId) return { cancelled: false };
+
+  rec.cancelled = true;
+  rec.abort?.abort(); // tears down the segment currently in flight
+
+  // Immediately, before the network call: the operator pressed a button
+  // and has to see it take. Not "cancelled" yet -- a job on a pod hasn't
+  // actually stopped until the pod says so, and claiming otherwise is the
+  // same confident-wrong-status this file's poll loop exists to avoid.
+  writeStatus(jobDir, { stage: "cancelling", message: "stopping...", progress: null, error: null });
+
+  try {
+    const result = await consoleFetch(`/api/agents/jobs/${rec.jobId}`, {
+      method: "PATCH",
+      body: { action: "cancel" },
+    });
+    // Cancelled outright. Write the terminal state here rather than wait
+    // for a poll loop, because in two of the three cases there isn't one:
+    // during an upload it hasn't started, and after a restart it never
+    // will. Harmlessly idempotent where there is one.
+    if (result?.status === "cancelled") {
+      writeStatus(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
+      return { cancelled: true, stopped: true };
+    }
+    // Still running on a pod: the runner sees cancel_requested on its next
+    // status report and terminates it, which is what actually stops the
+    // GPU billing. pollUntilDone writes the terminal state when it lands.
+    //
+    // Unless nothing is following this job -- the restarted-app case,
+    // where `active` is empty and no poll loop exists. Start one, or
+    // "Stopping..." is where this row stays forever.
+    if (!active.has(recordingDir)) {
+      active.set(recordingDir, rec);
+      pollUntilDone(recordingDir, jobDir, rec.jobId, rec.label).catch((err) => {
+        active.delete(recordingDir);
+        console.error(`[pipeline] polling stopped: ${err.message}`);
+      });
+    }
+    return { cancelled: true, stopped: false };
+  } catch (err) {
+    // The local upload really has stopped, so saying nothing happened
+    // would be wrong -- but so would claiming a clean cancel the console
+    // never confirmed. Terminal either way, so Retry becomes available.
+    console.error(`[pipeline] cancel failed: ${err.message}`);
+    writeStatus(jobDir, {
+      stage: "error",
+      message: "stopped here, but the cloud console didn't confirm",
+      error: err.message,
+      progress: null,
+      done: false,
+    });
+    return { cancelled: true, stopped: false, consoleError: err.message };
+  }
 }

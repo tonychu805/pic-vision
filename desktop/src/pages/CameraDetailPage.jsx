@@ -61,6 +61,7 @@ function LiveViewButton({ camera }) {
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
 
   const openLiveView = async () => {
     setOpen(true);
@@ -255,6 +256,9 @@ const CLOUD_STAGE_LABELS = {
   reel: "Detecting rallies, cutting reel",
   done: "Done",
   error: "Failed",
+  // Between the click and the job actually being stopped. Not terminal:
+  // a job already running on a pod hasn't stopped until the pod says so.
+  cancelling: "Stopping…",
   cancelled: "Cancelled",
 };
 
@@ -283,6 +287,23 @@ function CloudJobRow({ camera, recording }) {
     const interval = setInterval(poll, 2000);
     return () => clearInterval(interval);
   }, [recording.dir]);
+
+  // Awaited, and the status re-read immediately. The old version fired
+  // this and ignored both the promise and the result, so even once the
+  // cancel worked nothing on screen changed until the next poll tick --
+  // which, during an upload, is a row still counting segments upward.
+  const cancel = async () => {
+    setCancelling(true);
+    setError("");
+    try {
+      const result = await window.pipelineAPI.cancel(recording.dir);
+      if (result?.consoleError) setError("Stopped here, but the console didn't confirm");
+    } catch (err) {
+      setError(cleanIpcError(err));
+    }
+    setStatus(await window.pipelineAPI.statusForRecording(recording.dir));
+    setCancelling(false);
+  };
 
   const start = async () => {
     setStarting(true);
@@ -328,9 +349,14 @@ function CloudJobRow({ camera, recording }) {
           <span style={{ flex: "none", color: status.stage === "error" ? "var(--color-danger)" : "var(--text-2)" }}>
             {stageLabel}{status.progress ? ` (${status.progress.current}/${status.progress.total})` : ""}
           </span>
-          {running && (
-            <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} onClick={() => window.pipelineAPI.cancel(recording.dir)}>
-              Cancel
+          {running && status.stage !== "cancelling" && (
+            <button
+              className="btn btn-ghost"
+              style={{ fontSize: "var(--fs-fine)", flex: "none" }}
+              disabled={cancelling}
+              onClick={cancel}
+            >
+              {cancelling ? "Stopping…" : "Cancel"}
             </button>
           )}
         </>

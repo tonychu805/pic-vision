@@ -2130,3 +2130,32 @@ Only (2) is something the operator can act on alone. (3) and (4) both require as
 **Verified:** 140 desktop tests pass (8 new for the verdict, 1 new for `ipInCidr`'s subnet-membership arithmetic including the above-2^31 signed-int32 case and the /23 boundary); renderer builds clean; and the module was run end-to-end against this machine's real network, where all three signals fired (11 ARP neighbours, 7 SSDP responders, mDNS bound successfully) and produced the correct `no-cameras` verdict. **Not verified at runtime:** the renderer's new empty-state branch. CDP was unreachable from this session (the DevTools endpoint served exactly one HTTP request and then stopped answering, on two fresh launches), so the JSX is backed by a clean build and the pure verdict tests, not by a screenshot of the real panel. The app itself boots clean.
 
 **Still open, deliberately not built here:** a per-vendor "what to ask the owner for" card (Tapo's RTSP account lives behind Settings → Advanced → Camera Account), an exportable venue-readiness sheet from the Diagnostics tab (ADR-092), and — the governance question this visit raised — the fact that `cameras:sweep` port-scans the whole local /24 on a button press with no notion of whose network it is. That is plainly authorised on a venue where the agent was installed as part of a deal, and not authorised on an exploratory visit over guest WiFi. Today they are the same button.
+
+## ADR-104 — Cancel stops the upload, not just the job row
+
+**Date:** 2026-09-19 · **Status:** fixed
+
+**Context.** Operator, live: "clicking cancel while the desktop send to cloud does not work" — then, refining it, "it appears to stop after a while, just not immediately."
+
+**Root cause.** Cancel told the console and nothing else. `cancelCloudJob` fired one PATCH and returned; the console handled it correctly (`app/api/agents/jobs/[id]/route.ts:93` — a job in `uploading` or `queued` is moved to `cancelled` immediately). Everything on the agent side kept going:
+
+- `uploadSegments` had no cancellation check of any kind — no flag between segments, no abort into the request in flight. Every remaining segment still went to R2. On a two-hour session that is gigabytes over a venue's uplink, after the operator asked it to stop, on a link already measured as bimodal (ADR-092).
+- The local `status.json` was never touched, and the renderer fired `pipeline:cancel` without awaiting it or using the result. So the row kept counting segments upward with a Cancel button that looked inert.
+- When the upload eventually finished, `PATCH action: "complete"` hit the console's 409 (`job is already cancelled`), `consoleFetch` threw, and the catch wrote `stage: "error"`, *"upload failed"*.
+
+So the operator's "stops after a while" was the rest of the upload running to completion, and the stop they saw was a *failure* being reported for a cancellation they had asked for. Nothing observed the cancelled job row in the meantime, because `pollUntilDone` — the only thing that watches for terminal states — doesn't start until the upload is done.
+
+The in-flight-job map's own comment documented its shape as `{ jobId, cancelled }`. Nothing ever set `cancelled`. The flag was designed and never wired, which is how the upload loop ended up with nothing to check.
+
+**Fix.** Local first, then the console — deliberately in that order, because the upload is the half that spends the venue's bandwidth:
+
+- `putStream`/`uploadFile` take an optional `AbortSignal` and destroy the request. A segment is hundreds of MB, so "stop at the next segment boundary" is not stopping. The rejection is marked `aborted`, so `uploadWithRetry` doesn't cheerfully restart the transfer the operator just stopped, and `runCloudJob` writes `cancelled` rather than `upload failed`.
+- `uploadSegments` also checks the flag between segments, for a cancel that lands in the gap where there is no request to tear down.
+- `runCloudJob` skips the `complete` PATCH when cancelled, so the console is never asked to queue a job it has already cancelled.
+- `cancelCloudJob` is now awaited and writes `stage: "cancelling"` **before** the network call, so the button visibly takes. Not `cancelled`: a job already running on a pod has not stopped until the pod says so, and claiming otherwise is the same confident-wrong-status this file's poll loop exists to avoid. The console's answer decides which: cancelled outright (written terminal here, since during an upload no poll loop has started and after a restart none ever will) or `cancel_requested` on a running pod (left to `pollUntilDone`).
+- `pollUntilDone` shows "stopping" while `cancel_requested` is set and the job isn't terminal — otherwise it would overwrite "Stopping…" with "Running TrackNet inference" one tick later, looking like the button was ignored *again*.
+- Two adjacent gaps closed: the job id is recovered from `job.json` when the in-memory map is empty, so Cancel works after an app restart instead of silently doing nothing; and that path starts a poll loop, so the row reaches a real terminal state rather than sitting at "Stopping…" forever.
+
+**Verified:** 143 desktop tests (3 new), renderer builds clean. The new tests run against a real local HTTP server that stalls mid-body — the state a real upload spends nearly all its time in — and assert that an abort in flight rejects as a cancellation *and that the server never receives the whole segment*, which is the assertion that actually distinguishes this fix from the bug. **The tests were confirmed to fail with the fix removed**, not merely to pass with it: tests 1 and 3 fail, while the paired happy-path test still passes. They carry explicit timeouts because the regression's natural failure mode is a hang, not an assertion.
+
+**Not verified:** no live cancel has been pressed against a real in-flight upload since the change. The next real "Send to cloud" is the first chance, and is the same run that will first exercise the five never-yet-successful pod stages.

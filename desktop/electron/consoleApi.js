@@ -51,12 +51,32 @@ export async function consoleFetch(path, { method = "GET", body, connection } = 
 // written next to it -- a benchmark whose transport differs from the real
 // one measures the wrong thing, and the Content-Length lesson above is
 // exactly the kind of difference that would go unnoticed.
-export function putStream(url, body, total, onProgress) {
+// `signal` (optional) aborts a transfer already in flight. Added 2026-09-19
+// for Cancel: a segment is hundreds of MB, so "stop at the next segment
+// boundary" is not stopping -- the request itself has to be torn down, or
+// the venue keeps paying for bytes nobody wants. The socket is destroyed
+// rather than left to drain, which is the point.
+export function putStream(url, body, total, onProgress, signal) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     // http:// only ever appears in tests (a local server); every real
     // presigned URL is https.
     const request = target.protocol === "http:" ? httpRequest : httpsRequest;
+
+    // Destroying a request makes it emit its own ECONNRESET, and the body
+    // stream may error too, so every path settles through these: the first
+    // outcome wins and the rest are ignored. Without that an abort would
+    // report a socket error instead of a cancellation.
+    let settled = false;
+    const settle = (fn) => (value) => {
+      if (settled) return;
+      settled = true;
+      signal?.removeEventListener("abort", onAbort);
+      fn(value);
+    };
+    const succeed = settle(resolve);
+    const fail = settle(reject);
+
     const req = request(
       {
         protocol: target.protocol,
@@ -70,15 +90,23 @@ export function putStream(url, body, total, onProgress) {
         const chunks = [];
         res.on("data", (c) => chunks.push(c));
         res.on("end", () => {
-          if (res.statusCode >= 200 && res.statusCode < 300) return resolve({ total });
+          if (res.statusCode >= 200 && res.statusCode < 300) return succeed({ total });
           const err = new Error(`upload failed (HTTP ${res.statusCode})`);
           err.status = res.statusCode;
           err.body = Buffer.concat(chunks).toString("utf8").slice(0, 500);
-          reject(err);
+          fail(err);
         });
       },
     );
-    req.on("error", reject);
+    req.on("error", fail);
+
+    // Marked so a caller can tell a deliberate stop from a transport
+    // failure, and doesn't retry it or report it as a failed upload.
+    const onAbort = () => {
+      body.destroy();
+      req.destroy();
+      fail(Object.assign(new Error("upload cancelled"), { aborted: true }));
+    };
 
     let sent = 0;
     body.on("data", (chunk) => {
@@ -87,14 +115,17 @@ export function putStream(url, body, total, onProgress) {
     });
     body.on("error", (err) => {
       req.destroy();
-      reject(err);
+      fail(err);
     });
+
+    if (signal?.aborted) return onAbort();
+    signal?.addEventListener("abort", onAbort, { once: true });
     body.pipe(req);
   });
 }
 
 // Streams one file to a presigned PUT URL.
-export function uploadFile(url, filePath, onProgress) {
+export function uploadFile(url, filePath, onProgress, signal) {
   const total = statSync(filePath).size;
-  return putStream(url, createReadStream(filePath), total, onProgress);
+  return putStream(url, createReadStream(filePath), total, onProgress, signal);
 }
