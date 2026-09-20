@@ -126,7 +126,16 @@ export default function App() {
                 // Keep the card's existing connection state -- a rename
                 // doesn't change whether the camera is actually reachable,
                 // so resetting to "checking" here would be a lie.
-                setSelectedCard((prev) => configuredCard(camera, prev.state));
+                // The rename response intentionally contains only the
+                // persisted camera fields, not heartbeat-owned calibration.
+                // Preserve that state so a harmless rename cannot briefly
+                // disable the cloud actions until the next heartbeat.
+                setSelectedCard((prev) => configuredCard({
+                  ...camera,
+                  isCalibrated: camera.isCalibrated ?? prev.camera.isCalibrated,
+                  calibrationRmseFt: camera.calibrationRmseFt ?? prev.camera.calibrationRmseFt,
+                  calibratedAt: camera.calibratedAt ?? prev.camera.calibratedAt,
+                }, prev.state));
               }}
             />
           )}

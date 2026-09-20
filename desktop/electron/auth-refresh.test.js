@@ -31,8 +31,7 @@ const TOKEN_RESPONSE = (expiresIn) => ({
 
 before(async () => {
   server = createServer((req, res) => {
-    let body = "";
-    req.on("data", (c) => { body += c; });
+    req.on("data", () => {});
     req.on("end", () => {
       const isRefresh = req.url.includes("grant_type=refresh_token");
       if (isRefresh && refreshStatus !== 200) {

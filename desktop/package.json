@@ -4,6 +4,7 @@
   "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
   "author": "picvision ai",
   "private": true,
+  "desktopName": "Pic Vision Camera Manager",
   "main": "electron/main.js",
   "type": "module",
   "scripts": {
@@ -50,7 +51,8 @@
       "target": "nsis"
     },
     "linux": {
-      "target": "AppImage"
+      "target": "AppImage",
+      "syncDesktopName": true
     }
   },
   "dependencies": {

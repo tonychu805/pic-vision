@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
-import { cardVisuals, detailPanels, frameRateSummary } from "../lib/cameraView.js";
+import { cardVisuals, detailPanels } from "../lib/cameraView.js";
 
 function formatElapsed(startedAt) {
   const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
@@ -484,7 +484,7 @@ function CameraSignIn({ camera, onUpdated }) {
     let updated;
     try {
       updated = await window.cameraAPI.updateCredentials(camera.id, username, password);
-    } catch (err) {
+    } catch {
       // Deliberately not err.message verbatim (PIC-93): the underlying
       // text is "RTSP/1.0 401 Unauthorized" or an ONVIF SOAP fault, which
       // tells a venue owner nothing. The one thing worth saying is which

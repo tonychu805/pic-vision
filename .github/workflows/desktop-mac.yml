@@ -70,6 +70,10 @@ jobs:
           npm_config_arch: ${{ matrix.arch }}
         run: npm ci
 
+      - name: Run desktop tests
+        working-directory: desktop
+        run: npm test
+
       - name: Build ${{ matrix.arch }} DMG
         working-directory: desktop
         env:
