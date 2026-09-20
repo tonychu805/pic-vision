@@ -87,12 +87,32 @@ test("the full pipeline finds a usable answer on this machine for real", async (
   assert.ok(result.realtimeMultiplier > 0);
   assert.equal(typeof result.hardware, "boolean");
 
-  // This workstation's ffmpeg-static bundle has no hardware H.264 encoder
-  // (confirmed via the real `ffmpeg -encoders` listing above), so the
-  // honest answer here is the libx264 floor, not a hardware encoder it
-  // doesn't actually have.
-  assert.equal(result.encoder, "libx264");
-  assert.equal(result.hardware, false);
+  // What the right ANSWER is depends on the machine, and this assertion
+  // used to hardcode one machine's answer: "libx264, no hardware". True on
+  // the Linux workstation, whose ffmpeg-static build carries no hardware
+  // H.264 encoder. False on a Mac, whose PLATFORM_CANDIDATES lead with
+  // h264_videotoolbox and whose bundled ffmpeg can legitimately win with
+  // it.
+  //
+  // It only ever ran on the workstation until 2026-09-20, when the release
+  // workflow started running `npm test` on a macOS runner -- so as written
+  // it would have failed the build BEFORE the DMG step: tag pushed, no
+  // release ever appearing. Found by reading it against the candidate list
+  // before cutting 1.6.0, not by the failure.
+  //
+  // So: the invariant everywhere, the exact answer only where the
+  // candidate list makes it certain.
+  assert.equal(
+    result.hardware,
+    result.encoder !== "libx264",
+    "the hardware flag must agree with which encoder actually won",
+  );
+  if (process.platform === "linux") {
+    // The Linux candidate list is [libx264] and nothing else, so this is
+    // not a guess about the binary -- it is the only answer possible.
+    assert.equal(result.encoder, "libx264");
+    assert.equal(result.hardware, false);
+  }
 });
 
 test("MIN_USABLE_MULTIPLIER stays above 1x realtime", () => {
