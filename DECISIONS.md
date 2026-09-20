@@ -2389,3 +2389,29 @@ Durations are derived from consecutive entries rather than stored, so nothing ne
 **Migration applied to production before the code deployed**, deliberately: the route now selects `stage_timings`, so the code landing first would have failed every job update. Additive and nullable, so the running code ignored it until the deploy.
 
 **Not yet verified:** no job has run since this shipped, so the column has never actually been written. The next run is the confirmation — and is also the first run that will report its own cost.
+
+---
+
+## ADR-112 — Failed venue uploads expire per venue, not per bucket
+
+**Date:** 2026-09-20 · **Status:** applied to production · **Ticket:** PIC-158
+
+**Context.** PIC-157 stopped `job_runner.py` deleting a job's uploaded segments unless it reached `done`, because deleting them on failure meant a venue had to re-upload an entire session to retry. That left the opposite gap: nothing reclaimed the footage of a job that never succeeded. Two dead files from the 09-19 failures were 543 MB — about half the bucket.
+
+**The filed plan could not have worked.** PIC-158 asked for a lifecycle rule scoped to the prefix `ingest/`. Real keys lead with the venue id — `<brandId>/ingest/<agentId>/<jobId>/<name>`, per `r2Keys.ts` — and R2 lifecycle prefixes are literal, with no wildcards, exactly like S3. A rule on `ingest/` matches zero objects: it would have been switched on, looked correct, and reclaimed nothing indefinitely.
+
+**Decision: one rule per venue**, prefix `<brandId>/ingest/`, expiring after **14 days**.
+
+This is the key layout working as intended rather than a workaround — PIC-153 put the brand first specifically to allow per-venue retention, per-venue storage accounting, and a clean single-prefix delete when a venue churns. R2 caps a bucket at 1000 lifecycle rules, so this scales to 1000 venues; past that the design has to change, and that is the ceiling to remember.
+
+Retention errs long deliberately. Too short costs a venue their footage; too long costs some storage. The number is one line.
+
+**The real hazard is a rule that is too broad.** This bucket also holds project-wide files at its root — `pipeline/` (~486 MB of ffmpeg and ffprobe) and `weights/` (~135 MB of TrackNet model) — which every job downloads. A bucket-wide expiry would delete them out from under the pipeline and break every future job. Several tests exist only to pin that no expiring rule has an empty prefix, and that those keys, a venue's `reels/`, and another venue's `ingest/` are all unmatched.
+
+**Verified against the live bucket, not only in tests.** A probe object written under a venue's ingest prefix came back with `expiry-date="Sun, 04 Oct 2026"` carrying that venue's own `rule-id`; probes under `pipeline/`, `weights/` and a venue's `reels/` got no expiry at all. All probes deleted afterwards. Cloudflare's docs explain why the two existing dead objects show no expiry yet: new uploads reflect a new rule immediately, existing objects may take up to 24 hours.
+
+**A script, not a hook on venue creation.** Writing this config replaces the entire ruleset, so two venues created concurrently could lose each other's rule, and sign-in is a poor place to depend on a storage API being reachable. `pnpm sync:lifecycle` reports drift, names any venue with no rule, and exits non-zero; `--apply` writes. Onboarding is manual and rare today; when it stops being either, this belongs in it — and the report mode is what makes a missed run visible instead of silent.
+
+**Found by running it rather than by reasoning:** the drift comparison used raw `JSON.stringify`, and R2 returns a rule's fields in its own order, so an identical ruleset always read as drifted. The script would have exited non-zero on every run — and a check that is always red is a check nobody reads, which is the same reason ADR-108's linter was kept deliberately minimal. Now compared canonically, with a test using R2's real field order beside one proving a genuine difference is still caught.
+
+**Note for PIC-138 and beyond:** the same fact that made this work — venue-prefixed keys — is what will let a job-scoped R2 credential be restricted to one venue's paths. The two tickets depend on the same property.

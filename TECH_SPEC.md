@@ -1675,6 +1675,20 @@ pic-vision/
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented
+│   │   ├── ingestLifecycle.ts                 # PIC-158 (2026-09-20): which R2 lifecycle
+│   │   │                                    # rules the PRIVATE ingest bucket should
+│   │   │                                    # have -- ONE PER VENUE, prefix
+│   │   │                                    # `<brandId>/ingest/`. The ticket's own
+│   │   │                                    # plan (a single rule on `ingest/`) would
+│   │   │                                    # have matched zero objects: real keys
+│   │   │                                    # lead with the venue id and R2 prefixes
+│   │   │                                    # are literal. DANGER: this bucket also
+│   │   │                                    # holds pipeline/ and weights/ at its root
+│   │   │                                    # (~620MB every job needs) -- an expiring
+│   │   │                                    # rule must never have an empty prefix
+│   │   ├── ingestLifecycle.test.ts            # 13 tests, most of them pinning what must
+│   │   │                                    # NOT be deleted (pipeline/, weights/, a
+│   │   │                                    # venue's reels/, another venue's ingest)
 │   │   ├── stageTimings.ts                    # PIC-159 (2026-09-20): when each job
 │   │   │                                    # stage started. The first successful
 │   │   │                                    # end-to-end run could not say how its
@@ -1708,6 +1722,14 @@ pic-vision/
 │   │   └── pillTone.ts                         # maps a mockup status label (e.g.
 │   │                                          # "Offline"/"Uploading"/"Enabled") to
 │   │                                          # Pill's neutral/progress/alert tone
+│   ├── scripts/syncIngestLifecycle.ts  # PIC-158: `pnpm sync:lifecycle` reports which
+│   │                                  # venues have no retention rule (their failed
+│   │                                  # uploads are kept forever) and exits non-zero
+│   │                                  # on drift; `--apply` writes them. A script
+│   │                                  # rather than a hook on venue creation: the R2
+│   │                                  # endpoint replaces the WHOLE ruleset, so two
+│   │                                  # venues created at once could lose each
+│   │                                  # other's rule. Run it when onboarding a venue
 │   ├── scripts/jevDemo.ts              # 2026-09-20, new top-level dir. The one
 │   │                                  # thing lib/jevClassifier.test.ts can't do:
 │   │                                  # a single REAL (billed) call to Jev, to
