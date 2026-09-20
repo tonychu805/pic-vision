@@ -10,7 +10,7 @@
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
 import Store from "electron-store";
-import { listCameras, testConnection, setCameraProfile } from "./cameras/store.js";
+import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "./capture.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
@@ -253,7 +253,10 @@ export function setAgentName(name) {
   const trimmed = String(name ?? "").trim();
   if (!trimmed) return getAgentName();
   store.set("agentName", trimmed);
-  sendHeartbeat(); // push the rename immediately rather than waiting for the next interval
+  // Push the rename now rather than at the next interval. Through the shared
+  // runner (see runHeartbeat) so it cannot overlap a heartbeat already in
+  // flight -- the same out-of-order hazard the camera list has.
+  runHeartbeat({ rerunIfBusy: true });
   return trimmed;
 }
 
@@ -553,6 +556,79 @@ export async function sendHeartbeat() {
   }
 }
 
+// ---- Heartbeats that never overlap, and one that can be asked for now ----
+//
+// A heartbeat carries the whole camera list, and the console prunes any
+// camera that isn't in it. Two in flight at once can therefore arrive out of
+// order: an older snapshot that still contains a just-removed camera landing
+// AFTER the newer one would re-insert it. So every heartbeat -- the regular
+// tick and the ones asked for below -- goes through one runner that allows
+// exactly one at a time.
+//
+// A request that arrives while one is already running sets a flag instead of
+// being dropped. The running heartbeat may have taken its snapshot of the
+// camera list before the change, so it can't be trusted to include it; a
+// second run after it finishes can.
+let heartbeatInFlight = null;
+let heartbeatRerun = false;
+
+function runHeartbeat({ rerunIfBusy = false } = {}) {
+  if (heartbeatInFlight) {
+    if (rerunIfBusy) heartbeatRerun = true;
+    return heartbeatInFlight;
+  }
+  heartbeatInFlight = (async () => {
+    try {
+      do {
+        heartbeatRerun = false;
+        try {
+          await sendHeartbeat();
+        } catch (err) {
+          // sendHeartbeat handles a failed POST itself; this is for the
+          // part before it, probing the cameras. Never let it escape: the
+          // caller is a timer or a fire-and-forget request.
+          console.error(`[cloud] heartbeat crashed: ${err.message}`);
+        }
+      } while (heartbeatRerun);
+    } finally {
+      heartbeatInFlight = null;
+    }
+  })();
+  return heartbeatInFlight;
+}
+
+// Collapses a burst -- adding four cameras in a row, or removing several --
+// into one heartbeat. Long enough to catch a burst, short enough that the
+// console still hears about a single change within a second or so.
+export const HEARTBEAT_DEBOUNCE_MS = 400;
+let heartbeatDebounce = null;
+
+/**
+ * Tell the console about a change to the camera list now, rather than at the
+ * next timer tick. Fire-and-forget: the operator's click never waits on it.
+ *
+ * A heartbeat probes every camera before it posts, so "now" is as fast as the
+ * slowest probe -- a few seconds, not the interval. That is the cost of
+ * sending a truthful list; the alternative is reporting a status this machine
+ * has not just checked.
+ */
+export function requestHeartbeat() {
+  // Not connected means nothing to tell. sendHeartbeat would return at once
+  // anyway; skipping here also avoids arming a timer for nothing.
+  if (!getCloudConnection()) return;
+  if (heartbeatDebounce) return;
+  heartbeatDebounce = setTimeout(() => {
+    heartbeatDebounce = null;
+    runHeartbeat({ rerunIfBusy: true });
+  }, HEARTBEAT_DEBOUNCE_MS);
+  // Never the thing keeping the process alive.
+  heartbeatDebounce.unref?.();
+}
+
+// Wired here, not in main.js, so every path that changes the camera list is
+// covered by construction -- including ones added later.
+onCamerasChanged(requestHeartbeat);
+
 // The cloud->agent command channel (ADR-071/ADR-073's long-flagged missing
 // piece, first built as ADR-077 for start/stop recording, extended by
 // ADR-080 for calibration): the console creates a row in `agent_commands`
@@ -741,7 +817,7 @@ export function startHeartbeatLoop() {
     // Deliberately "is the channel live right now", not "was it ever" --
     // a socket that drops mid-session must bring the fallback back.
     if (!isCommandChannelLive()) await processCommandsNow();
-    sendHeartbeat(); // don't wait a full interval for the first "online" signal
+    runHeartbeat(); // don't wait a full interval for the first "online" signal
   };
   tick();
   heartbeatTimer = setInterval(tick, HEARTBEAT_INTERVAL_MS);

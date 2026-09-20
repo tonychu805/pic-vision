@@ -151,6 +151,42 @@ function saveCameras(cameras) {
   store.set("cameras", cameras.map(encryptCamera));
 }
 
+// Told whenever the operator changes WHICH cameras exist or how they are
+// named or reached -- added, removed, renamed, credentials replaced.
+//
+// Exists so the console hears about it now. The console learns a camera is
+// gone only from the next heartbeat, so for up to a full interval a removed
+// camera stayed listed there as calibrated, and a same-named replacement
+// looked like it had inherited the calibration. It hadn't -- a re-added
+// camera gets a fresh id and starts uncalibrated -- but the operator saw the
+// stale row and could click Calibrate on a camera that no longer existed,
+// which errored (2026-09-20, 36s after the re-add).
+//
+// Deliberately NOT called from saveCameras itself. setCameraProfile also
+// saves, and the heartbeat calls it for every camera on every tick, so a
+// hook there would have each heartbeat trigger the next one forever.
+//
+// A registry rather than an import of cloud.js because cloud.js already
+// imports this module; the reverse would be a cycle.
+const changeListeners = new Set();
+
+export function onCamerasChanged(listener) {
+  changeListeners.add(listener);
+  return () => changeListeners.delete(listener);
+}
+
+function notifyCamerasChanged() {
+  for (const listener of changeListeners) {
+    try {
+      listener();
+    } catch (err) {
+      // A listener's failure must never fail the operator's add or remove
+      // -- the change has already been saved by the time this runs.
+      console.error(`[cameras] change listener failed: ${err.message}`);
+    }
+  }
+}
+
 // The `onvif` library defaults to 120s per request (its own cam.js:94), and
 // that default is what "Add a camera by IP address" spent before it even
 // reached the RTSP fallback: UAT on 2026-09-18 typed an address with nothing
@@ -296,6 +332,7 @@ export async function addCamera({ label, hostname, port, username, password, pat
   const cameras = listCameras();
   cameras.push(camera);
   saveCameras(cameras);
+  notifyCamerasChanged();
   return camera;
 }
 
@@ -337,6 +374,7 @@ export async function addCameraFromSampleClip({ label, filePath }) {
   const cameras = listCameras();
   cameras.push(camera);
   saveCameras(cameras);
+  notifyCamerasChanged();
   return camera;
 }
 
@@ -404,6 +442,7 @@ export function migrateRecordingDirsToCameraIds() {
 export function removeCamera(id) {
   const cameras = listCameras().filter((c) => c.id !== id);
   saveCameras(cameras);
+  notifyCamerasChanged();
   return cameras;
 }
 
@@ -452,6 +491,7 @@ export async function updateCameraCredentials(id, username, password) {
       : c,
   );
   saveCameras(next);
+  notifyCamerasChanged();
   return publicCamera(next.find((c) => c.id === id));
 }
 
@@ -474,6 +514,7 @@ export function renameCamera(id, label) {
   const cameras = listCameras();
   const next = cameras.map((c) => (c.id === id ? { ...c, label } : c));
   saveCameras(next);
+  notifyCamerasChanged();
   return next.find((c) => c.id === id);
 }
 
@@ -587,5 +628,6 @@ export async function addCameraViaRtsp({ label, hostname, port, path, username, 
   const cameras = listCameras();
   cameras.push(camera);
   saveCameras(cameras);
+  notifyCamerasChanged();
   return camera;
 }

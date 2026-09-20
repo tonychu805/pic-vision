@@ -2486,3 +2486,33 @@ Tests are paired per `CLAUDE.md`: *no account key reaches the pod* beside *the s
 **Not verified: a real pod.** Everything is proven except the one thing that needs a billed GPU run — that RunPod passes six extra environment variables (one ~700-character session token each) through to the container, and that the pod's boto3 talks to R2 with them from RunPod's network. Low risk, not zero, and it is the first thing the next real job will show. **If that job fails at its first download, revert the two Python files** (`git revert` of the runner/pod commit); the console endpoint is additive and unaffected.
 
 **Remaining two thirds of PIC-138, unchanged.** The pod still holds the **global runner token** and the **full RunPod account key**. The token can claim any venue's next job and bypasses the per-venue access rules; the RunPod key can create pods and is held solely so a pod can terminate itself. Neither narrows the same way — see the ticket. The RunPod key in particular needs a watchdog on the other side before it comes off, because self-termination is what protects the account if the runner dies mid-job.
+
+---
+
+## ADR-115 — A change to the camera list reaches the console now, not at the next heartbeat
+
+**Date:** 2026-09-20 · **Status:** built, tested, ships in the next desktop release
+
+**Context.** Reported as "if I remove a camera on the desktop and add one with the same name, it shows as calibrated." The premise was wrong, and checking why is worth recording, because the wrong premise led straight at a plausible-looking bug that doesn't exist.
+
+**What was checked, and what it found.**
+
+- *A re-added camera never inherits calibration.* Every camera gets a fresh random id on add; the console keys its rows by `(agent_id, camera_id)`; the heartbeat's calibration reply is keyed by id. The database confirms it: the re-added Court 4 has a new id and `is_calibrated = false`.
+- *The renderer holds nothing keyed by label* — React keys, the calibration refresh (`c.id === camera.id`) and the status map are all id-based.
+- *What was actually happening:* the console learns that a camera is gone only from the next heartbeat, which sends the whole list and prunes anything missing. Until then the removed camera's row sits there, **still calibrated**, beside its uncalibrated same-named replacement. The data shows the cost: a Calibrate was sent to the *removed* camera's id 36 seconds after its replacement was added, and errored.
+
+The operator concluded "it's just not synced immediately," which is right. The bug was real but was staleness, not inheritance.
+
+**Made worse the same day.** ADR-113's neighbour change took the heartbeat from 30s to 60s to cut cloud-function usage, doubling how long a removed camera could linger.
+
+**Decision.** Adding, removing or renaming a camera, or replacing its credentials, requests a heartbeat immediately.
+
+- **`onCamerasChanged` registry in the store, not a hook in `saveCameras`.** `setCameraProfile` also saves, and the heartbeat calls it for every camera on every tick. A hook in the shared save would make each heartbeat trigger the next forever. Only the six user-facing functions notify. A registry rather than an import because `cloud.js` already imports the store.
+- **Debounced 400ms.** A heartbeat probes *every* camera before it posts, so four adds in a row must not become four full sweeps against cameras that may allow only one RTSP session.
+- **Every heartbeat goes through one single-flight runner** — the timer's, the requested ones, and the existing immediate push after the *machine* is renamed, which had been calling `sendHeartbeat()` directly. The console prunes any camera absent from a heartbeat, so two in flight can arrive out of order: an older list still containing a just-removed camera landing *after* the newer one would put it back.
+- **A request that arrives mid-flight queues a rerun rather than being dropped.** The running heartbeat took its snapshot before the change and cannot be trusted to include it. Dropping the request would recreate the bug at smaller scale.
+- **Fire-and-forget.** The operator's click never waits. "Immediately" means as fast as the slowest camera probe, a few seconds, not the interval; the alternative is reporting a status this machine hasn't just checked.
+
+**What the tests found about themselves.** Ten tests, real store and real `cloud.js` against a real local HTTP server. First run: all green. Breaking the implementation five ways caught three of five. **Two slipped through**, and the reason is instructive: the server held each heartbeat open for 250–400ms against a 400ms debounce, so the follow-up request only ever fired *after* the first had finished — nothing was ever in flight to overlap with or to queue behind. Both the "never overlap" and "queue a mid-flight change" tests passed with the very logic they exist to check deleted. Fixed by holding heartbeats open for several times the debounce and asserting, as a precondition, that one is genuinely in flight. All five breaks are now caught, each by the right test; the file was restored byte-identical after every mutation.
+
+**Not covered.** The immediate heartbeat probes every camera, so a venue with a dead camera waits out that probe before the console hears about *any* change. Not measured against real hardware, and no real camera was touched. If it proves slow, the fix is to reuse recent statuses for cameras that weren't the subject of the change.

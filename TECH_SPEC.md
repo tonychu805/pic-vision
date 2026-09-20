@@ -1035,7 +1035,18 @@ pic-vision/
 │   │   │                              # lesson applied to the module written
 │   │   │                              # because of it, rather than testing only the
 │   │   │                              # wording helper beside it
-│   │   ├── cloud.js                    # 2026-09-03: first outbound connectivity
+│   │   ├── cloud.js                    # 2026-09-20 (ADR-115): EVERY heartbeat now goes
+│   │   │                              # through one single-flight runner, and adding /
+│   │   │                              # removing / renaming a camera requests one NOW
+│   │   │                              # (debounced 400ms, queued if one is mid-flight)
+│   │   │                              # instead of waiting for the timer -- the console
+│   │   │                              # only learns a camera is gone from a heartbeat.
+│   │   │                              # Wired via cameras/store.js's onCamerasChanged
+│   │   │                              # registry, NOT from saveCameras (setCameraProfile
+│   │   │                              # saves inside every heartbeat: a hook there loops).
+│   │   │                              # camera-sync.test.js: 10 tests, real store + real
+│   │   │                              # cloud.js + real HTTP server, mutation-checked
+│   │   │                              # 2026-09-03: first outbound connectivity
 │   │   │                              # to pic-vision-cloud-console (ADR-071) --
 │   │   │                              # registerAgent (2026-09-05, ADR-079 --
 │   │   │                              # takes the signed-in operator's own
