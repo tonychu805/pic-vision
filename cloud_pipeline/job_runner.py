@@ -56,7 +56,35 @@ WORK_DIR = os.environ.get("RUNNER_WORK_DIR", os.path.join(REPO_ROOT, "cloud_pipe
 RUNNER_ID = os.environ.get("RUNNER_ID", socket.gethostname())
 
 POLL_SEC = 5
+
+# Backoff while there is nothing to do (2026-09-20). This loop used to
+# poll every POLL_SEC forever: 17,280 calls a day, ~518k a month, against
+# a Netlify function, doing nothing. That alone exceeded the account's
+# quota and took console/share/marketing down for five days before anyone
+# noticed -- the runner's own "claim failed" lines went to journald, which
+# is not a place anybody watches.
+#
+# Backs off to IDLE_MAX_SEC after IDLE_RAMP_AFTER consecutive empty
+# claims, and snaps straight back to POLL_SEC the moment a job appears, so
+# a busy period still polls tightly. Worst case a job waits IDLE_MAX_SEC
+# before being picked up, which is nothing against a ~10 minute job.
+IDLE_RAMP_AFTER = 3
+IDLE_MAX_SEC = 60
+
 TERMINAL_STAGES = ("done", "error", "cancelled")
+
+
+def idle_sleep_sec(consecutive_idle_polls):
+    """How long to wait after an empty claim.
+
+    Pure, so the ramp is testable without a clock or a console. The first
+    few empty polls stay fast -- a job queued moments after the previous
+    one finished is the common case, and making that wait a minute would
+    be a regression for no saving.
+    """
+    if consecutive_idle_polls < IDLE_RAMP_AFTER:
+        return POLL_SEC
+    return IDLE_MAX_SEC
 
 # How often to ask RunPod whether the pod is still there, and how long to
 # wait before deciding it's stuck rather than just slow. 15s is cheap
@@ -453,16 +481,23 @@ def main():
         sys.exit("RUNNER_TOKEN is not set (add it to .env; same value as the console's)")
     os.makedirs(WORK_DIR, exist_ok=True)
     _log(f"polling {CONSOLE_URL} as {RUNNER_ID}, work dir {WORK_DIR}")
+    idle_polls = 0
     while True:
         try:
             job = claim_job()
         except Exception as e:  # noqa: BLE001 - console unreachable: wait, don't die
             _log(f"claim failed: {e}")
-            time.sleep(POLL_SEC * 4)
+            # A failing console is also a reason to back off, not to keep
+            # hammering it every few seconds -- which is exactly what this
+            # loop did for five days straight during the quota outage.
+            idle_polls += 1
+            time.sleep(max(POLL_SEC * 4, idle_sleep_sec(idle_polls)))
             continue
         if job is None:
-            time.sleep(POLL_SEC)
+            idle_polls += 1
+            time.sleep(idle_sleep_sec(idle_polls))
             continue
+        idle_polls = 0  # work exists: go back to polling tightly
         run_one(job)
 
 

@@ -30,8 +30,14 @@ const BUNDLE = path.join(OUT_DIR, "ErrorBoundary.mjs");
 let ErrorBoundary;
 
 before(async () => {
-  rmSync(OUT_DIR, { recursive: true, force: true });
+  // Only this file's own bundle, not the whole directory. OUT_DIR is
+  // shared with connectionStatus.test.js, and `node --test` runs test
+  // files in parallel -- a recursive wipe here deleted that file's
+  // freshly-built bundle out from under it, failing five tests with
+  // ENOENT depending purely on which `before` hook won the race. It
+  // passed for a while by luck, which is the worst version of this.
   mkdirSync(OUT_DIR, { recursive: true });
+  rmSync(BUNDLE, { force: true });
   const result = spawnSync(
     path.join(ROOT, "node_modules", ".bin", "esbuild"),
     [path.join(ROOT, "src", "ErrorBoundary.jsx"), "--bundle", "--format=esm",

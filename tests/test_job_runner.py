@@ -451,3 +451,43 @@ def test_cleanup_always_removes_the_local_scratch_directory(monkeypatch, tmp_pat
     job_runner._cleanup(dict(JOB), str(job_dir))
     assert not job_dir.exists()
     assert (tmp_path / "logs" / "job-1.log").read_text() == "some log output"
+
+
+# --- idle backoff (2026-09-20) ----------------------------------------
+#
+# The loop polled every POLL_SEC forever: ~518k cloud-function calls a
+# month doing nothing, which exhausted the Netlify quota and took the
+# console, share links and marketing site down for five days. The runner's
+# own "claim failed" lines went to journald, which nobody watches.
+#
+# Paired deliberately: the test that a long idle backs off sits beside the
+# test that a busy runner still polls tightly. A backoff that only ever
+# slowed down would pass the first alone and quietly add a minute to every
+# job pickup.
+
+def test_a_long_idle_backs_off():
+    from cloud_pipeline.job_runner import idle_sleep_sec, IDLE_MAX_SEC
+    assert idle_sleep_sec(50) == IDLE_MAX_SEC
+
+
+def test_the_first_few_empty_polls_stay_fast():
+    # A job queued moments after the previous one finished is the common
+    # case; making that wait a full minute would be a regression.
+    from cloud_pipeline.job_runner import idle_sleep_sec, POLL_SEC, IDLE_RAMP_AFTER
+    for i in range(IDLE_RAMP_AFTER):
+        assert idle_sleep_sec(i) == POLL_SEC
+
+
+def test_the_ramp_is_monotonic_and_never_below_the_floor():
+    from cloud_pipeline.job_runner import idle_sleep_sec, POLL_SEC, IDLE_MAX_SEC
+    waits = [idle_sleep_sec(i) for i in range(20)]
+    assert waits == sorted(waits)
+    assert all(POLL_SEC <= w <= IDLE_MAX_SEC for w in waits)
+
+
+def test_the_idle_ceiling_actually_cuts_the_call_volume():
+    # The number that matters: what an idle month costs. Pinned so a
+    # future tweak to IDLE_MAX_SEC has to face the bill it creates.
+    from cloud_pipeline.job_runner import IDLE_MAX_SEC
+    calls_per_month = 30 * 24 * 3600 / IDLE_MAX_SEC
+    assert calls_per_month <= 50_000, f"{calls_per_month:.0f} calls/month while idle"

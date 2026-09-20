@@ -18,6 +18,7 @@ import { basename } from "node:path";
 import { runCloudJob } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
+import { isCommandChannelLive } from "./commandChannel.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -41,7 +42,17 @@ const store = new Store({ name: "cloud", configFileMode: 0o600 });
 // environmental at first rather than a wrong URL.
 const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "https://console.picvisionai.com";
 
-const HEARTBEAT_INTERVAL_MS = 30_000;
+// 30s until 2026-09-20. Each tick costs TWO cloud-function calls (the
+// command sweep below and the heartbeat itself), so one always-on agent
+// was ~173k calls a month before a single venue recorded anything --
+// which, with the job runner's own idle poll, is what exhausted the
+// Netlify quota and took every public site down for five days.
+//
+// PAIRED with the console's OFFLINE_AFTER_MS (overview-client.tsx),
+// which is three of these: raising one without the other would show
+// every agent permanently offline. They are changed together, and the
+// comment there says so too.
+export const HEARTBEAT_INTERVAL_MS = 60_000;
 
 let heartbeatTimer = null;
 
@@ -720,7 +731,16 @@ export function startHeartbeatLoop() {
     // that cameraStatuses() reads; running the heartbeat first would report
     // the *old* state and make the console wait a full extra cycle to see
     // a change that already happened this tick.
-    await processCommandsNow();
+    //
+    // Skipped entirely while the Realtime push channel is connected
+    // (2026-09-20). Commands already arrive over that websocket, which
+    // costs nothing per message and is what makes "Calibrate" feel
+    // instant; this sweep is the fallback commandChannel.js's own header
+    // describes, for a dropped socket or Realtime being down. Running it
+    // anyway doubled every agent's cloud-function usage to buy nothing.
+    // Deliberately "is the channel live right now", not "was it ever" --
+    // a socket that drops mid-session must bring the fallback back.
+    if (!isCommandChannelLive()) await processCommandsNow();
     sendHeartbeat(); // don't wait a full interval for the first "online" signal
   };
   tick();

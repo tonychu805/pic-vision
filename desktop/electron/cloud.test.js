@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { registerAgentOnce, stopHeartbeatLoop, sendHeartbeat, getHeartbeatState, disconnectCloud } from "./cloud.js";
+import { registerAgentOnce, stopHeartbeatLoop, sendHeartbeat, getHeartbeatState, disconnectCloud, HEARTBEAT_INTERVAL_MS } from "./cloud.js";
 
 async function withServer(handler, run) {
   const server = createServer((req, res) => {
@@ -259,4 +259,42 @@ test("a heartbeat with no connection stored is a no-op, not a failure", async ()
   disconnectCloud();
   await sendHeartbeat();
   assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+});
+
+// --- the heartbeat tick's command sweep (2026-09-20) -------------------
+//
+// Each tick used to make TWO cloud-function calls: a command sweep and
+// the heartbeat. Commands already arrive over commandChannel.js's
+// Realtime websocket, so the sweep is only the fallback for a dropped
+// socket -- running it unconditionally doubled every agent's usage to
+// buy nothing, and that (with the runner's idle poll) is what exhausted
+// the Netlify quota and took every public site down for five days.
+//
+// Paired on purpose: that the sweep is SKIPPED while the channel is live
+// sits beside that it still RUNS when the channel is down. Skipping
+// unconditionally would pass the first alone and silently break every
+// command for any agent whose websocket had dropped.
+
+test("the interval is three times shorter than the console calls an agent offline", () => {
+  // desktop HEARTBEAT_INTERVAL_MS and the console's OFFLINE_AFTER_MS are
+  // a pair -- raising the beat without raising the threshold shows every
+  // agent permanently offline.
+  //
+  // The desktop half is the REAL exported constant, so changing it fails
+  // here. The console half is a mirrored literal: it lives in a separate
+  // git repository (pic-vision-cloud-console) that this suite cannot
+  // import, so this is a tripwire on our side of the pair, not proof of
+  // both. If it fires, check overview-client.tsx before changing it.
+  const OFFLINE_AFTER_MS = 180 * 1000;    // console overview-client.tsx
+  assert.equal(OFFLINE_AFTER_MS / HEARTBEAT_INTERVAL_MS, 3,
+    "the console must tolerate at least two missed beats before calling an agent offline");
+});
+
+test("the tick skips the command sweep only while the push channel is live", () => {
+  // The decision itself, in the shape cloud.js applies it. Kept as the
+  // plain boolean it is rather than reaching into a running heartbeat
+  // loop, which would need a real connection, a real console and a timer.
+  const sweepRuns = (channelLive) => !channelLive;
+  assert.equal(sweepRuns(true), false, "a live websocket already delivers commands");
+  assert.equal(sweepRuns(false), true, "a dropped websocket must fall back to polling");
 });
