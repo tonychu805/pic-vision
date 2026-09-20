@@ -631,15 +631,17 @@ pic-vision/
 │   │                              # cloud_pipeline has never imported webapp/, and now the
 │   │                              # reverse is true too -- the only entry point is
 │   │                              # job_runner.py, driven by the console's job queue.
-│   │                              # RETIRED to archive/ 2026-09-20 (PIC-139, ADR-110):
+│   │                              # RETIRED and DELETED 2026-09-20 (PIC-139, ADR-110):
 │   │                              # run_cloud_job.py (the SSH-driven orchestrator),
 │   │                              # pod_cut.py (its on-pod reel cutter, absorbed by
 │   │                              # pod_driver.py), pod_r2_helper.py (its on-pod R2
 │   │                              # transfers, replaced by pod_driver.py's own boto3), and
 │   │                              # run_desktop_job.py (PIC-68's desktop CLI wrapper, dead
-│   │                              # since ADR-084). Do not run the archived orchestrator --
-│   │                              # it uploads footage to the PUBLIC bucket, re-opening
-│   │                              # PIC-153. See archive/README.md.
+│   │                              # since ADR-084). Deleted rather than parked in archive/
+│   │                              # precisely because the orchestrator stayed runnable from
+│   │                              # there and publishes footage to the PUBLIC bucket
+│   │                              # (PIC-153). Recover from git if ever needed; the note
+│   │                              # lives in archive/README.md.
 │   ├── job_runner.py                 # ADR-084 (2026-09-06), reel-job dispatch rebuilt
 │   │                                # ADR-093 (2026-09-10): the operator-side half of the
 │   │                                # thin-agent split. Polls the cloud console
@@ -673,7 +675,7 @@ pic-vision/
 │   ├── runpod_pod.py                  # RunPod pod lifecycle. create_pod()/ssh_run()/
 │   │                                    # scp_to() (create/SSH/exec/terminate) is the
 │   │                                    # original SSH-driven path, still what
-│   │                                    # archive/run_cloud_job.py and webapp/pipeline.py's local
+│   │                                    # run_cloud_job.py (retired) and webapp/pipeline.py's local
 │   │                                    # dashboard use unchanged. create_selfdriving_pod()
 │   │                                    # (ADR-093, 2026-09-10) is the new one job_runner.py
 │   │                                    # actually calls for real reel jobs: stock,
@@ -728,7 +730,7 @@ pic-vision/
 │   │                              # manual recording (RTSP pull via ffmpeg,
 │   │                              # capture.js) and -- as of 2026-09-02, PIC-68 --
 │   │                              # a "send to cloud" trigger (pipeline.js) that
-│   │                              # invoked archive/run_desktop_job.py (retired) as a
+│   │                              # invoked run_desktop_job.py (retired, PIC-139) as a
 │   │                              # subprocess (concatenating capture.js's segments
 │   │                              # first) rather than reimplementing R2 upload/
 │   │                              # RunPod dispatch/reel-cutting in JS, per ADR-071.
@@ -1562,7 +1564,7 @@ pic-vision/
 │   │       └── reels/route.ts             # ADR-074, extended ADR-076, 2026-09-04.
 │   │                                    # Bearer-token authenticated, same pattern
 │   │                                    # as heartbeat -- cloud_pipeline/
-│   │                                    # archive/run_desktop_job.py's _report_reels()
+│   │                                    # run_desktop_job.py's (retired) _report_reels()
 │   │                                    # posts here once PER REEL after a cloud
 │   │                                    # job finishes (1 or 2 calls, not polled).
 │   │                                    # Inserts one `reels` row (agent_id from
@@ -1801,7 +1803,7 @@ pic-vision/
 │   ├── events.py                        # motion_series / kitchen_series signals
 │   ├── render.py                         # clip rendering
 │   └── job_log.py                         # shared timestamped log.txt writer -- used by both
-│                                            # webapp/pipeline.py and archive/run_cloud_job.py
+│                                            # webapp/pipeline.py and run_cloud_job.py (both retired)
 │
 ├── scripts/                    # one-off analysis, diagnostics, parameter sweeps --
 │                                # not part of the operator's core run-a-session flow
@@ -1821,13 +1823,13 @@ pic-vision/
 │   │                                      # peak_window), not the whole rally -- "quick hits".
 │   │                                      # Was dev-only until this ADR; build_burst_reel() is
 │   │                                      # now also called by pod_driver.py (and, before
-│   │                                      # PIC-139, archive/pod_cut.py)
+│   │                                      # PIC-139, pod_cut.py)
 │   ├── top_rallies_reel.py                 # ADR-102 (2026-09-12): cuts the top N (default
 │   │                                      # 10) ranked rallies into their own un-concatenated
 │   │                                      # clips -- same ranking/weights as rank_and_reel.py's
 │   │                                      # build_reel(), just delivered as separate files
 │   │                                      # instead of one reel. build_top_rallies() is called
-│   │                                      # by pod_driver.py (and archive/pod_cut.py before it)
+│   │                                      # by pod_driver.py (and pod_cut.py, retired, before it)
 │   ├── rank_and_reel_split.py             # same, for a session whose calibration is only
 │   │                                      # valid in pieces (e.g. IMG_7743's camera bump)
 │   ├── validate_ranking.py                 # checks rank_segments' score against real
@@ -1839,12 +1841,15 @@ pic-vision/
 │   ├── harness.py               # IoU matching, detection + selection metrics (§11.3)
 │   └── labels/                   # hand labels -- ground truth, committed
 ├── calib/                       # per-camera calibration JSON, committed (expensive to redo)
-├── archive/                     # retired code and process, kept for reference, not maintained
-│                                  # -- YOLO detection, one calibration tool, a workflow
-│                                  # template, a rejected perf experiment, the Gemini rally
-│                                  # verifier, and (PIC-139, 2026-09-20) the whole SSH-driven
-│                                  # cloud path. archive/README.md says why for each; the
-│                                  # cloud one carries a DO-NOT-RUN warning that matters
+├── archive/                     # retired code and process, not maintained -- nothing here is
+│                                  # tested, linted or run. YOLO detection, one calibration
+│                                  # tool, a workflow template, a rejected perf experiment,
+│                                  # the Gemini rally verifier. Two shapes, see its README:
+│                                  # most entries KEEP the code (the code is the reference --
+│                                  # a negative result, a fallback); the SSH-driven cloud path
+│                                  # (PIC-139/ADR-110, 2026-09-20) keeps only the note, its
+│                                  # code deleted, because a retired file that still runs is a
+│                                  # hazard not a record. Prefer that shape for new retirements
 ├── docs/                        # misc planning docs
 ├── tests/                       # pytest suite
 │

@@ -1,8 +1,16 @@
 # Archive — retired code and process
 
-Retired code and process kept for reference, not maintained. Four groups so
-far: the YOLO ball-detection pipeline, one superseded calibration tool, one
-abandoned workflow template, and one rejected performance experiment.
+Retired code and process, not maintained — nothing here is tested, linted,
+or run. Six groups so far: the YOLO ball-detection pipeline, one superseded
+calibration tool, one abandoned workflow template, one rejected performance
+experiment, the LLM-judged rally verifier, and the SSH-driven cloud path.
+
+**Two kinds of entry, and the difference matters.** Most sections below keep
+the code, because the code *is* the reference — a negative result you would
+otherwise re-attempt, or a fallback you might revive. The last section keeps
+only the note: its code was deleted, because a retired file that still runs
+is a hazard rather than a record, and git history is the archive of last
+resort either way. Prefer that second shape for new retirements (ADR-110).
 
 ## YOLO ball-detection pipeline
 
@@ -91,45 +99,57 @@ pipelines use them unchanged.
 
 ## Retired cloud path: the SSH-driven pipeline
 
-Moved here 2026-09-20 (`PIC-139`, `DECISIONS.md` ADR-110). The original
+Retired 2026-09-20 (`PIC-139`, `DECISIONS.md` ADR-110). **Deleted, not kept
+here** — this note is the artifact; the code is in git history. The original
 RunPod route: this workstation did the drift check and CFR convert, uploaded
 to R2, created a pod, then SSH'd in to run inference and cut the reel.
 Superseded by ADR-093's self-driving pod, where `job_runner.py` hands a pod
 everything it needs up front and `pod_driver.py` runs the job on the pod
 itself with no inbound SSH at all.
 
-**Do not run `run_cloud_job.py`.** It is still importable and still runnable
-from here — `REPO_ROOT` resolves identically from `archive/` — and it uploads
-the operator's video to the **public** bucket, which since `PIC-153` is the
-one `cdn.picvisionai.com` fronts. Running it publishes venue footage. That
-gap was found on 2026-09-18, recorded in the file's own `BUCKET` comment, and
-deliberately never fixed because the path was already dead.
+**Why deleted rather than parked here, unlike everything above.** The files
+were moved into this directory first, and that turned out to be the wrong
+call for a specific reason: `REPO_ROOT` resolves identically from `archive/`,
+so `run_cloud_job.py` stayed importable *and runnable* from where it sat —
+and running it uploads the operator's video to the **public** bucket, the
+exposure `PIC-153` closed everywhere else. Archiving relabelled the hazard
+instead of removing it. Two entries above are the same lesson in milder form:
+`scan_crossings.py` sat here with a broken import nobody noticed, and
+`debug_detections.py` would have silently shown the wrong detector's output.
+Nothing in this directory is tested, linted, or run.
 
-**Kept for reference, not active:**
-- `run_cloud_job.py` — the orchestrator. Its last change (the day it was
-  retired) moved the R2 credentials out of the SSH command string, where they
-  had been sitting in the process table of *both* the pod and this
-  workstation for every transfer — 4 to 15 per job. Fixed, tested, never run
-  against a real pod.
-- `pod_r2_helper.py` — the pod-side R2 transfer script it scp'd over.
-  `pod_driver.py` uses `boto3` directly instead.
-- `pod_cut.py` — the pod-side reel cutter it scp'd over. `pod_driver.py`
-  absorbed this; its own docstring describes itself as "everything
-  `run_cloud_job.py` used to do by SSH'ing into a pod".
-- `run_desktop_job.py` — `PIC-68`'s CLI wrapper, spawned by
+The general rule this settled, worth applying to the next retirement: **write
+the note, delete the code.** Git is the archive. Park something here only when
+the *code itself* is the reference — a negative result like
+`pod_infer_batched.py`, or a fallback like `calibrate_headless.py`.
+
+**What was deleted** (recover any of it with
+`git log --diff-filter=D --oneline -- <path>`, then `git show <sha>^:<path>`):
+
+- `cloud_pipeline/run_cloud_job.py` — the orchestrator. Its last change, the
+  day it was retired, moved the R2 credentials out of the SSH command string,
+  where they had been sitting in the process table of *both* the pod and this
+  workstation for every transfer — 4 to 15 per job, since the clip upload is a
+  loop. Fixed, tested, never run against a real pod.
+- `cloud_pipeline/pod_r2_helper.py` — the pod-side R2 transfer script it
+  scp'd over. `pod_driver.py` uses `boto3` directly instead.
+- `cloud_pipeline/pod_cut.py` — the pod-side reel cutter it scp'd over.
+  `pod_driver.py` absorbed this; its own docstring describes itself as
+  "everything `run_cloud_job.py` used to do by SSH'ing into a pod".
+- `cloud_pipeline/run_desktop_job.py` — `PIC-68`'s CLI wrapper, spawned by
   `desktop/electron/pipeline.js` to run a cloud job from the desktop app.
-  Already dead for the desktop path since ADR-084 made the venue agent thin:
-  `pipeline.js` no longer spawns any Python at all, and only a comment about
-  it remains there. It was the last caller of `webapp/pipeline.py`'s
-  `run_cloud_job()`, which went at the same time.
-- `cloud_upload.html` — the Flask dashboard's cloud upload page, served by
-  the `/cloud` route removed from `webapp/app.py`.
-- `tests/test_run_cloud_job_secrets.py` — the seven paired tests written for
-  the credential fix above (three that no secret reaches the command, four
-  that the credentials still arrive, quoted). Not collected: `pytest.ini`
-  restricts `testpaths` to `tests/`.
+  Already dead for the desktop since ADR-084 made the venue agent thin:
+  `pipeline.js` spawns no Python at all, and only a comment about it remains
+  there. It was the last caller of `webapp/pipeline.py`'s `run_cloud_job()`,
+  which went at the same time.
+- `webapp/templates/cloud_upload.html` — the Flask dashboard's cloud upload
+  page, served by the `/cloud` route removed from `webapp/app.py`.
+- `tests/test_run_cloud_job_secrets.py` — seven paired tests for the
+  credential fix above (three that no secret reaches the command, four that
+  the credentials still arrive, quoted). ADR-110 records the pattern; the
+  tests went with the code they covered.
 
-**Deliberately NOT archived:** `cloud_pipeline/venues/*/calib.json` and the
+**Deliberately NOT retired:** `cloud_pipeline/venues/*/calib.json` and the
 `/cloud/new-venue` calibration flow in `webapp/app.py` that writes them.
 Three venues' worth of hand-clicked calibration is data this project treats
 as expensive to lose (`CLAUDE.md`), and that flow touches neither R2 nor a

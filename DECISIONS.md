@@ -2348,3 +2348,17 @@ Writing those tests found a real race in the tests themselves, worth recording: 
 **Correction recorded in the archived file.** Its docstring claimed it had never been run end-to-end with real GPU inference. That was stale — `PROGRESS.md` records a real invocation on 2026-08-26, exit code 0, 13 rally segments — and it misled a reader into repeating the claim on the day it was retired.
 
 **Verified:** 175 tests pass (182 − 7: the credential tests moved to `archive/tests/`, which `pytest.ini` does not collect). `job_runner`, `pod_driver`, `runpod_pod`, `r2_storage`, `setup_venue_calibration`, `save_calibration` and both `webapp` modules all still import, and every one of the 15 files `job_runner.py` ships to the pod still exists. **Not verified:** no live pod run — the pipeline has still never completed one.
+
+### Update, same day: archived → deleted
+
+The decision above landed the retired files in `archive/`. Within the hour that was reversed, on the operator's question of whether deleting is simply neater — it is, and the reason is specific rather than stylistic.
+
+**Archiving did not remove the hazard it was supposed to contain.** `REPO_ROOT` resolves identically from `archive/`, so `run_cloud_job.py` stayed importable and runnable from where it sat, and running it publishes venue footage to the public bucket. The ADR above already conceded this and compensated with a DO-NOT-RUN banner — which is the tell: a mitigation written in prose, guarding a file that nothing tests, lints or runs.
+
+**This repo had already recorded the same failure twice**, in `archive/README.md`'s own entries: `scan_crossings.py` sat archived with an import that had been broken "for some time before anyone noticed", and `debug_detections.py` was flagged because anyone using it would have "silently gotten the wrong detector's output". Three instances is a pattern, not bad luck.
+
+**The rule, applied from here: write the note, delete the code.** Git is the archive — `git log --diff-filter=D --oneline -- <path>` finds anything deleted. `archive/` earns its place only when the *code itself* is the reference: a negative result you would otherwise re-attempt (`pod_infer_batched.py`), or a documented fallback (`calibrate_headless.py`). In every other case the value is in the README prose, and the file adds only surface — greppable, importable, runnable, untested.
+
+Deleted accordingly: `run_cloud_job.py`, `pod_cut.py`, `pod_r2_helper.py`, `run_desktop_job.py`, `cloud_upload.html`, `test_run_cloud_job_secrets.py`. The `archive/README.md` section and this ADR are what remain, which is the whole point — nothing recorded above was lost, because none of it lived in the code.
+
+**Against it, and worth stating:** `archive/` is this project's documented convention (`CLAUDE.md` names it), and a codebase where "retired" means two different things is worse than one that is consistently either. That is now resolved in the README's own preamble rather than left implicit — it distinguishes the two shapes and points new retirements at this one.
