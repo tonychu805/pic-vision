@@ -1310,9 +1310,29 @@ pic-vision/
 │       │                                  # new dep) -- incl. that it paints an opaque
 │       │                                  # background, without which it would be as
 │       │                                  # invisible as the crash it replaces
+│       ├── lib/heartbeatStatus.js         # PIC-92 (2026-09-20): turns cloud:status
+│       │                                  # into the words the Cloud page prints --
+│       │                                  # "Connected" ONLY when a heartbeat most
+│       │                                  # recently succeeded, "Connecting…" before
+│       │                                  # the first one, "Connection lost" plus how
+│       │                                  # long it's been otherwise. Returns finished
+│       │                                  # strings, not a code the JSX re-maps, so
+│       │                                  # there's one copy of the decision
+│       ├── lib/heartbeatStatus.test.js    # 9 tests: the three states, never-checked-in
+│       │                                  # vs. was-working-and-broke, coarse relative
+│       │                                  # times, and a clock behind the console's
+│       ├── lib/connectionStatus.test.js   # 5 tests that RENDER the status line, same
+│       │                                  # esbuild + react-dom/server harness as
+│       │                                  # errorBoundary.test.js -- covers the markup
+│       │                                  # (icon actually present, no unmapped tone),
+│       │                                  # which no test of the helper alone would
 │       ├── index.css                     # "Nocturne" design tokens, ported from
 │       │                                  # the handoff bundle's styles.css
-│       ├── components/                    # TitleBar, Sidebar, CameraCard (WeekGrid/
+│       ├── components/                    # TitleBar, Sidebar, CameraCard,
+│       │                                    # ConnectionStatus (PIC-92 -- its own
+│       │                                    # component only so a test can render it;
+│       │                                    # CloudPage can't be, its connection
+│       │                                    # arrives through an effect). (WeekGrid/
 │       │                                    # DayActivityStrip moved to the cloud
 │       │                                    # console 2026-09-04, see below -- Schedule
 │       │                                    # no longer lives here at all)

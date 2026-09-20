@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError, describeRegisterError } from "../lib/ipcError.js";
+import ConnectionStatus from "../components/ConnectionStatus.jsx";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
@@ -151,6 +152,23 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
     // the account-mismatch dialog moving this machine to another venue.
   }, [connectionEpoch]);
 
+  // PIC-92: this page used to read the connection once, on mount. Even
+  // with the heartbeat's health now in that reply, a page that never asks
+  // again would show whatever was true when it opened -- which is how the
+  // stale "Connected" survived a revoke long enough to be reported. The
+  // heartbeat itself runs every 30s; polling faster than that only costs a
+  // cheap main-process read, and means a connection that drops while
+  // somebody is looking at this page turns over within a few seconds
+  // rather than whenever they next navigate.
+  useEffect(() => {
+    if (CLOUD_API_MISSING) return undefined;
+    // Empty deps on purpose: refresh only closes over state setters, and
+    // re-creating the interval each render would reset the 5s clock
+    // forever, so it would never actually fire.
+    const timer = setInterval(refresh, 5000);
+    return () => clearInterval(timer);
+  }, []);
+
   // Compared the way a person reads it -- trimmed and case-insensitive.
   // "Front desk" and "front desk " are the same machine to everyone except
   // a string comparison.
@@ -253,10 +271,10 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>Checking connection…</p>
         ) : connection ? (
           <>
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <i className="ph-fill ph-check-circle" style={{ fontSize: 16, color: "var(--color-success)" }} />
-              <span style={{ fontWeight: 500 }}>Connected to {connection.brandName}</span>
-            </div>
+            {/* Re-rendered by the 5s poll above, so "Last check-in 2
+                minutes ago" keeps counting up instead of freezing at
+                whatever it said when the page opened. */}
+            <ConnectionStatus connection={connection} />
             {session?.user && (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>
                 Signed in as {session.user.email}

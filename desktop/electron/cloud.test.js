@@ -12,7 +12,7 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { registerAgentOnce, stopHeartbeatLoop } from "./cloud.js";
+import { registerAgentOnce, stopHeartbeatLoop, sendHeartbeat, getHeartbeatState, disconnectCloud } from "./cloud.js";
 
 async function withServer(handler, run) {
   const server = createServer((req, res) => {
@@ -117,4 +117,146 @@ test("any other 4xx also throws 'auth' -- not left as an unclassified raw messag
   }, async (url) => {
     await assert.rejects(registerAgentOnce("access-token", "user-1", url), /^Error: auth$/);
   });
+});
+
+// --- PIC-92: is this machine actually reporting, or merely registered? --
+//
+// The bug these cover: cloud:status answered "is a connection stored
+// locally", so after a real revoke the Cloud page kept saying "Connected"
+// while every heartbeat was being rejected. The state below is what makes
+// the difference visible; heartbeatStatus.test.js covers the wording the
+// operator ends up reading.
+//
+// Each test registers against a live local server first, because that is
+// what writes the connection sendHeartbeat then reads. The heartbeat loop
+// registration starts is stopped immediately -- see the note above about
+// an interval outliving its server and hanging the whole run.
+
+/** Register against `url`, then stop the loop that registration starts. */
+async function connectTo(url) {
+  const connection = await registerAgentOnce("access-token", "user-1", url);
+  stopHeartbeatLoop();
+  return connection;
+}
+
+/**
+ * Wait for the heartbeat registration fires immediately to actually land.
+ *
+ * stopHeartbeatLoop() clears the interval but cannot recall the first
+ * tick, which startHeartbeatLoop() runs right away and which is already
+ * in flight. Any test that then drives sendHeartbeat() by hand is racing
+ * that tick -- and it is a real race, not a theoretical one: it landed
+ * between two assertions here and overwrote the timestamp one of them had
+ * just captured.
+ */
+async function settleFirstHeartbeat() {
+  for (let i = 0; i < 200 && getHeartbeatState().lastAttemptOk === null; i++) {
+    await new Promise((resolve) => setTimeout(resolve, 5));
+  }
+}
+
+test("a freshly registered machine is 'not checked in yet', not 'connected'", async () => {
+  await withServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+  }, async (url) => {
+    await connectTo(url);
+    // Asserted with no await in between, deliberately: the tick started by
+    // registration is behind a real network round trip, so it cannot have
+    // completed yet. Settling first (as the tests below do) would be
+    // asserting the heartbeat's result, not registration's.
+    // The whole ticket in one assertion: registration succeeded, and the
+    // answer is still "unknown" rather than "connected".
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+  });
+});
+
+test("a successful heartbeat records both that it worked and when", async () => {
+  await withServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.url.includes("register")
+      ? { agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }
+      : { brandName: "Test Venue" }));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    const before = Date.now();
+    await sendHeartbeat();
+    const { lastAttemptOk, lastHeartbeatAt } = getHeartbeatState();
+    assert.equal(lastAttemptOk, true);
+    assert.ok(Date.parse(lastHeartbeatAt) >= before, "timestamp should be from this heartbeat");
+  });
+});
+
+test("a rejected heartbeat (the revoke case) flips the state to failing", async () => {
+  await withServer((req, res) => {
+    if (req.url.includes("register")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+      return;
+    }
+    res.writeHead(401, { "content-type": "application/json" });
+    res.end(JSON.stringify({ error: "revoked" }));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await sendHeartbeat();
+    assert.equal(getHeartbeatState().lastAttemptOk, false);
+  });
+});
+
+test("a connection that worked and then broke keeps the last time it worked", async () => {
+  // Without this the page can only say "lost", and an operator can't tell
+  // a link that dropped a minute ago from one that has been down all day.
+  let revoked = false;
+  await withServer((req, res) => {
+    if (req.url.includes("register")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+      return;
+    }
+    if (revoked) {
+      res.writeHead(401, { "content-type": "application/json" });
+      res.end(JSON.stringify({ error: "revoked" }));
+      return;
+    }
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ brandName: "Test Venue" }));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await sendHeartbeat();
+    const succeededAt = getHeartbeatState().lastHeartbeatAt;
+    assert.ok(succeededAt);
+    revoked = true;
+    await sendHeartbeat();
+    const after = getHeartbeatState();
+    assert.equal(after.lastAttemptOk, false);
+    assert.equal(after.lastHeartbeatAt, succeededAt, "the last good check-in must survive the failure");
+  });
+});
+
+test("disconnecting clears the health, so a later connection can't inherit it", async () => {
+  await withServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.url.includes("register")
+      ? { agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }
+      : { brandName: "Test Venue" }));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await sendHeartbeat();
+    assert.equal(getHeartbeatState().lastAttemptOk, true);
+    disconnectCloud();
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+  });
+});
+
+test("a heartbeat with no connection stored is a no-op, not a failure", async () => {
+  // disconnectCloud() above leaves no connection. sendHeartbeat must not
+  // report "failing" for a machine that simply isn't paired -- that would
+  // put "Connection lost" on a page whose real state is "not connected".
+  disconnectCloud();
+  await sendHeartbeat();
+  assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
 });

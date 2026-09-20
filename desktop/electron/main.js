@@ -30,7 +30,7 @@ import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState } from "./cloud.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -394,7 +394,12 @@ function registerCloudHandlers() {
     const connection = getCloudConnection();
     if (!connection) return connection;
     const { apiToken: _apiToken, ...rest } = connection;
-    return rest;
+    // PIC-92: a stored connection is not a working one. Without this the
+    // page could only answer "was this machine ever registered", and after
+    // a real revoke it kept saying "Connected" while every heartbeat was
+    // being rejected -- the truth was only in the Log tab, which is easy
+    // to miss. State only, no error text (see getHeartbeatState).
+    return { ...rest, ...getHeartbeatState() };
   });
   ipcMain.handle("cloud:disconnect", async () => {
     await stopCommandChannel();

@@ -41,7 +41,7 @@ export function isEncrypted(value) {
 // refresh, a heartbeat-driven rename) -- logging every call on an affected
 // machine would flood the Log tab and bury everything else in it. Logged
 // once per launch instead, the same "state change, not every poll" idiom
-// cloud.js's own lastHeartbeatOk already uses for the heartbeat's
+// cloud.js's own lastAttemptOk already uses for the heartbeat's
 // connected/disconnected line.
 let warnedThisLaunch = false;
 

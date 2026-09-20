@@ -2282,3 +2282,38 @@ Deliberately minimal — one error-level rule plus `no-unused-vars` as a warning
 **Verified the gate, not just the fix.** Both shipped bugs were reintroduced and the linter was run against them: `cancelling` produces 4 errors, `span` produces 2. Both releases would have been blocked. With the fix in place: 0 errors, 2 pre-existing warnings, 160 tests still passing.
 
 **What could not be verified here, and why.** The actual re-render of `CloudJobRow`'s Cancel button was not exercised on a running app: this machine's app sits at a sign-in screen (its session expired), and reaching the camera detail page would mean signing in against production. For this specific class that is an acceptable gap rather than a hand-wave — a `ReferenceError` on a free identifier is purely a scope question, and static scope analysis answers it completely. Running React would confirm the same fact less directly.
+
+---
+
+## ADR-109 — "Connected" now means a heartbeat succeeded, not that a record exists
+
+**Date:** 2026-09-20 · **Status:** fixed · **Ticket:** PIC-92
+
+**Context.** The desktop Cloud page answered the wrong question. `cloud:status` returned `getCloudConnection()` — "is a connection stored on this machine" — and the page rendered a green tick and "Connected to \<venue\>" whenever that was truthy. Whether the machine was *reporting* was tracked separately, by `lastHeartbeatOk` in `cloud.js`, and never left the main process.
+
+Found 2026-09-05 while testing revoke: after a real revoke the page kept saying Connected, with a stale "Registered …" line, while every heartbeat was being rejected with a 401. The only honest account was in the Log tab — which an operator glancing at the Cloud page has no reason to open.
+
+**Two separate defects, and fixing either alone leaves the bug.**
+
+1. *The state wasn't exposed.* `lastHeartbeatOk` existed and was correct.
+2. *The page never asked again.* `refresh()` ran once on mount. Even with health in the reply, a page read once at open would still have shown a connection that died five minutes later as alive.
+
+**Decision: three states, not two.** `lastHeartbeatOk` was initialised `true`, purely so the first successful tick wouldn't log a spurious "reconnected". That made it unusable as something to *show*: before the first heartbeat it means "assumed fine", and "assumed fine" rendered as "Connected" is the very lie being fixed. It is now `lastAttemptOk`, tri-state:
+
+| value | meaning | page says |
+|---|---|---|
+| `null` | no attempt has completed | "Connecting to \<venue\>…" |
+| `true` | most recent attempt succeeded | "Connected to \<venue\>" + last check-in |
+| `false` | most recent attempt failed | "Connection lost" + how long since one worked |
+
+Alongside it, `lastHeartbeatAt` records the last *success*. A machine that has never once checked in and one that checked in an hour ago are different problems — usually a wrong console URL or a revoked machine versus a network that dropped — and "lost" alone cannot tell them apart.
+
+The log transitions come out identical to the old boolean (a first-ever failure still logs "lost"; a first-ever success still logs nothing), which is why this is one variable rather than two living side by side.
+
+**No error text crosses to the renderer.** `getHeartbeatState()` returns state only. Why a heartbeat failed is already logged, with its status or message, to the Log tab. Handing the reason to the UI would invite printing it, which is exactly PIC-93 and PIC-144.
+
+**Verified, including the part ADR-105 warns about.** The decision logic is a pure function (`src/lib/heartbeatStatus.js`, 9 tests) — but ADR-105's whole lesson is that a well-tested helper with nothing running the code around it ships crashes anyway. So the status line is its own component and 5 further tests *render* it through the same esbuild + `react-dom/server` harness `errorBoundary.test.js` established, asserting on the markup an operator would see: that the icon is really present, that no tone renders `undefined`, and that "Connected to" does **not** appear when heartbeats are failing. Six more tests in `cloud.test.js` drive real local HTTP servers through register → succeed → revoke → disconnect. 160 → 180 tests, renderer build clean.
+
+Writing those tests found a real race in the tests themselves, worth recording: registration starts the heartbeat loop, whose first tick fires immediately, and `stopHeartbeatLoop()` clears the interval without recalling a tick already in flight. That tick landed between two assertions and overwrote the timestamp one had just captured.
+
+**Not verified:** nobody has watched this on a running app against a genuinely revoked token. The states are covered by tests that execute them; the end-to-end "revoke it and watch the page turn over" is not, for the same reason ADR-108 gives — this machine's app sits at a sign-in screen, and reaching the page means signing in against production.

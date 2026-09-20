@@ -56,14 +56,46 @@ let heartbeatTimer = null;
 // actionable failure.
 let registrationInFlight = null;
 
-// Transition-tracking for the activity log -- both start "assumed fine"
-// (undefined for a camera means "no prior reading yet," true for the
-// heartbeat means "just connected/registered") so the very first
-// heartbeat tick after a launch or a fresh registration doesn't log a
+// Transition-tracking for the activity log -- a camera starts undefined
+// ("no prior reading yet") so the very first reading doesn't log a
 // spurious "recovered" the moment it succeeds; only an actual change from
 // a previously-known state logs anything.
 const lastCameraStatus = new Map(); // cameraId -> "online" | "offline"
-let lastHeartbeatOk = true;
+
+// PIC-92. This was `lastHeartbeatOk = true` -- initialised true purely so
+// the first successful tick wouldn't log a false "reconnected". That made
+// it unusable as something to SHOW: before the first tick it means
+// "assumed fine", and "assumed fine" rendered as "Connected" is exactly
+// the lie this ticket is about. Three states instead of two:
+//
+//   null  -- no attempt has completed yet. Not connected, not broken:
+//            unknown, and the UI says so rather than picking one.
+//   true  -- the most recent attempt succeeded.
+//   false -- the most recent attempt failed.
+//
+// The log transitions come out identical to the old boolean (a first-ever
+// failure still logs "lost", a first-ever success still logs nothing),
+// which is why there is one variable here and not two.
+let lastAttemptOk = null;
+
+// When a heartbeat last actually SUCCEEDED, so a failure can say how long
+// the connection has really been down instead of just "lost". Stays null
+// until one succeeds -- a connection that has never once checked in is a
+// different thing from one that checked in an hour ago, and the operator
+// needs to tell them apart.
+let lastHeartbeatAt = null;
+
+/**
+ * What the Cloud page shows instead of "is a connection stored locally".
+ *
+ * Deliberately carries no error text: why a heartbeat failed is already
+ * logged (with its HTTP status or message) to the Log tab, and raw thrown
+ * text reaching the UI is the exact defect PIC-93 and PIC-144 were about.
+ * The renderer gets state, not a message it would be tempted to print.
+ */
+export function getHeartbeatState() {
+  return { lastAttemptOk, lastHeartbeatAt };
+}
 
 // Calibration state as last reported by the console (ADR-084 -- the
 // console owns it now, there's no local calib.json anymore). Refreshed on
@@ -325,7 +357,11 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
     connectedAt: new Date().toISOString(),
   };
   saveConnection(connection);
-  lastHeartbeatOk = true; // fresh connection -- don't let a stale prior failure log a false "reconnected" on the first tick
+  // Fresh connection: back to "not checked yet", so a stale prior failure
+  // can't log a false "reconnected" on the first tick AND the page doesn't
+  // claim a working link before one heartbeat has proved it (PIC-92).
+  lastAttemptOk = null;
+  lastHeartbeatAt = null;
   logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
   startHeartbeatLoop();
   return connection;
@@ -351,6 +387,11 @@ export function adoptConnection(userId) {
 export function disconnectCloud() {
   stopHeartbeatLoop();
   store.delete("connection");
+  // Otherwise a later reconnection inherits this one's health, and the
+  // page could show a "last check-in" belonging to a connection that no
+  // longer exists.
+  lastAttemptOk = null;
+  lastHeartbeatAt = null;
   // Remembered, because the app re-registers a signed-in device that has
   // no connection every time it launches (that retry exists for a first
   // registration that failed). Without this flag, Disconnect undid itself
@@ -448,7 +489,7 @@ async function cameraStatuses() {
   });
 }
 
-async function sendHeartbeat() {
+export async function sendHeartbeat() {
   const connection = getCloudConnection();
   if (!connection) return;
 
@@ -464,12 +505,13 @@ async function sendHeartbeat() {
       // isn't retried forever -- surfaces in status() instead of
       // silently hammering an endpoint that will never accept it again.
       console.error(`[cloud] heartbeat rejected: HTTP ${res.status}`);
-      if (lastHeartbeatOk) logEvent("cloud_disconnected", "Lost connection to the cloud console", `HTTP ${res.status}`);
-      lastHeartbeatOk = false;
+      if (lastAttemptOk !== false) logEvent("cloud_disconnected", "Lost connection to the cloud console", `HTTP ${res.status}`);
+      lastAttemptOk = false;
       return;
     }
-    if (!lastHeartbeatOk) logEvent("cloud_connected", "Reconnected to the cloud console");
-    lastHeartbeatOk = true;
+    if (lastAttemptOk === false) logEvent("cloud_connected", "Reconnected to the cloud console");
+    lastAttemptOk = true;
+    lastHeartbeatAt = new Date().toISOString();
     // Keeps a Settings-page rename on the console reaching this already-
     // paired agent within one heartbeat cycle, instead of only ever
     // reflecting whatever the brand was named at pairing time.
@@ -495,8 +537,8 @@ async function sendHeartbeat() {
     // logged, not thrown; the loop just tries again next interval rather
     // than crashing the agent over a transient network blip.
     console.error(`[cloud] heartbeat failed: ${err.message}`);
-    if (lastHeartbeatOk) logEvent("cloud_disconnected", "Lost connection to the cloud console", err.message);
-    lastHeartbeatOk = false;
+    if (lastAttemptOk !== false) logEvent("cloud_disconnected", "Lost connection to the cloud console", err.message);
+    lastAttemptOk = false;
   }
 }
 
