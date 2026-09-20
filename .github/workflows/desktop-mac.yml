@@ -40,9 +40,19 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # 22, not 20, since 1.6.0's first attempt (2026-09-20). `npm test` runs
+      # `node --test "electron/**/*.test.js"`, and Node only expands that
+      # glob itself from 21 onward -- on 20 it looks for a file literally
+      # named `**/*.test.js` and exits 1 with "Could not find", before a
+      # single test runs. Every machine this is developed on is on 22, so
+      # the suite had never once met a Node that couldn't run it, and the
+      # workflow had never run `npm test` at all until 7426225 added it
+      # that same day. Matching CI to the version the code is written and
+      # tested against is the fix; a portable test runner would be more
+      # code than this is worth.
       - uses: actions/setup-node@v4
         with:
-          node-version: 20
+          node-version: 22
 
       # The tag is what names the release; package.json is what the built
       # app reports as its own version and what the update check compares
