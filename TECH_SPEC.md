@@ -1381,8 +1381,15 @@ pic-vision/
 │   │                              # via v0.app (Next.js App Router, Supabase for DB+
 │   │                              # auth, hosted on Netlify not Vercel -- matches
 │   │                              # picvisionai.com). public/claude-design.html is the
-│   │                              # original static design mockup, still an iframe at
-│   │                              # "/", untouched -- but every one of its screens
+│   │                              # original static design mockup. It WAS the site --
+│   │                              # an iframe at "/" -- until 2026-09-20, when the
+│   │                              # root became a redirect to the real console
+│   │                              # (/overview signed in, /sign-in signed out, the
+│   │                              # same split (app)/layout.tsx already applies).
+│   │                              # Visitors were being shown a picture of the
+│   │                              # product instead of the product. Still served as a
+│   │                              # static file at /claude-design.html for reference,
+│   │                              # not deleted -- but every one of its screens
 │   │                              # (Overview/Cameras/Courts/Reels/Members/Team/
 │   │                              # Settings + sign-in) is now ALSO ported to a real
 │   │                              # page below, pixel-matched against a live
