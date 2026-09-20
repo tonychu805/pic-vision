@@ -2362,3 +2362,30 @@ The decision above landed the retired files in `archive/`. Within the hour that 
 Deleted accordingly: `run_cloud_job.py`, `pod_cut.py`, `pod_r2_helper.py`, `run_desktop_job.py`, `cloud_upload.html`, `test_run_cloud_job_secrets.py`. The `archive/README.md` section and this ADR are what remain, which is the whole point — nothing recorded above was lost, because none of it lived in the code.
 
 **Against it, and worth stating:** `archive/` is this project's documented convention (`CLAUDE.md` names it), and a codebase where "retired" means two different things is worse than one that is consistently either. That is now resolved in the README's own preamble rather than left implicit — it distinguishes the two shapes and points new retirements at this one.
+
+---
+
+## ADR-111 — The cloud pipeline completed end to end, and now measures itself
+
+**Date:** 2026-09-20 · **Status:** done · **Ticket:** PIC-159
+
+**The run.** First successful end-to-end cloud pipeline run, on Court 4. Every stage that had never executed successfully did: convert (the BtbN NVENC ffmpeg from PIC-156, first real use), inference, reel cutting, output upload, final report. 20 candidate rallies → a 175.0s full reel, a 30s burst reel, and 10 individual ranked clips. Claimed 06:52:03Z, done 07:02:28Z — **10m25s**.
+
+**Verified independently rather than taken from the runner's "finished" line**, which PIC-157 established is printed on failures too: job row `status: done` / `error: null`; all 12 reels present in R2 at real sizes; the full reel ffprobe'd straight from the CDN as h264 1920×1080, 175.0s, 5250 frames, 2.67 Mbps; share page 200; **zero pods left on the RunPod account**; and the job's input segment deleted while the two failed 09-19 segments remain — PIC-157's "delete only on `done`" behaving exactly as designed, in both directions, on real data. The PIC-153 bucket split held: input from `pic-vision-ingest-private`, output to the public bucket. `target_sec` was 180, confirming ADR-102's correction is live.
+
+**What the run could not tell us, and why that mattered more than the success.** `progress` was `null` and nothing recorded when each stage began. The pod reports `stage` on every transition but the column holds only the latest, so each stage's start was overwritten by the next; the runner log carries only claim, pod-created and finished. So the run proved the pipeline works and left the question behind every scaling decision — what does a session cost in GPU time — exactly as unanswerable as before.
+
+That is the second time in two days a number was missing when it was needed. The architecture discussion earlier the same day was built on a 1.02×-realtime figure from 2026-08-26 that the operator correctly flagged as stale; the real figures (ADR-065's 36.2fps local, a 09-05 pod run at ~102fps) were already in the repo. A pipeline that does not measure itself leaves every cost model resting on whatever number someone last wrote down.
+
+**Decision: stamp every stage transition into `jobs.stage_timings`**, a new nullable jsonb column of `[{stage, at}]`, appended by the runner-jobs PATCH route when the reported stage differs from the stored one.
+
+- **Not a key inside `progress`.** That column is pod-owned and overwritten wholesale on every report, so anything the server accumulated there would be destroyed by the next heartbeat.
+- **Stamped after the terminal-status block**, so `done`/`error`/`cancelled` are recorded too — that block sets `update.stage` itself rather than taking it from the request, and without this the last real stage would have no end and read as `null` forever.
+- **Compared against the stored stage**, because the runner sends an empty PATCH every few seconds purely to bump `updated_at`; a nine-minute inference would otherwise append ~100 identical entries.
+- **Capped at 64.** Written by a caller holding a runner token; an unbounded append is row bloat nobody notices until a job row stops fitting comfortably.
+
+Durations are derived from consecutive entries rather than stored, so nothing needs changing when a stage is added, renamed or reordered. A still-running stage reports `null`, not zero — "unknown" and "instant" are different answers.
+
+**Migration applied to production before the code deployed**, deliberately: the route now selects `stage_timings`, so the code landing first would have failed every job update. Additive and nullable, so the running code ignored it until the deploy.
+
+**Not yet verified:** no job has run since this shipped, so the column has never actually been written. The next run is the confirmation — and is also the first run that will report its own cost.

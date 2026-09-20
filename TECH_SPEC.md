@@ -1675,6 +1675,18 @@ pic-vision/
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented
+│   │   ├── stageTimings.ts                    # PIC-159 (2026-09-20): when each job
+│   │   │                                    # stage started. The first successful
+│   │   │                                    # end-to-end run could not say how its
+│   │   │                                    # 10m25s split between convert/inference/
+│   │   │                                    # cut -- `stage` holds only the latest
+│   │   │                                    # value, so each start was overwritten by
+│   │   │                                    # the next. Its own jsonb column, NOT a key
+│   │   │                                    # in `progress`: that one is pod-owned and
+│   │   │                                    # overwritten wholesale every report
+│   │   ├── stageTimings.test.ts               # 9 tests incl. the heartbeat case (a
+│   │   │                                    # repeated stage must not append) paired
+│   │   │                                    # with a real change appending
 │   │   ├── jevClassifier.ts                   # 2026-09-20. Wrapper over
 │   │   │                                    # @typesafe-ai/sdk (TypeSafe's "Jev"
 │   │   │                                    # System One model): classify(state,
