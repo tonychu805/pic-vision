@@ -642,6 +642,20 @@ pic-vision/
 │   │                              # there and publishes footage to the PUBLIC bucket
 │   │                              # (PIC-153). Recover from git if ever needed; the note
 │   │                              # lives in archive/README.md.
+│   ├── job_runner.py                 # 2026-09-20 (ADR-116): CANCEL now works while a pod
+│   │                                # has not checked in. It used to reach a job only
+│   │                                # through the POD (every status PATCH is answered
+│   │                                # with "cancel requested"), so a pod whose container
+│   │                                # never started -- ADR-101 -- never saw it: the click
+│   │                                # was recorded and ignored, and the runner then
+│   │                                # created a SECOND pod for the cancelled job. Now
+│   │                                # get_job_state() reads updated_at + cancel_requested
+│   │                                # in one call; checked before EVERY pod is created
+│   │                                # and on each poll until the pod's first check-in.
+│   │                                # After check-in it is deliberately left to the pod
+│   │                                # (graceful, reports its own result). A failed read
+│   │                                # never cancels. Pod terminated first, then the job
+│   │                                # marked `cancelled` -- not `error`
 │   ├── job_runner.py                 # ADR-084 (2026-09-06), reel-job dispatch rebuilt
 │   │                                # ADR-093 (2026-09-10): the operator-side half of the
 │   │                                # thin-agent split. Polls the cloud console

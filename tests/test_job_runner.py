@@ -34,6 +34,11 @@ FAKE_CREDENTIALS = {
 }
 
 
+def _state(updated_at, cancel_requested=False):
+    """What get_job_state() returns for a confirmed read of the job row."""
+    return {"updated_at": updated_at, "cancel_requested": cancel_requested}
+
+
 def _no_real_network(monkeypatch, credentials=None):
     # run_reel_job() uploads a real deps tarball to R2 AND asks the console
     # for this job's scoped credentials (PIC-138) before creating a pod --
@@ -119,7 +124,7 @@ def test_happy_path_creates_one_pod_and_returns_once_it_disappears(monkeypatch):
     # None = "couldn't tell" -- never confirms progress either way, so the
     # first-checkin timeout never fires here; stood in only to keep this
     # test from making a real network call to the console.
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
 
     job_runner.run_reel_job(JOB)  # must not raise
     assert exists_calls["n"] == 3
@@ -138,7 +143,7 @@ def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypa
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: ("pod-1", "gpu"))
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
     patched = []
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append((job_id, fields)) or False)
 
@@ -154,7 +159,7 @@ def test_env_carries_the_real_job_and_fresh_reel_ids(monkeypatch):
     _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
     captured = {}
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: captured.update(kw) or ("pod-1", "gpu"))
@@ -214,7 +219,7 @@ def test_a_pod_that_never_finishes_is_terminated_and_reported_as_an_error(monkey
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: ("pod-1", "gpu"))
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: True)  # never goes away
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
     terminated = []
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: terminated.append(pod_id))
     patched = []
@@ -247,7 +252,7 @@ def test_a_pod_with_no_first_checkin_is_terminated_fast_rather_than_waiting_for_
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: True)
     # Same value every read -- confirms the row is genuinely unchanged,
     # not just "we couldn't tell this time".
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: "2026-01-01T00:00:00Z")
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state("2026-01-01T00:00:00Z"))
     terminated = []
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: terminated.append(pod_id))
     patched = []
@@ -290,9 +295,9 @@ def test_a_stuck_first_attempt_is_rescued_by_the_retry(monkeypatch):
     def updated_at(job_id):
         reads["n"] += 1
         # Unchanged while pod-1 is up; moves once pod-2 exists.
-        return "2026-01-01T00:00:00Z" if len(created) < 2 else "2026-01-01T00:05:00Z"
+        return _state("2026-01-01T00:00:00Z" if len(created) < 2 else "2026-01-01T00:05:00Z")
 
-    monkeypatch.setattr(job_runner, "get_job_updated_at", updated_at)
+    monkeypatch.setattr(job_runner, "get_job_state", updated_at)
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: None)
     patched = []
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields))
@@ -326,7 +331,7 @@ def test_a_pod_that_checks_in_is_never_retried(monkeypatch):
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: created.append(kw["image"]) or ("pod-1", "gpu"))
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", pod_exists)
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: "2026-01-01T00:05:00Z")
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state("2026-01-01T00:05:00Z"))
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: None)
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: None)
 
@@ -352,7 +357,7 @@ def test_a_pod_that_checks_in_is_not_mistaken_for_stuck(monkeypatch):
 
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", fake_exists)
     # Real progress: the value differs from the job's claimed-at baseline.
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: "2026-01-01T00:05:00Z")
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state("2026-01-01T00:05:00Z"))
     terminated = []
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: terminated.append(pod_id))
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
@@ -375,7 +380,7 @@ def test_failed_status_reads_never_count_toward_the_first_checkin_timeout(monkey
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: ("pod-1", "gpu"))
     monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: True)
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
     terminated = []
     monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: terminated.append(pod_id))
     patched = []
@@ -530,7 +535,7 @@ def _run_and_capture_pod_env(monkeypatch, credentials=None):
     monkeypatch.setenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY", PARENT_SECRET)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
-    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
     captured = {}
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: captured.update(kw) or ("pod-1", "gpu"))
@@ -650,6 +655,8 @@ def _serve(responses):
             self.end_headers()
             self.wfile.write(payload)
 
+        do_GET = do_POST  # the job-state read is a GET
+
         def log_message(self, *args):
             pass
 
@@ -730,3 +737,167 @@ def test_a_successful_fetch_prints_nothing(console, capsys):
     out = capsys.readouterr()
     for secret in ("READ-SECRET", "WRITE-SECRET", "READ-TOKEN", "WRITE-TOKEN"):
         assert secret not in out.out + out.err
+
+
+# --- Cancel has to work when the pod never starts (2026-09-20) -----------------
+#
+# The operator clicked Stop on a job whose pod's container never started
+# (ADR-101). Cancel reaches a job only through the POD: every status PATCH the
+# pod sends is answered with whether the operator asked to cancel. A pod that
+# never starts sends nothing, so the click was recorded and then ignored --
+# and the runner went on to create a SECOND pod for a job that was already
+# cancelled. Both billed, about 12 minutes of GPU between them.
+#
+# Paired throughout. Every "must cancel" sits beside a "must not": a failed
+# read must not cancel (PIC-157: a check that failed is not a check that
+# came back negative), and a pod that HAS checked in must be left to cancel
+# itself gracefully rather than being hard-killed from here.
+
+BASELINE = "2026-01-01T00:00:00Z"
+
+
+class _Pods:
+    """Stand-in for RunPod, recording what the runner did to it."""
+
+    def __init__(self, monkeypatch, stays_up=lambda pod_id: True):
+        self.created, self.terminated, self.patched = [], [], []
+        monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                            lambda **kw: self.created.append(kw["image"]) or (f"pod-{len(self.created)}", "gpu"))
+        monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: stays_up(pod_id))
+        monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: self.terminated.append(pod_id))
+        monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: self.patched.append(fields) or False)
+        _no_real_network(monkeypatch)
+        monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+        monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+
+    def run(self):
+        job_runner.run_reel_job({**JOB, "updated_at": BASELINE})
+
+    @property
+    def cancelled_patches(self):
+        return [f for f in self.patched if f.get("cancelled") is True]
+
+    @property
+    def error_patches(self):
+        return [f for f in self.patched if "error" in f]
+
+
+def test_a_cancel_while_the_pod_is_silent_stops_the_pod_and_ends_the_job_cancelled(monkeypatch):
+    pods = _Pods(monkeypatch)
+    # Both slow paths are made FATAL here, so only a prompt cancel can pass.
+    # An earlier version left a 5s first-check-in timeout in place and passed
+    # with the wait-loop cancel branch deleted: the timeout fired, terminated
+    # the pod, and the RETRY's pre-create check caught the cancel -- the right
+    # outcome, five seconds late, by a different path. (Found by deleting the
+    # branch and watching this stay green.) With the timeout out of reach and
+    # a short job deadline, the only way to a clean `cancelled` is the branch.
+    monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 1000)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 1.0)
+    # The operator's Stop lands AFTER the pod exists -- the whole point. (A
+    # flag that is true from the start is a different case, covered below:
+    # the pre-create check stops it before any pod is made.)
+    monkeypatch.setattr(job_runner, "get_job_state",
+                        lambda job_id: _state(BASELINE, cancel_requested=bool(pods.created)))
+    pods.run()
+    assert pods.terminated == ["pod-1"], "the billing pod must be stopped"
+    assert len(pods.created) == 1
+    assert len(pods.cancelled_patches) == 1
+    # Cancelled, not errored: "the pod disappeared" is what the runner would
+    # otherwise report, and it tells the operator something that isn't true.
+    assert pods.error_patches == []
+
+
+def test_a_cancel_that_arrives_while_the_first_pod_is_stuck_does_not_create_a_second(monkeypatch):
+    # The reported incident, exactly. The first pod is stuck and the fast-fail
+    # terminates it; the operator's Stop lands while that is happening. The
+    # retry used to create a second pod for the cancelled job.
+    pods = _Pods(monkeypatch)
+    monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
+    cancelled_now = {"v": False}
+    monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod",
+                        lambda pod_id: (pods.terminated.append(pod_id), cancelled_now.update(v=True)))
+    monkeypatch.setattr(job_runner, "get_job_state",
+                        lambda job_id: _state(BASELINE, cancel_requested=cancelled_now["v"]))
+    pods.run()
+    assert len(pods.created) == 1, f"a second pod was created for a cancelled job: {pods.created}"
+    assert len(pods.cancelled_patches) == 1
+    assert pods.error_patches == [], "a cancelled job must not be reported as a stuck-container failure"
+
+
+def test_a_cancel_before_any_pod_exists_creates_none(monkeypatch):
+    # Between the claim and the pod there is a deps upload and a credentials
+    # fetch -- long enough for a Stop to land.
+    pods = _Pods(monkeypatch)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state(BASELINE, cancel_requested=True))
+    pods.run()
+    assert pods.created == []
+    assert pods.terminated == [], "there is nothing to terminate"
+    assert len(pods.cancelled_patches) == 1
+
+
+def test_a_stuck_pod_that_was_not_cancelled_is_still_retried(monkeypatch):
+    # The paired half. A cancel check that fired on the timeout itself would
+    # pass every test above and quietly turn the ADR-101 retry into a cancel.
+    pods = _Pods(monkeypatch, stays_up=lambda pod_id: pod_id == "pod-1")
+    monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state(BASELINE if len(pods.created) < 2 else "later"))
+    pods.run()
+    assert len(pods.created) == 2, "an un-cancelled stuck pod must still get its one retry"
+    assert pods.cancelled_patches == []
+
+
+def test_an_unreadable_job_is_never_treated_as_cancelled(monkeypatch):
+    # PIC-157's rule: a check that FAILED is not a check that came back
+    # negative -- and equally not one that came back positive. A console
+    # blip must not kill a healthy pod.
+    pods = _Pods(monkeypatch)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 0.15)  # ends via the deadline, never via a cancel
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    pods.run()
+    assert pods.cancelled_patches == [], "an unreadable job row must not be read as a cancel"
+    assert len(pods.created) == 1
+
+
+def test_a_cancel_after_the_pod_has_checked_in_is_left_to_the_pod(monkeypatch):
+    # Once updated_at has moved the pod is up and talking to the console; it
+    # sees the cancel on its own status PATCHes and stops gracefully,
+    # reporting its own final result. Hard-killing it from here would
+    # pre-empt that -- so this loop deliberately does not.
+    polls = {"n": 0}
+
+    def pod_up_for_a_few_polls(pod_id):
+        polls["n"] += 1
+        return polls["n"] < 4
+
+    pods = _Pods(monkeypatch, stays_up=pod_up_for_a_few_polls)
+    # Not cancelled while the pod is being created; once it exists it has
+    # checked in (updated_at moved) AND the operator has clicked Stop.
+    monkeypatch.setattr(job_runner, "get_job_state",
+                        lambda job_id: _state("2026-01-01T00:05:00Z", cancel_requested=True) if pods.created
+                        else _state(BASELINE))
+    pods.run()
+    assert pods.terminated == [], "a pod that has checked in must not be hard-killed by the runner's cancel check"
+    assert pods.cancelled_patches == []
+
+
+# --- get_job_state against a real local server --------------------------------
+
+def test_get_job_state_returns_both_fields(console):
+    console([(200, {"stage": "queued", "status": "running", "updated_at": BASELINE, "cancel_requested": True})])
+    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": True}
+
+
+def test_a_console_that_predates_the_field_reads_as_not_cancelled(console):
+    # Deploy order: the console change goes out first, but a runner talking
+    # to an older console must still work, and fail in the safe direction.
+    console([(200, {"stage": "queued", "status": "running", "updated_at": BASELINE})])
+    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": False}
+
+
+def test_a_failed_read_is_none_not_a_guess(console, monkeypatch):
+    console([(500, {"error": "boom"})])
+    assert job_runner.get_job_state("job-1") is None
+    console([(404, {"error": "job not found"})])
+    assert job_runner.get_job_state("job-1") is None
+    monkeypatch.setattr(job_runner, "CONSOLE_URL", "http://127.0.0.1:1")
+    assert job_runner.get_job_state("job-1") is None

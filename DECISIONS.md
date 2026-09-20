@@ -2516,3 +2516,35 @@ The operator concluded "it's just not synced immediately," which is right. The b
 **What the tests found about themselves.** Ten tests, real store and real `cloud.js` against a real local HTTP server. First run: all green. Breaking the implementation five ways caught three of five. **Two slipped through**, and the reason is instructive: the server held each heartbeat open for 250–400ms against a 400ms debounce, so the follow-up request only ever fired *after* the first had finished — nothing was ever in flight to overlap with or to queue behind. Both the "never overlap" and "queue a mid-flight change" tests passed with the very logic they exist to check deleted. Fixed by holding heartbeats open for several times the debounce and asserting, as a precondition, that one is genuinely in flight. All five breaks are now caught, each by the right test; the file was restored byte-identical after every mutation.
 
 **Not covered.** The immediate heartbeat probes every camera, so a venue with a dead camera waits out that probe before the console hears about *any* change. Not measured against real hardware, and no real camera was touched. If it proves slow, the fix is to reuse recent statuses for cameras that weren't the subject of the change.
+
+---
+
+## ADR-116 — Stop works when the pod never started
+
+**Date:** 2026-09-20 · **Status:** built, deployed, tested — not yet exercised against a real stuck pod · **Ticket:** PIC-161
+
+**Context.** The first real job after the scoped-credentials change (ADR-114) got a pod whose container never started — ADR-101's documented failure, on a specific RunPod host. The runner's 8-minute first-check-in safeguard worked: it terminated the pod and retried on the backup image. The operator had clicked Stop on the desktop before either of us looked. It did nothing.
+
+**Why Stop did nothing.** Cancel reaches a running job only through the pod. Every status PATCH the pod sends is answered with whether the operator asked to cancel, and the pod stops itself. A pod that never starts sends nothing. The runner's own wait loop never read `cancel_requested`, so the click was recorded and ignored — and the runner then created a **second** pod for a job that had already been cancelled. Both billed: about 12 minutes of GPU between them, for a job the operator had stopped.
+
+**A correction to my own report.** I first told the operator "nothing is broken beyond a stuck pod". That was wrong. The stuck pod was ADR-101; the ignored Stop was a separate, real defect, and it was the operator — not I — who noticed it ("I manually clicked stop on desktop before you intervene"). I read the job as an infrastructure fault and never looked at whether the cancel flag on the row had been honoured. It is the same shape as the ticket-reading mistake earlier today: answering the question I had assumed instead of the one that was asked.
+
+**What was done in the moment.** With the operator's Stop as the instruction, I marked the job `cancelled` first — as the pod would have — so the runner's later "pod disappeared" report became a harmless 409, then terminated the pod. Verified: 0 pods billing, and the runner logged that it was keeping the uploaded segment because the status was `cancelled`, not `done` — PIC-157's rule, confirmed live on a cancel for the first time.
+
+**Decision.**
+
+- **The console's runner job read returns `cancel_requested`** (additive; deployed and confirmed live against the cancelled job before any runner code changed). A runner talking to an older console omits it, which reads as not-cancelled — the behaviour before the field existed, and the safe direction to fail.
+- **The runner reads it in one call with `updated_at`** (`get_job_state`, replacing `get_job_updated_at`), so the wait loop does not double its Netlify calls.
+- **It is checked before every pod is created, on every attempt** — this alone is what would have prevented the second pod — **and on each poll until the pod's first check-in**, the one window in which nothing else can see the cancel.
+- **After first check-in it is deliberately left to the pod**, which stops gracefully and reports its own final result. Hard-killing it from the runner would pre-empt that. A test pins it.
+- **A failed read never cancels.** PIC-157's rule from the pipeline, again: a check that failed is not a check that came back negative — and equally not one that came back positive. A console blip must not kill a healthy pod.
+- **The pod is terminated first, then the job marked `cancelled`.** Termination is what stops the billing. Marked `cancelled` rather than errored, because "the pod disappeared" — what the runner would otherwise report — tells the operator something that is not true.
+- **Never retried.** The operator said stop.
+
+**What the tests found about themselves — for the third time today.** Seven breaks of the implementation, checked individually. The first version of the suite caught six. The seventh, deleting the wait-loop cancel branch, **passed**: the assertions were about the outcome (pod terminated, one cancelled patch, no second pod), and that outcome is reachable a second way — the 5-second first-check-in timeout fires, terminates the pod, and the *retry's* pre-create check catches the cancel. Same result, five seconds late, by a different path. The test now makes both slow paths fatal (timeout out of reach, a one-second job deadline), so only a prompt cancel passes; the break is caught. The pattern across ADR-115 and this one is the same: **a test asserting only an outcome passes when the outcome is reachable by a path the test was meant to rule out.** Nine new Python tests, 201 → 210, every one of the seven breaks now caught by the right test with the file restored byte-identical after each.
+
+**Still open — not resolved by this.**
+
+1. **Host or env?** The retry pod landed on the **same machine** as the stuck one, so it cannot separate a bad host from the six new credential env vars. ADR-101 recorded this exact hang on a specific bad host before any of today's changes, which makes the host likelier, and RunPod accepted all six variables intact (2 tokens of 904 and 848 characters). But it is undecided. The next fresh job decides: if it starts, the env is cleared; if it hangs on a *different* host, revert `a8a7625`.
+2. **The retry cannot avoid a host that just failed.** The pod-creation call has no data-center or machine control (`create_selfdriving_pod` sets one GPU type and nothing else), so a same-host retry is possible by design.
+3. **The first-check-in timeout is 8 minutes.** Against a normal cold start of ≤160s, that is a long time to bill an idle GPU, and a stuck first attempt plus a stuck retry costs 16. Not changed here.

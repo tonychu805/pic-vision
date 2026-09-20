@@ -162,18 +162,54 @@ def get_job_status(job_id):
         return None
 
 
-def get_job_updated_at(job_id):
-    """Best-effort read of a job's current updated_at -- None on any
-    failure (network hiccup, 404), so a transient read error is never
-    mistaken for "no progress" the way a genuinely stuck pod would be;
-    the caller only acts once this returns the same value repeatedly
-    across a real time window, not on a single failed read."""
+def get_job_state(job_id):
+    """Best-effort read of a job's updated_at and cancel_requested -- None
+    on any failure (network hiccup, 404).
+
+    None means "could not find out", never "no progress" and never "not
+    cancelled": a transient read error must not be mistaken for a stuck pod,
+    and must not be mistaken for a cancel either. The caller only acts on a
+    CONFIRMED read -- same rule as get_job_status above, and as PIC-157's:
+    a check that failed is not a check that came back negative.
+
+    A console that predates `cancel_requested` in this response simply omits
+    it, which reads as "not cancelled" -- the behaviour before the field
+    existed, and the safe direction to fail.
+    """
     try:
         r = requests.get(f"{CONSOLE_URL}/api/runner/jobs/{job_id}", headers=_headers(), timeout=30)
         r.raise_for_status()
-        return r.json().get("updated_at")
+        body = r.json()
+        return {
+            "updated_at": body.get("updated_at"),
+            "cancel_requested": bool(body.get("cancel_requested")),
+        }
     except Exception:  # noqa: BLE001 - a failed status check must not crash the wait loop
         return None
+
+
+def _cancel_job(job_id, pod_id=None):
+    """Stop a job the operator cancelled before any pod could act on it.
+
+    Cancel normally reaches a job through the POD: every status PATCH the
+    pod sends is answered with whether the operator asked to cancel, and the
+    pod stops itself. That needs the pod's container to have started. A pod
+    that never starts (ADR-101) sends nothing, so the operator's Stop was
+    recorded and then ignored -- on 2026-09-20 the runner waited out its
+    full first-check-in timeout, then created a SECOND pod for a job that
+    had already been cancelled, and both billed.
+
+    The pod is terminated FIRST (that is what stops the billing), and the job
+    is then marked cancelled -- not errored, which is what "the pod
+    disappeared" would otherwise report and which tells the operator
+    something that isn't true. Segments are kept either way (PIC-157).
+    """
+    if pod_id:
+        runpod_pod.terminate_pod(pod_id)
+    patch_job(job_id, cancelled=True, message="cancelled by operator before the pod started")
+    _log(f"job {job_id}: cancelled by the operator before its pod started"
+         + (f" -- pod {pod_id} terminated" if pod_id else " -- no pod was created"))
+    return "cancelled"
 
 
 # pod_driver.py's own dependency closure -- same explicit-file-list
@@ -394,8 +430,19 @@ def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
                    here, job NOT yet marked errored, caller decides
                    whether to try again
       "deadline"   the whole job's deadline passed; terminated and errored
+      "cancelled"  the operator cancelled before the pod ever checked in;
+                   any pod terminated and the job marked cancelled. Never
+                   retried -- the operator said stop.
     """
     first_checkin_seen = False
+
+    # Checked before creating anything, on EVERY attempt. Without this the
+    # retry after a stuck first pod created a second pod for a job that had
+    # been cancelled while the first was stuck. A None read (console blip)
+    # does not cancel: only a confirmed request does.
+    state = get_job_state(job_id)
+    if state is not None and state["cancel_requested"]:
+        return _cancel_job(job_id)
 
     _log(f"job {job_id}: creating self-driving pod (attempt {attempt}, {image})...")
     pod_id, gpu_type = runpod_pod.create_selfdriving_pod(
@@ -409,14 +456,24 @@ def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
         time.sleep(POD_POLL_SEC)
 
         if not first_checkin_seen:
-            current_updated_at = get_job_updated_at(job_id)
+            state = get_job_state(job_id)
+            current_updated_at = state["updated_at"] if state is not None else None
             # None means this particular check failed (network hiccup,
             # console blip) -- inconclusive, not evidence of a stuck pod,
             # so it's left to the next poll rather than counted toward
             # the timeout below. Only a CONFIRMED read showing no change
             # counts.
             if current_updated_at is not None and current_updated_at != baseline_updated_at:
+                # The pod is up and talking to the console. From here it
+                # sees a cancel itself, on its own status PATCHes, and
+                # stops gracefully -- reporting its own final result --
+                # so this loop deliberately leaves it to. Acting here too
+                # would pre-empt that with a hard kill.
                 first_checkin_seen = True
+            elif state is not None and state["cancel_requested"]:
+                # The one window nobody else can see the cancel: the pod
+                # has said nothing, so it never will read the flag.
+                return _cancel_job(job_id, pod_id)
             elif current_updated_at is not None and \
                     time.monotonic() - pod_created_at > FIRST_CHECKIN_TIMEOUT_SEC:
                 # No progress signal at all, well past every successful
