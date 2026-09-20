@@ -28,10 +28,12 @@ from webapp import pipeline
 JOBS_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), "jobs")
 os.makedirs(JOBS_DIR, exist_ok=True)
 
-# Per-venue calibrations for the cloud route (cloud_pipeline/venues/<name>/
-# calib.json) -- one-time per venue, unlike the local route's fresh
-# per-job calibration. See cloud_pipeline/run_cloud_job.py's own comment
-# on why those two cadences can't be conflated.
+# Per-venue calibrations (cloud_pipeline/venues/<name>/calib.json) --
+# one-time per venue, unlike the local route's fresh per-job calibration.
+# The cloud job route that consumed these went with PIC-139, but the data
+# and the flow that writes it are kept: it is hand-clicked and this project
+# treats it as expensive to lose. ADR-049 is why the two cadences can't be
+# conflated.
 VENUES_DIR = os.path.join(REPO_ROOT, "cloud_pipeline", "venues")
 
 with open(os.path.join(REPO_ROOT, "config.yaml")) as f:
@@ -84,13 +86,8 @@ def _venue_dir(name, must_exist=False):
     return path
 
 
-def _list_venues():
-    if not os.path.isdir(VENUES_DIR):
-        return []
-    return sorted(
-        entry for entry in os.listdir(VENUES_DIR)
-        if os.path.exists(os.path.join(VENUES_DIR, entry, "calib.json"))
-    )
+# _list_venues() lived here. Its only caller was the /cloud upload page's
+# venue dropdown, which went with PIC-139.
 
 
 def _find_staging_video(venue_dir):
@@ -136,60 +133,16 @@ def upload():
     return redirect(url_for("calibrate_page", job_id=job_id))
 
 
-@app.route("/cloud")
-def cloud_index():
-    return render_template("cloud_upload.html", busy=_job_busy(),
-                           default_target_sec=int(DEFAULT_TARGET_SEC),
-                           venues=_list_venues())
-
-
-@app.route("/cloud/upload", methods=["POST"])
-def cloud_upload():
-    if _job_busy():
-        return "a job is already running -- wait for it to finish first", 409
-    venue = request.form.get("venue") or ""
-    venue_dir = _venue_dir(venue, must_exist=True)
-    calib_path = os.path.join(venue_dir, "calib.json")
-    if not os.path.exists(calib_path):
-        return f"venue '{venue}' has no calib.json -- set it up first", 400
-
-    f = request.files.get("video")
-    if not f or not f.filename:
-        return redirect(url_for("cloud_index"))
-    ext = os.path.splitext(f.filename)[1]
-    if ext not in ALLOWED_EXT:
-        return f"unsupported file type {ext}", 400
-    target_sec = float(request.form.get("target_sec") or DEFAULT_TARGET_SEC)
-
-    job_id = time.strftime("%Y%m%d-%H%M%S") + "-" + secrets.token_hex(3)
-    job_dir = os.path.join(JOBS_DIR, job_id)
-    os.makedirs(job_dir)
-    video_file = "video_original" + ext
-    f.save(os.path.join(job_dir, video_file))
-
-    with open(os.path.join(job_dir, "job.json"), "w") as jf:
-        json.dump({"video_file": video_file, "target_sec": target_sec,
-                   "session_id": job_id, "backend": "cloud",
-                   "venue": venue, "calib_path": calib_path}, jf, indent=2)
-
-    # Unlike the local route, no calibration step -- the venue's calib.json
-    # already exists, so the job can start running immediately.
-    with _lock:
-        _active_job["id"] = job_id
-    threading.Thread(target=_run_cloud_job_thread, args=(job_id,), daemon=True).start()
-
-    return redirect(url_for("status_page", job_id=job_id))
-
-
-def _run_cloud_job_thread(job_id):
-    try:
-        pipeline.run_cloud_job(os.path.join(JOBS_DIR, job_id))
-    finally:
-        with _lock:
-            if _active_job["id"] == job_id:
-                _active_job["id"] = None
-
-
+# The cloud job route that used to live here (/cloud, /cloud/upload) was
+# removed with PIC-139. It drove cloud_pipeline/run_cloud_job.py, the
+# pre-ADR-093 SSH-driven pipeline, which real venue traffic stopped using
+# when job_runner.py + pod_driver.py took over -- and which, per its own
+# 2026-09-18 comment, would still have uploaded footage into the PUBLIC
+# bucket, re-opening the exposure PIC-153 closed everywhere else.
+#
+# The venue calibration flow below is deliberately kept: it writes
+# cloud_pipeline/venues/<name>/calib.json, which is hand-clicked data this
+# project treats as expensive to lose, and it touches neither R2 nor a pod.
 @app.route("/cloud/new-venue")
 def new_venue_form():
     return render_template("new_venue.html")
@@ -399,9 +352,14 @@ def venue_calibrate_save(name):
 
     err_ft = result["per_point_error_ft"]
     worst = int(max(range(len(err_ft)), key=lambda k: err_ft[k]))
+    # Was url_for("cloud_index") until PIC-139 removed that route. Left as a
+    # url_for it would have raised BuildError here, at the end of a
+    # calibration the operator had just clicked through -- losing the work
+    # at the last step. Home instead; there is no cloud upload page to
+    # return to any more.
     return jsonify({"ok": True, "rmse_ft": result["reprojection_rmse_ft"],
                     "worst": POINTS[worst][0],
-                    "redirect": url_for("cloud_index")})
+                    "redirect": url_for("home")})
 
 
 def _run_job_thread(job_id):

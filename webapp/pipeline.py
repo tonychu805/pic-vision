@@ -38,16 +38,13 @@ LOCAL_STAGES = [
     ("reel", "Detecting rallies, ranking, cutting reel"),
 ]
 
-# Mirrors cloud_pipeline.run_cloud_job.STAGES -- imported when available (the
-# common case) so there's one source of truth; falls back to a literal copy
-# so a missing boto3/paramiko install (cloud_pipeline's own dependencies)
-# can't break the local route or the webapp's own startup. Keep in sync by
-# hand if cloud_pipeline.run_cloud_job.STAGES changes (same convention this
-# project already uses for cloud_pipeline/Dockerfile vs. POD_SETUP_CMD).
-try:
-    from cloud_pipeline.run_cloud_job import STAGES as CLOUD_STAGES
-except ImportError:
-    CLOUD_STAGES = [
+# PIC-139: this used to import STAGES from cloud_pipeline.run_cloud_job,
+# with the literal below as a fallback for a missing boto3/paramiko. That
+# module is gone (it drove the retired SSH pipeline), so the literal is now
+# the only copy -- and nothing reads it, since run_cloud_job() went with it.
+# Kept only because status.json files from past cloud jobs still reference
+# these stage names when the dashboard renders their history.
+_RETIRED_CLOUD_STAGES = [
         ("drift_check", "Checking camera drift"),
         ("convert", "Converting to 30fps CFR"),
         ("proxy", "Creating 1080p upload proxy"),
@@ -83,7 +80,7 @@ _cancel_requested = set()
 
 class _Cancelled(Exception):
     """Raised internally when a stage boundary notices cancel_job() was
-    called. Caught by run_job()/run_cloud_job()'s existing except handler,
+    called. Caught by run_job()'s existing except handler,
     which already knows not to stomp the "cancelled" status cancel_job()
     wrote."""
 
@@ -149,7 +146,7 @@ def cancel_job(job_dir):
     background thread itself may take a while longer to unwind if it's
     stuck inside a blocking ssh call whose connection hasn't yet noticed the
     remote pod is gone, but that's harmless once the pod is dead and the job
-    is marked done: run_job()/run_cloud_job()'s except handlers check for
+    is marked done: run_job()'s except handler checks for
     stage=="cancelled" before overwriting this status, so the eventual
     exception from the killed process/dropped connection won't stomp it.
 
@@ -293,85 +290,10 @@ def run_job(job_dir):
     finally:
         _clear_handle(job_id)
 
-
-def run_cloud_job(job_dir):
-    """Cloud-path counterpart to run_job(): same job_dir/status.json/log.txt
-    contract webapp/app.py's status page already polls, but dispatches
-    inference to RunPod+R2 (cloud_pipeline.run_cloud_job) instead of the
-    local TF2.15 subprocess. job.json must carry "calib_path" pointing at an
-    existing per-venue calib.json (cloud_pipeline/venues/<name>/calib.json)
-    -- unlike the local route, this never calibrates per job (see
-    cloud_pipeline/run_cloud_job.py's own guard against that mistake).
-    Imports cloud_pipeline lazily so a missing boto3/paramiko install only
-    breaks the cloud route, not the whole webapp at startup."""
-    from cloud_pipeline.run_cloud_job import run_cloud_job as _cloud_run
-    job_id = os.path.basename(job_dir.rstrip("/"))
-    stage_tracker = {"current": None}
-    try:
-        with open(os.path.join(job_dir, "job.json")) as f:
-            job = json.load(f)
-        video_path = os.path.join(job_dir, job["video_file"])
-        calib_path = job["calib_path"]
-
-        def log(msg, stage=None):
-            fields = {"message": msg}
-            if stage and stage != stage_tracker["current"]:
-                fields["stage"] = stage
-                fields["stage_started_at"] = time.time()
-                fields["progress"] = None  # stale progress from the previous stage
-                stage_tracker["current"] = stage
-            _set_status(job_dir, **fields)
-            _log(job_dir, msg)
-
-        def progress(current, total, eta_sec):
-            _set_status(job_dir, progress={"current": current, "total": total,
-                                            "eta_sec": eta_sec})
-
-        def on_pod_id(pod_id):
-            _register_pod(job_id, pod_id)
-            _log(job_dir, f"[pod] tracking pod {pod_id} (cancellable)")
-
-        _set_status(job_dir, stages=CLOUD_STAGES)
-        log("starting cloud pipeline run...", stage="drift_check")
-        result = _cloud_run(video_path, calib_path, job["target_sec"],
-                             job["session_id"], job_dir, log_fn=log,
-                             progress_fn=progress, pod_id_fn=on_pod_id,
-                             should_cancel_fn=lambda: _is_cancelled(job_id))
-
-        # Cloud path returns R2 keys, not local file paths (ADR-074 -- the
-        # reel is cut on the pod, never downloaded here) -- a different
-        # result shape from run_job()'s local reel_chronological/reel_ranked
-        # file paths above, so this reports bucket/key fields instead.
-        #
-        # Two reels now (full + burst, ADR-076) -- result["reels"] is a
-        # list of {kind, reel_id, key, stats}, burst entry absent if it had
-        # no qualifying candidates. reel_bucket/reel_ranked_key/reel_id/
-        # stats are kept as flat top-level fields too, sourced from the
-        # "full" entry, purely for webapp/app.py's own local preview route
-        # (_reel_presigned_url/preview_page) -- unchanged by this, still
-        # only ever shows the full reel. run_desktop_job.py's console
-        # report is the only reader of the new reels/share_id fields.
-        full = next(r for r in result["reels"] if r["kind"] == "full")
-        _set_status(job_dir, stage="done", message="done", done=True, progress=None,
-                    reel_bucket=result["bucket"],
-                    reel_ranked_key=full["key"], reel_id=full["reel_id"],
-                    stats=full["stats"],
-                    share_id=result["share_id"], reels=result["reels"])
-    # (Exception, SystemExit), not just Exception -- cloud_pipeline.run_cloud_job's
-    # own missing-calibration guard raises SystemExit (fine for its bare-CLI
-    # use, where an uncaught SystemExit just prints one clean line and exits),
-    # but that isn't an Exception subclass, so a plain `except Exception` here
-    # let it escape uncaught: this function's own thread died silently and
-    # status.json was left stuck at whatever stage was last set (drift_check)
-    # forever instead of ever reaching stage="error" -- found 2026-09-02 while
-    # adding PIC-68's desktop-agent caller, but this path is shared with the
-    # Flask dashboard's cloud-job route too, so it was a live bug there
-    # already, not something new to this caller.
-    except (Exception, SystemExit) as e:
-        if _current_stage(job_dir) == "cancelled":
-            return  # cancel_job() already wrote the terminal status -- don't stomp it
-        _log(job_dir, "[error] " + "".join(
-            traceback.format_exception(type(e), e, e.__traceback__)))
-        _set_status(job_dir, stage="error", message=str(e), done=True, error=str(e))
-    finally:
-        _clear_handle(job_id)
+# run_cloud_job() stood here until PIC-139. It was the status.json/log.txt
+# wrapper around cloud_pipeline.run_cloud_job, and it had exactly two
+# callers, both now gone: webapp/app.py's /cloud route (removed with it)
+# and cloud_pipeline/run_desktop_job.py, which ADR-084 already made dead
+# for the desktop path -- desktop/electron/pipeline.js no longer spawns
+# any Python at all. Real venue jobs run through job_runner.py ->
+# pod_driver.py and never touched this function.

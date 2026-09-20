@@ -88,3 +88,55 @@ pipelines use them unchanged.
   is worse than labelling by hand — see `project_labeling_noise_floor`'s
   wider point that labelling disagreement is already this project's
   biggest measurement error.
+
+## Retired cloud path: the SSH-driven pipeline
+
+Moved here 2026-09-20 (`PIC-139`, `DECISIONS.md` ADR-110). The original
+RunPod route: this workstation did the drift check and CFR convert, uploaded
+to R2, created a pod, then SSH'd in to run inference and cut the reel.
+Superseded by ADR-093's self-driving pod, where `job_runner.py` hands a pod
+everything it needs up front and `pod_driver.py` runs the job on the pod
+itself with no inbound SSH at all.
+
+**Do not run `run_cloud_job.py`.** It is still importable and still runnable
+from here — `REPO_ROOT` resolves identically from `archive/` — and it uploads
+the operator's video to the **public** bucket, which since `PIC-153` is the
+one `cdn.picvisionai.com` fronts. Running it publishes venue footage. That
+gap was found on 2026-09-18, recorded in the file's own `BUCKET` comment, and
+deliberately never fixed because the path was already dead.
+
+**Kept for reference, not active:**
+- `run_cloud_job.py` — the orchestrator. Its last change (the day it was
+  retired) moved the R2 credentials out of the SSH command string, where they
+  had been sitting in the process table of *both* the pod and this
+  workstation for every transfer — 4 to 15 per job. Fixed, tested, never run
+  against a real pod.
+- `pod_r2_helper.py` — the pod-side R2 transfer script it scp'd over.
+  `pod_driver.py` uses `boto3` directly instead.
+- `pod_cut.py` — the pod-side reel cutter it scp'd over. `pod_driver.py`
+  absorbed this; its own docstring describes itself as "everything
+  `run_cloud_job.py` used to do by SSH'ing into a pod".
+- `run_desktop_job.py` — `PIC-68`'s CLI wrapper, spawned by
+  `desktop/electron/pipeline.js` to run a cloud job from the desktop app.
+  Already dead for the desktop path since ADR-084 made the venue agent thin:
+  `pipeline.js` no longer spawns any Python at all, and only a comment about
+  it remains there. It was the last caller of `webapp/pipeline.py`'s
+  `run_cloud_job()`, which went at the same time.
+- `cloud_upload.html` — the Flask dashboard's cloud upload page, served by
+  the `/cloud` route removed from `webapp/app.py`.
+- `tests/test_run_cloud_job_secrets.py` — the seven paired tests written for
+  the credential fix above (three that no secret reaches the command, four
+  that the credentials still arrive, quoted). Not collected: `pytest.ini`
+  restricts `testpaths` to `tests/`.
+
+**Deliberately NOT archived:** `cloud_pipeline/venues/*/calib.json` and the
+`/cloud/new-venue` calibration flow in `webapp/app.py` that writes them.
+Three venues' worth of hand-clicked calibration is data this project treats
+as expensive to lose (`CLAUDE.md`), and that flow touches neither R2 nor a
+pod. `cloud_pipeline/runpod_pod.py` also stays — `job_runner.py` uses it to
+create pods on the live path.
+
+**What this does not affect.** The live pipeline ships source to the pod as a
+tarball, so a file need not be imported to be load-bearing — checked
+explicitly. `job_runner.py`'s `POD_DEPS_FILES` contains `pod_driver.py`,
+ten `src/` modules and five `scripts/` modules, and none of the files above.

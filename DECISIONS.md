@@ -2317,3 +2317,34 @@ The log transitions come out identical to the old boolean (a first-ever failure 
 Writing those tests found a real race in the tests themselves, worth recording: registration starts the heartbeat loop, whose first tick fires immediately, and `stopHeartbeatLoop()` clears the interval without recalling a tick already in flight. That tick landed between two assertions and overwrote the timestamp one had just captured.
 
 **Not verified:** nobody has watched this on a running app against a genuinely revoked token. The states are covered by tests that execute them; the end-to-end "revoke it and watch the page turn over" is not, for the same reason ADR-108 gives — this machine's app sits at a sign-in screen, and reaching the page means signing in against production.
+
+---
+
+## ADR-110 — The SSH-driven cloud path is retired, not patched
+
+**Date:** 2026-09-20 · **Status:** retired to `archive/` · **Ticket:** PIC-139
+
+**Context.** PIC-139 filed a real secret leak: `run_cloud_job.py` interpolated the R2 credentials into the command string handed to `ssh_run()`, so the secret sat in the pod's process table for every transfer. Its recommendation was to delete the file as dead code — but it also said to confirm that first.
+
+**Confirming it changed the answer twice.**
+
+1. *It was not dead.* `webapp/pipeline.py` imported it twice — `STAGES` at import time, and `run_cloud_job()` for the Flask dashboard's `/cloud` route. So the leak was fixed in place first (`6832a40`), because deleting it right then would have broken a working route.
+2. *The leak was wider than filed.* `ssh_run` passes the command as an argv element to a **local** `ssh` process, so the secret was in this workstation's process table too. And it was 4–15 transfers per job, not the six the call sites suggest — the clip upload is a loop.
+
+**Decision: retire the whole path, rather than keep a patched copy.** Three reasons, in order of weight:
+
+- **Running it publishes venue footage.** Its own `BUCKET` comment, added 2026-09-18, records that a real run still uploads to the **public** bucket — the exposure PIC-153 closed everywhere else. Fixing the credential leak made it less dangerous, not safe.
+- **Nothing production depends on it.** Venue traffic is desktop → console → `job_runner.py` → `pod_driver.py`. Checked beyond imports, because the live pipeline ships source to the pod as a tarball and a file need not be imported to be load-bearing: `POD_DEPS_FILES` is `pod_driver.py` plus ten `src/` and five `scripts/` modules, and contains none of the retired files.
+- **Keeping it costs maintenance, already paid once.** ADR-102 records wiring `top_rallies_reel.py` into *both* reel-cutting paths specifically so they would not drift apart.
+
+**Archived, not deleted**, per this repo's `archive/` convention — `git mv`, so history follows. Retired: `run_cloud_job.py`, `pod_cut.py`, `pod_r2_helper.py`, `run_desktop_job.py` (already dead for the desktop since ADR-084 — `desktop/electron/pipeline.js` spawns no Python at all), `cloud_upload.html`, and the credential test. `webapp/pipeline.py`'s `run_cloud_job()` and `webapp/app.py`'s `/cloud` routes went with them.
+
+**Archiving is weaker than deleting, and the file says so.** `REPO_ROOT` resolves identically from `archive/`, so the orchestrator is still importable and still runnable from where it now sits. A DO-NOT-RUN block at the top of the file and a section in `archive/README.md` carry the public-bucket warning, since the move alone does not.
+
+**Deliberately kept:** `cloud_pipeline/venues/*/calib.json` (three venues of hand-clicked calibration, which `CLAUDE.md` treats as expensive to lose) and the `/cloud/new-venue` flow that writes it — it touches neither R2 nor a pod. `runpod_pod.py` stays; `job_runner.py` uses it.
+
+**Two live breaks found while removing the routes**, neither of which a test would have caught: `url_for("cloud_index")` at the end of the *venue calibration save* would have raised `BuildError` right after an operator finished clicking through a calibration, losing the work at the final step; and `new_venue.html`'s back link pointed at the deleted `/cloud`.
+
+**Correction recorded in the archived file.** Its docstring claimed it had never been run end-to-end with real GPU inference. That was stale — `PROGRESS.md` records a real invocation on 2026-08-26, exit code 0, 13 rally segments — and it misled a reader into repeating the claim on the day it was retired.
+
+**Verified:** 175 tests pass (182 − 7: the credential tests moved to `archive/tests/`, which `pytest.ini` does not collect). `job_runner`, `pod_driver`, `runpod_pod`, `r2_storage`, `setup_venue_calibration`, `save_calibration` and both `webapp` modules all still import, and every one of the 15 files `job_runner.py` ships to the pod still exists. **Not verified:** no live pod run — the pipeline has still never completed one.

@@ -18,7 +18,7 @@
 <body>
 <div class="wrap">
   <h1>pic-vision — rally highlight reel</h1>
-  <p class="sub">Choose where inference runs.</p>
+  <p class="sub">Runs on this workstation's GPU.</p>
   {% if busy %}
   <div class="warn">A job is already running — wait for it to finish before starting a new one.</div>
   {% endif %}
@@ -27,10 +27,9 @@
       <div class="title">Local GPU</div>
       <div class="desc">Runs on this workstation. Calibrate fresh every upload.</div>
     </a>
-    <a class="choice" href="/cloud">
-      <div class="title">Cloud (RunPod)</div>
-      <div class="desc">Runs on a billed RunPod GPU pod. Reuses a saved per-venue calibration.</div>
-    </a>
+    {# The "Cloud (RunPod)" card stood here until PIC-139. It drove the
+       retired SSH pipeline; real venue jobs go through the cloud console
+       and job_runner.py, not this dashboard. #}
   </div>
 </div>
 </body></html>

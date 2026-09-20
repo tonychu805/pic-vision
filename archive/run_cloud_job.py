@@ -1,4 +1,26 @@
-"""Cloud-path job orchestrator: capture -> R2 -> RunPod GPU -> cut on the
+"""RETIRED 2026-09-20 (PIC-139). DO NOT RUN THIS.
+
+Kept for reference only. It is still importable and still runnable --
+REPO_ROOT resolves the same from archive/ as it did from cloud_pipeline/ --
+so the warning has to be here rather than relying on the move alone:
+
+  * It uploads the operator's video to `BUCKET`, which since PIC-153 is the
+    PUBLIC bucket that cdn.picvisionai.com fronts. Running this publishes
+    venue footage, re-opening the exact exposure PIC-153 closed everywhere
+    else. This is called out in the BUCKET comment below and was never
+    remediated, because the path was already dead when it was found.
+  * Its R2 credential handling was fixed the day it was retired (the secret
+    used to sit in both machines' process tables). That fix is in this file
+    and its tests are in archive/tests/, but neither has ever run against a
+    real pod.
+
+Real venue jobs go through the cloud console -> cloud_pipeline/job_runner.py
+-> cloud_pipeline/pod_driver.py, which owe nothing to this file. See
+archive/README.md for the full retirement note.
+
+--- original docstring follows ---
+
+Cloud-path job orchestrator: capture -> R2 -> RunPod GPU -> cut on the
 pod -> R2 -> finished reel. The RunPod/R2 counterpart to webapp/pipeline.py's
 run_job.
 
@@ -18,9 +40,12 @@ comes back, as R2 keys -- this module never downloads it.
 Prerequisites (.env, gitignored): RUNPOD_API_KEY, CLOUDFLARE_R2_ACCESS_KEY_ID,
 CLOUDFLARE_R2_SECRET_ACCESS_KEY, CLOUDFLARE_R2_ACCOUNT_ID.
 
-Not yet run end-to-end with real GPU inference -- built and reviewable, but
-the live test (installing TF2.15 fresh on a pod, running real inference)
-hasn't happened yet. See cloud_pipeline/README.md.
+[Stale as written, corrected 2026-09-20: this said "not yet run end-to-end
+with real GPU inference", and it stayed in the file after that stopped
+being true. PROGRESS.md records a real invocation on 2026-08-26 -- exit
+code 0, 13 rally segments, both reels playable. The line misled a reader
+into calling this file untested as recently as the day it was retired.]
+See cloud_pipeline/README.md.
 """
 import argparse
 import json
