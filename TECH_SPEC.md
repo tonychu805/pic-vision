@@ -1685,9 +1685,36 @@ pic-vision/
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented
+│   │   ├── jevClassifier.ts                   # 2026-09-20. Wrapper over
+│   │   │                                    # @typesafe-ai/sdk (TypeSafe's "Jev"
+│   │   │                                    # System One model): classify(state,
+│   │   │                                    # questions) -> typed answers +
+│   │   │                                    # probabilities, no text to parse.
+│   │   │                                    # SERVER-ONLY -- the SDK refuses to
+│   │   │                                    # construct in a browser (it would
+│   │   │                                    # hand TYPESAFE_API_KEY to anyone
+│   │   │                                    # viewing the page) and the override
+│   │   │                                    # flag is deliberately not plumbed
+│   │   │                                    # through. Maps the SDK's dozen error
+│   │   │                                    # classes onto one `kind` set with a
+│   │   │                                    # safe message, same policy as
+│   │   │                                    # apiError.ts. Nothing imports it yet
+│   │   │                                    # -- built to evaluate Jev, not a
+│   │   │                                    # committed dependency (no ADR)
+│   │   ├── jevClassifier.test.ts              # 28 tests, all with an injected
+│   │   │                                    # client -- a real call is billed
 │   │   └── pillTone.ts                         # maps a mockup status label (e.g.
 │   │                                          # "Offline"/"Uploading"/"Enabled") to
 │   │                                          # Pill's neutral/progress/alert tone
+│   ├── scripts/jevDemo.ts              # 2026-09-20, new top-level dir. The one
+│   │                                  # thing lib/jevClassifier.test.ts can't do:
+│   │                                  # a single REAL (billed) call to Jev, to
+│   │                                  # prove the wrapper works against the live
+│   │                                  # API. `pnpm demo:jev ["some text"]`; needs
+│   │                                  # TYPESAFE_API_KEY. Compiled via tsc into
+│   │                                  # .test-build like the test script -- this
+│   │                                  # Node build has no --experimental-strip-
+│   │                                  # types support, and tsx wasn't worth a dep
 │   ├── netlify.toml                    # Next.js Runtime plugin -- v0.app's own
 │   │                                  # auto-deploy-on-merge is Vercel-only, doesn't
 │   │                                  # apply here. Live 2026-09-04 at
