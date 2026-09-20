@@ -25,14 +25,27 @@ JOB = {
 }
 
 
-def _no_real_r2_upload(monkeypatch):
-    # run_reel_job() uploads a real deps tarball to R2 before creating a
-    # pod -- stood in by every test that calls run_reel_job() (not
-    # test_upload_pod_deps_..., which tests this function itself) so a
-    # test can't silently start making real R2 calls, the same mistake
-    # already made once this session with patch_job() before it was
-    # mocked everywhere it needed to be.
+FAKE_CREDENTIALS = {
+    "readBucket": "test-bucket",
+    "writeBucket": "test-public-bucket",
+    "read": {"accessKeyId": "READ-KEY", "secretAccessKey": "READ-SECRET", "sessionToken": "READ-TOKEN"},
+    "write": {"accessKeyId": "WRITE-KEY", "secretAccessKey": "WRITE-SECRET", "sessionToken": "WRITE-TOKEN"},
+    "expiresAt": "2099-01-01T00:00:00.000Z",
+}
+
+
+def _no_real_network(monkeypatch, credentials=None):
+    # run_reel_job() uploads a real deps tarball to R2 AND asks the console
+    # for this job's scoped credentials (PIC-138) before creating a pod --
+    # both stood in by every test that calls run_reel_job() (not the tests
+    # of those functions themselves) so a test can't silently start making
+    # real network calls. Not a hypothetical: when the credentials call was
+    # added, the first existing test to reach it made a REAL request to the
+    # production console and got a genuine 401 back, because its token is
+    # fake. Nothing leaked, but only because the token was fake.
     monkeypatch.setattr(job_runner, "_upload_pod_deps", lambda bucket: "https://example.invalid/fake-deps.tar")
+    monkeypatch.setattr(job_runner, "fetch_pod_credentials",
+                        lambda job_id: credentials if credentials is not None else FAKE_CREDENTIALS)
 
 
 def test_a_job_with_no_segments_is_refused_before_any_pod_is_created(monkeypatch):
@@ -48,7 +61,7 @@ def test_a_job_with_no_brand_id_is_refused_rather_than_guessing_a_reel_key(monke
     # PIC-153 (2026-09-18): a reel key with no brand prefix, or a wrong
     # one, either breaks lib/reels.ts's validation or -- worse -- silently
     # lands in the wrong venue's data. Refusing outright beats guessing.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     created = []
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: created.append(kw) or ("pod-1", "gpu"))
@@ -63,8 +76,11 @@ def test_the_pod_receives_the_brand_id_and_a_separate_output_bucket(monkeypatch)
     # separate, public one the finished reel goes to. Conflating the two
     # would either write a private bucket key the public CDN can't serve,
     # or (the dangerous direction) write raw footage into the public one.
-    _no_real_r2_upload(monkeypatch)
-    monkeypatch.setenv("R2_INGEST_BUCKET", "the-public-bucket")
+    # The output bucket now comes back from the console with the
+    # credentials (each is bound to exactly one bucket, so the runner must
+    # not be able to disagree with it), not from an env var of the runner's.
+    _no_real_network(monkeypatch, {**FAKE_CREDENTIALS, "readBucket": "the-private-bucket", "writeBucket": "the-public-bucket"})
+    monkeypatch.setenv("R2_INGEST_BUCKET", "an-env-var-that-must-now-be-ignored")
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     captured = {}
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
@@ -80,7 +96,7 @@ def test_the_pod_receives_the_brand_id_and_a_separate_output_bucket(monkeypatch)
 
 
 def test_happy_path_creates_one_pod_and_returns_once_it_disappears(monkeypatch):
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
     exists_calls = {"n": 0}
@@ -117,7 +133,7 @@ def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypa
     # reported a terminal status before treating its disappearance as
     # success. This is the fix: unconditionally try to mark it errored:
     # if it DID report already, the console's own guard makes this a no-op.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
                         lambda **kw: ("pod-1", "gpu"))
@@ -135,7 +151,7 @@ def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypa
 
 
 def test_env_carries_the_real_job_and_fresh_reel_ids(monkeypatch):
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
     monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
@@ -192,7 +208,7 @@ def test_a_pod_that_never_finishes_is_terminated_and_reported_as_an_error(monkey
     # The one path with no live test yet: a pod that hangs past its
     # deadline (host failure, OOM -- anything pod_driver.py's own
     # exception handling never got a chance to catch).
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 0.05)
     monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
@@ -221,7 +237,7 @@ def test_a_pod_with_no_first_checkin_is_terminated_fast_rather_than_waiting_for_
     # A CONFIRMED read (not None) showing the job's updated_at hasn't
     # moved since it was claimed, held past FIRST_CHECKIN_TIMEOUT_SEC, is
     # what's supposed to catch that -- fast, not after JOB_DEADLINE_SEC.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)  # must not be what fires here
@@ -259,7 +275,7 @@ def test_a_stuck_first_attempt_is_rescued_by_the_retry(monkeypatch):
     # The case worth having: the first pod never checks in, the second
     # one does and finishes normally. The venue gets its reel and never
     # hears about any of it.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.03)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
@@ -296,7 +312,7 @@ def test_a_stuck_first_attempt_is_rescued_by_the_retry(monkeypatch):
 def test_a_pod_that_checks_in_is_never_retried(monkeypatch):
     # The other half: a working job must not create a second pod. Getting
     # this wrong would double the GPU bill on every successful run.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 5)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
@@ -322,7 +338,7 @@ def test_a_pod_that_checks_in_is_never_retried(monkeypatch):
 def test_a_pod_that_checks_in_is_not_mistaken_for_stuck(monkeypatch):
     # The positive case: a pod that reports real progress must not trip
     # the fast-fail meant for one that never starts at all.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.02)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
@@ -352,7 +368,7 @@ def test_failed_status_reads_never_count_toward_the_first_checkin_timeout(monkey
     # same as a confirmed-unchanged row -- that would terminate a pod
     # that might be perfectly healthy just because job_runner.py itself
     # couldn't reach the console for a while.
-    _no_real_r2_upload(monkeypatch)
+    _no_real_network(monkeypatch)
     monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
     monkeypatch.setattr(job_runner, "FIRST_CHECKIN_TIMEOUT_SEC", 0.02)
     monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 0.1)
@@ -491,3 +507,226 @@ def test_the_idle_ceiling_actually_cuts_the_call_volume():
     from cloud_pipeline.job_runner import IDLE_MAX_SEC
     calls_per_month = 30 * 24 * 3600 / IDLE_MAX_SEC
     assert calls_per_month <= 50_000, f"{calls_per_month:.0f} calls/month while idle"
+
+
+# --- PIC-138: a pod runs on scoped credentials, never the account's keys ----
+#
+# A pod used to be handed the account's full R2 keys: read, write and delete
+# across every venue's footage and reels. It is disposable, internet-facing
+# hardware running ffmpeg and TensorFlow over footage a stranger recorded, so
+# "compromised pod" has to be survivable.
+#
+# Paired deliberately, per CLAUDE.md ("remove the secret, then prove it still
+# works"). The test that no account key reaches the pod sits beside the test
+# that the scoped credentials DO -- removal alone would pass with no
+# credentials at all, which is a pod that cannot reach R2.
+
+PARENT_SECRET = "ACCOUNT-SECRET-THAT-MUST-NEVER-REACH-A-POD"
+
+
+def _run_and_capture_pod_env(monkeypatch, credentials=None):
+    _no_real_network(monkeypatch, credentials)
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCESS_KEY_ID", "ACCOUNT-KEY-ID")
+    monkeypatch.setenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY", PARENT_SECRET)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
+    monkeypatch.setattr(job_runner, "get_job_updated_at", lambda job_id: None)
+    captured = {}
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: captured.update(kw) or ("pod-1", "gpu"))
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
+    job_runner.run_reel_job(JOB)
+    return captured["env"]
+
+
+def test_no_account_r2_key_reaches_the_pod(monkeypatch):
+    env = _run_and_capture_pod_env(monkeypatch)
+    assert "CLOUDFLARE_R2_ACCESS_KEY_ID" not in env
+    assert "CLOUDFLARE_R2_SECRET_ACCESS_KEY" not in env
+    everything = " ".join(f"{k}={v}" for k, v in env.items())
+    assert PARENT_SECRET not in everything, "the account secret is in the pod's environment"
+    assert "ACCOUNT-KEY-ID" not in everything
+
+
+def test_the_pod_does_receive_the_scoped_credentials(monkeypatch):
+    # The paired half. Without it the test above passes for a pod holding
+    # nothing -- one that fails at its first download.
+    env = _run_and_capture_pod_env(monkeypatch)
+    assert env["R2_READ_ACCESS_KEY_ID"] == "READ-KEY"
+    assert env["R2_READ_SECRET_ACCESS_KEY"] == "READ-SECRET"
+    assert env["R2_READ_SESSION_TOKEN"] == "READ-TOKEN"
+    assert env["R2_WRITE_ACCESS_KEY_ID"] == "WRITE-KEY"
+    assert env["R2_WRITE_SECRET_ACCESS_KEY"] == "WRITE-SECRET"
+    assert env["R2_WRITE_SESSION_TOKEN"] == "WRITE-TOKEN"
+    # Needed for the endpoint URL and not a secret, so it stays.
+    assert env["CLOUDFLARE_R2_ACCOUNT_ID"]
+
+
+def test_the_read_and_write_credentials_are_kept_apart(monkeypatch):
+    # Each is bound to one bucket by R2. Crossing them would hand the
+    # reel-writing credential to the code that reads footage, or the
+    # reverse, and the pod would 403 on its first real call.
+    env = _run_and_capture_pod_env(monkeypatch)
+    read_values = {v for k, v in env.items() if k.startswith("R2_READ_")}
+    write_values = {v for k, v in env.items() if k.startswith("R2_WRITE_")}
+    assert read_values.isdisjoint(write_values)
+
+
+def test_the_console_decides_both_buckets_not_the_runner(monkeypatch):
+    creds = {**FAKE_CREDENTIALS, "readBucket": "test-bucket", "writeBucket": "console-chosen-output"}
+    monkeypatch.setenv("R2_INGEST_BUCKET", "runner-env-var-must-lose")
+    env = _run_and_capture_pod_env(monkeypatch, creds)
+    assert env["OUTPUT_BUCKET"] == "console-chosen-output"
+
+
+def test_a_credential_for_a_different_input_bucket_is_refused_before_any_pod(monkeypatch):
+    # The job row says its footage is in one bucket; the console issued a
+    # read credential for another. Something upstream has drifted, and the
+    # honest response is to stop, not to guess which is right.
+    _no_real_network(monkeypatch, {**FAKE_CREDENTIALS, "readBucket": "some-other-bucket"})
+    created = []
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: created.append(kw) or ("pod-1", "gpu"))
+    with pytest.raises(RuntimeError, match="refusing rather than guessing"):
+        job_runner.run_reel_job(JOB)
+    assert created == [], "must not spend money on a pod whose credentials do not match its job"
+
+
+def test_a_console_refusal_stops_the_job_before_a_pod_exists(monkeypatch):
+    monkeypatch.setattr(job_runner, "_upload_pod_deps", lambda bucket: "https://example.invalid/x")
+
+    def refuse(job_id):
+        raise RuntimeError("console refused pod credentials for job job-1: job is done, not running")
+
+    monkeypatch.setattr(job_runner, "fetch_pod_credentials", refuse)
+    created = []
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: created.append(kw) or ("pod-1", "gpu"))
+    with pytest.raises(RuntimeError, match="console refused"):
+        job_runner.run_reel_job(JOB)
+    assert created == [], "no fallback to the account keys, and no pod"
+
+
+def test_scoped_r2_env_maps_every_field():
+    env = job_runner.scoped_r2_env(FAKE_CREDENTIALS)
+    assert sorted(env) == sorted([
+        "R2_READ_ACCESS_KEY_ID", "R2_READ_SECRET_ACCESS_KEY", "R2_READ_SESSION_TOKEN",
+        "R2_WRITE_ACCESS_KEY_ID", "R2_WRITE_SECRET_ACCESS_KEY", "R2_WRITE_SESSION_TOKEN",
+    ])
+
+
+def test_a_credential_outlives_the_deadline_that_ends_its_pod():
+    # MIRRORS lib/podGrants.ts's POD_CREDENTIAL_TTL_SEC (4h) in the console
+    # repo, which cannot be imported here. A credential that expires before
+    # its pod does fails the job at the final upload -- the most expensive
+    # place to find out. If this fires, check that file before changing it.
+    CONSOLE_CREDENTIAL_TTL_SEC = 4 * 3600
+    assert job_runner.JOB_DEADLINE_SEC < CONSOLE_CREDENTIAL_TTL_SEC
+
+
+# --- fetch_pod_credentials against a REAL local server ----------------------
+#
+# Same reasoning test_pod_driver.py's _fake_console already gives: a mocked
+# `requests.post` would agree with whatever this file assumed about the
+# console. A real socket cannot.
+
+import json  # noqa: E402
+import threading  # noqa: E402
+from http.server import BaseHTTPRequestHandler, HTTPServer  # noqa: E402
+
+
+def _serve(responses):
+    """responses: list of (status, body_dict) answered in order, last repeats."""
+    seen = []
+
+    class Handler(BaseHTTPRequestHandler):
+        def do_POST(self):
+            seen.append({"path": self.path, "auth": self.headers.get("Authorization")})
+            status, body = responses[min(len(seen) - 1, len(responses) - 1)]
+            payload = json.dumps(body).encode()
+            self.send_response(status)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(payload)))
+            self.end_headers()
+            self.wfile.write(payload)
+
+        def log_message(self, *args):
+            pass
+
+    server = HTTPServer(("127.0.0.1", 0), Handler)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    return server, seen
+
+
+@pytest.fixture
+def console(monkeypatch):
+    servers = []
+
+    def start(responses):
+        server, seen = _serve(responses)
+        servers.append(server)
+        monkeypatch.setattr(job_runner, "CONSOLE_URL", f"http://127.0.0.1:{server.server_address[1]}")
+        return seen
+
+    yield start
+    for server in servers:
+        server.shutdown()
+        server.server_close()
+
+
+def _no_wait(_seconds):
+    pass
+
+
+def test_fetch_returns_what_the_console_issued_and_authenticates_as_the_runner(console):
+    seen = console([(200, FAKE_CREDENTIALS)])
+    assert job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait) == FAKE_CREDENTIALS
+    assert seen == [{"path": "/api/runner/jobs/job-1/credentials", "auth": f"Bearer {job_runner.RUNNER_TOKEN}"}]
+
+
+def test_a_refusal_is_final_and_asked_only_once(console):
+    # 4xx is the console saying no on purpose (job not running, segments not
+    # where the key shape says). Asking again cannot change the answer, and
+    # retrying would just hammer an endpoint that mints credentials.
+    seen = console([(409, {"error": "job is done, not running"})])
+    with pytest.raises(RuntimeError, match="job is done, not running"):
+        job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait)
+    assert len(seen) == 1
+
+
+def test_a_transient_console_error_is_retried_and_can_recover(console):
+    seen = console([(503, {"error": "busy"}), (503, {"error": "busy"}), (200, FAKE_CREDENTIALS)])
+    assert job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait) == FAKE_CREDENTIALS
+    assert len(seen) == 3
+
+
+def test_a_console_that_stays_down_gives_up_after_a_bounded_number_of_tries(console):
+    seen = console([(500, {"error": "boom"})])
+    with pytest.raises(RuntimeError, match="after 3 attempts"):
+        job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait)
+    assert len(seen) == job_runner.CREDENTIAL_ATTEMPTS
+
+
+def test_an_unreachable_console_is_retried_then_reported(monkeypatch):
+    monkeypatch.setattr(job_runner, "CONSOLE_URL", "http://127.0.0.1:1")  # nothing listens on port 1
+    with pytest.raises(RuntimeError, match="could not reach the console"):
+        job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait)
+
+
+def test_a_failure_message_never_carries_a_credential_from_the_response(console):
+    # run_one() writes str(exception) into the job row, which the venue can
+    # read. A credential in an exception message would be a credential in a
+    # database column.
+    poisoned = {"error": "nope", "read": {"secretAccessKey": "LEAKED-SECRET"}, "debug": "LEAKED-SECRET"}
+    console([(409, poisoned)])
+    with pytest.raises(RuntimeError) as excinfo:
+        job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait)
+    assert "LEAKED-SECRET" not in str(excinfo.value)
+
+
+def test_a_successful_fetch_prints_nothing(console, capsys):
+    console([(200, FAKE_CREDENTIALS)])
+    job_runner.fetch_pod_credentials("job-1", _sleep=_no_wait)
+    out = capsys.readouterr()
+    for secret in ("READ-SECRET", "WRITE-SECRET", "READ-TOKEN", "WRITE-TOKEN"):
+        assert secret not in out.out + out.err

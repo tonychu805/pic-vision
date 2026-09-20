@@ -211,6 +211,75 @@ def _upload_pod_deps(bucket):
     return r2_storage.generate_presigned_url(bucket, POD_DEPS_KEY, expires_in=3600)
 
 
+# The credentials endpoint (PIC-138) gets a few tries on a transient
+# failure, because failing here is cheap -- no pod exists yet, so nothing is
+# billing -- but a single console hiccup should not cost a venue a retry.
+# A 4xx is never retried: those are the console saying "no" on purpose
+# (job not running, segments not where the key shape says), and asking again
+# cannot change the answer.
+CREDENTIAL_ATTEMPTS = 3
+CREDENTIAL_BACKOFF_SEC = 2.0
+
+
+def fetch_pod_credentials(job_id, _sleep=time.sleep):
+    """Ask the console for this job's two scoped R2 credentials.
+
+    A pod used to be handed the account's own R2 keys: read, write and
+    delete across every venue's footage and reels. It now runs with two
+    credentials the console minted for THIS job -- one that can only read
+    this job's segments (plus the shared tools and weights), one that can
+    only write under this venue's reel folder -- each expiring in about
+    four hours (POST /api/runner/jobs/<id>/credentials, PIC-138).
+
+    There is deliberately NO fallback to the account keys in this process's
+    environment. If this fails the job fails, before a pod exists. Quietly
+    falling back to broader credentials would keep the pipeline working
+    while undoing the whole point, and nobody would ever notice.
+
+    Nothing from a success response is ever logged, and errors carry only
+    the console's own `error` string: run_one() writes str(exception) into
+    the job row, which is readable by the venue, so a credential in an
+    exception message would be a credential in a database column.
+    """
+    url = f"{CONSOLE_URL}/api/runner/jobs/{job_id}/credentials"
+    last = None
+    for attempt in range(1, CREDENTIAL_ATTEMPTS + 1):
+        try:
+            r = requests.post(url, headers=_headers(), timeout=30)
+        except requests.RequestException as e:
+            last = f"could not reach the console ({type(e).__name__})"
+        else:
+            if r.status_code == 200:
+                return r.json()
+            try:
+                reason = r.json().get("error") or f"HTTP {r.status_code}"
+            except ValueError:
+                reason = f"HTTP {r.status_code}"
+            if r.status_code < 500:
+                raise RuntimeError(f"console refused pod credentials for job {job_id}: {reason}")
+            last = f"console error {r.status_code}: {reason}"
+        if attempt < CREDENTIAL_ATTEMPTS:
+            _sleep(CREDENTIAL_BACKOFF_SEC * attempt)
+    raise RuntimeError(f"could not get pod credentials for job {job_id} after {CREDENTIAL_ATTEMPTS} attempts: {last}")
+
+
+def scoped_r2_env(credentials):
+    """The pod's R2 environment, from what the console issued.
+
+    Its own function so a test can hold the two halves of the security
+    change side by side: that no account key is in the pod's environment,
+    AND that the scoped credentials are. Asserting only the first would
+    pass with no credentials at all -- a pod that cannot reach R2.
+    """
+    env = {}
+    for direction, key in (("READ", "read"), ("WRITE", "write")):
+        cred = credentials[key]
+        env[f"R2_{direction}_ACCESS_KEY_ID"] = cred["accessKeyId"]
+        env[f"R2_{direction}_SECRET_ACCESS_KEY"] = cred["secretAccessKey"]
+        env[f"R2_{direction}_SESSION_TOKEN"] = cred["sessionToken"]
+    return env
+
+
 def run_reel_job(job):
     """ADR-093: hand the whole job to a self-driving pod and wait for it to
     disappear. Everything past this function -- downloading the venue's
@@ -237,14 +306,23 @@ def run_reel_job(job):
     if not brand_id:
         raise RuntimeError(f"job {job_id} has no brand_id -- refusing rather than guessing a reel key")
 
-    # job["bucket"] is the PRIVATE ingest bucket (PIC-153, 2026-09-18) --
-    # where this job's raw segments actually are, set by the console when
-    # the job was created. OUTPUT_BUCKET is the separate, public one the
-    # finished reel/burst/clips get written to -- same bucket, same env
-    # var name and default, the console's own ingestBucket() already uses
-    # for this (lib/r2Presign.ts), kept in sync deliberately rather than
-    # invented fresh here.
-    output_bucket = os.environ.get("R2_INGEST_BUCKET", "test-ingest-runpod")
+    # Scoped, expiring credentials for THIS job (PIC-138), fetched before
+    # anything is created so a refusal costs nothing.
+    #
+    # The console also decides both buckets, and they come back with the
+    # credentials because each credential is bound to exactly one bucket: a
+    # runner that disagreed with the console about where output goes would
+    # hold a write credential for a bucket the pod is not writing to, and
+    # find out at the final upload. job["bucket"] is the PRIVATE ingest
+    # bucket (PIC-153) where this job's segments are; it must be the one the
+    # read credential was issued for, or something upstream has drifted.
+    credentials = fetch_pod_credentials(job_id)
+    if credentials["readBucket"] != job["bucket"]:
+        raise RuntimeError(
+            f"job {job_id} records input bucket {job['bucket']!r} but the console issued "
+            f"credentials for {credentials['readBucket']!r} -- refusing rather than guessing"
+        )
+    output_bucket = credentials["writeBucket"]
 
     # Minted here, not on the pod: the console needs these ids to exist
     # (in the pod's final result) as soon as the pod reports done, and
@@ -265,9 +343,14 @@ def run_reel_job(job):
         "SHARE_ID": str(uuid.uuid4()),
         "CONSOLE_URL": CONSOLE_URL,
         "RUNNER_TOKEN": RUNNER_TOKEN,
-        "CLOUDFLARE_R2_ACCESS_KEY_ID": os.environ["CLOUDFLARE_R2_ACCESS_KEY_ID"],
-        "CLOUDFLARE_R2_SECRET_ACCESS_KEY": os.environ["CLOUDFLARE_R2_SECRET_ACCESS_KEY"],
+        # The account id alone -- it only builds the endpoint URL and is
+        # not a secret. The account's R2 KEYS no longer go to the pod:
+        # what it reads and writes with is scoped_r2_env() below.
         "CLOUDFLARE_R2_ACCOUNT_ID": os.environ["CLOUDFLARE_R2_ACCOUNT_ID"],
+        **scoped_r2_env(credentials),
+        # Still the full account key, and still the global runner token
+        # above: PIC-138's remaining two thirds. Neither can be narrowed
+        # the same way -- see the ticket for the sequencing.
         "RUNPOD_API_KEY": os.environ["RUNPOD_API_KEY"],
     }
 

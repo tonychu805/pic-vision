@@ -703,6 +703,13 @@ pic-vision/
 │   │                                    # been switched over to route real venue traffic
 │   │                                    # through it yet -- every real test so far was a
 │   │                                    # manually inserted job, not the real claim queue
+│   │                                    # PIC-138 (2026-09-20): runs on TWO SCOPED, EXPIRING
+│   │                                    # R2 credentials (R2_READ_* / R2_WRITE_*) the console
+│   │                                    # minted for this job, NOT the account's own keys --
+│   │                                    # it used to hold read/write/delete across every
+│   │                                    # venue. READ: this job's segments + pipeline/ +
+│   │                                    # weights/. WRITE: <brand>/reels/ only. Neither can
+│   │                                    # list or delete. NOT yet run on a real pod
 │   ├── setup_venue_calibration.py        # ONE-TIME per-venue calibration (not per-job --
 │   │                                    # the retired run_cloud_job.py had no calibration
 │   │                                    # logic of its own either)
@@ -1675,6 +1682,28 @@ pic-vision/
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented
+│   │   ├── r2TempCredentials.ts               # PIC-138 (2026-09-20): signs short-lived,
+│   │   │                                    # path-scoped R2 credentials locally (HS256 JWT
+│   │   │                                    # over the parent secret; nothing stored, nothing
+│   │   │                                    # to revoke). REFUSES the dangerous defaults --
+│   │   │                                    # Cloudflare documents that omitting paths grants
+│   │   │                                    # the WHOLE bucket, so empty prefixes, a prefix
+│   │   │                                    # without a trailing slash, wildcards, traversal,
+│   │   │                                    # unknown actions and any ttl > 6h all throw.
+│   │   │                                    # Sends `actions` and NEVER `scope`: Cloudflare's
+│   │   │                                    # docs show both together and the live service
+│   │   │                                    # rejects that with a bare 400 (found by running
+│   │   │                                    # it, not by any test)
+│   │   ├── podGrants.ts                       # what a pod may touch: READ this job's segments
+│   │   │                                    # + pipeline/ + weights/ (Get/Head only); WRITE
+│   │   │                                    # <brand>/reels/ (Put + the multipart set, NOT
+│   │   │                                    # Delete -- boto3 goes multipart above 8MB). Refuses
+│   │   │                                    # rather than widens: segments outside the job
+│   │   │                                    # prefix, equal buckets, no segments
+│   │   ├── podCredentials.ts                  # which jobs may be issued credentials (running
+│   │   │                                    # reel jobs only; 409 otherwise so a replayed call
+│   │   │                                    # cannot mint a fresh one) -- the decisions, kept out
+│   │   │                                    # of the route so a test can run them
 │   │   ├── queueHealth.ts                     # PIC-109 (2026-09-20): is anything stuck?
 │   │   │                                    # Thresholds tuned AGAINST false alarms --
 │   │   │                                    # queued 30min, uploading 4h (a real 2.5GB
@@ -1730,6 +1759,12 @@ pic-vision/
 │   │   └── pillTone.ts                         # maps a mockup status label (e.g.
 │   │                                          # "Offline"/"Uploading"/"Enabled") to
 │   │                                          # Pill's neutral/progress/alert tone
+│   ├── api/runner/jobs/[id]/credentials/route.ts  # PIC-138. Runner-authenticated. Returns
+│   │                                  # the two scoped credentials + the bucket names (the
+│   │                                  # console is the single source of truth for both, since
+│   │                                  # each credential is bound to exactly one). Never
+│   │                                  # cached, never logged. Minted HERE not on the runner
+│   │                                  # because the runner is the workstation PIC-123 retires
 │   ├── api/health/route.ts             # PIC-109. Public, unauthenticated (a monitor
 │   │                                  # needing a credential is one more thing that
 │   │                                  # can silently stop working) and carries NO

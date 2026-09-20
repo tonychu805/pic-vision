@@ -2445,3 +2445,44 @@ The five-day outage is the one that settles it. A signal existed the whole time 
 **Verified, including the half that is easy to skip.** The workflow was run for real (`workflow_dispatch`) and passed against live infrastructure: `/` → 307, `/api/health` → 200, the runner claim endpoint → 401. Then the failure branches were exercised separately against simulated status codes, because a monitor that has only ever passed is an untested monitor — 503, 000, 404 and 502 all fail correctly on the root check, and a 200 on the claim endpoint fails as "accepted an unauthenticated request". The 503 case is this week's outage exactly.
 
 **What this does not cover:** a venue's own question, "where is my reel". That needs the console Jobs page PIC-109 also asks for, which is larger product work — and a page tells nobody anything while nobody is looking at it, which is why the alert came first.
+
+---
+
+## ADR-114 — A pod holds two scoped, expiring R2 credentials, not the account's keys
+
+**Date:** 2026-09-20 · **Status:** built, deployed and verified except on a real pod · **Ticket:** PIC-138 (one third)
+
+**Context.** Every RunPod pod was handed the account's full R2 credentials: read, write and delete across every venue's footage and every finished reel. A pod is disposable, internet-facing hardware running ffmpeg, OpenCV and TensorFlow over footage a stranger recorded. If one is ever compromised, "read and delete everything for every customer" is not a survivable outcome. PIC-138 was filed 2026-09-10 and deferred until the pipeline completed a real run; it did, earlier today (ADR-111).
+
+**Decision.** The console mints two credentials per job and the pod runs on those.
+
+| | bucket | may | may not |
+|---|---|---|---|
+| **read** | private ingest | `GetObject`, `HeadObject` on this job's segments, `pipeline/`, `weights/` | list, write, delete, read any other job or venue |
+| **write** | public output | `PutObject` + the multipart set on `<brand>/reels/` | delete, list, read back, write outside its venue's folder |
+
+Both expire in 4 hours (the runner's 3h deadline plus a margin). Two credentials because R2 binds each to exactly one bucket — which is also the private/public split PIC-153 exists to keep. The grant is derived from what `pod_driver.py` actually does: its entire S3 surface is six calls, three downloads and three uploads.
+
+**The multipart set is required, not incidental.** boto3's `upload_file` goes multipart above 8 MB and a full reel is ~58 MB. A `PutObject`-only grant would pass every "cannot delete" test and then 403 the final upload of every real job — the most expensive place to find out.
+
+**Minted on the console, not the runner.** The runner is the operator's workstation, which PIC-123 retires. The parent secret already lives in the console's environment for presigning, so signing there exposes nothing new, and the pod-side contract stays identical whoever asks: the runner today, a Cloudflare Workflow later. The runner asks `POST /api/runner/jobs/<id>/credentials` with its existing token, and there is deliberately **no fallback** to the account keys in its own environment — quietly falling back would keep the pipeline working while undoing the whole point, and nobody would ever notice.
+
+**What checking Cloudflare's docs against the live service found.**
+
+1. *Lifetimes are not capped by R2 in practice* — 365 days were accepted — which is precisely why the ceiling has to be ours. `MAX_TTL_SEC` is 6h.
+2. *The docs are wrong about `scope` + `actions`.* Cloudflare's own example signs both together. The live service rejects that with a bare `400 Bad Request` on **every** call — a token it cannot parse, not a denial. Every operation failed the first time this was run. `actions` alone works, so credentials carry `actions` and never `scope`, and a test pins it.
+3. *R2 silently accepts claim names it doesn't recognise* (`action`, `permissions` both returned success) and mints a credential that works but is **not narrowed at all**. "It didn't error" is therefore not evidence a restriction applies; only a 403 on the forbidden thing is. The verification counts a denial only when R2 answers 403 — an earlier draft treated any client error as a denial, and the 400 above would have passed as one.
+
+None of these three was findable by a unit test. All were found by running the TypeScript's output against the real bucket with the same boto3 calls the pod makes.
+
+**Refuses rather than widens.** The signer throws on the dangerous defaults — Cloudflare documents that omitting paths grants the *whole bucket*, so an empty prefix list from a bug or a missing brand id must be an error and never "everything". Also: a prefix with no trailing slash (`pipeline` would match `pipeline-secrets/`), wildcards, traversal, unknown action names, any lifetime over the ceiling. The grants throw on a job whose segments are not under its own key prefix (legacy or corrupt) instead of granting something broader that happens to cover them; and a job that is not `running` is a 409, so a stale or replayed call cannot mint a fresh working credential for a job that ended.
+
+**Verified.** Against real R2, with credentials minted by the TypeScript and the exact boto3 calls the pod makes, including a 12 MB multipart upload: everything the pod needs works, and all eleven things a compromised pod must not do return a genuine 403 — another job's segment (same venue), another venue's reel folder, writing outside `reels/`, deleting the reel it just wrote, reading it back, listing either bucket, and using each credential on the other's bucket. Then again through the **deployed** route, using a temporary `running` job row that was deleted immediately afterwards: 200, `Cache-Control: no-store`, no account secret in the body, the designed scopes, a 4h lifetime, and the credentials behaved correctly against R2 — which also confirms Netlify's environment can sign. Refusals live: no token and wrong token → 401, a finished job → 409, an unknown job → 404.
+
+Tests are paired per `CLAUDE.md`: *no account key reaches the pod* beside *the scoped credentials do*, mutation-checked both ways — put the keys back and the first fails; drop the credentials too and only the second fails, which is exactly why they're paired, since the first passes for a pod holding nothing. Pod-side tripwires each verified to trip: a shared file moved off its granted prefix, a reel written outside `<brand>/reels/`, and code reading the account key again. 111 → 159 console tests, 175 → 201 Python.
+
+**A near-miss worth recording.** The first existing runner test to reach the new console call made a **real HTTP request to the production console** and got a genuine 401 back, because its token is fake. Nothing leaked, only because the token was fake. The shared test stand-in now isolates both network calls.
+
+**Not verified: a real pod.** Everything is proven except the one thing that needs a billed GPU run — that RunPod passes six extra environment variables (one ~700-character session token each) through to the container, and that the pod's boto3 talks to R2 with them from RunPod's network. Low risk, not zero, and it is the first thing the next real job will show. **If that job fails at its first download, revert the two Python files** (`git revert` of the runner/pod commit); the console endpoint is additive and unaffected.
+
+**Remaining two thirds of PIC-138, unchanged.** The pod still holds the **global runner token** and the **full RunPod account key**. The token can claim any venue's next job and bypasses the per-venue access rules; the RunPod key can create pods and is held solely so a pod can terminate itself. Neither narrows the same way — see the ticket. The RunPod key in particular needs a watchdog on the other side before it comes off, because self-termination is what protects the account if the runner dies mid-job.

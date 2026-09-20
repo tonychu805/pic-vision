@@ -45,8 +45,21 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            account-wide runner token, not a token scoped
                            to this one job. Scoping that is real future
                            work, not done here.
-    CLOUDFLARE_R2_*        same R2 creds the operator's workstation
-                           already has -- same gap as above, not scoped.
+    CLOUDFLARE_R2_ACCOUNT_ID   only the account id, for the endpoint URL.
+                           NOT the account's R2 keys (PIC-138, 2026-09-20):
+                           a pod used to be handed full read/write/delete
+                           across every venue's footage and reels.
+    R2_READ_ACCESS_KEY_ID / R2_READ_SECRET_ACCESS_KEY / R2_READ_SESSION_TOKEN
+    R2_WRITE_ACCESS_KEY_ID / R2_WRITE_SECRET_ACCESS_KEY / R2_WRITE_SESSION_TOKEN
+                           two short-lived credentials the console minted
+                           for THIS job (POST /api/runner/jobs/<id>/
+                           credentials), each bound to one bucket and
+                           expiring ~4h out. READ can only get/head this
+                           job's segments plus pipeline/ and weights/ in
+                           the private bucket; WRITE can only put under
+                           <brand>/reels/ in the public one. Neither can
+                           list or delete, and neither can touch another
+                           venue. See lib/podGrants.ts in the console.
     RUNPOD_API_KEY         so this pod can delete itself when done. Same
                            gap: this is the full account key, not scoped
                            to "delete only this pod."
@@ -164,14 +177,33 @@ def _log(msg):
     print(f"[pod-driver {time.strftime('%H:%M:%S')}] {msg}", flush=True)
 
 
-def _r2_client():
+def _scoped_r2_client(direction):
+    """An S3 client on one of the two credentials the console minted.
+
+    Two, not one, because R2 binds a credential to exactly one bucket --
+    which is also the private-input / public-output split PIC-153 exists to
+    keep. `direction` is "READ" (the private ingest bucket) or "WRITE" (the
+    public output bucket).
+
+    A missing variable is a KeyError naming it, deliberately: the only way
+    to reach this without them is a runner that did not fetch scoped
+    credentials, and falling back to anything broader would silently undo
+    the whole point of them.
+    """
     account_id = os.environ["CLOUDFLARE_R2_ACCOUNT_ID"]
     return boto3.client(
         "s3", endpoint_url=f"https://{account_id}.r2.cloudflarestorage.com",
-        aws_access_key_id=os.environ["CLOUDFLARE_R2_ACCESS_KEY_ID"],
-        aws_secret_access_key=os.environ["CLOUDFLARE_R2_SECRET_ACCESS_KEY"],
+        aws_access_key_id=os.environ[f"R2_{direction}_ACCESS_KEY_ID"],
+        aws_secret_access_key=os.environ[f"R2_{direction}_SECRET_ACCESS_KEY"],
+        aws_session_token=os.environ[f"R2_{direction}_SESSION_TOKEN"],
         region_name="auto",
     )
+
+
+def _r2_clients():
+    """(input client, output client). The pod reads from one bucket and
+    writes to the other, and holds no credential that can do both."""
+    return _scoped_r2_client("READ"), _scoped_r2_client("WRITE")
 
 
 # How hard to try on the one report that can't be dropped (see
@@ -371,14 +403,14 @@ def _self_terminate(pod_id):
 
 
 def run():
-    s3 = _r2_client()
+    s3_in, s3_out = _r2_clients()
     os.makedirs(WORKDIR, exist_ok=True)
 
     # Must land before anything below shells out to "ffmpeg"/"ffprobe" --
     # the first such call is the segment concat a few lines down.
     _check_cancel("setup", "fetching ffmpeg...")
     for local_path, key in ((FFMPEG_LOCAL, FFMPEG_R2_KEY), (FFPROBE_LOCAL, FFPROBE_R2_KEY)):
-        s3.download_file(BUCKET, key, local_path)
+        s3_in.download_file(BUCKET, key, local_path)
         os.chmod(local_path, 0o755)
 
     segment_keys = json.loads(os.environ["SEGMENT_KEYS_JSON"])
@@ -401,7 +433,7 @@ def run():
     local_segments = []
     for key in segment_keys:
         local = os.path.join(seg_dir, os.path.basename(key))
-        s3.download_file(BUCKET, key, local)
+        s3_in.download_file(BUCKET, key, local)
         local_segments.append(local)
 
     if len(local_segments) == 1:
@@ -468,7 +500,7 @@ def run():
     _check_cancel("inference", "fetching model weights...")
     if not os.path.exists(WEIGHTS_LOCAL):
         weights_tar = os.path.join(WORKDIR, "weights.tar")
-        s3.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
+        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
         subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"],
                        check=True)
 
@@ -504,7 +536,7 @@ def run():
     # exact old shape too, for the separate SSH-driven path that wasn't
     # migrated in the same change (see that file's own comment).
     ranked_key = f"{BRAND_ID}/reels/{reel_id}.mp4"
-    s3.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), OUTPUT_BUCKET, ranked_key)
+    s3_out.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), OUTPUT_BUCKET, ranked_key)
     reels = []
     # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
     # pre-minted by job_runner.py before this pod even started), the count
@@ -512,7 +544,7 @@ def run():
     for clip in top_result["manifest"]:
         clip_reel_id = str(uuid.uuid4())
         clip_key = f"{BRAND_ID}/reels/{clip_reel_id}.mp4"
-        s3.upload_file(os.path.join(reel_dir, "top", clip["file"]), OUTPUT_BUCKET, clip_key)
+        s3_out.upload_file(os.path.join(reel_dir, "top", clip["file"]), OUTPUT_BUCKET, clip_key)
         reels.append({
             "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
             "rank": clip["rank"],
@@ -521,7 +553,7 @@ def run():
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
         burst_key = f"{BRAND_ID}/reels/{burst_reel_id}.mp4"
-        s3.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), OUTPUT_BUCKET, burst_key)
+        s3_out.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), OUTPUT_BUCKET, burst_key)
         reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
     # Retried, not best-effort: every reel above is already in R2 and this

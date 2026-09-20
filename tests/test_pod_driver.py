@@ -200,3 +200,106 @@ def test_progress_reports_are_still_best_effort(console_url):
     seen = console_url([(500, "{}")])
     assert pod_driver.patch_job(stage="inference") is False
     assert len(seen) == 1
+
+
+# --- PIC-138: the pod holds two scoped credentials and no account key --------
+#
+# pod_driver.py used to build one S3 client from the account's own R2 keys and
+# use it for everything: read every venue's footage, write and DELETE anywhere.
+# It now builds two, from credentials the console minted for this one job.
+import re  # noqa: E402
+import inspect  # noqa: E402
+
+
+def _scoped_env(monkeypatch):
+    for direction in ("READ", "WRITE"):
+        monkeypatch.setenv(f"R2_{direction}_ACCESS_KEY_ID", f"{direction}-KEY")
+        monkeypatch.setenv(f"R2_{direction}_SECRET_ACCESS_KEY", f"{direction}-SECRET")
+        monkeypatch.setenv(f"R2_{direction}_SESSION_TOKEN", f"{direction}-TOKEN")
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCOUNT_ID", "acct")
+
+
+def _creds_of(client):
+    # botocore keeps these on the request signer; there is no public getter.
+    c = client._request_signer._credentials
+    return c.access_key, c.secret_key, c.token
+
+
+def test_the_pod_builds_a_read_client_and_a_write_client_on_different_credentials(monkeypatch):
+    _scoped_env(monkeypatch)
+    s3_in, s3_out = pod_driver._r2_clients()
+    assert _creds_of(s3_in) == ("READ-KEY", "READ-SECRET", "READ-TOKEN")
+    assert _creds_of(s3_out) == ("WRITE-KEY", "WRITE-SECRET", "WRITE-TOKEN")
+
+
+def test_both_clients_carry_a_session_token(monkeypatch):
+    # The whole mechanism: without the token R2 sees a plain access key and
+    # secret it has never heard of, and 403s -- or worse, if the two ever
+    # happened to be the account's own, quietly works at full privilege.
+    _scoped_env(monkeypatch)
+    for client in pod_driver._r2_clients():
+        assert _creds_of(client)[2], "a scoped credential without its session token is not scoped"
+
+
+def test_missing_scoped_credentials_fail_loudly_and_never_fall_back(monkeypatch):
+    # The account's own keys are deliberately present here. If the pod could
+    # reach for them when the scoped ones are missing, a runner that failed
+    # to fetch credentials would still produce a working pipeline -- and the
+    # security change would be undone with nothing ever failing.
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCOUNT_ID", "acct")
+    monkeypatch.setenv("CLOUDFLARE_R2_ACCESS_KEY_ID", "ACCOUNT-KEY")
+    monkeypatch.setenv("CLOUDFLARE_R2_SECRET_ACCESS_KEY", "ACCOUNT-SECRET")
+    for name in ("R2_READ_ACCESS_KEY_ID", "R2_READ_SECRET_ACCESS_KEY", "R2_READ_SESSION_TOKEN",
+                 "R2_WRITE_ACCESS_KEY_ID", "R2_WRITE_SECRET_ACCESS_KEY", "R2_WRITE_SESSION_TOKEN"):
+        monkeypatch.delenv(name, raising=False)
+    with pytest.raises(KeyError, match="R2_READ_ACCESS_KEY_ID"):
+        pod_driver._r2_clients()
+
+
+def test_no_code_on_the_pod_reads_the_account_r2_keys():
+    # A tripwire on the source, because the failure it guards is silent: a
+    # later edit that reads CLOUDFLARE_R2_SECRET_ACCESS_KEY again would work
+    # perfectly on a pod that still happened to receive it, and nothing
+    # would fail until the day that stopped being true.
+    code = "\n".join(
+        line for line in inspect.getsource(pod_driver).splitlines()
+        if not line.lstrip().startswith("#")
+    )
+    # Docstring prose may mention the names; code may not READ them.
+    reads = re.findall(r"environ(?:\.get)?\s*[\[(]\s*[\"']CLOUDFLARE_R2_(?:ACCESS_KEY_ID|SECRET_ACCESS_KEY)", code)
+    assert reads == [], f"pod_driver.py reads the account's R2 keys again: {reads}"
+
+
+def test_the_shared_files_the_pod_reads_are_covered_by_its_read_credential():
+    # MIRRORS lib/podGrants.ts SHARED_READ_PREFIXES in the console repo,
+    # which cannot be imported here. The read credential covers this job's
+    # segments plus these two folders and nothing else, so a pod dependency
+    # that moves to a new prefix is not a test failure anywhere -- it is a
+    # job that 403s minutes into a billed GPU run. This is the tripwire.
+    granted = ("pipeline/", "weights/")
+    for name in ("FFMPEG_R2_KEY", "FFPROBE_R2_KEY", "WEIGHTS_R2_KEY"):
+        key = getattr(pod_driver, name)
+        assert key.startswith(granted), f"{name}={key!r} is outside the read credential's prefixes {granted}"
+
+
+def test_every_reel_the_pod_uploads_lands_in_its_venues_reel_folder():
+    # The write credential covers <brand>/reels/ and nothing else. Every
+    # upload_file call must use a key built under that prefix, or the final
+    # upload of a real job 403s -- the most expensive place to find out.
+    source = inspect.getsource(pod_driver.run)
+    # upload_file(os.path.join(...), OUTPUT_BUCKET, <key var>) -- the join()
+    # has its own parentheses, so a plain [^)]* would stop inside it.
+    uploads = re.findall(r"s3_out\.upload_file\(os\.path\.join\([^)]*\),\s*OUTPUT_BUCKET,\s*(\w+)\)", source)
+    assert len(uploads) == 3, f"expected the full, top-rally and burst uploads, found {uploads}"
+    for var in uploads:
+        assert re.search(rf'{var}\s*=\s*f"\{{BRAND_ID\}}/reels/', source), f"{var} is not built under <brand>/reels/"
+
+
+def test_reads_use_the_read_client_and_writes_use_the_write_client():
+    # Crossing them is a real bug: the read credential has no PutObject and
+    # the write credential has no GetObject, so either mistake 403s a job.
+    source = inspect.getsource(pod_driver.run)
+    assert not re.search(r"s3_out\.download_file", source)
+    assert not re.search(r"s3_in\.upload_file", source)
+    assert len(re.findall(r"s3_in\.download_file", source)) == 3
+    assert len(re.findall(r"s3_out\.upload_file", source)) == 3
