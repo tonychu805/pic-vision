@@ -1675,6 +1675,14 @@ pic-vision/
 │   │   ├── mockData.ts                        # sample data for the not-yet-real
 │   │   │                                    # sections, ported verbatim from the
 │   │   │                                    # mockup's own content, not invented
+│   │   ├── queueHealth.ts                     # PIC-109 (2026-09-20): is anything stuck?
+│   │   │                                    # Thresholds tuned AGAINST false alarms --
+│   │   │                                    # queued 30min, uploading 4h (a real 2.5GB
+│   │   │                                    # session on a 3.5Mbps venue uplink takes
+│   │   │                                    # ~1.6h, ADR-092). An alert that cries
+│   │   │                                    # wolf gets switched off
+│   │   ├── queueHealth.test.ts                # 11 tests; every "must alert" paired with
+│   │   │                                    # a "must stay quiet" for the lookalike case
 │   │   ├── ingestLifecycle.ts                 # PIC-158 (2026-09-20): which R2 lifecycle
 │   │   │                                    # rules the PRIVATE ingest bucket should
 │   │   │                                    # have -- ONE PER VENUE, prefix
@@ -1722,6 +1730,19 @@ pic-vision/
 │   │   └── pillTone.ts                         # maps a mockup status label (e.g.
 │   │                                          # "Offline"/"Uploading"/"Enabled") to
 │   │                                          # Pill's neutral/progress/alert tone
+│   ├── api/health/route.ts             # PIC-109. Public, unauthenticated (a monitor
+│   │                                  # needing a credential is one more thing that
+│   │                                  # can silently stop working) and carries NO
+│   │                                  # venue/camera/job identity -- a duration and a
+│   │                                  # sentence. 503 when stuck; the status code is
+│   │                                  # the contract, not the JSON
+│   ├── .github/workflows/uptime.yml    # PIC-109, new top-level dir. Hits the above
+│   │                                  # every 15min FROM GITHUB -- deliberately
+│   │                                  # outside both things it watches, since neither
+│   │                                  # the console nor the operator's workstation can
+│   │                                  # report its own outage. Alerting is GitHub's
+│   │                                  # own failed-scheduled-run notification; no
+│   │                                  # third-party monitoring account
 │   ├── scripts/syncIngestLifecycle.ts  # PIC-158: `pnpm sync:lifecycle` reports which
 │   │                                  # venues have no retention rule (their failed
 │   │                                  # uploads are kept forever) and exits non-zero

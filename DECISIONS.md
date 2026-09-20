@@ -2415,3 +2415,33 @@ Retention errs long deliberately. Too short costs a venue their footage; too lon
 **Found by running it rather than by reasoning:** the drift comparison used raw `JSON.stringify`, and R2 returns a rule's fields in its own order, so an identical ruleset always read as drifted. The script would have exited non-zero on every run — and a check that is always red is a check nobody reads, which is the same reason ADR-108's linter was kept deliberately minimal. Now compared canonically, with a test using R2's real field order beside one proving a genuine difference is still caught.
 
 **Note for PIC-138 and beyond:** the same fact that made this work — venue-prefixed keys — is what will let a job-scoped R2 credential be restricted to one venue's paths. The two tickets depend on the same property.
+
+---
+
+## ADR-113 — Something outside the system watches the system
+
+**Date:** 2026-09-20 · **Status:** live · **Ticket:** PIC-109 (partial, deliberately)
+
+**Context.** Three incidents in nine days, every one found by luck rather than by any signal:
+
+| found | what | how it surfaced |
+|---|---|---|
+| 09-12 | the runner had been on stale code for two days | noticed while checking something else |
+| 09-20 | every console calibration had failed since 09-18 | the operator happened to try one |
+| 09-20 | console, share links and marketing site 503 for **five days** | the operator asked why a test could not run |
+
+The five-day outage is the one that settles it. A signal existed the whole time — the runner logged a failed claim every twenty seconds — and it went to journald, which nobody reads. PIC-109 predicted this shape in September and had sat in the backlog since.
+
+**Decision: check from outside, on a schedule, and alert through something already in the operator's life.** `GET /api/health` reports whether anything is stuck; `.github/workflows/uptime.yml` polls it every fifteen minutes and fails loudly. It runs on GitHub on purpose — the two things worth watching are the console (Netlify) and the runner (the operator's workstation), and **neither can report its own outage**. Alerting is GitHub's own failed-scheduled-run notification, so there is no third-party monitoring account to sign up for, pay for, or forget the password to.
+
+**Only half of PIC-109, and the half chosen matters.** The ticket leads with "the runner is a single point of failure" — runner redundancy, restart handling, the machine being off. None of that is built, because **PIC-123 dissolves it**: moving orchestration to Cloudflare Workflows removes the single point of failure rather than mitigating it. Building redundancy for a component scheduled for deletion is throwaway work. Knowing when jobs are stuck, by contrast, outlives that change entirely.
+
+**The ticket's own proposed check would not have caught this week's outage.** PIC-109 suggests "alert when a job has been queued > 30 min". With the console down, the desktop could not create jobs at all — nothing was ever queued, and that check would have stayed silent for all five days. Hence the separate reachability checks, which are the part that actually earns its place.
+
+**Unauthenticated on purpose.** A monitor that needs a credential is one more thing that can silently stop working, and one more holder of a secret PIC-138 wants to scope down. The response carries no venue, camera or job identity — a duration and a sentence — and a test pins that no id can appear in it.
+
+**Thresholds are set against false alarms, not against tidiness.** Queued: 30 minutes. Uploading: **4 hours**, deliberately generous, because a two-hour session is ~2.5 GB and venue uplink was measured as bimodal at roughly 3.5 vs 30 Mbps (ADR-092) — at the slow end a legitimate upload runs about 1.6 hours. That threshold still catches PIC-155's failure, where a job sat in `uploading` forever after its completion call threw. Same reasoning ADR-108 used for the linter: a gate that cries wolf gets ignored, and is then worse than no gate. Every "must alert" test is paired with a "must stay quiet" test for the case that looks like it.
+
+**Verified, including the half that is easy to skip.** The workflow was run for real (`workflow_dispatch`) and passed against live infrastructure: `/` → 307, `/api/health` → 200, the runner claim endpoint → 401. Then the failure branches were exercised separately against simulated status codes, because a monitor that has only ever passed is an untested monitor — 503, 000, 404 and 502 all fail correctly on the root check, and a 200 on the claim endpoint fails as "accepted an unauthenticated request". The 503 case is this week's outage exactly.
+
+**What this does not cover:** a venue's own question, "where is my reel". That needs the console Jobs page PIC-109 also asks for, which is larger product work — and a page tells nobody anything while nobody is looking at it, which is why the alert came first.
