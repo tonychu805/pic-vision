@@ -1,6 +1,11 @@
 # Release notes
 
-## 1.6.0 — 2026-09-20
+## 1.6.1 — 2026-09-20
+
+**There is no 1.6.0 to install.** It was tagged, but its build failed before
+any installer was made — the release-building machine was running an older
+version of the tooling than the tests need — so nothing was ever published.
+1.6.1 is that release, unchanged apart from the fix to how it gets built.
 
 - **Fixed: getting signed out for no reason.** The app renews your login
   quietly in the background about once an hour. If that renewal failed for
