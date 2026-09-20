@@ -1,5 +1,25 @@
 # Release notes
 
+## 1.6.2 — 2026-09-20
+
+- **Fixed: a job stuck on "Stopping…" forever.** The row for a cloud job only
+  updated while something in the app was asking the console how the job was
+  doing, and that only started when an upload finished or you clicked Cancel
+  — never when the app was opened. Close or restart the app after sending a
+  job and its row froze at whatever it last said; for a cancelled job that
+  was "Stopping…", with no Cancel or Retry button to get out of it. The app
+  now picks a job back up whenever it shows one that is still in progress.
+  It leaves finished jobs alone, and it stops asking if the console says the
+  job no longer exists. A job whose *upload* was interrupted by closing the
+  app is not picked up — that transfer died with the app and needs redoing.
+  A row already stuck from before this update clears itself the first time
+  you open the new version.
+
+- **Fixed: removing a camera and adding one with the same name showed it as
+  calibrated.** It wasn't — the console just hadn't been told yet. The app now
+  tells the console the moment a camera is added, removed, renamed or has its
+  login changed, instead of at the next 60-second check-in.
+
 ## 1.6.1 — 2026-09-20
 
 **There is no 1.6.0 to install.** It was tagged, but its build failed before
