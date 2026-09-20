@@ -84,8 +84,37 @@ async function requestToken(body) {
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
-  if (!res.ok) throw new Error(data.error_description || data.msg || `sign-in failed (HTTP ${res.status})`);
+  if (!res.ok) {
+    const err = new Error(data.error_description || data.msg || `sign-in failed (HTTP ${res.status})`);
+    // Carried so a refresh can tell "this credential is genuinely dead"
+    // from "we couldn't reach the server". Flattening both into a string
+    // is what made every network blip sign the operator out -- see
+    // sessionIsOver() below.
+    err.status = res.status;
+    throw err;
+  }
   return data;
+}
+
+/**
+ * Is a failed token request proof the session is over?
+ *
+ * Only a definitive rejection from the auth server counts: 400 or 401,
+ * which is what Supabase returns for a revoked, expired or already-used
+ * refresh token. Anything else -- a 5xx, a rate limit, a DNS failure, a
+ * venue's wifi dropping mid-renewal -- means we do not know, and "we do
+ * not know" must not destroy a working login.
+ *
+ * `fetch` rejects with no status at all on a network error, which lands
+ * here as undefined and is correctly treated as not-proof.
+ *
+ * Same rule PIC-157 established on the pipeline: a check that failed is
+ * not a check that came back negative. There it was a flaky connection
+ * killing a healthy pod; here it is a flaky connection killing a healthy
+ * session, and the operator has to find their password again.
+ */
+export function sessionIsOver(status) {
+  return status === 400 || status === 401;
 }
 
 export async function signIn(email, password) {
@@ -243,9 +272,9 @@ export function getSession() {
 }
 
 // Refreshes 60s ahead of real expiry so a call that's mid-flight when the
-// token turns over doesn't race a 401. Clears the stored session on a
-// failed refresh (revoked/expired refresh token) rather than leaving a
-// dead session getSession() would keep reporting as signed-in.
+// token turns over doesn't race a 401. Clears the stored session only
+// when the auth server actually rejects the refresh token, rather than
+// leaving a dead session getSession() would keep reporting as signed-in.
 /**
  * Exported for the realtime command channel (ADR-100), which needs a live
  * token to authenticate its subscription and a fresh one periodically.
@@ -269,8 +298,15 @@ async function getValidAccessToken() {
     };
     saveSession(refreshed);
     return refreshed.accessToken;
-  } catch {
-    store.delete("session");
+  } catch (err) {
+    if (sessionIsOver(err?.status)) {
+      store.delete("session");
+      return null;
+    }
+    // Keep the session and just fail this one call. The next one tries
+    // again; a renewal that could not be attempted is not a renewal that
+    // was refused, and the operator stays signed in through a blip.
+    console.error(`[auth] token refresh failed, keeping session: ${err?.message}`);
     return null;
   }
 }

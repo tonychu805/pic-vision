@@ -121,12 +121,23 @@ export default function SignInPage({ onSignedIn }) {
                 />
               </div>
 
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-                <label className="radio" style={{ fontSize: "var(--fs-body)" }} title="Sessions already stay signed in by default">
-                  <input type="checkbox" disabled />
-                  <span className="dot" style={{ borderRadius: 4 }} />
-                  Keep me signed in
-                </label>
+              {/* "Keep me signed in" stood here until 2026-09-20. It came in
+                  with the design mockup and was never wired to anything --
+                  permanently greyed out, with its only explanation in a
+                  tooltip nobody hovers, which reads as broken rather than
+                  as deliberate. It was reported as "doesn't work", fairly.
+
+                  Removed rather than wired up because the behaviour it
+                  promised is simply what the app does: the session is
+                  saved and renewed in the background. What made that
+                  untrue was a bug in the renewal, not a missing option --
+                  any failure at all used to throw the login away (see
+                  auth.js's sessionIsOver). Fixed in the same change.
+
+                  Worth building for real only if venues start sharing a
+                  machine, where "don't save my login here" is a genuine
+                  request. It is not one today. */}
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 18 }}>
                 <span style={{ fontSize: "var(--fs-body)", opacity: 0.5, cursor: "not-allowed" }} title="Password reset isn't built yet">
                   Forgot password
                 </span>
