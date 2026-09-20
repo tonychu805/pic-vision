@@ -1,5 +1,43 @@
 # Release notes
 
+## 1.6.0 — 2026-09-20
+
+- **Fixed: getting signed out for no reason.** The app renews your login
+  quietly in the background about once an hour. If that renewal failed for
+  *any* reason at all — a moment of bad wifi, the login service having a
+  hiccup — it threw your saved login away and made you type your password
+  again. It couldn't tell "your login has genuinely expired" from "couldn't
+  reach the server just then". Now only a real rejection signs you out;
+  everything else keeps your login and simply tries again next time.
+
+- **Removed the greyed-out "Keep me signed in" box.** It was never connected
+  to anything, and its only explanation was a tooltip. Staying signed in is
+  simply what the app does now that the bug above is fixed.
+
+- **The Cloud page now tells you whether you are actually connected.**
+  It used to say "Connected" whenever this machine had *ever* registered,
+  which stays true after a machine is removed from the console — so it kept
+  showing a green tick while every check-in was being turned away. It now
+  says one of three things: **Connecting** (no check-in yet), **Connected**
+  (the last check-in worked, and when), or **Connection lost** (and how long
+  since one last worked). It refreshes itself every few seconds. The reason
+  a check-in failed is still in the Log tab.
+
+- **Renaming a camera no longer greys out its cloud buttons for a moment.**
+
+- **Quieter in the background.** This machine now checks in with the cloud
+  every 60 seconds instead of every 30, and no longer asks twice per check-in
+  when its live connection is already working. The console waits three minutes
+  before calling a machine offline (it used to be 90 seconds), so you will
+  see "offline" a little later than before.
+
+- Release builds now run the test suite before building the installer.
+
+**Not yet tried on this build:** a real camera. It has been launched and its
+screens checked, but only from a clean profile with no cameras set up, which
+is the path that broke 1.5.0. If a camera you already have set up behaves
+differently after updating, that is exactly what we need to hear about.
+
 ## 1.5.4 — 2026-09-20
 
 - **Fixed: clicking Retry on a recording broke the interface.** This is the
