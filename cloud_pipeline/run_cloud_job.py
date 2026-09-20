@@ -26,6 +26,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import tarfile
@@ -66,6 +67,43 @@ WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 POD_INFER_SCRIPT = os.path.join(REPO_ROOT, "scripts", "pod_infer.py")
 POD_R2_HELPER = os.path.join(REPO_ROOT, "cloud_pipeline", "pod_r2_helper.py")
 POD_CUT_SCRIPT = os.path.join(REPO_ROOT, "cloud_pipeline", "pod_cut.py")
+
+# Where the pod keeps its R2 credentials (PIC-139). A file, not a command
+# prefix -- see the comment at its write site for why.
+POD_R2_ENV = "/workspace/.r2env"
+
+# The three variables pod_r2_helper.py reads. Named here rather than
+# inlined so the test that proves the secret is gone and the test that
+# proves the credentials still arrive are looking at the same list.
+R2_ENV_VARS = (
+    "CLOUDFLARE_R2_ACCESS_KEY_ID",
+    "CLOUDFLARE_R2_SECRET_ACCESS_KEY",
+    "CLOUDFLARE_R2_ACCOUNT_ID",
+)
+
+
+def r2_env_file_contents(env):
+    """Shell-sourceable exports for the pod's R2 credentials.
+
+    `shlex.quote` because a generated secret can contain characters a
+    shell would otherwise act on; this file is `.`-sourced, so an unquoted
+    value is executable text, not data.
+    """
+    return "".join(
+        f"export {name}={shlex.quote(env[name])}\n" for name in R2_ENV_VARS
+    )
+
+
+def pod_r2_command(action, bucket, key, local_path):
+    """The remote command for one R2 transfer.
+
+    Sources the credentials rather than carrying them, so nothing here
+    reaches a process table on either machine.
+    """
+    return (f"cd /workspace && . {POD_R2_ENV} && python3 pod_r2_helper.py "
+            f"{action} {bucket} {key} {local_path}")
+
+
 # build_reel()'s own dependency closure (ADR-074's "cut the reel on the
 # pod, not locally") -- tarred and scp'd over as one file rather than
 # scp_to'd one-by-one (that helper doesn't support directories), same
@@ -376,15 +414,31 @@ def run_cloud_job(video_path, calib_path, target_sec, session_id, out_dir,
                             "cd /workspace && tar -xf reel_deps.tar --no-same-owner",
                             timeout_sec=60)
 
-        r2_env = (
-            f"CLOUDFLARE_R2_ACCESS_KEY_ID={os.environ['CLOUDFLARE_R2_ACCESS_KEY_ID']} "
-            f"CLOUDFLARE_R2_SECRET_ACCESS_KEY={os.environ['CLOUDFLARE_R2_SECRET_ACCESS_KEY']} "
-            f"CLOUDFLARE_R2_ACCOUNT_ID={os.environ['CLOUDFLARE_R2_ACCOUNT_ID']}"
-        )
+        # PIC-139: these credentials used to be interpolated straight into
+        # the command string, as `KEY=... SECRET=... python3 ...`. That put
+        # the R2 secret key in TWO process tables for the duration of every
+        # transfer -- the pod's, where sshd runs the string through `sh -c`
+        # (the finding as filed), and this machine's, since ssh_run passes
+        # it as an argv element to a local `ssh` process. `ps` on either
+        # end showed it. Written to a mode-0600 file on the pod and sourced
+        # instead: a file's contents never appear in `ps`.
+        #
+        # The local copy is a 0600 temp file (tempfile's default) deleted
+        # as soon as it is copied. The pod's copy lives as long as the pod,
+        # which is terminated in this function's `finally`.
+        with tempfile.NamedTemporaryFile("w", suffix=".env", delete=False) as tmp:
+            tmp.write(r2_env_file_contents(os.environ))
+            r2_env_local = tmp.name
+        try:
+            runpod_pod.scp_to(ip, port, keyfile, r2_env_local, POD_R2_ENV)
+        finally:
+            os.remove(r2_env_local)
+        # scp does not reliably carry the source mode across, and the
+        # default would be world-readable to anything else on the pod.
+        runpod_pod.ssh_run(ip, port, keyfile, f"chmod 600 {POD_R2_ENV}", timeout_sec=60)
 
         def pod_r2(action, key, local_path, timeout_sec=600):
-            cmd = (f"cd /workspace && {r2_env} python3 pod_r2_helper.py "
-                   f"{action} {BUCKET} {key} {local_path}")
+            cmd = pod_r2_command(action, BUCKET, key, local_path)
             runpod_pod.ssh_run(ip, port, keyfile, cmd, timeout_sec=timeout_sec)
 
         log("downloading video/calib/weights onto the pod from R2...", stage="pod_download")
