@@ -2582,3 +2582,19 @@ What it deliberately does not resume:
 **And the tests had a flaw that made the whole thing slower and blurrier.** A failed assertion — or a broken implementation — leaves polling loops running, a loop keeps the process alive, and the run hangs to its timeout printing nothing: the break is detected but attributed to nothing. Two breaks did exactly that. The suite's `after` hook now ends every loop it started, so a broken implementation fails loudly and in seconds. This is the fourth time today the *checking* had to be checked.
 
 **Not covered.** The operator's actual row is still frozen: it needs a desktop build with this fix, which means the next release. 212 desktop tests (was 203), stable across two full runs, lint clean.
+
+---
+
+## ADR-118 — Calibration waits out the runner's idle sleep; the console must not call that "not running"
+
+**Date:** 2026-09-20 · **Status:** warning fixed; the wait itself is an open decision
+
+**What happened.** Submitting a calibration on the console showed "Waiting for the processing machine to pick this up — it may not be running." The calibration then succeeded, after "quite a while". The job was created 12:35:06 UTC, claimed 12:36:04 (58s), finished 12:36:08 (4s of work).
+
+**Cause: my change from the same day.** The runner now sleeps up to 60s between empty checks (`IDLE_MAX_SEC`, to stop idle polling exhausting the Netlify quota). I justified that as "nothing against a ~10 minute job" — true for reels, wrong for calibration, where someone is watching a spinner. The console's warning fired at 20s, a threshold from when the runner polled every 5s. So one change produced two visible faults: a slow calibration, and a false alarm about a healthy machine.
+
+**Fix (this ADR): the warning, not the wait.** `unclaimedNotice` (`lib/calibrationTiming.ts`): silent for 6s, then "queued — the processing machine checks about once a minute, so this can take up to a minute", and only past 75s (a full idle sleep + 15s) "it may not be running". The 60s constant mirrors the runner's and both files say to change them together. Paired tests: a runner asleep for up to 60s is never called "not running", and one silent past 75s is. Three breaks of the helper (alarm back at 20s; says nothing; never alarms) each fail the right tests.
+
+**Not fixed: the up-to-60s wait.** Options, recorded rather than decided: (2) idle sleep ~15s, ~173k calls/month; (3) the runner subscribes to Supabase Realtime, so pickup is near-instant with no function calls — fits with PIC-123 retiring this runner.
+
+**A slip while doing it:** I told the operator I had "changed nothing" after they interrupted my edit command. It had already applied. `git status` showed it, and I only checked because my next append left a duplicate block. Interrupting a tool call does not undo it; check the tree.

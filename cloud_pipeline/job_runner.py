@@ -67,7 +67,11 @@ POLL_SEC = 5
 # Backs off to IDLE_MAX_SEC after IDLE_RAMP_AFTER consecutive empty
 # claims, and snaps straight back to POLL_SEC the moment a job appears, so
 # a busy period still polls tightly. Worst case a job waits IDLE_MAX_SEC
-# before being picked up, which is nothing against a ~10 minute job.
+# before being picked up, which is nothing against a ~10 minute reel job --
+# but it IS something against a calibration, which a person is watching a
+# spinner for (58s observed, 2026-09-20). The console's "may not be running"
+# threshold is coupled to this: RUNNER_IDLE_POLL_MS in
+# pic-vision-cloud-console/lib/calibrationTiming.ts. Change one, change both.
 IDLE_RAMP_AFTER = 3
 IDLE_MAX_SEC = 60
 
