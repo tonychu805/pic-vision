@@ -2548,3 +2548,37 @@ The operator concluded "it's just not synced immediately," which is right. The b
 1. **Host or env?** The retry pod landed on the **same machine** as the stuck one, so it cannot separate a bad host from the six new credential env vars. ADR-101 recorded this exact hang on a specific bad host before any of today's changes, which makes the host likelier, and RunPod accepted all six variables intact (2 tokens of 904 and 848 characters). But it is undecided. The next fresh job decides: if it starts, the env is cleared; if it hangs on a *different* host, revert `a8a7625`.
 2. **The retry cannot avoid a host that just failed.** The pod-creation call has no data-center or machine control (`create_selfdriving_pod` sets one GPU type and nothing else), so a same-host retry is possible by design.
 3. **The first-check-in timeout is 8 minutes.** Against a normal cold start of ≤160s, that is a long time to bill an idle GPU, and a stuck first attempt plus a stuck retry costs 16. Not changed here.
+
+---
+
+## ADR-117 — A cloud job is followed however the app got here
+
+**Date:** 2026-09-20 · **Status:** built and tested; ships in the next desktop release, not 1.6.1 · **Ticket:** PIC-163
+
+**Context.** After the runner-side fix for a Stop that was ignored (ADR-116), the operator's desktop row still said "Stopping…". The job was `cancelled` on the console. The row showed no Cancel button (hidden while stopping) and no Retry (only shown for error/cancelled), so there was no way out.
+
+**Cause.** The row is a mirror of a local `status.json`, refreshed every 2 seconds by the renderer. That file is advanced by exactly one thing — `pollUntilDone` in the main process — and it was started from exactly two places: an upload finishing, and the Cancel click (only when nothing was already following). **Nothing started it when the app launched.** Close or restart the app after sending a job and the file froze at whatever it last said, permanently. The console had said `cancelled` long before; nothing was asking. The existing comment in `cancelCloudJob` even names "the restarted-app case" — but handled it only at the instant of the click, not for a restart after it.
+
+I could not read the operator's local file (their desktop is not on this machine), so the restart is the diagnosis the code supports, not one I observed. The fix does not depend on it: it also covers a poll loop that died for any other reason.
+
+**Decision: resume following on the read path.** `pipelineStatusForRecording` — the renderer's existing 2-second read, for every visible row — now starts a follower for a non-terminal row that has none, using the job id already saved in `job.json` (`recoverJobRecord`, which existed for Cancel). No startup scan, which would have to know which rows matter; a row that is on screen is re-examined by construction.
+
+What it deliberately does not resume:
+- **A terminal status** — finished, nothing to follow.
+- **`upload`** — the transfer died with the process that was doing it, so following the console would mirror a job that can never advance and hide that the upload needs redoing. That is a real, separate problem; this must not quietly make it look like progress.
+- **A recording with no `job.json`** — nothing to follow.
+
+**A 404 ends the loop.** A resumed loop polls the console every 5 seconds per row. A job that no longer exists for this agent (deleted, or the machine moved to another venue, ADR-094) will never change, so polling on would burn a cloud-function call every few seconds forever for a job that is not there — precisely how idle polling exhausted the Netlify quota and took every public site down for five days. Only a 404 ends it, with a plain "this job no longer exists on the console". A 5xx or a dropped connection says nothing about the job, and ending on one would freeze a healthy job on a blip. Paired tests pin both directions.
+
+**A stop still in progress keeps saying "Stopping…"** — the mirroring logic that shows the honest state while a pod winds down is unchanged and now pinned by a test, since resuming must not turn it into a confident stage name.
+
+**Tests.** Nine, against the real `pipeline.js`, a real local HTTP server and real status files, including the exact reported state. Each of seven breaks of the implementation is caught by exactly the right test.
+
+**A mistake of mine during that checking, recorded because it nearly shipped a broken fix.** I told the operator the interrupted mutation command "never ran, so nothing was changed". That was false. It had been running — hung through two slow breaks — when it was interrupted, and it was killed *after* one break (deleting the guard against starting a second follower) had been applied and before the restore. My "clean state" check then looked for the pieces I remembered rather than for the whole file, missed the missing guard, and my next script saved the broken file as its "clean" backup and restored it. It was caught only because the restore verification listed the guard as absent. Two things changed as a result:
+
+1. **A checksum of a known-good file, not a grep for what I remember.** The check is now "identical to the saved good copy", which cannot miss something I forgot to look for.
+2. **A restore trap on every mutation run**, so an interruption cannot leave a break applied.
+
+**And the tests had a flaw that made the whole thing slower and blurrier.** A failed assertion — or a broken implementation — leaves polling loops running, a loop keeps the process alive, and the run hangs to its timeout printing nothing: the break is detected but attributed to nothing. Two breaks did exactly that. The suite's `after` hook now ends every loop it started, so a broken implementation fails loudly and in seconds. This is the fourth time today the *checking* had to be checked.
+
+**Not covered.** The operator's actual row is still frozen: it needs a desktop build with this fix, which means the next release. 212 desktop tests (was 203), stable across two full runs, lint clean.

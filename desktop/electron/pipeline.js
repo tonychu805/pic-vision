@@ -25,7 +25,10 @@ import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
 import { logEvent } from "./activityLog.js";
 
 const SEGMENT_RE = /^session-\d+\.mkv$/;
-const POLL_INTERVAL_MS = 5_000;
+// Overridable only so a test can watch several polls without waiting a
+// minute; nothing else sets it. Same seam auth.js and cloud.js already have
+// for their endpoints.
+const POLL_INTERVAL_MS = Number(process.env.PIC_VISION_POLL_INTERVAL_MS) || 5_000;
 const UPLOAD_RETRIES = 3;
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 
@@ -55,7 +58,42 @@ export function pipelineStatus(jobDir) {
 }
 
 export function pipelineStatusForRecording(recordingDir) {
-  return pipelineStatus(path.join(recordingDir, "cloud_job"));
+  const status = pipelineStatus(path.join(recordingDir, "cloud_job"));
+  resumeFollowing(recordingDir, status);
+  return status;
+}
+
+// Make sure a job that is still alive in the cloud is being FOLLOWED.
+//
+// status.json is only ever advanced by pollUntilDone, and pollUntilDone was
+// started from exactly two places: the moment an upload finished, and the
+// moment Cancel was clicked. Nothing restarted it when the app launched. So
+// if the app was closed or restarted after a job was sent, the file froze
+// at whatever it last said -- and for a cancel that was "Stopping…", with
+// the Cancel button hidden and no Retry, permanently (reported 2026-09-20).
+// The console had long since said `cancelled`; nothing was asking.
+//
+// It lives on the READ path because the renderer already asks for this
+// every 2 seconds for every visible row, so a row that matters is
+// re-examined without a startup scan that would have to know which rows
+// those are. It also covers a poll loop that died for any other reason.
+//
+// What it will not resume:
+//   - a terminal status: finished, nothing to follow.
+//   - "upload": the transfer died with the process that was doing it, so
+//     following the console would mirror a job that can never advance. That
+//     is a real problem of its own and not this one.
+//   - a recording with no job.json: nothing to follow.
+function resumeFollowing(recordingDir, status) {
+  if (!status.stage || TERMINAL.has(status.stage) || status.stage === "upload") return;
+  if (active.has(recordingDir)) return;
+  const rec = recoverJobRecord(recordingDir);
+  if (!rec) return;
+  active.set(recordingDir, rec);
+  pollUntilDone(recordingDir, path.join(recordingDir, "cloud_job"), rec.jobId, rec.label).catch((err) => {
+    active.delete(recordingDir);
+    console.error(`[pipeline] polling stopped: ${err.message}`);
+  });
 }
 
 // Atomic (write + rename), same as webapp/pipeline.py's _set_status: the
@@ -145,9 +183,26 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
     try {
       ({ job } = await consoleFetch(`/api/agents/jobs/${jobId}`));
     } catch (err) {
-      // Console unreachable: keep the job alive and try again. A venue's
-      // internet dropping shouldn't fail a job that's running fine on the
-      // operator's machine.
+      // The console says this job does not exist -- for THIS agent, which
+      // also covers a machine moved to another venue (ADR-094). Nothing
+      // will ever change that, so polling on would just burn a cloud
+      // function call every few seconds forever, per row, for a job that
+      // is not there. Only a 404 ends it: a 5xx or a dropped connection
+      // says nothing about the job, and a venue's internet dropping
+      // shouldn't fail a job that's running fine.
+      if (err.status === 404) {
+        active.delete(recordingDir);
+        writeStatus(jobDir, {
+          stage: "error",
+          message: "this job no longer exists on the console",
+          error: err.message,
+          progress: null,
+          done: false,
+        });
+        logEvent("pipeline_failed", `${label} cloud job not found on the console`);
+        return;
+      }
+      // Console unreachable: keep the job alive and try again.
       console.error(`[pipeline] status poll failed: ${err.message}`);
       continue;
     }

@@ -1049,6 +1049,20 @@ pic-vision/
 │   │   │                              # lesson applied to the module written
 │   │   │                              # because of it, rather than testing only the
 │   │   │                              # wording helper beside it
+│   │   ├── pipeline.js                 # 2026-09-20 (ADR-117): a job alive in the cloud is
+│   │   │                              # now FOLLOWED however the app got here. status.json is
+│   │   │                              # advanced only by pollUntilDone, which was started from
+│   │   │                              # two places (upload finished, Cancel clicked) and never
+│   │   │                              # at launch -- close the app after sending a job and the
+│   │   │                              # row froze; for a cancel, at "Stopping…" with no Cancel
+│   │   │                              # or Retry button. pipelineStatusForRecording (the
+│   │   │                              # renderer's 2s read) now resumes following a non-
+│   │   │                              # terminal row nothing is following. NOT "upload" (the
+│   │   │                              # transfer died with the process). A 404 ends the loop
+│   │   │                              # (else a cloud call every 5s forever for a job that is
+│   │   │                              # gone); a 5xx / dropped connection does not.
+│   │   │                              # pipeline-resume.test.js: 9 tests, real pipeline.js +
+│   │   │                              # real HTTP server, each break checked
 │   │   ├── cloud.js                    # 2026-09-20 (ADR-115): EVERY heartbeat now goes
 │   │   │                              # through one single-flight runner, and adding /
 │   │   │                              # removing / renaming a camera requests one NOW
