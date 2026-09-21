@@ -252,6 +252,27 @@ test("disconnecting clears the health, so a later connection can't inherit it", 
   });
 });
 
+test("a console that accepts the heartbeat and never answers ends as a failure, not a hang", async () => {
+  // 2026-09-21: the heartbeat had no timeout, so a request that was accepted
+  // and never answered waited forever -- and forever is not a failure, so the
+  // state stayed "connected" and nothing was logged. Milliseconds here, not
+  // the real 30s.
+  await withServer((req, res) => {
+    if (req.url.includes("register")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+    }
+    // any other request: accept, never respond
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    const started = Date.now();
+    await sendHeartbeat(200);
+    assert.ok(Date.now() - started < 3000, "should give up on its own timeout");
+    assert.equal(getHeartbeatState().lastAttemptOk, false, "a heartbeat that timed out is a failed one");
+  });
+});
+
 test("a heartbeat with no connection stored is a no-op, not a failure", async () => {
   // disconnectCloud() above leaves no connection. sendHeartbeat must not
   // report "failing" for a machine that simply isn't paired -- that would

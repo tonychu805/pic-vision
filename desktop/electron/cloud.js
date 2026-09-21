@@ -19,6 +19,7 @@ import { runCloudJob } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
+import { withDeadline } from "./deadline.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -53,6 +54,27 @@ const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "https://console
 // every agent permanently offline. They are changed together, and the
 // comment there says so too.
 export const HEARTBEAT_INTERVAL_MS = 60_000;
+
+// Every wait in the heartbeat and command paths has a limit (2026-09-21).
+// Before, a single call that never settled froze the whole command pass, and
+// the tick awaited that pass before sending its heartbeat, so the console
+// heard nothing while the app still said "Connected" -- a hang is not a
+// failure, so nothing was ever logged. See deadline.js.
+//
+// A camera on the venue's own LAN answers in well under a second; this is
+// generous, and past it the camera is reported offline like any other failed
+// probe rather than holding every other camera's status hostage.
+const PROBE_DEADLINE_MS = 20_000;
+// One small JSON round trip to the console.
+const CONSOLE_REQUEST_TIMEOUT_MS = 30_000;
+// A single command (grab a frame and upload it, start/stop recording). Long
+// enough for a slow upload of one still, short enough that one stuck command
+// cannot hold the queue for the rest of the session.
+const COMMAND_DEADLINE_MS = 120_000;
+// How long a tick waits for the command pass before sending its heartbeat
+// anyway. Commands still get first go in the ordinary case (see the tick for
+// why), but a stuck pass must not be able to silence the heartbeat.
+const SWEEP_WAIT_MS = 15_000;
 
 let heartbeatTimer = null;
 
@@ -442,7 +464,7 @@ function parseRecordingStartedAt(name) {
 // path itself.
 async function cameraStatuses() {
   const cameras = listCameras();
-  const results = await Promise.allSettled(cameras.map((c) => testConnection(c)));
+  const results = await Promise.allSettled(cameras.map((c) => withDeadline(testConnection(c), PROBE_DEADLINE_MS, `Checking ${c.label}`)));
   return cameras.map((c, i) => {
     const recordings = listRecordings(c);
     const status = results[i].status === "fulfilled" ? "online" : "offline";
@@ -503,13 +525,14 @@ async function cameraStatuses() {
   });
 }
 
-export async function sendHeartbeat() {
+export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
   const connection = getCloudConnection();
   if (!connection) return;
 
   const cameras = await cameraStatuses();
   try {
     const res = await fetch(`${connection.consoleUrl}/api/agents/heartbeat`, {
+      signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
       body: JSON.stringify({ cameraCount: cameras.length, cameras, agentName: getAgentName() }),
@@ -642,6 +665,7 @@ onCamerasChanged(requestHeartbeat);
 async function fetchPendingCommands(connection) {
   try {
     const res = await fetch(`${connection.consoleUrl}/api/agents/commands`, {
+      signal: AbortSignal.timeout(CONSOLE_REQUEST_TIMEOUT_MS),
       headers: { Authorization: `Bearer ${connection.apiToken}` },
     });
     if (!res.ok) return [];
@@ -656,6 +680,7 @@ async function fetchPendingCommands(connection) {
 async function completeCommand(connection, commandId, status, result) {
   try {
     await fetch(`${connection.consoleUrl}/api/agents/commands/${commandId}`, {
+      signal: AbortSignal.timeout(CONSOLE_REQUEST_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
       body: JSON.stringify({ status, result: result ?? null }),
@@ -763,7 +788,7 @@ async function processCommands() {
   // own button re-renders) should apply in order, not race.
   for (const command of commands) {
     try {
-      const result = await runCommand(command);
+      const result = await withDeadline(runCommand(command), COMMAND_DEADLINE_MS, command.type);
       await completeCommand(connection, command.id, "done", result);
     } catch (err) {
       await completeCommand(connection, command.id, "error", { error: err.message });
@@ -816,7 +841,12 @@ export function startHeartbeatLoop() {
     // anyway doubled every agent's cloud-function usage to buy nothing.
     // Deliberately "is the channel live right now", not "was it ever" --
     // a socket that drops mid-session must bring the fallback back.
-    if (!isCommandChannelLive()) await processCommandsNow();
+    //
+    // Bounded (2026-09-21): a pass that never finishes used to hold this tick
+    // -- and with it the heartbeat -- forever, while the app went on saying
+    // "Connected". The pass still gets its head start; it just cannot keep
+    // the heartbeat waiting past SWEEP_WAIT_MS.
+    if (!isCommandChannelLive()) await withDeadline(processCommandsNow(), SWEEP_WAIT_MS, "command sweep").catch(() => {});
     runHeartbeat(); // don't wait a full interval for the first "online" signal
   };
   tick();

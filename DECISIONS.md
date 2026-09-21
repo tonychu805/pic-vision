@@ -2598,3 +2598,23 @@ What it deliberately does not resume:
 **Not fixed: the up-to-60s wait.** Options, recorded rather than decided: (2) idle sleep ~15s, ~173k calls/month; (3) the runner subscribes to Supabase Realtime, so pickup is near-instant with no function calls — fits with PIC-123 retiring this runner.
 
 **A slip while doing it:** I told the operator I had "changed nothing" after they interrupted my edit command. It had already applied. `git status` showed it, and I only checked because my next append left a duplicate block. Interrupting a tool call does not undo it; check the tree.
+
+---
+
+## ADR-119 — One stuck step must not freeze the venue agent's commands or its heartbeat
+
+**Date:** 2026-09-21 · **Status:** fix built and tested locally; **not released, not verified on the Office machine**
+
+**What happened.** The Office agent went silent to the console for 30+ minutes (last heartbeat 05:29:33 UTC) while its own app said "Connected" and its Log tab recorded nothing. Cameras read "Agent offline" and the console refused Start/Stop. A restart fixed it. Later the same day a new camera's calibration snapshot requests sat `pending` for 10+ minutes, six of them (one per click), while the agent *was* heartbeating.
+
+**Cause, as far as it is known.** The command pass runs one command at a time and several of its steps had no time limit: the request to the console, the presigned upload (`putStream` had no socket timeout at all), the report-back, and the camera probe the heartbeat waits on. One call that never settles freezes the pass. And `startHeartbeatLoop`'s tick awaited that pass before sending its heartbeat, so the console went dark too. A hang is not a failure, so nothing was logged, and `lastAttemptOk` stayed true from the last success — hence "Connected".
+
+**What is NOT established.** Which specific call hung either time. The evidence is circumstantial: the stalled queue, the 17-minute-old stop command that only errored ("camera not found") after the restart, and the code paths above having no limit. The Office machine's Log tab was never read. This ADR fixes the *class* (nothing may wait forever) and not a proven instance; if it recurs after the release, the stuck step is somewhere these deadlines don't cover.
+
+**Fix — desktop.** `deadline.js` `withDeadline()`; a 30s timeout on every console request (heartbeat, command fetch, command report, `consoleFetch`); a 60s **idle** limit on uploads (idle, not total — a recording segment legitimately takes as long as the uplink needs); a 20s limit on each camera probe (a slow camera reads offline instead of holding every other camera's status); a 120s limit per command; and the tick now waits at most 15s for the command pass before sending its heartbeat. The status line no longer says "Connected" when the last success is over 3 minutes old and nothing has failed since (`heartbeatStatus.js`).
+
+**Fix — console.** A second Calibrate click within 2 minutes reuses the pending snapshot request instead of queuing another; pending snapshot requests older than 10 minutes are closed as `error: expired` (`lib/commandExpiry.ts`). Scoped to snapshots on purpose: expiring a scheduled `stop_recording` would leave a camera recording indefinitely.
+
+**Checked.** Desktop 221 tests and lint clean; console 169 tests and `tsc` clean. Paired tests: an upload that stops moving is torn down, *and* one that keeps moving is not cut off; a stale heartbeat stops saying Connected, *and* a recent one still does. One bug caught in my own helper by its test: the deadline timer was `unref`'d, so a deadline could be skipped when nothing else held the process open.
+
+**Not covered.** The per-command deadline and the tick's bounded wait are exercised only through `withDeadline`'s unit tests, not end to end. The console routes were typechecked but not run against the live database. Neither repo is committed or deployed; the Office machine needs a new desktop build to get any of it. **Correction (same day):** an earlier draft of this ADR said six stale snapshot commands were still `pending` in production. They were not left there — checked afterwards, all 8 snapshot requests for that camera ended `done`: restarting the Office app drained the backlog, one snapshot per queued click, exactly the pile-up the console change now prevents. I had written the claim from a query taken minutes earlier and not re-checked it before recording it.

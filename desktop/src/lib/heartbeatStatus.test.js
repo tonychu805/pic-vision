@@ -82,3 +82,27 @@ test("an unparseable timestamp degrades to no detail rather than to 'NaN ago'", 
   assert.equal(status.title, "Connected to V");
   assert.doesNotMatch(status.detail, /NaN/);
 });
+
+// 2026-09-21: the heartbeat stuck waiting on a call that never returned. No
+// attempt *failed*, so lastAttemptOk stayed true from the last success and the
+// page said Connected for as long as the machine stayed silent. Paired: a
+// recent success must still read Connected, or this would just be a machine
+// that always claims to be broken.
+test("a heartbeat that stopped arriving without failing does not say Connected", () => {
+  const status = heartbeatStatus(
+    { brandName: "Riverside Courts", lastAttemptOk: true, lastHeartbeatAt: ago(11 * 60_000) },
+    NOW,
+  );
+  assert.equal(status.tone, "lost");
+  assert.doesNotMatch(status.title, /^Connected/);
+  assert.match(status.title, /Not checking in to Riverside Courts/);
+  assert.match(status.detail, /11 minutes ago/);
+});
+
+test("a check-in within the last few beats still says Connected", () => {
+  for (const ms of [0, 20_000, 60_000, 2 * 60_000 + 30_000]) {
+    const status = heartbeatStatus({ brandName: "V", lastAttemptOk: true, lastHeartbeatAt: ago(ms) }, NOW);
+    assert.equal(status.tone, "ok", `${ms}ms since the last check-in should still be fine`);
+    assert.match(status.title, /^Connected to V/);
+  }
+});

@@ -17,9 +17,23 @@ export function requireConnection() {
   return connection;
 }
 
-export async function consoleFetch(path, { method = "GET", body, connection } = {}) {
+// Every call to the console is a small JSON round trip; one that has not
+// answered in this long is not going to. Without a limit, fetch() waits on a
+// dead connection for minutes, and the command pass -- which runs one command
+// at a time -- waits with it (see deadline.js for what that cost).
+export const CONSOLE_FETCH_TIMEOUT_MS = 30_000;
+
+// How long an upload may go without a single byte moving in either
+// direction before it is treated as dead. An idle limit, not a total one: a
+// recording segment is hundreds of MB and legitimately takes as long as the
+// venue's uplink needs, but a transfer that has stopped entirely never
+// recovers on its own.
+export const UPLOAD_IDLE_TIMEOUT_MS = 60_000;
+
+export async function consoleFetch(path, { method = "GET", body, connection, timeoutMs = CONSOLE_FETCH_TIMEOUT_MS } = {}) {
   const conn = connection ?? requireConnection();
   const res = await fetch(`${conn.consoleUrl}${path}`, {
+    signal: AbortSignal.timeout(timeoutMs),
     method,
     headers: {
       Authorization: `Bearer ${conn.apiToken}`,
@@ -56,7 +70,7 @@ export async function consoleFetch(path, { method = "GET", body, connection } = 
 // boundary" is not stopping -- the request itself has to be torn down, or
 // the venue keeps paying for bytes nobody wants. The socket is destroyed
 // rather than left to drain, which is the point.
-export function putStream(url, body, total, onProgress, signal) {
+export function putStream(url, body, total, onProgress, signal, idleTimeoutMs = UPLOAD_IDLE_TIMEOUT_MS) {
   return new Promise((resolve, reject) => {
     const target = new URL(url);
     // http:// only ever appears in tests (a local server); every real
@@ -99,6 +113,14 @@ export function putStream(url, body, total, onProgress, signal) {
       },
     );
     req.on("error", fail);
+
+    // Idle, not total -- see UPLOAD_IDLE_TIMEOUT_MS. Destroying the request
+    // emits its own error, which `fail` reports; the body is torn down too so
+    // a file handle isn't left open on a transfer nobody is waiting for.
+    req.setTimeout(idleTimeoutMs, () => {
+      body.destroy();
+      req.destroy(new Error(`upload stalled: no data moved for ${Math.round(idleTimeoutMs / 1000)}s`));
+    });
 
     // Marked so a caller can tell a deliberate stop from a transport
     // failure, and doesn't retry it or report it as a failed upload.

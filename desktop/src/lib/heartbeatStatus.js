@@ -18,6 +18,9 @@ const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
 
+// Matches HEARTBEAT_INTERVAL_MS (60s) x 3, the console's own offline threshold.
+const STALE_AFTER_MS = 3 * MINUTE;
+
 /**
  * "just now" / "4 minutes ago" / "2 hours ago" / "3 days ago".
  *
@@ -67,6 +70,23 @@ export function heartbeatStatus(connection, now = Date.now()) {
       tone: "pending",
       title: `Connecting to ${brandName}…`,
       detail: "Waiting for this machine's first check-in.",
+    };
+  }
+
+  // "The last attempt didn't fail" is not "it is checking in": an attempt that
+  // never finishes never fails either. 2026-09-21: a venue machine stopped
+  // reaching the console for 30+ minutes while this said Connected, because
+  // the heartbeat was stuck waiting rather than erroring, so there was no
+  // failure to report. The only honest signal left is the clock -- the last
+  // *success* is too old. Three beats is what the console itself tolerates
+  // (overview-client.tsx's OFFLINE_AFTER_MS), so the two sides agree on when
+  // this machine has gone quiet.
+  const lastMs = lastHeartbeatAt ? Date.parse(lastHeartbeatAt) : NaN;
+  if (lastAttemptOk && Number.isFinite(lastMs) && now - lastMs > STALE_AFTER_MS) {
+    return {
+      tone: "lost",
+      title: `Not checking in to ${brandName}`,
+      detail: `Last successful check-in ${timeAgo(lastHeartbeatAt, now)}, and nothing has failed since -- something is stuck. Restarting the app clears it.`,
     };
   }
 

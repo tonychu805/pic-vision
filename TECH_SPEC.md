@@ -1104,6 +1104,9 @@ pic-vision/
 │   │   │                              # streamUri, nor the raw calibPath/
 │   │   │                              # sampleClipPath (local filesystem paths).
 │   │   │                              # Court/reel data still doesn't cross this.
+│   │   ├── deadline.js                  # ADR-119 (2026-09-21): withDeadline(), a time
+│   │   │                              # limit for a promise with none of its own, so one
+│   │   │                              # stuck step can't freeze the command queue or heartbeat.
 │   │   ├── commandChannel.js            # ADR-100 (2026-09-09): Supabase Realtime
 │   │   │                              # subscription on agent_commands, so a console
 │   │   │                              # command lands in ~640ms instead of waiting up
