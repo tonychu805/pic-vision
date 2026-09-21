@@ -1,5 +1,32 @@
 # Release notes
 
+## 1.6.3 — 2026-09-21
+
+- **Fixed: the app saying "Connected" while the console heard nothing.** A
+  venue machine went quiet for over half an hour — cameras showed "Agent
+  offline" on the console, and Start/Stop recording was refused — while the
+  app itself still said Connected and its Log tab recorded nothing. Cause:
+  the app does its work one step at a time, and several steps could wait
+  forever on a network call that never answered. When one did, everything
+  behind it waited too, including the check-in. Waiting forever isn't an
+  error, so nothing was logged. Every wait now has a limit: a request to the
+  console gives up after 30 seconds, an upload that stops moving entirely
+  gives up after 60 seconds, a camera that doesn't answer is reported
+  offline after 20 seconds, and a single command gives up after 2 minutes.
+  The check-in no longer waits on commands for more than 15 seconds.
+
+- **Fixed: "Calibrate" doing nothing.** A stuck command also blocked the
+  ones behind it, so clicking Calibrate several times queued several
+  snapshot requests that all sat unanswered. Combined with the fix above, a
+  stuck request can no longer hold the queue. (The console also now reuses a
+  pending request instead of queuing a duplicate, and drops snapshot
+  requests nobody answered within ten minutes.)
+
+- **Changed: the status line tells you when check-ins have stopped.** If the
+  last successful check-in is more than three minutes old and nothing has
+  failed since, it now says "Not checking in" with how long it has been,
+  instead of "Connected".
+
 ## 1.6.2 — 2026-09-20
 
 - **Fixed: a job stuck on "Stopping…" forever.** The row for a cloud job only
