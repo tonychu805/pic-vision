@@ -18,6 +18,7 @@ import { randomUUID } from "node:crypto";
 import { copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
+import { isSameCameraSource } from "./identity.js";
 import { vendorsForIps } from "./vendorLookup.js";
 import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
@@ -293,12 +294,15 @@ async function rtspProfile(uri) {
 // already-configured hostname just returns the existing entry rather
 // than re-verifying and creating a duplicate -- the camera was already
 // verified when it was first added, so there's nothing to re-check.
-function existingByHostname(hostname) {
-  return listCameras().find((c) => c.hostname === hostname);
+// What counts as "the same camera" lives in identity.js: hostname for ONVIF,
+// host + port + path for RTSP (2026-09-21: two streams on one host, told
+// apart only by path, collapsed into one).
+function existingSource(candidate) {
+  return listCameras().find((c) => isSameCameraSource(c, candidate));
 }
 
 export async function addCamera({ label, hostname, port, username, password, path }) {
-  const existing = existingByHostname(hostname);
+  const existing = existingSource({ hostname, port, path, connectionType: "onvif" });
   if (existing) return existing;
   const { info, streamUri, profile } = await testConnection({ hostname, port, username, password, path });
   const camera = {
@@ -342,7 +346,7 @@ const SAMPLE_CLIP_EXT = new Set([".mp4", ".mov", ".mkv", ".avi", ".MP4", ".MOV",
 // video file stands in for a live camera, so calibration and the cloud
 // pipeline can be exercised without a real, court-facing camera -- neither
 // camera on this network has reliably been one (see the day's progress
-// notes). No `existingByHostname` dedup here -- a sample-clip camera has
+// notes). No `existingSource` dedup here -- a sample-clip camera has
 // no hostname, so that check doesn't apply and isn't called.
 export async function addCameraFromSampleClip({ label, filePath }) {
   if (!filePath || !existsSync(filePath)) throw new Error("File not found: " + filePath);
@@ -594,9 +598,9 @@ export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
 }
 
 export async function addCameraViaRtsp({ label, hostname, port, path, username, password }) {
-  const existing = existingByHostname(hostname);
-  if (existing) return existing;
   port = port || 554;
+  const existing = existingSource({ hostname, port, path, connectionType: "rtsp" });
+  if (existing) return existing;
   await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
   const streamUri = `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`;
   const vendors = vendorsForIps([hostname]);

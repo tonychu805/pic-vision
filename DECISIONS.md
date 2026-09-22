@@ -2618,3 +2618,17 @@ What it deliberately does not resume:
 **Checked.** Desktop 221 tests and lint clean; console 169 tests and `tsc` clean. Paired tests: an upload that stops moving is torn down, *and* one that keeps moving is not cut off; a stale heartbeat stops saying Connected, *and* a recent one still does. One bug caught in my own helper by its test: the deadline timer was `unref`'d, so a deadline could be skipped when nothing else held the process open.
 
 **Not covered.** The per-command deadline and the tick's bounded wait are exercised only through `withDeadline`'s unit tests, not end to end. The console routes were typechecked but not run against the live database. Neither repo is committed or deployed; the Office machine needs a new desktop build to get any of it. **Correction (same day):** an earlier draft of this ADR said six stale snapshot commands were still `pending` in production. They were not left there — checked afterwards, all 8 snapshot requests for that camera ended `done`: restarting the Office app drained the backlog, one snapshot per queued click, exactly the pile-up the console change now prevents. I had written the claim from a query taken minutes earlier and not re-checked it before recording it.
+
+## ADR-120 — Two RTSP streams on one host are two cameras
+
+**Date:** 2026-09-21 · **Status:** fix built and tested locally; **not released, not tried against a real two-stream device**
+
+**What happened.** Adding two RTSP streams with the same IP and port but different paths produced one camera. The second add returned the first camera's record, so nothing appeared and no error was shown.
+
+**Cause.** `addCamera` and `addCameraViaRtsp` both used `existingByHostname()`, added on 2026-09-01 to stop one Synology camera being added twice. Hostname is the wrong identity for RTSP: an NVR or a multi-stream camera serves every channel from one host and port, and the path is the only thing that differs.
+
+**Fix.** The rule now lives in `desktop/electron/cameras/identity.js`. ONVIF still matches on hostname alone (its port and path describe the control service, not a stream). RTSP matches on host + port + path, with port defaulting to 554 and hostname compared case-insensitively. An ONVIF entry and an RTSP entry are never treated as the same camera.
+
+**Checked.** `identity.test.js`, paired: different paths are different cameras, *and* the exact same stream added twice is still one. Desktop suite and lint clean.
+
+**Not covered.** `addCameraViaRtsp` itself was not run end to end (the store imports Electron, so only the pure rule is unit-tested). A same-stream duplicate is still swallowed silently rather than reported to the operator. An RTSP add on a host that already has an ONVIF entry now creates a second entry where it used to return the first.
