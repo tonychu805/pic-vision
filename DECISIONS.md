@@ -2646,3 +2646,17 @@ What it deliberately does not resume:
 **Checked.** Paired tests: falls back on the real captured stderr, *and* does not retry when NVENC works or when the error is about the input. The pinned BtbN ffmpeg (downloaded from R2) contains libx264 and, run through `_encode_h264` with NVENC forced to fail, produced valid 30fps yuv420p output for both steps. Full suite 214 passed.
 
 **Not covered.** No real 4090 pod was run. The libx264 conversion speed on a pod's CPUs for a full two-hour session is unmeasured. Nothing yet stops other, non-NVENC differences between fallback cards.
+
+## ADR-122 — A live-looking push channel can silently stop delivering commands
+
+**Date:** 2026-09-22 · **Status:** fix built and tested locally; **not yet run against a real dead-socket incident**
+
+**What happened.** On the "Office" agent, two `grab_calibration_snapshot` requests for two different cameras (added the same session) sat `pending` for 8+ minutes. The console's own 90s wait gave up on both with "Still not reflected." Meanwhile the agent's heartbeat was completely normal — last check-in 27 seconds old when checked directly in `agents.last_seen_at`.
+
+**Cause.** `cloud.js`'s heartbeat tick skips its fallback command-poll entirely whenever `isCommandChannelLive()` says the Realtime push channel is connected (2026-09-20), on the reasoning that a dropped socket would flip that flag and bring the fallback back. That reasoning assumes a dead socket always announces itself. It doesn't: a connection can go silently dead — no error, no `CLOSED` status — and the client library has no way to notice on its own. The heartbeat kept succeeding right alongside it because it's a separate plain HTTPS call on the same tick, unaffected by the socket's state, so nothing about the app's own status ever looked wrong.
+
+**Fix.** `shouldSweepCommands(channelLive, msSinceLastSweep)`: still always sweeps when the channel isn't live, and now also sweeps once `COMMAND_SWEEP_WATCHDOG_MS` has passed since the last real attempt even while the channel claims to be live. `processCommands()` stamps `lastSweepAt` on every real attempt, however triggered (the realtime push or the tick's own fallback), so commands actually flowing over the push channel keep resetting the watchdog and it only ever fires during a genuine silence. Set equal to `COMMAND_DEADLINE_MS` (2 minutes), not the 5 minutes first drafted: close to the console's own 90s give-up, so an operator's retry click is likely to land after the watchdog has already cleared the backlog — the tradeoff being a smaller, not zero, cost margin against the 2026-09-20 concern (one extra call in two ticks now, not one in five).
+
+**Checked.** Paired tests: a dropped channel always sweeps regardless of elapsed time, *and* a live channel skips the sweep right after one just ran; a live channel that's gone quiet past the watchdog sweeps anyway (the exact incident shape) at and past the boundary. Desktop suite (230) and lint clean.
+
+**Not covered.** No real zombied-socket reproduction — the fix is built from the DB evidence (two stuck rows, a fresh heartbeat) and the code path, not a captured live failure. Two minutes bounds recovery but a calibration click still fails its own 90s console-side wait during that window; the operator's retry, not this fix, is what succeeds once the watchdog has swept.

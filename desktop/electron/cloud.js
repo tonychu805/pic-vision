@@ -76,6 +76,39 @@ const COMMAND_DEADLINE_MS = 120_000;
 // why), but a stuck pass must not be able to silence the heartbeat.
 const SWEEP_WAIT_MS = 15_000;
 
+// The backstop for a push channel that reports itself live but isn't
+// actually delivering anything (2026-09-22, ADR-122): a socket can go
+// silently dead -- no error, no "closed" status -- while the heartbeat
+// keeps succeeding right alongside it, since that's a separate plain HTTPS
+// call. `isCommandChannelLive()` has no way to notice that on its own, so
+// two calibration snapshot requests for two different cameras sat
+// `pending` for the rest of the session with the agent checking in
+// normally the whole time. Same as COMMAND_DEADLINE_MS, and for a related
+// reason: close to the console's own 90s give-up, so an operator's retry
+// click is likely to land after this has already cleared the backlog. The
+// ordinary case (a genuinely live channel) still skips the extra
+// cloud-function call on all but one tick in two -- the 2026-09-20 cost
+// concern above still holds, just with a smaller margin than a longer
+// interval would give -- but no wedge can now last longer than this.
+export const COMMAND_SWEEP_WATCHDOG_MS = COMMAND_DEADLINE_MS;
+
+// 0, not Date.now(): an app that has never swept must be free to sweep on
+// its very first tick regardless of channel state, same as before this fix.
+let lastSweepAt = 0;
+
+/**
+ * Whether this tick should run the fallback command sweep: always when the
+ * push channel isn't live (the original fallback), and once the watchdog
+ * interval has passed since the last real attempt even when it claims to be
+ * live, so a channel that's live in name only can't block commands forever.
+ * Takes the elapsed time rather than reading `lastSweepAt` itself so the
+ * decision is a pure, directly testable function of its inputs.
+ */
+export function shouldSweepCommands(channelLive, msSinceLastSweep) {
+  if (!channelLive) return true;
+  return msSinceLastSweep >= COMMAND_SWEEP_WATCHDOG_MS;
+}
+
 let heartbeatTimer = null;
 
 // Registration is started automatically after sign-in and, if that first
@@ -782,6 +815,12 @@ function sendRecordingToCloud(camera, recordingDir) {
 async function processCommands() {
   const connection = getCloudConnection();
   if (!connection) return;
+  // Recorded on every real attempt, however it was triggered (the realtime
+  // push or the tick's own fallback) -- this is what shouldSweepCommands()
+  // measures its watchdog window from, so commands actually flowing over
+  // the push channel keep resetting it and the watchdog only ever fires
+  // during a genuine silence.
+  lastSweepAt = Date.now();
   const commands = await fetchPendingCommands(connection);
   // Sequential, not Promise.all -- two commands for the same camera
   // arriving in one batch (e.g. a fast double-click before the console's
@@ -833,20 +872,26 @@ export function startHeartbeatLoop() {
     // the *old* state and make the console wait a full extra cycle to see
     // a change that already happened this tick.
     //
-    // Skipped entirely while the Realtime push channel is connected
+    // Mostly skipped while the Realtime push channel is connected
     // (2026-09-20). Commands already arrive over that websocket, which
     // costs nothing per message and is what makes "Calibrate" feel
     // instant; this sweep is the fallback commandChannel.js's own header
     // describes, for a dropped socket or Realtime being down. Running it
-    // anyway doubled every agent's cloud-function usage to buy nothing.
-    // Deliberately "is the channel live right now", not "was it ever" --
-    // a socket that drops mid-session must bring the fallback back.
+    // every tick doubled every agent's cloud-function usage to buy nothing.
+    //
+    // Not skipped unconditionally, though (2026-09-22, ADR-122):
+    // shouldSweepCommands() also runs it on a long watchdog interval even
+    // while the channel claims to be live, because "live" is just a status
+    // callback that a silently-dead socket may never receive -- see
+    // COMMAND_SWEEP_WATCHDOG_MS for the incident that found this.
     //
     // Bounded (2026-09-21): a pass that never finishes used to hold this tick
     // -- and with it the heartbeat -- forever, while the app went on saying
     // "Connected". The pass still gets its head start; it just cannot keep
     // the heartbeat waiting past SWEEP_WAIT_MS.
-    if (!isCommandChannelLive()) await withDeadline(processCommandsNow(), SWEEP_WAIT_MS, "command sweep").catch(() => {});
+    if (shouldSweepCommands(isCommandChannelLive(), Date.now() - lastSweepAt)) {
+      await withDeadline(processCommandsNow(), SWEEP_WAIT_MS, "command sweep").catch(() => {});
+    }
     runHeartbeat(); // don't wait a full interval for the first "online" signal
   };
   tick();

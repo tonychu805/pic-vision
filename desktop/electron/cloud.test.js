@@ -12,7 +12,16 @@
 import assert from "node:assert/strict";
 import { createServer } from "node:http";
 import { test } from "node:test";
-import { registerAgentOnce, stopHeartbeatLoop, sendHeartbeat, getHeartbeatState, disconnectCloud, HEARTBEAT_INTERVAL_MS } from "./cloud.js";
+import {
+  registerAgentOnce,
+  stopHeartbeatLoop,
+  sendHeartbeat,
+  getHeartbeatState,
+  disconnectCloud,
+  HEARTBEAT_INTERVAL_MS,
+  shouldSweepCommands,
+  COMMAND_SWEEP_WATCHDOG_MS,
+} from "./cloud.js";
 
 async function withServer(handler, run) {
   const server = createServer((req, res) => {
@@ -282,7 +291,7 @@ test("a heartbeat with no connection stored is a no-op, not a failure", async ()
   assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
 });
 
-// --- the heartbeat tick's command sweep (2026-09-20) -------------------
+// --- the heartbeat tick's command sweep (2026-09-20, watchdog 2026-09-22) --
 //
 // Each tick used to make TWO cloud-function calls: a command sweep and
 // the heartbeat. Commands already arrive over commandChannel.js's
@@ -311,11 +320,23 @@ test("the interval is three times shorter than the console calls an agent offlin
     "the console must tolerate at least two missed beats before calling an agent offline");
 });
 
-test("the tick skips the command sweep only while the push channel is live", () => {
-  // The decision itself, in the shape cloud.js applies it. Kept as the
-  // plain boolean it is rather than reaching into a running heartbeat
-  // loop, which would need a real connection, a real console and a timer.
-  const sweepRuns = (channelLive) => !channelLive;
-  assert.equal(sweepRuns(true), false, "a live websocket already delivers commands");
-  assert.equal(sweepRuns(false), true, "a dropped websocket must fall back to polling");
+test("a dropped channel always sweeps, regardless of when it last ran", () => {
+  assert.equal(shouldSweepCommands(false, 0), true);
+  assert.equal(shouldSweepCommands(false, COMMAND_SWEEP_WATCHDOG_MS * 10), true);
+});
+
+test("a live channel skips the sweep right after one just ran", () => {
+  assert.equal(shouldSweepCommands(true, 0), false);
+  assert.equal(shouldSweepCommands(true, COMMAND_SWEEP_WATCHDOG_MS - 1), false);
+});
+
+// ADR-122: two calibration snapshot requests for two different cameras sat
+// `pending` for the rest of the session because the push channel reported
+// itself live -- so this stayed skipped -- while the socket had actually
+// gone silently dead. The heartbeat kept succeeding right alongside it,
+// since that's a separate plain HTTPS call, so nothing ever looked wrong
+// from the outside.
+test("a live channel that has gone quiet past the watchdog sweeps anyway", () => {
+  assert.equal(shouldSweepCommands(true, COMMAND_SWEEP_WATCHDOG_MS), true);
+  assert.equal(shouldSweepCommands(true, COMMAND_SWEEP_WATCHDOG_MS + 1), true);
 });
