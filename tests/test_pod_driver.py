@@ -303,3 +303,64 @@ def test_reads_use_the_read_client_and_writes_use_the_write_client():
     assert not re.search(r"s3_in\.upload_file", source)
     assert len(re.findall(r"s3_in\.download_file", source)) == 3
     assert len(re.findall(r"s3_out\.upload_file", source)) == 3
+
+
+# --- NVENC -> libx264 fallback (2026-09-21) ---------------------------------
+# Tournament 2's pod landed on an RTX 4090 and the convert step died with the
+# stderr below. Paired: the fallback must fire on that, and must NOT fire when
+# NVENC works or when the failure is the input's fault (the same command line
+# contains "h264_nvenc" either way, so matching on the message would be wrong).
+
+REAL_NVENC_STDERR = (
+    "[h264_nvenc @ 0x623db706e500] OpenEncodeSessionEx failed: unsupported device (2): (no details)\n"
+    "[h264_nvenc @ 0x623db706e500] No capable devices found\n"
+    "Nothing was written into output file, because at least one of its streams received no packets."
+)
+
+
+def _record_ffmpeg(monkeypatch, outcomes):
+    calls = []
+
+    def fake(args):
+        calls.append(args)
+        outcome = outcomes.pop(0)
+        if outcome is not None:
+            raise pod_driver.FfmpegError(" ".join(args) + "\n" + outcome, outcome)
+
+    monkeypatch.setattr(pod_driver, "_run_ffmpeg", fake)
+    return calls
+
+
+def _codec(args):
+    return args[args.index("-c:v") + 1]
+
+
+def test_encode_falls_back_to_libx264_when_nvenc_is_unavailable(monkeypatch):
+    calls = _record_ffmpeg(monkeypatch, [REAL_NVENC_STDERR, None])
+    pod_driver._encode_h264(["-i", "in.mkv"], ["-an", "-vsync", "cfr", "-r", "30", "out.mp4"])
+    assert [_codec(c) for c in calls] == ["h264_nvenc", "libx264"]
+    # same input and same output on the retry, so the rest of the pipeline sees no difference
+    for c in calls:
+        assert c[c.index("-i") + 1] == "in.mkv" and c[-1] == "out.mp4"
+        assert c[-6:-1] == ["-an", "-vsync", "cfr", "-r", "30"]
+    assert "-pix_fmt" in calls[1] and "yuv420p" in calls[1]
+
+
+def test_encode_does_not_retry_when_nvenc_works(monkeypatch):
+    calls = _record_ffmpeg(monkeypatch, [None])
+    pod_driver._encode_h264(["-i", "in.mkv"], ["-an", "out.mp4"])
+    assert [_codec(c) for c in calls] == ["h264_nvenc"]
+
+
+def test_encode_does_not_retry_a_failure_that_is_not_about_nvenc(monkeypatch):
+    calls = _record_ffmpeg(monkeypatch, ["in.mkv: Invalid data found when processing input"])
+    with pytest.raises(pod_driver.FfmpegError, match="Invalid data"):
+        pod_driver._encode_h264(["-i", "in.mkv"], ["-an", "out.mp4"])
+    assert [_codec(c) for c in calls] == ["h264_nvenc"]
+
+
+def test_encode_reports_the_libx264_error_if_the_fallback_also_fails(monkeypatch):
+    calls = _record_ffmpeg(monkeypatch, [REAL_NVENC_STDERR, "libx264 exploded"])
+    with pytest.raises(pod_driver.FfmpegError, match="libx264 exploded"):
+        pod_driver._encode_h264(["-i", "in.mkv"], ["-an", "out.mp4"])
+    assert len(calls) == 2

@@ -304,7 +304,48 @@ def _run_ffmpeg(args):
     is none)."""
     result = subprocess.run(args, capture_output=True, text=True)
     if result.returncode != 0:
-        raise RuntimeError(f"{' '.join(args)}\n{result.stderr.strip()}")
+        raise FfmpegError(f"{' '.join(args)}\n{result.stderr.strip()}", result.stderr)
+
+
+class FfmpegError(RuntimeError):
+    """`stderr` kept apart from the message because the message also holds
+    the command line, and a command that *asked for* h264_nvenc must not
+    look like one whose NVENC *failed*."""
+
+    def __init__(self, message, stderr):
+        super().__init__(message)
+        self.stderr = stderr
+
+
+def _encode_h264(head, tail):
+    """`ffmpeg -y -v error <head> -c:v <encoder> ... <tail>`, on NVENC when
+    the card has it and on libx264 when it does not.
+
+    2026-09-21: the runner falls back through eight GPU types when the
+    pinned RTX 2000 Ada is busy (runpod_pod.FALLBACK_GPU_TYPES), but the
+    ffmpeg build here was only ever verified on the 2000 Ada. Tournament 1
+    converted fine on an RTX 6000 Ada; Tournament 2's pod landed on an RTX
+    4090 and died with `OpenEncodeSessionEx failed: unsupported device (2)`
+    / `No capable devices found`. Why that host could not open an encode
+    session was not established (the pod deletes itself) -- so this reacts
+    to the failure instead of predicting it from the card name.
+
+    Only a failure that names nvenc in ffmpeg's own stderr falls back: a bad
+    input fails the same way on either encoder, and retrying it would just
+    double the time to a real error. libx264 -crf 20 is the same quality
+    target as nvenc -cq 20; the pod's CPUs make it slower, not unusable.
+    The pinned BtbN build was checked to contain libx264 and to produce a
+    valid 30fps yuv420p file from this exact argument list."""
+    base = ["ffmpeg", "-y", "-v", "error", *head]
+    try:
+        _run_ffmpeg([*base, "-c:v", "h264_nvenc", "-preset", "p4", "-cq", "20", *tail])
+    except FfmpegError as e:
+        if "nvenc" not in e.stderr.lower():
+            raise
+        _log("WARNING: NVENC is unavailable on this GPU/host, encoding on the CPU with libx264 "
+             "instead (slower, same output format)")
+        _run_ffmpeg([*base, "-c:v", "libx264", "-preset", "veryfast", "-crf", "20",
+                     "-pix_fmt", "yuv420p", *tail])
 
 
 def _run_inference_streaming(cmd):
@@ -474,9 +515,8 @@ def run():
     # and this is not the change to fold a cosmetic rename into.
     _check_cancel("convert", "converting to 30fps CFR...")
     cfr_video = os.path.join(WORKDIR, "video_cfr.mp4")
-    _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-err_detect", "ignore_err",
-                 "-i", raw_video, "-c:v", "h264_nvenc", "-preset", "p4",
-                 "-cq", "20", "-an", "-vsync", "cfr", "-r", "30", cfr_video])
+    _encode_h264(["-err_detect", "ignore_err", "-i", raw_video],
+                 ["-an", "-vsync", "cfr", "-r", "30", cfr_video])
 
     _check_cancel("proxy", "preparing the inference/upload resolution...")
     if not calib.get("calibration_resolution"):
@@ -492,9 +532,7 @@ def run():
             proxy_video = cfr_video
         else:
             proxy_video = os.path.join(WORKDIR, "video_proxy_1080p.mp4")
-            _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", cfr_video,
-                         "-vf", "scale=-2:1080", "-c:v", "h264_nvenc", "-preset", "p4",
-                         "-cq", "20", "-an", proxy_video])
+            _encode_h264(["-i", cfr_video, "-vf", "scale=-2:1080"], ["-an", proxy_video])
 
     # --- Weights: same R2-cached tarball every pod-based run already used. ---
     _check_cancel("inference", "fetching model weights...")

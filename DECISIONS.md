@@ -2632,3 +2632,17 @@ What it deliberately does not resume:
 **Checked.** `identity.test.js`, paired: different paths are different cameras, *and* the exact same stream added twice is still one. Desktop suite and lint clean.
 
 **Not covered.** `addCameraViaRtsp` itself was not run end to end (the store imports Electron, so only the pure rule is unit-tested). A same-stream duplicate is still swallowed silently rather than reported to the operator. An RTSP add on a host that already has an ONVIF entry now creates a second entry where it used to return the first.
+
+## ADR-121 — The pod's video convert falls back to libx264 when NVENC is unavailable
+
+**Date:** 2026-09-21 · **Status:** built and tested locally; the re-queued Tournament 2 job then completed (8 rallies, 175s) — but on the pinned RTX 2000 Ada, so **the fallback itself has still not run on a real non-NVENC card**
+
+**What happened.** Tournament 2's cloud job failed at the first ffmpeg step: `h264_nvenc ... OpenEncodeSessionEx failed: unsupported device (2) / No capable devices found`. Its pod had landed on an RTX 4090. Tournament 1's job, same code and image 15 minutes earlier, converted fine on an RTX 6000 Ada.
+
+**Cause, as far as it is known.** `runpod_pod.FALLBACK_GPU_TYPES` lets the runner take any of 8 cards when the pinned RTX 2000 Ada is busy (that day both jobs ran on fallback cards), but the pinned ffmpeg build in `pod_driver.py` was only ever verified on the 2000 Ada, and the convert step had no software path. **Not established:** *why* that 4090 host could not open an encode session (container capability, driver age, host config). The pod deleted itself, so it could not be inspected. This corrects the same-day reading of the fallback list as only an unverified-consistency caveat (ADR-064/065): it is also a hard failure mode.
+
+**Fix.** `pod_driver._encode_h264()` runs `h264_nvenc` first and, only when ffmpeg's own stderr names nvenc, redoes the step with `libx264 -preset veryfast -crf 20 -pix_fmt yuv420p`. Applied to both encodes (30fps CFR convert, 1080p proxy). A failure that doesn't mention nvenc (bad input) is raised as before, not retried.
+
+**Checked.** Paired tests: falls back on the real captured stderr, *and* does not retry when NVENC works or when the error is about the input. The pinned BtbN ffmpeg (downloaded from R2) contains libx264 and, run through `_encode_h264` with NVENC forced to fail, produced valid 30fps yuv420p output for both steps. Full suite 214 passed.
+
+**Not covered.** No real 4090 pod was run. The libx264 conversion speed on a pod's CPUs for a full two-hour session is unmeasured. Nothing yet stops other, non-NVENC differences between fallback cards.
