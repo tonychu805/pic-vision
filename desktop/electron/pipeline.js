@@ -172,6 +172,41 @@ function cancelledError() {
   return Object.assign(new Error("upload cancelled"), { aborted: true });
 }
 
+// Serializes the actual byte transfer across DIFFERENT recordings/cameras
+// on this machine (2026-09-22) -- `active`'s per-recordingDir guard above
+// only ever stopped the SAME recording being sent twice. A venue's uplink
+// is one shared, often thin pipe (ADR-092 measured it bimodal, roughly 3.5
+// vs. 30 Mbps), and running two uploads on it at once was tested to slow
+// both down rather than add real throughput -- the machine sits otherwise
+// idle during an upload anyway, so there is nothing to gain by racing them.
+// Only uploadSegments() itself queues: creating the job on the console
+// (the fetch just above) and the post-upload wait for the runner/pod are
+// unaffected, so a second camera's job still exists and starts moving the
+// moment its turn at the wire comes up, not after the first job's entire
+// pipeline finishes.
+let uploadQueueLength = 0;
+let uploadQueueTail = Promise.resolve();
+
+export function withUploadSlot(fn, onWaiting) {
+  uploadQueueLength++;
+  if (uploadQueueLength > 1) onWaiting?.();
+  const ahead = uploadQueueTail;
+  const run = ahead.then(fn, fn);
+  // The chain's own tail must settle regardless of this upload's outcome --
+  // otherwise one failed upload would permanently wedge every later one
+  // behind a rejected promise. `run` itself, returned below, is what a
+  // caller awaits for its OWN real result/rejection; this is a second,
+  // separate consumer of it, not a `.finally()` (whose own returned
+  // promise would go unhandled if the caller never happens to check it,
+  // which is exactly the shape of "unhandled rejection" this queue must
+  // never itself cause).
+  uploadQueueTail = run.then(
+    () => { uploadQueueLength--; },
+    () => { uploadQueueLength--; },
+  );
+  return run;
+}
+
 // Mirrors the console's view of the job into the local status.json until
 // it reaches a terminal state. Runs detached from the caller (nothing
 // awaits it) -- the renderer follows along by polling status.json, the
@@ -291,7 +326,10 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
   // sleep mid-transfer and the job sits half-uploaded until it expires.
   const blocker = powerSaveBlocker.start("prevent-app-suspension");
   try {
-    await uploadSegments(jobId, uploads, files, jobDir, rec);
+    await withUploadSlot(
+      () => uploadSegments(jobId, uploads, files, jobDir, rec),
+      () => writeStatus(jobDir, { message: "waiting for another upload to finish..." }),
+    );
     // A cancel landing in the gap between the last segment and this call
     // would otherwise ask the console to queue a job it has already
     // cancelled -- which answers 409, and used to surface as "upload

@@ -30,6 +30,7 @@ Optional: CONSOLE_URL, RUNNER_WORK_DIR, RUNNER_ID.
 
     make runner            # or: .venv/bin/python -m cloud_pipeline.job_runner
 """
+import concurrent.futures
 import json
 import os
 import shutil
@@ -117,6 +118,46 @@ JOB_DEADLINE_SEC = 3 * 3600
 # the container never runs any of this project's own code -- it only
 # stops the operator from waiting up to JOB_DEADLINE_SEC to find out.
 FIRST_CHECKIN_TIMEOUT_SEC = 8 * 60
+
+# RunPod's own live inventory across every fallback GPU type can be
+# exhausted at once (confirmed real, 2026-08-26 -- runpod_pod.py's own
+# history: all 5 types on that day's list came back "no instances
+# available" simultaneously) -- and it comes back, often within minutes.
+# Before this, that raised straight away as a job failure with RunPod's
+# raw API error text as the message, no retry: a transient capacity gap
+# looked identical to a real bug. A short, spaced-out number of retries
+# turns a wait for capacity into a visible status message instead of an
+# unexplained hard failure, without turning this into an unbounded poll --
+# see _create_pod_with_capacity_retry.
+GPU_CAPACITY_RETRY_DELAYS_SEC = [60, 180, 300]  # ~1, 3, 5 min
+
+# Reel jobs used to run one at a time: main() claimed a job and blocked on
+# run_one() -- which can take from minutes to JOB_DEADLINE_SEC's full 3
+# hours -- before claiming the next. Nothing about a reel job needs that:
+# since ADR-093 this process never touches a video byte or runs ffmpeg for
+# one, it only creates a pod and polls the console every POD_POLL_SEC, so
+# N jobs in flight cost N cheap HTTP polls, not N times the local work. The
+# console's own claim_next_job already uses `FOR UPDATE SKIP LOCKED`
+# specifically so concurrent claims can't collide (app/api/runner/jobs/
+# claim/route.ts) -- this was the only side not using that.
+#
+# The cap is NOT RunPod's account limit: checked 2026-09-22 (GraphQL
+# `myself.spendLimit`), this account's hourly spend ceiling is $80, nowhere
+# near reachable at these GPU prices and this scale. It exists so the
+# number of simultaneously-billing pods, open polling loops, and RunPod API
+# calls stays predictable while this is new, not because anything
+# downstream enforces a lower number -- raise it once real multi-venue
+# usage shows more headroom is needed. Real GPU scarcity is a separate,
+# per-job concern already handled by _create_pod_with_capacity_retry above
+# -- more concurrent jobs means more contention for the same fallback pool,
+# which is exactly why that retry exists.
+MAX_CONCURRENT_JOBS = 4
+
+
+def has_capacity(in_flight_count):
+    """Whether the runner should claim another job right now. Pure so the
+    cap itself is testable without threads, a real claim, or a console."""
+    return in_flight_count < MAX_CONCURRENT_JOBS
 
 
 def _log(msg):
@@ -425,6 +466,64 @@ def run_reel_job(job):
         return
 
 
+class _CapacityWaitCancelled(Exception):
+    """The operator cancelled the job while it was waiting for GPU
+    capacity, before any pod existed to see the cancel itself."""
+
+
+def _create_pod_with_capacity_retry(job_id, env, image, deadline):
+    """create_selfdriving_pod(), retried with backoff when EVERY fallback
+    GPU type comes back unavailable. That is RunPod's live marketplace
+    inventory being briefly exhausted, not this job or this image -- unlike
+    the stuck-container retry in run_reel_job's caller (which switches to a
+    backup IMAGE because the first is suspected broken), so this retries
+    the exact same fallback list after a short wait instead.
+
+    Never retries past the job's own deadline. Checks for an operator
+    cancel between attempts and during each wait (in POD_POLL_SEC slices,
+    same cadence as the post-creation wait loop) -- a wait built from
+    GPU_CAPACITY_RETRY_DELAYS_SEC can run several minutes, long enough that
+    a Stop click should not sit ignored until a pod exists to see it.
+
+    Raises _CapacityWaitCancelled if the operator cancelled, or the
+    original RuntimeError (chained) with a clear, operator-facing message
+    if every attempt is spent without ever getting a pod.
+    """
+    attempts = len(GPU_CAPACITY_RETRY_DELAYS_SEC) + 1
+    last_error = None
+    for attempt in range(1, attempts + 1):
+        try:
+            return runpod_pod.create_selfdriving_pod(
+                name=f"cloud-pipeline-{env['SESSION_ID']}", env=env, image=image,
+                gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
+        except RuntimeError as e:
+            last_error = e
+        if attempt == attempts:
+            break
+        delay = GPU_CAPACITY_RETRY_DELAYS_SEC[attempt - 1]
+        if time.monotonic() + delay >= deadline:
+            break
+        _log(f"job {job_id}: no GPU capacity on any of "
+             f"{len(runpod_pod.FALLBACK_GPU_TYPES)} fallback types "
+             f"(attempt {attempt}/{attempts}) -- retrying in {delay}s")
+        patch_job(job_id, message=f"waiting for GPU capacity (attempt {attempt}/{attempts})...")
+        remaining = delay
+        while remaining > 0:
+            step = min(POD_POLL_SEC, remaining)
+            time.sleep(step)
+            remaining -= step
+            state = get_job_state(job_id)
+            if state is not None and state["cancel_requested"]:
+                raise _CapacityWaitCancelled()
+    raise RuntimeError(
+        f"no GPU capacity available on any of {len(runpod_pod.FALLBACK_GPU_TYPES)} "
+        f"card types after {attempts} attempts over roughly "
+        f"{sum(GPU_CAPACITY_RETRY_DELAYS_SEC) // 60} minutes -- RunPod has no free "
+        "instances of any fallback type right now; this is not a bug, try again "
+        "once capacity frees up"
+    ) from last_error
+
+
 def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt):
     """One pod, start to finish. Returns:
 
@@ -449,9 +548,10 @@ def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
         return _cancel_job(job_id)
 
     _log(f"job {job_id}: creating self-driving pod (attempt {attempt}, {image})...")
-    pod_id, gpu_type = runpod_pod.create_selfdriving_pod(
-        name=f"cloud-pipeline-{env['SESSION_ID']}", env=env, image=image,
-        gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
+    try:
+        pod_id, gpu_type = _create_pod_with_capacity_retry(job_id, env, image, deadline)
+    except _CapacityWaitCancelled:
+        return _cancel_job(job_id)
     _log(f"job {job_id}: pod {pod_id} created ({gpu_type}), waiting for it to finish "
          f"(it reports its own progress to the console from here)")
 
@@ -620,29 +720,52 @@ def run_one(job):
         _cleanup(job, job_dir)
 
 
+def _report_unexpected_exception(future):
+    """run_one() already catches and reports every failure of its own
+    (run_one's try/except) -- this only fires if something escaped THAT,
+    which should never happen but must not vanish silently into a Future
+    nobody ever calls .result() on if it somehow does."""
+    exc = future.exception()
+    if exc is not None:
+        _log(f"a job's thread raised past its own error handling (this is a bug): {exc}")
+
+
 def main():
     if not RUNNER_TOKEN:
         sys.exit("RUNNER_TOKEN is not set (add it to .env; same value as the console's)")
     os.makedirs(WORK_DIR, exist_ok=True)
-    _log(f"polling {CONSOLE_URL} as {RUNNER_ID}, work dir {WORK_DIR}")
+    _log(f"polling {CONSOLE_URL} as {RUNNER_ID}, work dir {WORK_DIR}, "
+         f"up to {MAX_CONCURRENT_JOBS} job(s) at once")
     idle_polls = 0
-    while True:
-        try:
-            job = claim_job()
-        except Exception as e:  # noqa: BLE001 - console unreachable: wait, don't die
-            _log(f"claim failed: {e}")
-            # A failing console is also a reason to back off, not to keep
-            # hammering it every few seconds -- which is exactly what this
-            # loop did for five days straight during the quota outage.
-            idle_polls += 1
-            time.sleep(max(POLL_SEC * 4, idle_sleep_sec(idle_polls)))
-            continue
-        if job is None:
-            idle_polls += 1
-            time.sleep(idle_sleep_sec(idle_polls))
-            continue
-        idle_polls = 0  # work exists: go back to polling tightly
-        run_one(job)
+    in_flight = set()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as executor:
+        while True:
+            in_flight = {f for f in in_flight if not f.done()}
+            if not has_capacity(len(in_flight)):
+                # Not claimed, not idle-backoff-worthy: this is a busy
+                # runner, not an empty queue, so it checks back at the
+                # tight cadence, not the ramped-up idle one.
+                time.sleep(POLL_SEC)
+                continue
+            try:
+                job = claim_job()
+            except Exception as e:  # noqa: BLE001 - console unreachable: wait, don't die
+                _log(f"claim failed: {e}")
+                # A failing console is also a reason to back off, not to keep
+                # hammering it every few seconds -- which is exactly what this
+                # loop did for five days straight during the quota outage.
+                idle_polls += 1
+                time.sleep(max(POLL_SEC * 4, idle_sleep_sec(idle_polls)))
+                continue
+            if job is None:
+                idle_polls += 1
+                time.sleep(idle_sleep_sec(idle_polls))
+                continue
+            idle_polls = 0  # work exists: go back to polling tightly
+            _log(f"claimed job {job['id']}, {len(in_flight) + 1} running concurrently")
+            future = executor.submit(run_one, job)
+            future.add_done_callback(_report_unexpected_exception)
+            in_flight.add(future)
 
 
 if __name__ == "__main__":

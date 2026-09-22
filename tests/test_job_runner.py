@@ -7,6 +7,7 @@
 # the only thing standing between a hung pod and billing forever
 # (ADR-093's still-open "who kills an orphaned pod" risk).
 import os
+import time
 
 import pytest
 
@@ -901,3 +902,176 @@ def test_a_failed_read_is_none_not_a_guess(console, monkeypatch):
     assert job_runner.get_job_state("job-1") is None
     monkeypatch.setattr(job_runner, "CONSOLE_URL", "http://127.0.0.1:1")
     assert job_runner.get_job_state("job-1") is None
+
+
+# --- GPU capacity exhaustion is retried with backoff, not failed outright ---
+#
+# Before this, every fallback GPU type coming back unavailable (a real,
+# confirmed-recoverable RunPod state -- runpod_pod.py's own history,
+# 2026-08-26) failed the job immediately with RunPod's raw API error text
+# as the message. Paired throughout: a job that eventually gets a pod must
+# never show an error on its way there, same rule as the stuck-container
+# retry above.
+
+def _capacity_pods(monkeypatch, fail_times):
+    """create_selfdriving_pod raises RuntimeError `fail_times` times, then
+    succeeds. fail_times=None means it never succeeds."""
+    calls = {"n": 0}
+
+    def fake(**kw):
+        calls["n"] += 1
+        if fail_times is None or calls["n"] <= fail_times:
+            raise RuntimeError("could not create self-driving pod on any GPU type: no instances currently available")
+        return ("pod-1", "gpu")
+
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod", fake)
+    return calls
+
+
+def test_gpu_capacity_exhaustion_is_retried_and_can_recover(monkeypatch):
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "GPU_CAPACITY_RETRY_DELAYS_SEC", [0.01, 0.01, 0.01])
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    calls = _capacity_pods(monkeypatch, fail_times=2)  # fails twice, then a pod exists
+    # pod_exists -> False on the very next poll is the ordinary "it finished
+    # and reported its own status" shape (see test_happy_path_... above) --
+    # this test is only about whether create_selfdriving_pod got its retry,
+    # not about what happens after a pod exists.
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    patched = []
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields) or False)
+
+    job_runner.run_reel_job(JOB)  # must not raise
+
+    assert calls["n"] == 3, "should have retried past both failures and gotten a pod on the third"
+    assert not any("no GPU capacity available" in (f.get("error") or "") for f in patched), \
+        f"a job that eventually got a pod must never report the permanent capacity-exhaustion failure: {patched}"
+    assert any("waiting for GPU capacity" in (f.get("message") or "") for f in patched)
+
+
+def test_gpu_capacity_exhaustion_that_never_recovers_is_reported_through_run_one(monkeypatch, tmp_path):
+    # run_reel_job() itself raises (checked directly below) -- this checks
+    # the full path a real failure actually takes: run_one()'s top-level
+    # catch is what turns that into the job's own `error` field, the same
+    # place an operator or venue would actually read it from.
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "GPU_CAPACITY_RETRY_DELAYS_SEC", [0.01, 0.01])
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
+    _capacity_pods(monkeypatch, fail_times=None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    # run_one()'s own `finally` calls _cleanup(), which reads the job's
+    # status back from the console -- stubbed so this stays offline, same
+    # reasoning as _no_real_network above.
+    monkeypatch.setattr(job_runner, "get_job_status", lambda job_id: "error")
+    patched = []
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields) or False)
+
+    job_runner.run_one(dict(JOB))  # must not raise -- run_one's own job
+
+    error_patches = [f["error"] for f in patched if "error" in f]
+    assert len(error_patches) == 1
+    assert "no GPU capacity available" in error_patches[0]
+    assert "RunPod" in error_patches[0], "the message should say this is RunPod capacity, not this project's bug"
+
+
+def test_gpu_capacity_exhaustion_message_is_clear_and_actionable(monkeypatch):
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "GPU_CAPACITY_RETRY_DELAYS_SEC", [0.01, 0.01])
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    _capacity_pods(monkeypatch, fail_times=None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: False)
+
+    with pytest.raises(RuntimeError, match="no GPU capacity available"):
+        job_runner.run_reel_job(JOB)
+
+
+def test_gpu_capacity_wait_never_retries_past_the_jobs_own_deadline(monkeypatch):
+    # A retry schedule that ignores the job's overall deadline could keep a
+    # pod-less job "waiting" indefinitely past JOB_DEADLINE_SEC -- it must
+    # give up at least as promptly as any other failure mode does.
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "GPU_CAPACITY_RETRY_DELAYS_SEC", [1000, 1000, 1000])
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 0.05)  # far shorter than any retry delay
+    calls = _capacity_pods(monkeypatch, fail_times=None)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: False)
+
+    started = time.monotonic()
+    with pytest.raises(RuntimeError, match="no GPU capacity available"):
+        job_runner.run_reel_job(JOB)
+    elapsed = time.monotonic() - started
+
+    assert elapsed < 5, f"must not wait out a 1000s retry delay past a 0.05s deadline: {elapsed}s"
+    assert calls["n"] == 1, "must not even attempt a second retry once the deadline is already passed"
+
+
+def test_a_cancel_during_the_gpu_capacity_wait_ends_the_job_cancelled_not_errored(monkeypatch):
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "GPU_CAPACITY_RETRY_DELAYS_SEC", [0.01, 0.01, 0.01])
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    calls = _capacity_pods(monkeypatch, fail_times=None)  # never succeeds on its own
+    # Cancelled from the second read onward -- i.e. partway through the wait,
+    # not before the very first attempt (that path is already covered by the
+    # existing "cancel before any pod exists" test).
+    reads = {"n": 0}
+
+    def state(job_id):
+        reads["n"] += 1
+        return _state(BASELINE, cancel_requested=reads["n"] >= 2)
+
+    monkeypatch.setattr(job_runner, "get_job_state", state)
+    patched = []
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields) or False)
+
+    job_runner.run_reel_job({**JOB, "updated_at": BASELINE})  # must not raise
+
+    assert calls["n"] <= 2, "must stop retrying once the operator has cancelled"
+    assert any(f.get("cancelled") is True for f in patched)
+    assert not any("error" in f for f in patched), "a cancel must not also be reported as an error"
+
+
+def test_a_pod_created_on_the_first_try_reports_no_waiting_message(monkeypatch):
+    # The paired half of the retry tests above: the ordinary, overwhelming
+    # majority case must not show a "waiting for GPU capacity" message it
+    # never actually needed.
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    _capacity_pods(monkeypatch, fail_times=0)
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
+    patched = []
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields) or False)
+
+    job_runner.run_reel_job(JOB)
+
+    assert not any("waiting for GPU capacity" in (f.get("message") or "") for f in patched)
+
+
+# --- job_runner.py can run more than one reel job at once (2026-09-22) -----
+#
+# The console's claim_next_job already used FOR UPDATE SKIP LOCKED so
+# concurrent claims can't collide; this runner was the only side still
+# serial. has_capacity() is the one piece of that worth a direct test --
+# main()'s own loop (like its claim/idle-backoff loop before it) has no
+# dedicated test, same precedent as idle_sleep_sec vs. main() itself.
+
+def test_capacity_is_available_below_the_cap():
+    assert job_runner.has_capacity(job_runner.MAX_CONCURRENT_JOBS - 1) is True
+
+
+def test_capacity_is_exhausted_at_the_cap():
+    assert job_runner.has_capacity(job_runner.MAX_CONCURRENT_JOBS) is False
+
+
+def test_capacity_is_exhausted_past_the_cap():
+    # Belt and suspenders: a transient overshoot (e.g. a race in main()'s
+    # own bookkeeping) must still read as "no capacity", not wrap around.
+    assert job_runner.has_capacity(job_runner.MAX_CONCURRENT_JOBS + 1) is False
