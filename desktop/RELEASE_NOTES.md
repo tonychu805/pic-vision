@@ -1,5 +1,16 @@
 # Release notes
 
+## 1.6.6 — 2026-09-22
+
+- **Changed: sending two cameras' recordings to the cloud at once no
+  longer slows both uploads down.** On a machine with more than one
+  camera, finishing two recordings around the same time used to start
+  both uploads together, competing for the same connection and making
+  each one slower than sending them one after another. Uploads now go out
+  one at a time, in the order they were sent; a second recording still
+  gets queued for processing immediately, and its row shows "waiting for
+  another upload to finish..." until its turn comes up.
+
 ## 1.6.5 — 2026-09-22
 
 - **Fixed: Calibrate could silently stop working for every camera on a
