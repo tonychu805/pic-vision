@@ -1,5 +1,16 @@
 # Release notes
 
+## 1.6.4 — 2026-09-22
+
+- **Fixed: adding a second camera stream from the same NVR or multi-stream
+  camera did nothing.** Two RTSP streams sharing the same IP and port but a
+  different path — the normal way an NVR exposes several channels — used to
+  collapse into a single camera: the second "Add" just handed back the
+  first one, with no new camera and no error. Cameras are now told apart by
+  their full stream address (host, port, and path) instead of just the
+  host. Adding the same stream twice is still recognized as one camera;
+  ONVIF cameras are unaffected.
+
 ## 1.6.3 — 2026-09-21
 
 - **Fixed: the app saying "Connected" while the console heard nothing.** A
