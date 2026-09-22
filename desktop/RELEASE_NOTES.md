@@ -1,5 +1,20 @@
 # Release notes
 
+## 1.6.5 — 2026-09-22
+
+- **Fixed: Calibrate could silently stop working for every camera on a
+  machine, while everything else looked fine.** The app has an instant
+  push channel for console commands (Calibrate, Start/Stop recording) and
+  a slower fallback poll it only uses when that channel looks disconnected.
+  If the push channel died quietly — no error, nothing to notice — the app
+  kept believing it was connected, so the fallback never took over: a
+  Calibrate click would just sit there until the console gave up on it.
+  Check-ins to the console kept succeeding the whole time, since those
+  don't use the same channel, so nothing on the Cloud page ever showed a
+  problem. The app now also checks in with the fallback poll every two
+  minutes regardless, so this can no longer go unnoticed for longer than
+  that.
+
 ## 1.6.4 — 2026-09-22
 
 - **Fixed: adding a second camera stream from the same NVR or multi-stream
