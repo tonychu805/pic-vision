@@ -2330,3 +2330,21 @@ Matches `sqrt`'s fp/10min improvement without its regression: **re-ran `pb_draft
 - Upload speed here was the fast mode (~34 Mbps). The slow mode seen before (~3.5 Mbps) would take ~17 min per 10-minute part at this bitrate, which can't keep up. The venue's own speed is still unmeasured.
 
 **Part 2's failure, root-caused.** Local TrackNet k14 on part 2's recorded file found **one** candidate, with exactly 6 crossings (the minimum). That stretch was nearly empty of play, and the cloud's encode landed at zero. With zero candidates, `rank_segments` min-max normalizes an empty list and raises. Reproduced on this footage by forcing zero candidates (`min_crossings=7`): old code raises the same ValueError, fixed code returns `[]`. The 1-candidate case runs all three reel builders fine. The bug predates the 2026-09-23 refactor (no guard before it either). It surfaces now because 10-minute parts make a no-rally stretch likely. Fix: ADR-129.
+
+## 2026-09-23 — Two-camera auto-split rehearsal: two games at once, 10-minute parts
+
+**Setup.** Same as the one-camera rehearsal above: the test venue, a second desktop copy, stand-in RTSP cameras. **A** = Court 4 clip (IMG_7893) at 1080p, 6 Mbps. **B** = Court 3 clip at 1280×640, 4 Mbps. Both with real calibrations, both started together at 17:34 UTC, both stopped at 17:59:36. First run with ADR-129 and per-job GPU recording live.
+
+**Results.**
+- **6/6 parts finished, 0 failures.** A part 2 (the same Court 4 stretch that crashed in the first rehearsal) finished `done` with message "no rallies found" and 0 candidates. **ADR-129 confirmed in the real cloud.**
+- **No mixing:** each game's share link holds only its own camera's reels (0 foreign), with part numbers. Both live pages show Rally 1–10 + Quick hits + Full reel.
+- **Stop → last reels:** A 9m51s, B 7m33s.
+- **Uploads with both cameras sending at once:** ~1m35s (A) and ~2m35s (B) per 10-minute part.
+- **Concurrency peaked at 3 running jobs** (cap 4). Nothing queued behind the cap.
+- **GPUs (first recorded):** parts 1–2 on RTX 4090, parts 3 on RTX 4000 Ada.
+
+**Machine-to-machine variance is the main latency risk, not the GPU type.**
+- **Hire + boot** (claimed → pod's first report): **6.5 and 6.0 min** for the two part-1 pods, against 1.3–2.7 min for every other pod in both rehearsals.
+- **Same card, different speed:** on the 1080p footage, A part 1 detected at **91 fps** and A part 2 at **49 fps**, both on an RTX 4090.
+- **Other slow steps:** a slow download (2m24s) and a slow convert (2m13s) each appeared on a single host.
+- **Conclusion:** reordering GPU types alone wouldn't remove this. Per-job `gpu_type`/`pod_id` now make it traceable.
