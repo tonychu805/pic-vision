@@ -2777,3 +2777,19 @@ UAT on real venue actions:
 - **13 automated production checks** passed: endpoint auth, pod-code checksum and currency, health, share page, CDN, the GitHub uptime check, and orchestrator ticks.
 
 **Rollback** is unchanged: set `CLAIMING_ENABLED = "false"` and redeploy; `sudo systemctl enable --now pic-vision-runner.path pic-vision-runner.service`.
+
+## ADR-126 — Security check findings: schedule dispatch was public; venue owners could write any venue column
+
+**Date:** 2026-09-23 · **Status:** both fixed and verified in production
+
+**1. Anyone could start or stop venue recordings.** `dispatch_due_schedule_bookings(at_time)` is SECURITY DEFINER and was executable by `anon`. That meant anyone holding the public key that ships in the browser. It trusts the caller's `at_time`: a time inside a future booking started that camera recording immediately, hours early (filming people who hadn't booked), and a later time stopped running sessions. Found by the Supabase security advisor. Fix: EXECUTE is `service_role` only (`20260923040000_schedule_dispatch_server_only.sql`); the only caller, `/api/schedule/dispatch`, already used the service role. Verified: an anon call gets "permission denied".
+
+**2. Venue owners could write any column of their own `brands` row from the browser.** RLS scoped the row, but the column privileges were table-wide. Two columns mattered:
+- `retain_footage_for_training`: an operator-recorded consent that a venue could set on itself.
+- `logo_key`: the logo routes delete whatever it names. An owner could point it at another venue's logo or reel, then "remove logo" would delete that file (cross-venue deletion).
+
+Fix: the logo routes write logo columns with the service role and delete only a key `isBrandLogoKey()` confirms is the venue's own (both key shapes in use, tested). Owners may insert only `owner_user_id, name, timezone` and update only `name, timezone, logo_on_reels` (`20260923040100_brands_owner_writable_columns.sql`, applied after the route change deployed). Verified by acting as PGC's signed-in owner in a rolled-back transaction: consent flag, `logo_key` and owner writes denied; Settings' own writes allowed.
+
+**Found alongside, not fixed (reported):** `scheduler-worker`'s only secret is stored under a name that looks like the token value, so it sends no `SCHEDULE_DISPATCH_TOKEN`. `/api/schedule/dispatch` has returned 401 on every tick since the Worker was set up, so **scheduled recordings have never started automatically** (1 booking on record, never commanded). The value is also visible, since secret names aren't hidden. Fix when chosen: rotate the token, set it correctly in Cloudflare and Netlify, and delete the misnamed secret.
+
+**Still open from the same check (lower):** pods run the downloaded code package without verifying it (a design choice pending); leaked-password protection is off in Supabase Auth; public `workers.dev` URLs on both Workers; GitHub actions pinned by tag; a non-constant-time token compare in the schedule route.
