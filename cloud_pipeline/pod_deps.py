@@ -26,7 +26,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 POD_DEPS_FILES = [
     "src/__init__.py", "src/job_log.py", "src/calib.py", "src/ball.py",
     "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
-    "src/drift.py", "src/video_quality.py",
+    "src/drift.py", "src/video_quality.py", "src/rallies.py",
     "scripts/check_drift.py", "scripts/rank_and_reel.py",
     "scripts/burst_moment_reel.py", "scripts/top_rallies_reel.py",
     "scripts/pod_infer.py",

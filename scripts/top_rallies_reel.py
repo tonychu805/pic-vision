@@ -19,15 +19,10 @@ import sys
 
 sys.path.insert(0, ".")
 
-from src.tracknet import load_predictions
-from src.calib import court_wedge
-from src.track import track_ball, max_jump_for_fps, reset_after_for_fps
-from src.ball import net_line_y, crossing_times, cluster_crossings
-from src.select import frame_speeds, spike_threshold, rank_segments
-from src.render import cut_clips, probe_fps
+from src.rallies import detect_candidates
+from src.select import rank_segments
+from src.render import cut_clips
 
-GAP_SEC = 3.0
-MIN_CROSSINGS = 6
 PAD_SEC = 3.0  # same as rank_and_reel.py's build_reel -- full rally context
 WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # same score as build_reel's ranking (ADR-063)
 DEFAULT_N = 10
@@ -50,26 +45,9 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     the order this function's callers want. stats is
     {"n_candidates", "n_chosen"}.
     """
-    with open(calib_path) as f:
-        calib = json.load(f)
-    fps = probe_fps(video)
-    track = load_predictions(csv, fps)
-    in_court = court_wedge(calib)
-    net_y = net_line_y(calib)
-
-    times = [t for t, *_ in track]
-    frames = [[(x, y, conf if conf is not None else 1.0)] if in_court(x, y) else []
-              for _, x, y, w, h, conf in track]
-    ys = track_ball(frames, max_jump=max_jump_for_fps(fps), reset_after=reset_after_for_fps(fps))
-    tracked = list(zip(times, ys))
-    times_crossed = crossing_times(tracked, net_y=net_y, band=0.0)
-    segments = cluster_crossings(times_crossed, gap_sec=GAP_SEC, min_crossings=MIN_CROSSINGS)
+    cand = detect_candidates(video, csv, calib_path)
+    segments, times_crossed, speeds, threshold = cand["segments"], cand["times_crossed"], cand["speeds"], cand["threshold"]
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
-
-    raw_points = sorted([(t, x, y) for t, x, y, w, h, c in track if in_court(x, y)],
-                         key=lambda p: p[0])
-    speeds = frame_speeds(raw_points)
-    threshold = spike_threshold(speeds, percentile=90)
 
     ranked = rank_segments(segments, times_crossed, speeds, threshold, weights=weights)
     chosen = ranked[:n]

@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import top_rallies_reel  # noqa: E402
+from src import rallies  # noqa: E402  -- the shared rally core these builders call (2026-09-23)
 
 
 def _segment_frames(base, score_bias):
@@ -28,10 +29,10 @@ def test_build_top_rallies_returns_rank_order_not_chronological(monkeypatch, tmp
     # score); later segments score higher. The manifest cut_clips() would
     # hand back is chronological (rally 1, 2, 3...) -- build_top_rallies must
     # re-sort it into score order before returning.
-    monkeypatch.setattr(top_rallies_reel, "load_predictions",
+    monkeypatch.setattr(rallies, "load_predictions",
                         lambda csv, fps: _fake_track(3))
-    monkeypatch.setattr(top_rallies_reel, "court_wedge", lambda calib: (lambda x, y: True))
-    monkeypatch.setattr(top_rallies_reel, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
 
     def fake_cut_clips(video, scored, out_dir, **kwargs):
         # Mirrors cut_clips' real contract: sorted by start time, i.e.
@@ -62,10 +63,10 @@ def test_build_top_rallies_returns_rank_order_not_chronological(monkeypatch, tmp
 
 
 def test_build_top_rallies_caps_at_n_even_with_more_candidates(monkeypatch, tmp_path):
-    monkeypatch.setattr(top_rallies_reel, "load_predictions",
+    monkeypatch.setattr(rallies, "load_predictions",
                         lambda csv, fps: _fake_track(4))
-    monkeypatch.setattr(top_rallies_reel, "court_wedge", lambda calib: (lambda x, y: True))
-    monkeypatch.setattr(top_rallies_reel, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
 
     def fake_cut_clips(video, scored, out_dir, **kwargs):
         return [{"file": f"rally_{i:03d}.mp4", "score": s["score"],
@@ -87,10 +88,10 @@ def test_build_top_rallies_caps_at_n_even_with_more_candidates(monkeypatch, tmp_
 
 
 def test_build_top_rallies_returns_all_when_fewer_than_n_qualify(monkeypatch, tmp_path):
-    monkeypatch.setattr(top_rallies_reel, "load_predictions",
+    monkeypatch.setattr(rallies, "load_predictions",
                         lambda csv, fps: _fake_track(3))
-    monkeypatch.setattr(top_rallies_reel, "court_wedge", lambda calib: (lambda x, y: True))
-    monkeypatch.setattr(top_rallies_reel, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
 
     def fake_cut_clips(video, scored, out_dir, **kwargs):
         return [{"file": f"rally_{i:03d}.mp4", "score": s["score"],

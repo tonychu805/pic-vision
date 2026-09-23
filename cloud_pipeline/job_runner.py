@@ -199,22 +199,6 @@ def patch_job(job_id, **fields):
     return bool(r.json().get("cancelRequested"))
 
 
-def get_job_status(job_id):
-    """Best-effort read of a job's current status -- None on any failure.
-
-    None means "could not find out", never "it failed": _cleanup treats an
-    unknown status the same as a failure, i.e. it keeps the segments. The
-    cost of being wrong that way is some storage; the cost of the other
-    way is a venue re-uploading a 2.5GB session.
-    """
-    try:
-        r = requests.get(f"{CONSOLE_URL}/api/runner/jobs/{job_id}", headers=_headers(), timeout=30)
-        r.raise_for_status()
-        return r.json().get("status")
-    except Exception:  # noqa: BLE001 - never crash cleanup over a status read
-        return None
-
-
 def get_job_state(job_id):
     """Best-effort read of a job's updated_at and cancel_requested -- None
     on any failure (network hiccup, 404).
@@ -222,7 +206,7 @@ def get_job_state(job_id):
     None means "could not find out", never "no progress" and never "not
     cancelled": a transient read error must not be mistaken for a stuck pod,
     and must not be mistaken for a cancel either. The caller only acts on a
-    CONFIRMED read -- same rule as get_job_status above, and as PIC-157's:
+    CONFIRMED read -- the same rule as PIC-157's:
     a check that failed is not a check that came back negative.
 
     A console that predates `cancel_requested` in this response simply omits

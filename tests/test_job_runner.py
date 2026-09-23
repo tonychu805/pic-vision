@@ -407,11 +407,11 @@ def test_failed_status_reads_never_count_toward_the_first_checkin_timeout(monkey
 # that no outcome -- success included -- makes this process delete one.
 
 
-@pytest.mark.parametrize("status", ["done", "error", "cancelled", None])
-def test_the_runner_never_deletes_uploaded_segments_whatever_the_outcome(monkeypatch, tmp_path, status):
-    monkeypatch.setattr(job_runner, "get_job_status", lambda job_id: status)
+def test_the_runner_never_deletes_uploaded_segments(monkeypatch, tmp_path):
+    # _cleanup doesn't even read the job's outcome any more: no path through
+    # it, success included, may delete a venue's upload.
     monkeypatch.setattr(job_runner.r2_storage, "delete_object",
-                        lambda bucket, key: pytest.fail(f"runner deleted {key} after a {status} job"))
+                        lambda bucket, key: pytest.fail(f"runner deleted {key}"))
     monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
     job_runner._cleanup(dict(JOB), str(tmp_path / "job-1"))
 
@@ -916,10 +916,6 @@ def test_gpu_capacity_exhaustion_that_never_recovers_is_reported_through_run_one
     monkeypatch.setattr(job_runner, "WORK_DIR", str(tmp_path))
     _capacity_pods(monkeypatch, fail_times=None)
     monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: None)
-    # run_one()'s own `finally` calls _cleanup(), which reads the job's
-    # status back from the console -- stubbed so this stays offline, same
-    # reasoning as _no_real_network above.
-    monkeypatch.setattr(job_runner, "get_job_status", lambda job_id: "error")
     patched = []
     monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: patched.append(fields) or False)
 

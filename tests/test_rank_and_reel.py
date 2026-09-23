@@ -4,6 +4,7 @@ from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "scripts"))
 import rank_and_reel  # noqa: E402
+from src import rallies  # noqa: E402  -- the shared rally core these builders call (2026-09-23)
 
 
 def _fake_track():
@@ -22,9 +23,9 @@ def test_build_reel_reports_go_to_the_original_stdout_stderr_split(
     # build_reel() must preserve it byte-for-byte -- verified once already by
     # hand (diffing the CLI's output before/after the refactor); this test
     # locks that in against a future regression.
-    monkeypatch.setattr(rank_and_reel, "load_predictions", lambda csv, fps: _fake_track())
-    monkeypatch.setattr(rank_and_reel, "court_wedge", lambda calib: (lambda x, y: True))
-    monkeypatch.setattr(rank_and_reel, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(rallies, "load_predictions", lambda csv, fps: _fake_track())
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
 
     manifest = [{"file": "rally_001.mp4", "score": 0.5, "start": 0.0, "end": 6.5}]
     monkeypatch.setattr(rank_and_reel, "cut_clips",
@@ -67,9 +68,9 @@ def test_build_reel_stops_choosing_once_target_sec_is_met(monkeypatch, tmp_path)
     for base in (0.0, 20.0):
         ys = [40.0, 60.0] * 7
         frames += [(base + i * 0.5, 100.0, y, 5.0, 5.0, 0.9) for i, y in enumerate(ys)]
-    monkeypatch.setattr(rank_and_reel, "load_predictions", lambda csv, fps: frames)
-    monkeypatch.setattr(rank_and_reel, "court_wedge", lambda calib: (lambda x, y: True))
-    monkeypatch.setattr(rank_and_reel, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(rallies, "load_predictions", lambda csv, fps: frames)
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
 
     seen_scored = {}
 
