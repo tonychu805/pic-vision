@@ -2753,3 +2753,9 @@ Supporting changes, both backward compatible and live:
 - The claim route accepts an optional `kinds`. `job_runner.py` sends `RUNNER_KINDS` if set, so at cutover the workstation can keep calibrations only.
 
 Remaining for cutover (step 5): set the Worker's `RUNNER_TOKEN`/`RUNPOD_API_KEY` secrets and deploy; set `RUNNER_KINDS=calibration` on the workstation and restart it; flip `CLAIMING_ENABLED`; run one real job.
+
+**Update (2026-09-23): step 6 done before step 5, at the operator's call. Calibration no longer touches the workstation.** A venue's calibration needs only its own desktop app (for the snapshot) and the console (for the math). The fit was ported to `pic-vision-cloud-console/lib/calibrationFit.ts` and runs inside the `apply_calibration` request. The answer comes back on the click, the camera is updated, and the calibration job row is written already `done` so history and the Cameras page are unchanged. `CALIBRATION_FIT=runner` restores the old path.
+
+The gate was parity, not inspection. All 15 real calibrations on record were re-run through today's `calibrate.py`, which reproduces all 15 stored results exactly. The TypeScript port must match that: same landmark assignment, same worst point, and court positions within 1e-3 ft. Measured worst case: **0.008 mm**; rmse within 2e-6 ft; ~40 ms per fit. OpenCV's RANSAC random sampling was replaced by an exhaustive search over all 495 four-point fits, deterministic and never worse. Deleting the refinement step fails the gate.
+
+Consequence for step 5: no calibration jobs will reach a runner any more, so the workstation needs no `RUNNER_KINDS=calibration`. At cutover it can simply stop. The kinds filter stays as a harmless safeguard.
