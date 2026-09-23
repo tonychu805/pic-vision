@@ -52,6 +52,18 @@ test("a 2-hour recording in 20-minute parts: every segment sent exactly once, in
   assert.deepEqual(listParts(dir).map((p) => p.name), ["part-01", "part-02", "part-03", "part-04", "part-05", "part-06"]);
 });
 
+test("10-minute parts: each segment goes on its own as soon as it's finished", () => {
+  const dir = recording(4); // segment 3 still being written
+  const during = makeDueParts(dir, { stillRecording: true, partMinutes: 10 });
+  assert.deepEqual(during.map((p) => p.segments), [[seg(0)], [seg(1)], [seg(2)]]);
+  assert.equal(makeDueParts(dir, { stillRecording: true, partMinutes: 10 }).length, 0);
+  const final = makeDueParts(dir, { stillRecording: false, partMinutes: 10, flush: true });
+  assert.deepEqual(final.map((p) => p.segments), [[seg(3)]]);
+  assert.deepEqual(listParts(dir).map((p) => p.name), ["part-01", "part-02", "part-03", "part-04"]);
+  writeSessionMeta(dir, { recording_session_id: "22222222-2222-4222-8222-222222222222" });
+  assert.deepEqual(listParts(dir).map((p) => sessionFieldsFor(p.dir, p.segments).partOffsetSec), [0, 600, 1200, 1800]);
+});
+
 test("parts are hard links: no copy of the footage, and the recording itself is untouched", () => {
   const dir = recording(2);
   const [part] = makeDueParts(dir, { stillRecording: false, partMinutes: 20, flush: true });

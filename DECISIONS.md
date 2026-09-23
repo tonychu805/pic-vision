@@ -2830,3 +2830,16 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 **Trade-offs accepted:** quick hits and full reel cover only the newest part (ADR-066's combined reel is still the real fix); ranking interleaves by part instead of re-ranking across parts, since scores from different parts aren't calibrated against each other.
 
 **Checked:** migration applied (anon can't call dispatch; the share RPC still serves old links, 12 reels). Console 196 unit tests. Orchestrator 31 unit + 9 component (pod gets the session's share id). Job runner 56. Desktop 245. Share-page merge 4 tests, plus a local render against real production data: 3 parts, no tabs, Rally 1–10 + Quick hits + Full reel; an old link unchanged. **Live against production after deploy:** S1 an upload attaches to its session with part number and offset; S2 another desktop's session, another camera's, a random id or a malformed id → refused; S3 an upload with no session still works; S4 a finished part lands on the session's share link, and the RPC returns it. 13/13 with the older live tests. **Not checked:** a real recording with a live camera through the whole flow (Friday rehearsal, after a desktop release).
+
+## ADR-129 — A stretch with no rallies finishes "done, no rallies", not as a failed job
+
+**Date:** 2026-09-24 · **Status:** built and tested; pod code ships on push (CI tarball); desktop message needs the next release
+
+**Why.** The auto-split rehearsal (EXPERIMENTS.md 2026-09-23) failed part 2: ten minutes with (almost) no play gave zero rally candidates, and ranking crashed on the empty list. With a session sent in 10–20 minute parts (ADR-127), a warm-up, break or changeover is a routine part, not an edge case. A failed job would show as an error at the venue and on the console.
+
+**Decision.**
+- The pod checks for candidates before cutting. With none, it reports the job **done** with message "no rallies found", no reels and `stats.n_candidates = 0`. The console already accepts a finished job with no reels, and the session's other parts carry the share page.
+- `rank_segments([])` returns `[]`. `spike_threshold` with fewer than 2 speeds returns infinity (nothing is a spike) instead of raising. That covers a covered camera or an empty court, which would otherwise crash earlier.
+- Desktop log: "<camera>: no rallies found" instead of "reel ready" with no detail.
+
+**Checked:** zero-candidate path reproduced on the real part-2 footage (old code raises, new returns `[]`); one-candidate path builds all three reels; 3 new tests (Python 234, desktop 246).

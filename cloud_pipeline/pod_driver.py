@@ -98,6 +98,7 @@ from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
 from scripts.top_rallies_reel import build_top_rallies  # noqa: E402
 from src.drift import drift_span, find_bumps  # noqa: E402
+from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
 WORKDIR = "/workspace/job"
@@ -579,6 +580,14 @@ def run():
     # same functions, no subprocess/SSH round trip needed for something
     # already running in-process. ---
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
+    # A stretch with no rallies (a warm-up, a break, an empty court) is a
+    # real outcome, far likelier now that a session is sent in 10-20 minute
+    # parts (ADR-127): finish with no reels instead of crashing the job
+    # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
+    if not detect_candidates(proxy_video, csv_path, calib_path)["segments"]:
+        _log("no rallies found in this footage; finishing with no reels")
+        finish_with_no_rallies()
+        return
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
     full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
@@ -632,6 +641,14 @@ def run():
         "reels": reels, "stats": stats,
     })
     _log(f"done: {reels}")
+
+
+def finish_with_no_rallies():
+    """Report a finished job that found no rallies: done, with no reels."""
+    return report_final_job_status(done=True, stage="done", message="no rallies found", progress=None, result={
+        "share_id": os.environ.get("SHARE_ID"), "reel_bucket": OUTPUT_BUCKET,
+        "reels": [], "stats": {"n_candidates": 0},
+    })
 
 
 def main():

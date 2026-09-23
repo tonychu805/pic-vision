@@ -2312,3 +2312,21 @@ Matches `sqrt`'s fp/10min improvement without its regression: **re-ran `pb_draft
 **Conclusion.** 30fps is a **requirement**, not a recommendation, and belongs in venue setup as a check rather than a line of guidance — a camera left on a 15fps default roughly halves the rallies found, silently. ADR-086's scaling ships anyway: it makes a misconfigured camera degrade visibly rather than catastrophically, and is a no-op at 30fps.
 
 **Caveats.** One video, 300s, 13 rallies — small. This arm's 30fps baseline recall (0.46) is itself below the `brickwall-SEMI` held-out figure (0.639, `PIC-56`); different footage, and it doesn't affect the relative comparison, which is the point of the test. Not re-run on a second video.
+
+## 2026-09-23 — Auto-split rehearsal (ADR-127/128): 10-minute parts, fake camera, real cloud
+
+**Setup.** A second copy of the desktop app, with its own settings folder, paired to the Syno Pickleball test venue (not PGC). The "camera" was the 43-minute Court 4 sample clip (IMG_7893) looped over RTSP at 1080p/30fps, ~6 Mbps H.264, with Court 4's real calibration. Recording was started like a console Start (session issued, ADR-128), with auto-split at 10 minutes. Stop was sent after 25 minutes. Production console, Cloudflare orchestrator, RunPod.
+
+**Timeline (UTC).**
+| Part | Footage | Sent | Upload done | GPU start | Finished |
+|---|---|---|---|---|---|
+| 1 | 0–10 min, 451 MB | 16:30:35 | 16:32:21 (~1m45s, ~34 Mbps) | 16:32:41 | 16:49:28 done: 10 rallies + quick hits + full |
+| 2 | 10–20 min, 454 MB | 16:40:33 | 16:42:11 | 16:42:31 | 16:49:28 **error: `min() arg is an empty sequence`** |
+| 3 | 20–26 min, 266 MB | 16:46:05 (52 s after Stop) | 16:47:16 | 16:47:36 | 16:55:23 done: 2 rallies + quick hits + full |
+
+- **Stop → last part's reels: 10 min 10 s.**
+- Part 1 took ~17 min from GPU start for 10 minutes of footage: ~4 min machine setup, ~8.5 min detection, then cutting. Parts run in parallel (cap 4 reel jobs), so one court keeps up. Three courts all sending 10-minute parts would reach ~5 concurrent jobs and queue.
+- Every part carried the session. Parts 1 and 3 landed on **one** share link with part numbers; the RPC returned them together.
+- Upload speed here was the fast mode (~34 Mbps). The slow mode seen before (~3.5 Mbps) would take ~17 min per 10-minute part at this bitrate, which can't keep up. The venue's own speed is still unmeasured.
+
+**Part 2's failure, root-caused.** Local TrackNet k14 on part 2's recorded file found **one** candidate, with exactly 6 crossings (the minimum). That stretch was nearly empty of play, and the cloud's encode landed at zero. With zero candidates, `rank_segments` min-max normalizes an empty list and raises. Reproduced on this footage by forcing zero candidates (`min_crossings=7`): old code raises the same ValueError, fixed code returns `[]`. The 1-candidate case runs all three reel builders fine. The bug predates the 2026-09-23 refactor (no guard before it either). It surfaces now because 10-minute parts make a no-rally stretch likely. Fix: ADR-129.

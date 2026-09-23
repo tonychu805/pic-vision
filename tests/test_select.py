@@ -78,3 +78,15 @@ def test_rank_segments_does_not_mutate_input():
     original = dict(segments[0])
     rank_segments(segments, [1.0], [], threshold=1e9)
     assert segments[0] == original
+
+
+def test_rank_segments_with_no_candidates_is_an_empty_ranking():
+    # A stretch with no rallies (a break, a warm-up) -- common once a session
+    # is sent in 10-minute parts. Used to crash the whole job (min() of an
+    # empty list), 2026-09-23 auto-split rehearsal.
+    assert rank_segments([], [1.0, 2.0], [(1.0, 5.0), (2.0, 6.0)], 5.5) == []
+
+
+def test_spike_threshold_with_too_few_detections_counts_nothing_as_a_spike():
+    assert spike_threshold([]) == float("inf")
+    assert spike_threshold([(1.0, 40.0)]) == float("inf")

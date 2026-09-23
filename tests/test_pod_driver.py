@@ -364,3 +364,17 @@ def test_encode_reports_the_libx264_error_if_the_fallback_also_fails(monkeypatch
     with pytest.raises(pod_driver.FfmpegError, match="libx264 exploded"):
         pod_driver._encode_h264(["-i", "in.mkv"], ["-an", "out.mp4"])
     assert len(calls) == 2
+
+
+def test_a_stretch_with_no_rallies_finishes_done_with_no_reels(console_url, monkeypatch):
+    # Not an error: the job is done, the console files no reels, and the
+    # session's other parts carry the share page (2026-09-23 rehearsal).
+    import json
+    monkeypatch.setenv("SHARE_ID", "11111111-1111-4111-8111-111111111111")
+    seen = console_url([(200, "{}")])
+    assert pod_driver.finish_with_no_rallies() is True
+    body = json.loads(seen[0]["body"])
+    assert body["done"] is True and "error" not in body
+    assert body["message"] == "no rallies found"
+    assert body["result"]["reels"] == []
+    assert body["result"]["share_id"] == "11111111-1111-4111-8111-111111111111"

@@ -57,6 +57,10 @@ def spike_threshold(speeds, percentile=90):
     """The percentile (default: 90th) of frame-to-frame speeds, used as the
     cutoff for what counts as a velocity "spike" elsewhere in this module."""
     vals = [v for _, v in speeds]
+    # Too few in-court detections to have a distribution (a covered camera,
+    # lights off, an empty court): nothing counts as a spike.
+    if len(vals) < 2:
+        return float("inf")
     return statistics.quantiles(vals, n=100)[percentile - 1]
 
 
@@ -107,6 +111,8 @@ def rank_segments(segments, crossing_times, speeds, threshold,
     Returns a new list of segments (each with 'duration', 'peak_crossing_rate',
     'n_spikes', and 'score' added), sorted by score descending. Does not
     mutate the input."""
+    if not segments:
+        return []  # no candidates to rank -- a stretch with no rallies
     w_d, w_p, w_s = weights
     rows = []
     for s in segments:

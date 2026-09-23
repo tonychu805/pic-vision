@@ -264,6 +264,10 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
     active.delete(recordingDir);
     if (job.status === "done") {
       const reels = job.result?.reels ?? [];
+      if (reels.length === 0) {
+        logEvent("pipeline_done", `${label}: no rallies found`, "Finished; this stretch had no play to cut.");
+        return;
+      }
       const full = reels.find((r) => r.kind === "full") ?? reels[0];
       const stats = full?.stats;
       const detail = stats ? `${stats.n_chosen} rallies, ${Math.round(stats.total_duration_sec)}s` : null;
