@@ -17,7 +17,7 @@
 // separate jobs with separate reels. Combining them into one session reel
 // is that later work, not this.
 import Store from "electron-store";
-import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, statSync } from "node:fs";
+import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
 export const SEGMENT_RE = /^session-\d+\.mkv$/;
@@ -137,4 +137,38 @@ export function serialized(fn) {
   const run = queue.then(fn, fn);
   queue = run.catch(() => {});
   return run;
+}
+
+// ---------- the playing session this recording belongs to (ADR-128) ----------
+
+const SESSION_FILE = "session.json";
+
+/** Remember the console-issued session for a recording, from its start command. */
+export function writeSessionMeta(recordingDir, params) {
+  const recordingSessionId = typeof params?.recording_session_id === "string" ? params.recording_session_id : null;
+  const bookingId = typeof params?.schedule_booking_id === "string" ? params.schedule_booking_id : null;
+  writeFileSync(path.join(recordingDir, SESSION_FILE), JSON.stringify({ recordingSessionId, bookingId }, null, 2));
+}
+
+/**
+ * What an upload of `dir` tells the console about its session: the
+ * session id, and -- for a part folder (<recording>/parts/part-NN) -- its
+ * number and where it starts in the session (its first segment's index x 10
+ * minutes). Nothing for a recording that predates sessions or had none.
+ */
+export function sessionFieldsFor(dir, fileNames) {
+  const partMatch = PART_RE.exec(path.basename(dir));
+  const isPart = partMatch && path.basename(path.dirname(dir)) === "parts";
+  const recordingDir = isPart ? path.dirname(path.dirname(dir)) : dir;
+  let recordingSessionId = null;
+  try {
+    recordingSessionId = JSON.parse(readFileSync(path.join(recordingDir, SESSION_FILE), "utf8")).recordingSessionId ?? null;
+  } catch {
+    recordingSessionId = null;
+  }
+  if (!recordingSessionId) return {};
+  if (!isPart) return { recordingSessionId };
+  const first = [...fileNames].map((f) => path.basename(f)).filter((f) => SEGMENT_RE.test(f)).sort()[0];
+  const segIndex = first ? Number(/\d+/.exec(first)[0]) : 0;
+  return { recordingSessionId, partIndex: Number(partMatch[1]), partOffsetSec: segIndex * SEGMENT_MINUTES * 60 };
 }

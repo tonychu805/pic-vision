@@ -13,7 +13,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta } from "./autoSplit.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename } from "node:path";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
@@ -739,7 +739,17 @@ async function runCommand(command) {
     }
   }
 
-  if (command.type === "start_recording") return await startRecording(camera);
+  if (command.type === "start_recording") {
+    const started = await startRecording(camera);
+    // The playing session the console issued with this start (ADR-128):
+    // every upload of this recording, whole or in parts, carries it back.
+    try {
+      writeSessionMeta(started.outDir, command.params);
+    } catch (err) {
+      console.error(`[cloud] could not save the session for ${camera.label}: ${err.message}`);
+    }
+    return started;
+  }
   if (command.type === "stop_recording") {
     const result = await stopRecording(camera.id);
     // Re-measure from what was actually captured. Free (a local file), more

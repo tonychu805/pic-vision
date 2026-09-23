@@ -18,6 +18,7 @@
 // the renderer's CloudJobRow keep working without knowing any of this
 // moved. Two stages are new and local to this file: "upload" (this
 // machine sending the video) and "queued" (waiting for a runner).
+import { sessionFieldsFor } from "./autoSplit.js";
 import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { powerSaveBlocker } from "electron";
@@ -314,6 +315,10 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
       cameraLabel,
       targetSec: targetSec || 180,
       files: files.map((f) => ({ name: path.basename(f), sizeBytes: statSync(f).size })),
+      // The playing session and part this upload belongs to (ADR-128), so
+      // the console puts every part's reels on one share page. Empty for a
+      // recording without a console-issued session.
+      ...sessionFieldsFor(recordingDir, files),
     },
   });
 

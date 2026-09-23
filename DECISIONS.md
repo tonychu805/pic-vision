@@ -2813,3 +2813,20 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 **Trade-offs accepted for the test:** reels come per part rather than one session reel; a rally crossing a part boundary can be cut (ADR-066 already accepted ~1.3/hour); ~1–2 min GPU start-up per part (pennies).
 
 **Checked:** 7 new tests on real files in a temp directory (a 2-hour recording in 20-minute parts sends every segment exactly once and in order, with the last on stop; hard links, not copies; send-now leaves the segment being written; the resend rule and its in-flight guard; distinct session ids). Full desktop suite 243/243, lint clean, renderer builds. **Not checked:** a live camera recording through the whole flow, and upload timing at the venue. That's the Friday rehearsal.
+
+## ADR-128 — One playing session, one share link: the console issues a recording session; parts merge on the share page
+
+**Date:** 2026-09-23 · **Status:** live (database, console, orchestrator, share page); desktop side built and tested, **needs the next desktop release**; not yet run on a live camera
+
+**Why.** ADR-127 sends a recording as several separate jobs. Each part needs its own session id (the console cancels an older upload with the same one), so nothing tied a session's parts together, and each part got its own share link. Players need one link per game.
+
+**Decision: the console issues the session and the desktop echoes it.** Other options were deriving the session from camera+time or from the court. They were rejected: those links are guesses a clock skew or a camera swap breaks, and a record created at start doesn't depend on either.
+- New table `recording_sessions` (agent, camera, optional booking, its own `share_id`). One is created per **scheduled booking** (the dispatch timer) and per **manual Start** (`/api/commands`, server-set, so a client can't choose it). Its id rides in the start command's params.
+- The desktop saves it as `session.json` in the recording folder. Every upload of that recording, whole or a part, sends `recording_session_id`, plus `part_index` and `part_offset_sec` for a part. The console refuses a session belonging to another desktop or another camera (400).
+- On claim, the job carries the session's `share_id`. The orchestrator (and the old workstation runner) pass it to the pod as `SHARE_ID`. On done, the console files the reels under the session's share id **whatever the pod reported**, tagged with the part.
+- **The share page looks the same as before** (operator: "for users, they still only need to see the same thing, so there shouldnt be any tabs"). With more than one part, it shows one carousel with each part's best rally interleaved (part 1's #1, part 2's #1, …, then each #2), capped at 10 rallies and renumbered 1–10, then the **newest** part's quick hits and full reel. With one part, the output is unchanged. The cap keeps the page's per-slide prefetch at today's ~12 slides.
+- Old desktops send no session and behave exactly as before.
+
+**Trade-offs accepted:** quick hits and full reel cover only the newest part (ADR-066's combined reel is still the real fix); ranking interleaves by part instead of re-ranking across parts, since scores from different parts aren't calibrated against each other.
+
+**Checked:** migration applied (anon can't call dispatch; the share RPC still serves old links, 12 reels). Console 196 unit tests. Orchestrator 31 unit + 9 component (pod gets the session's share id). Job runner 56. Desktop 245. Share-page merge 4 tests, plus a local render against real production data: 3 parts, no tabs, Rally 1–10 + Quick hits + Full reel; an old link unchanged. **Live against production after deploy:** S1 an upload attaches to its session with part number and offset; S2 another desktop's session, another camera's, a random id or a malformed id → refused; S3 an upload with no session still works; S4 a finished part lands on the session's share link, and the RPC returns it. 13/13 with the older live tests. **Not checked:** a real recording with a live camera through the whole flow (Friday rehearsal, after a desktop release).

@@ -404,7 +404,9 @@ def run_reel_job(job):
         "SESSION_ID": job.get("session_id") or job_id,
         "REEL_ID": str(uuid.uuid4()),
         "BURST_REEL_ID": str(uuid.uuid4()),
-        "SHARE_ID": str(uuid.uuid4()),
+        # The playing session's share link when the job is part of one
+        # (ADR-128), so every part's reels land on one page; else a fresh one.
+        "SHARE_ID": job.get("share_id") or str(uuid.uuid4()),
         "CONSOLE_URL": CONSOLE_URL,
         "RUNNER_TOKEN": RUNNER_TOKEN,
         # The account id alone -- it only builds the endpoint URL and is

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS } from "./autoSplit.js";
+import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor } from "./autoSplit.js";
 
 const seg = (i) => `session-${String(i).padStart(3, "0")}.mkv`;
 
@@ -79,4 +79,23 @@ test("every part gets its own session id (the console cancels an older upload of
   const b = partSessionId("Court 5", "/rec/2026-09-26T10-00-00-000Z", "part-02");
   assert.notEqual(a, b);
   assert.match(a, /^[a-zA-Z0-9._-]+$/);
+});
+
+
+test("session fields: a part carries the session, its number, and where it starts; a whole recording just the session", () => {
+  const dir = recording(6);
+  writeSessionMeta(dir, { recording_session_id: "11111111-1111-4111-8111-111111111111", schedule_booking_id: "b-1" });
+  const [p1, p2] = makeDueParts(dir, { stillRecording: false, partMinutes: 20 });
+  assert.deepEqual(sessionFieldsFor(p1.dir, p1.segments), { recordingSessionId: "11111111-1111-4111-8111-111111111111", partIndex: 1, partOffsetSec: 0 });
+  assert.deepEqual(sessionFieldsFor(p2.dir, p2.segments), { recordingSessionId: "11111111-1111-4111-8111-111111111111", partIndex: 2, partOffsetSec: 1200 });
+  assert.deepEqual(sessionFieldsFor(dir, [seg(0)]), { recordingSessionId: "11111111-1111-4111-8111-111111111111" });
+});
+
+test("session fields: a recording from before sessions (or a start without one) sends nothing extra", () => {
+  const old = recording(2);
+  assert.deepEqual(sessionFieldsFor(old, [seg(0)]), {});
+  const none = recording(2);
+  writeSessionMeta(none, {});
+  const [p] = makeDueParts(none, { stillRecording: false, partMinutes: 20, flush: true });
+  assert.deepEqual(sessionFieldsFor(p.dir, p.segments), {});
 });
