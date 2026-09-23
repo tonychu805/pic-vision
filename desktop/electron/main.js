@@ -30,7 +30,8 @@ import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow } from "./cloud.js";
+import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -300,6 +301,18 @@ function registerCameraHandlers() {
 
 // Real scan configuration (scanSettings.js) -- 2026-09-05, replacing
 // SettingsPage.jsx's mock "Ranges"/"Behaviour" panels.
+// Sending a recording in parts while it records (autoSplit.js). Scalars
+// only: a part length, a camera id -- the camera itself is looked up in main.
+function registerAutoSplitHandlers() {
+  ipcMain.handle("autoSplit:get", async () => ({ minutes: getAutoSplitMinutes() }));
+  ipcMain.handle("autoSplit:set", async (_event, minutes) => ({ minutes: setAutoSplitMinutes(minutes) }));
+  ipcMain.handle("autoSplit:sendNow", async (_event, cameraId) => autoSplitSendNow(cameraId));
+}
+
+// Every 30s: any recording in progress sends the parts that are due. Cheap
+// when off (one settings read) and when nothing is recording.
+const AUTO_SPLIT_TICK_MS = 30_000;
+
 function registerScanSettingsHandlers() {
   ipcMain.handle("scanSettings:get", async () => {
     return { extraRanges: getExtraRanges(), timeoutMs: getTimeoutMs() };
@@ -342,7 +355,13 @@ function registerPipelineHandlers() {
   ipcMain.handle("pipeline:run", async (_event, { cameraId, recordingDir, targetSec }) => {
     const camera = listCameras().find((c) => c.id === cameraId);
     if (!camera) throw new Error("Camera not found");
-    const sessionId = `${camera.label}-${path.basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+    // A part folder (autoSplit.js) is <recording>/parts/part-NN: its id must
+    // name the recording too, or "part-01" of one recording would collide
+    // with another's and the console would cancel that upload as a resend.
+    const partName = path.basename(recordingDir);
+    const sessionId = /^part-\d+$/.test(partName)
+      ? partSessionId(camera.label, path.dirname(path.dirname(recordingDir)), partName)
+      : `${camera.label}-${partName}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
     // A sample-clip camera's one "recording" IS the uploaded file already
     // -- no segments to concatenate, so pipeline.js's videoPath override
     // is passed straight through instead of looking for session-*.mkv
@@ -595,6 +614,7 @@ app.whenReady().then(() => {
   migrateRecordingDirsToCameraIds();
   registerCameraHandlers();
   registerScanSettingsHandlers();
+  registerAutoSplitHandlers();
   registerCaptureHandlers();
   registerPipelineHandlers();
   registerCloudHandlers();
@@ -639,6 +659,7 @@ app.whenReady().then(() => {
     };
   });
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
+  setInterval(() => { autoSplitTick().catch((err) => console.error(`[autosplit] ${err.message}`)); }, AUTO_SPLIT_TICK_MS);
   syncCommandChannel().catch(() => {}); // instant commands where possible; the poll above is the floor
   // Catches two cases where sign-in's own registration didn't happen or
   // didn't stick: registration never succeeded (console unreachable the

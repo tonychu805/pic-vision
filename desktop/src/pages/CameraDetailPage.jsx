@@ -365,6 +365,58 @@ function CloudJobRow({ camera, recording }) {
   );
 }
 
+// A recording sent in parts (autoSplit.js), or one still recording: one
+// status row per part already sent, instead of the whole recording's single
+// Send button -- sending the whole recording as well would process every
+// part twice. While recording, "Send what's recorded so far" sends every
+// finished 10-minute piece now, for when the session is about to end.
+function PartedRecording({ camera, recording, onChanged }) {
+  const [splitMinutes, setSplitMinutes] = useState(0);
+  const [sending, setSending] = useState(false);
+  const [note, setNote] = useState("");
+
+  useEffect(() => { window.autoSplitAPI?.get().then((r) => setSplitMinutes(r.minutes)); }, []);
+
+  const sendNow = async () => {
+    setSending(true);
+    setNote("");
+    try {
+      const { sent } = await window.autoSplitAPI.sendNow(camera.id);
+      setNote(sent.length ? `Sent ${sent.join(", ")}` : "Nothing finished to send yet -- the current 10 minutes is still recording");
+      onChanged?.();
+    } catch (err) {
+      setNote(cleanIpcError(err));
+    }
+    setSending(false);
+  };
+
+  return (
+    <div style={{ padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: "var(--fs-body)" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+        <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+          {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
+        </span>
+        {recording.recording && (splitMinutes > 0 ? (
+          <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} disabled={sending} onClick={sendNow}>
+            {sending ? "Sending…" : "Send what's recorded so far"}
+          </button>
+        ) : (
+          <span className="text-4" style={{ flex: "none", fontSize: "var(--fs-fine)" }}>Still recording</span>
+        ))}
+      </div>
+      {recording.recording && splitMinutes > 0 && (
+        <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "4px 0 0" }}>
+          Sending in {splitMinutes}-minute parts while recording; the rest goes when recording stops.
+        </p>
+      )}
+      {note && <p className="text-3" style={{ fontSize: "var(--fs-fine)", margin: "4px 0 0" }}>{note}</p>}
+      <div style={{ paddingLeft: 16 }}>
+        {(recording.parts ?? []).map((p) => <CloudJobRow key={p.dir} camera={camera} recording={p} />)}
+      </div>
+    </div>
+  );
+}
+
 // Hands finished recordings to cloud_pipeline/run_desktop_job.py as a
 // subprocess (PIC-68) -- the local agent doesn't reimplement R2 upload/
 // RunPod dispatch/reel-cutting in JS, per ADR-071's "reuse the existing
@@ -400,6 +452,16 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
   };
   useEffect(() => { refresh(); }, [camera.id]);
 
+  // While something is recording, parts appear on their own (autoSplit.js
+  // sends one every N minutes), so the list re-reads itself instead of
+  // waiting for a Refresh press.
+  const anyRecording = recordings.some((r) => r.recording);
+  useEffect(() => {
+    if (!anyRecording) return undefined;
+    const interval = setInterval(() => { window.captureAPI.listRecordings(camera.id).then(setRecordings); }, 15000);
+    return () => clearInterval(interval);
+  }, [camera.id, anyRecording]);
+
   // One heartbeat is 30s, so a slower cadence than the 2s job poll is
   // enough; this only has to correct itself once, shortly after launch.
   useEffect(() => {
@@ -423,7 +485,9 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
             No recordings yet.
           </p>
         ) : (
-          recordings.map((r) => <CloudJobRow key={r.dir} camera={camera} recording={r} />)
+          recordings.map((r) => (r.parts?.length || r.recording
+            ? <PartedRecording key={r.dir} camera={camera} recording={r} onChanged={refresh} />
+            : <CloudJobRow key={r.dir} camera={camera} recording={r} />))
         )}
       </div>
     </div>

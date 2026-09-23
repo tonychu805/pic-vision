@@ -171,6 +171,8 @@ export default function SettingsPage({ onBack }) {
           </details>
         </div>
 
+        <AutoSplitCard />
+
         <div className="card">
           <div className="section-label">How long to wait</div>
           <div className="field">
@@ -201,6 +203,48 @@ export default function SettingsPage({ onBack }) {
           </p>
         </div>
       </div>
+    </div>
+  );
+}
+
+// Sending a recording in parts while it records (desktop/electron/autoSplit.js).
+// Saves on change, like the Appearance-style switches elsewhere: a setting
+// that needs a separate Save press reads as on while it isn't.
+function AutoSplitCard() {
+  const [minutes, setMinutes] = useState(null);
+  const [error, setError] = useState("");
+
+  useEffect(() => { window.autoSplitAPI?.get().then((r) => setMinutes(r.minutes)).catch(() => setMinutes(0)); }, []);
+
+  const change = async (value) => {
+    setError("");
+    try {
+      const saved = await window.autoSplitAPI.set(Number(value));
+      setMinutes(saved.minutes);
+    } catch (err) {
+      setError(err.message || String(err));
+    }
+  };
+
+  return (
+    <div className="card">
+      <div className="section-label">Send in parts while recording</div>
+      <div className="field">
+        <label>Send each part to the cloud every</label>
+        <select className="input" style={{ maxWidth: 180 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
+          <option value={0}>Off (send when recording stops)</option>
+          <option value={10}>10 minutes</option>
+          <option value={20}>20 minutes</option>
+          <option value={30}>30 minutes</option>
+          <option value={60}>60 minutes</option>
+        </select>
+      </div>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{error}</p>}
+      <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
+        While a camera records, each finished part is sent to the cloud straight away, so its highlights are ready
+        while play continues. When recording stops, the remainder is sent as the last part -- whether it was a
+        scheduled session or stopped by hand. Each part gets its own set of reels.
+      </p>
     </div>
   );
 }

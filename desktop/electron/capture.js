@@ -15,6 +15,7 @@
 // becomes its own highlight reel once automatic capture is built"), just
 // not this one -- a manual button is simpler to get right first.
 import { spawn, spawnSync } from "node:child_process";
+import { listParts } from "./autoSplit.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -420,6 +421,11 @@ export function stopRecording(cameraId) {
   });
 }
 
+/** Where a camera is recording right now, or null. */
+export function activeOutDir(cameraId) {
+  return active.get(cameraId)?.outDir ?? null;
+}
+
 export function stopAllRecordings() {
   return Promise.all([...active.keys()].map(stopRecording));
 }
@@ -464,7 +470,11 @@ export function listRecordings(camera) {
     .map((name) => {
       const dir = path.join(cameraDir, name);
       const segments = readdirSync(dir).filter((f) => /^session-\d+\.mkv$/.test(f));
-      return { name, dir, segments: segments.length, recording: dir === activeOutDir };
+      // Parts auto-split has already sent (autoSplit.js): each is its own
+      // cloud job, so the screen shows one row per part instead of the
+      // whole recording's single Send button.
+      const parts = listParts(dir).map((p) => ({ name: p.name, dir: p.dir, segments: p.segments.length, recording: false }));
+      return { name, dir, segments: segments.length, recording: dir === activeOutDir, parts };
     })
     .sort((a, b) => b.name.localeCompare(a.name));
 }

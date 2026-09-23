@@ -40,6 +40,12 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
 });
 
+contextBridge.exposeInMainWorld("autoSplitAPI", {
+  get: () => ipcRenderer.invoke("autoSplit:get"),
+  set: (minutes) => ipcRenderer.invoke("autoSplit:set", minutes),
+  sendNow: (cameraId) => ipcRenderer.invoke("autoSplit:sendNow", cameraId),
+});
+
 contextBridge.exposeInMainWorld("scanSettingsAPI", {
   get: () => ipcRenderer.invoke("scanSettings:get"),
   addRange: (cidr) => ipcRenderer.invoke("scanSettings:addRange", cidr),

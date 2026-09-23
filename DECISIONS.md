@@ -2793,3 +2793,23 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 **Found alongside, fixed the same evening:** `scheduler-worker`'s only secret is stored under a name that looks like the token value, so it sends no `SCHEDULE_DISPATCH_TOKEN`. `/api/schedule/dispatch` has returned 401 on every tick since the Worker was set up, so **scheduled recordings have never started automatically** (1 booking on record, never commanded). The value is also visible, since secret names aren't hidden. Fixed: a new random token was set as a secret in Netlify's production context and as `SCHEDULE_DISPATCH_TOKEN` on the Worker (never printed); the console was redeployed to load it; the misnamed secret was deleted. Verified by tailing the Worker: 12 of 13 ticks clean afterwards. The one exception was an HTTP 525 (Cloudflare couldn't complete TLS to the console's origin), transient and the same family as the runner's 04:01 certificate mismatch. Worth watching if it recurs, since the orchestrator uses the same path. The orchestrator's ticks were clean over the same window. The first attempt failed at the Netlify step (a secret value needs `--context`) while the script reported success. It was caught from the command output, not the script's last line, and redone with each step checked.
 
 **Still open from the same check (lower):** pods run the downloaded code package without verifying it (a design choice pending); leaked-password protection is off in Supabase Auth; public `workers.dev` URLs on both Workers; GitHub actions pinned by tag; a non-constant-time token compare in the schedule route.
+
+## ADR-127 — Auto-split: send a recording in parts while it records (weekend stand-in for ADR-066)
+
+**Date:** 2026-09-23 · **Status:** built and unit-tested in the desktop app; **not yet run against a live camera** (Friday rehearsal); not released
+
+**Why.** The weekend venue test is a full 1–2 hour session with reels handed over **in person** at the end, to collect feedback. Sending the whole session at the end means about an hour of processing (measured pod inference ~75 fps, so a 2 h session is ~48 min of detection plus conversion) plus the upload, so players would be gone. ADR-066's rolling pipeline (one combined session reel ~10–15 min after the end) is several days of pipeline, console and orchestrator work, too risky before a live test.
+
+**Decision: regroup what the desktop already records.** `capture.js` has always written 10-minute segments and kept recording across them. `desktop/electron/autoSplit.js` groups *finished* segments into parts (`<recording>/parts/part-NN/`, hard links, no copy) and sends each through the existing `runCloudJob`, unchanged, as an ordinary job. No cloud, pipeline or orchestrator change.
+- A 30-second timer sends a part every N minutes (setting: off/10/20/30/60, **off by default**, so other venue machines keep today's behaviour).
+- **Send what's recorded so far** sends every finished, unsent segment now.
+- When recording stops (scheduled or manual), the remainder goes as the final part, replacing the whole-recording auto-send while auto-split is on.
+
+**Correctness points found while building:**
+- **Each part needs its own session id.** The console cancels an older still-uploading job of the same camera+session as a resend (`d0503ae`), so shared ids would have part 2 cancel part 1's upload. `partSessionId()` includes the recording and part; the manual Send/Retry button uses the same id for part folders.
+- A segment is "finished" only when ffmpeg has moved on to a newer one **and** it hasn't been written in 15 s, and a segment can belong to only one part (passes are serialized).
+- A part whose send never reached the console (no `job.json`) is resent on the next tick. Parts in flight are excluded, so it's never sent twice.
+
+**Trade-offs accepted for the test:** reels come per part rather than one session reel; a rally crossing a part boundary can be cut (ADR-066 already accepted ~1.3/hour); ~1–2 min GPU start-up per part (pennies).
+
+**Checked:** 7 new tests on real files in a temp directory (a 2-hour recording in 20-minute parts sends every segment exactly once and in order, with the last on stop; hard links, not copies; send-now leaves the segment being written; the resend rule and its in-flight guard; distinct session ids). Full desktop suite 243/243, lint clean, renderer builds. **Not checked:** a live camera recording through the whole flow, and upload timing at the venue. That's the Friday rehearsal.

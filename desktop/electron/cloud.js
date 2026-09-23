@@ -12,10 +12,11 @@ import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
-import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "./capture.js";
+import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir } from "./capture.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized } from "./autoSplit.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename } from "node:path";
-import { runCloudJob } from "./pipeline.js";
+import { runCloudJob, isPipelineRunning } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
@@ -762,8 +763,16 @@ async function runCommand(command) {
     // the operator triggered themselves keeps its manual send, since
     // silently spending GPU money on a recording someone stopped by hand
     // isn't obviously wanted.
-    if (result.stopped && result.outDir && command.params?.schedule_booking_id) {
-      sendRecordingToCloud(camera, result.outDir);
+    if (result.stopped && result.outDir) {
+      if (getAutoSplitMinutes() > 0) {
+        // Auto-split on: whatever hasn't gone out yet leaves now as the
+        // final part -- for any stop, since the operator chose to have this
+        // recording sent in parts. Awaited only as far as creating the part;
+        // the upload itself runs in the background like every other send.
+        await sendDueParts(camera, result.outDir, { stillRecording: false, flush: true });
+      } else if (command.params?.schedule_booking_id) {
+        sendRecordingToCloud(camera, result.outDir);
+      }
     }
     return result;
   }
@@ -797,9 +806,9 @@ async function runCommand(command) {
 // state in the recording's cloud_job/status.json, exactly as it does for a
 // manual send, so nothing here needs to wait for it. Failures are logged to
 // the activity log by runCloudJob itself.
-function sendRecordingToCloud(camera, recordingDir) {
-  const sessionId = `${camera.label}-${basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
-  runCloudJob({
+function sendRecordingToCloud(camera, recordingDir, sessionIdOverride) {
+  const sessionId = sessionIdOverride ?? `${camera.label}-${basename(recordingDir)}`.replace(/[^a-zA-Z0-9._-]+/g, "_");
+  return runCloudJob({
     recordingDir,
     videoPath: camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined,
     targetSec: 180,
@@ -810,6 +819,54 @@ function sendRecordingToCloud(camera, recordingDir) {
     console.error(`[cloud] scheduled send failed for ${camera.label}: ${err.message}`);
     logEvent("pipeline_failed", `${camera.label} scheduled upload failed`, err.message);
   });
+}
+
+// ---------- auto-split (autoSplit.js) ----------
+
+// Parts whose send is in progress but hasn't reached a console job yet:
+// without this, the retry pass below would see "no job.json" a moment after
+// sending and send the same part again.
+const partsInFlight = new Set();
+
+function sendPart(camera, recordingDir, part) {
+  partsInFlight.add(part.dir);
+  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x 10 min)`);
+  Promise.resolve(sendRecordingToCloud(camera, part.dir, partSessionId(camera.label, recordingDir, part.name)))
+    .finally(() => partsInFlight.delete(part.dir));
+}
+
+/** Create and send the parts that are due for one recording; resend any whose earlier send never reached the console. */
+function sendDueParts(camera, recordingDir, { stillRecording, flush }) {
+  const minutes = getAutoSplitMinutes();
+  if (!minutes) return Promise.resolve([]);
+  return serialized(async () => {
+    const isRunning = (dir) => isPipelineRunning(dir) || partsInFlight.has(dir);
+    for (const part of unsentParts(recordingDir, isRunning)) sendPart(camera, recordingDir, part);
+    const created = makeDueParts(recordingDir, { stillRecording, partMinutes: minutes, flush });
+    for (const part of created) sendPart(camera, recordingDir, part);
+    return created.map((p) => p.name);
+  });
+}
+
+/** Every recording in progress: send its parts that are due. Called on a timer from main.js. */
+export async function autoSplitTick() {
+  if (!getAutoSplitMinutes()) return;
+  for (const camera of listCameras()) {
+    if (camera.connectionType === "sampleClip") continue;
+    const dir = activeOutDir(camera.id);
+    if (dir) await sendDueParts(camera, dir, { stillRecording: true, flush: false }).catch((err) => console.error(`[autosplit] ${camera.label}: ${err.message}`));
+  }
+}
+
+/** "Send what's recorded so far": every finished, unsent segment of this camera's recording goes out now as a part. */
+export async function autoSplitSendNow(cameraId) {
+  const camera = listCameras().find((c) => c.id === cameraId);
+  if (!camera) throw new Error("Camera not found");
+  const dir = activeOutDir(cameraId);
+  if (!dir) throw new Error(`${camera.label} isn't recording`);
+  if (!getAutoSplitMinutes()) throw new Error("Turn on sending in parts in Settings first");
+  const sent = await sendDueParts(camera, dir, { stillRecording: true, flush: true });
+  return { sent };
 }
 
 async function processCommands() {

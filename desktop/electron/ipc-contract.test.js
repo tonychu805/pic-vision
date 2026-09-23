@@ -78,7 +78,7 @@ const FRESH_INPUT_ONLY = new Set([
 // Listing them is the deliberate claim the rule above describes -- they
 // are an error's text, never an entity, and carry no secret that could
 // have been stripped on the way out.
-const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack)$/;
+const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|minutes|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack)$/;
 
 function isObjectParam(param) {
   // `{ a, b }` / `[a, b]` -- destructured, therefore an object.
