@@ -1075,3 +1075,27 @@ def test_capacity_is_exhausted_past_the_cap():
     # Belt and suspenders: a transient overshoot (e.g. a race in main()'s
     # own bookkeeping) must still read as "no capacity", not wrap around.
     assert job_runner.has_capacity(job_runner.MAX_CONCURRENT_JOBS + 1) is False
+
+
+def _capture_pod_env(monkeypatch, job):
+    _no_real_network(monkeypatch, FAKE_CREDENTIALS)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    captured = {}
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod",
+                        lambda **kw: captured.update(kw) or ("pod-1", "gpu"))
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: False)
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: None)
+    job_runner.run_reel_job(job)
+    return captured["env"]
+
+
+def test_the_pod_gets_the_logo_the_console_chose(monkeypatch):
+    env = _capture_pod_env(monkeypatch, {**JOB, "logo_url": "https://cdn.picvisionai.com/b/brand-logos/x.png"})
+    assert env["LOGO_URL"] == "https://cdn.picvisionai.com/b/brand-logos/x.png"
+
+
+def test_no_logo_from_the_console_means_no_logo_on_the_pod(monkeypatch):
+    # null (toggle off / no upload / SVG) and an older console that never
+    # sends the field at all must both reach the pod as "no logo".
+    assert _capture_pod_env(monkeypatch, {**JOB, "logo_url": None})["LOGO_URL"] == ""
+    assert _capture_pod_env(monkeypatch, dict(JOB))["LOGO_URL"] == ""

@@ -27,6 +27,10 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            before PIC-153. Deliberately not the same value
                            as BUCKET: that conflation is the mistake
                            PIC-153 found.
+    LOGO_URL              optional: public CDN URL of the venue's logo, set
+                           only when the venue turned "Show logo on reel
+                           videos" on in Settings (lib/reelLogo.ts decides).
+                           Burnt into every clip's lower-right corner.
     SEGMENT_KEYS_JSON     JSON list of R2 keys, the venue's raw recording
                            segments (already uploaded by the desktop app --
                            this is the actual "delete the operator's
@@ -171,10 +175,32 @@ OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
 # would mean that guard was bypassed somehow; better to crash loudly here
 # than write an un-prefixed key by accident.
 BRAND_ID = os.environ["BRAND_ID"]
+LOGO_URL = os.environ.get("LOGO_URL") or None
 
 
 def _log(msg):
     print(f"[pod-driver {time.strftime('%H:%M:%S')}] {msg}", flush=True)
+
+
+def _fetch_logo(url, workdir):
+    """Download the venue's logo, or return None if it can't be had.
+
+    A missing logo costs the venue its corner badge; failing the job would
+    cost it the whole reel and a billed GPU run -- so this degrades, and
+    says so in the log."""
+    if not url:
+        return None
+    try:
+        resp = requests.get(url, timeout=30)
+        resp.raise_for_status()
+        path = os.path.join(workdir, "logo" + os.path.splitext(url.split("?")[0])[1])
+        with open(path, "wb") as f:
+            f.write(resp.content)
+        _log(f"logo fetched ({len(resp.content)} bytes) -- burning into every clip")
+        return path
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"WARNING: could not fetch logo from {url} ({e}) -- rendering without it")
+        return None
 
 
 def _scoped_r2_client(direction):
@@ -554,13 +580,15 @@ def run():
     # already running in-process. ---
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
+    logo_path = _fetch_logo(LOGO_URL, WORKDIR)
     full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
-                              target_sec, session_id, weights=WEIGHTS, include_chronological=False)
+                              target_sec, session_id, weights=WEIGHTS, include_chronological=False,
+                              logo_path=logo_path)
     burst_result = build_burst_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "burst"),
-                                     BURST_TARGET_SEC, session_id)
+                                     BURST_TARGET_SEC, session_id, logo_path=logo_path)
     has_burst = burst_result["chronological"] is not None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
-                                    session_id, n=TOP_RALLIES_N)
+                                    session_id, n=TOP_RALLIES_N, logo_path=logo_path)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
 

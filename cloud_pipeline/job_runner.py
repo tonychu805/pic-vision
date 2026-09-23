@@ -412,6 +412,10 @@ def run_reel_job(job):
     env = {
         "JOB_ID": job_id,
         "BRAND_ID": brand_id,
+        # The venue's logo, only if it chose "Show logo on reel videos" --
+        # the claim response's logo_url is already null otherwise
+        # (lib/reelLogo.ts in the console). Empty means no logo.
+        "LOGO_URL": job.get("logo_url") or "",
         "BUCKET": job["bucket"],
         "OUTPUT_BUCKET": output_bucket,
         "BOOTSTRAP_URL": bootstrap_url,

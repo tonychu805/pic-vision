@@ -56,16 +56,58 @@ def probe_fps(video, default=30.0):
     return fps
 
 
-def clip_command(video, start, end, out_path):
+# Venue logo in the lower-right corner, sized against the video so a 720p
+# camera gets the same look as a 1080p one: 8% of the frame's width, inset
+# 1/60th of it (32px at 1920), corners rounded at 12% of the logo's width.
+# Chosen by eye on a real PGC clip, 2026-09-23.
+LOGO_WIDTH_FRAC = 0.08
+LOGO_MARGIN_FRAC = 1 / 60
+LOGO_RADIUS_FRAC = 0.12
+
+
+def logo_filter(video_width):
+    """filter_complex placing input 1 (the logo image) over input 0.
+
+    Trims a 1px edge off the logo first: uploads often carry a stray
+    border line (PGC's did) that reads as a hairline on one side once the
+    corners are rounded. The alpha mask is antialiased by a half-pixel so
+    the rounded edge isn't stair-stepped. The logo is a still image, so
+    this all runs once per clip, not per frame -- overlay just repeats it."""
+    w = max(2, round(video_width * LOGO_WIDTH_FRAC / 2) * 2)
+    m = round(video_width * LOGO_MARGIN_FRAC)
+    r = round(w * LOGO_RADIUS_FRAC)
+    corner = (f"hypot(max(0,{r}-min(X+0.5,W-X-0.5)),"
+              f"max(0,{r}-min(Y+0.5,H-Y-0.5)))")
+    return (f"[1]crop=iw-2:ih-2:1:1,scale={w}:-2:flags=lanczos,format=rgba,"
+            f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*clip({r}+0.5-{corner},0,1)'[logo];"
+            f"[0][logo]overlay=W-w-{m}:H-h-{m}")
+
+
+def clip_command(video, start, end, out_path, logo_path=None, video_width=None):
     """ffmpeg command to cut [start, end] (seconds) of video into an H.264 clip.
-    Re-encodes for frame-accurate boundaries; drops audio for now."""
+    Re-encodes for frame-accurate boundaries; drops audio for now.
+
+    With logo_path (and the source's video_width), the logo is burnt in
+    during that same encode -- no second pass."""
     duration = end - start
-    return [
-        "ffmpeg", "-y", "-v", "error",
-        "-ss", f"{start}", "-i", video, "-t", f"{duration}",
+    cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start}", "-i", video]
+    if logo_path:
+        # Before -t: an -i after it would make -t apply to the logo input.
+        cmd += ["-i", logo_path, "-filter_complex", logo_filter(video_width)]
+    return cmd + [
+        "-t", f"{duration}",
         "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
         "-movflags", "+faststart", "-an", out_path,
     ]
+
+
+def probe_width(video):
+    """The video stream's width in pixels."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-select_streams", "v:0",
+         "-show_entries", "stream=width", "-of", "csv=p=0", video],
+        capture_output=True, text=True, check=True).stdout
+    return int(out.strip())
 
 
 def manifest_entry(seg, rally_id, file, court_id=None, session_id=None):
@@ -102,11 +144,14 @@ def concat_clips(manifest, out_dir):
 
 
 def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
-              pad_sec=3.0):
+              pad_sec=3.0, logo_path=None):
     """Cut each segment into an H.264 clip in out_dir and write manifest.json.
     pad_sec adds context before/after each crossing burst so clips are watchable.
+    logo_path, if given, is burnt into every clip's lower-right corner -- and
+    so into every reel concatenated from them, since those are `-c copy`.
     Returns the manifest (list of manifest_entry dicts, sorted by start)."""
     os.makedirs(out_dir, exist_ok=True)
+    video_width = probe_width(video) if logo_path and segments else None
     sorted_segs = sorted(segments, key=lambda s: s["start"])
     n = len(sorted_segs)
     manifest = []
@@ -116,8 +161,8 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
         end = seg["end"] + pad_sec
         log.info("[%d/%d] %.1f–%.1fs  (%.1fs, %d crossings)",
                  i, n, start, end, end - start, seg.get("crossings", 0))
-        subprocess.run(clip_command(video, start, end,
-                                    os.path.join(out_dir, fname)), check=True)
+        subprocess.run(clip_command(video, start, end, os.path.join(out_dir, fname),
+                                    logo_path=logo_path, video_width=video_width), check=True)
         manifest.append(manifest_entry(seg, i, fname, court_id, session_id))
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
         json.dump({"video": video, "court_id": court_id, "session_id": session_id,

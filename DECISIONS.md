@@ -2678,3 +2678,23 @@ What it deliberately does not resume:
 **Checked.** GPU capacity: paired tests for retry-then-recover vs. exhaust-with-clear-message, a deadline that cuts a wait short without exceeding it, a cancel mid-wait ending the job cancelled not errored, and (paired) the ordinary first-try case showing no waiting message at all. Concurrency: `has_capacity()` at/below/above the cap (pure, directly tested — `main()`'s own loop has no dedicated test, same precedent as `idle_sleep_sec` vs. `main()` itself). Upload queue: `withUploadSlot()` tested directly and unmocked — strict FIFO order, active-window non-overlap across five queued uploads, `onWaiting` firing only for a call that actually waits, and (paired, and the one real bug caught by writing these) a failed upload not wedging the ones behind it, fixed by removing a stray `.finally()` that created its own unhandled-rejection-prone promise nobody consumed.
 
 **Not covered.** No real RunPod capacity exhaustion was reproduced — the retry logic is verified against a mocked `RuntimeError`, not a live "no instances available" response. No real multi-job concurrent run against RunPod (billing implications of 2+ simultaneous pods are understood, not observed). The desktop upload queue was not tested against a real multi-camera venue upload, and the "waiting for another upload to finish..." status message has not been seen in the actual UI.
+
+## ADR-124 — A venue can put its own logo on its reel videos
+
+**Date:** 2026-09-23 · **Status:** built and tested locally (Python 229, console 174, `tsc --noEmit` clean); **database column not yet applied to production, nothing pushed, no real job has rendered a logo yet**
+
+**What.** A "Show logo on reel videos" switch in the console's Settings (off by default, new column `brands.logo_on_reels`). When it's on, the venue's uploaded logo is burnt into the lower-right corner of every clip a job cuts: the full reel, the burst reel, and each top-rally clip. The reels are `-c copy` joins of those clips, so they carry the logo too.
+
+**Shape.** The console decides and the pod just follows. The claim route reads the brand's switch and logo when the runner claims the job, and returns `logo_url` (a public CDN URL) or null (`lib/reelLogo.ts`). `job_runner.py` passes it to the pod as `LOGO_URL`, and `pod_driver.py` downloads it and hands the path to `src/render.py`. The logo goes on during the clip encode that was already happening, so there's no second render pass. Because the pod fetches the logo over the public CDN, its scoped R2 credentials (PIC-138) need no new permission.
+
+**Choices.**
+- *Read at claim time, not at job creation:* a job queued before the switch flipped follows the switch as it is now.
+- *A failed logo download renders without the logo instead of failing the job:* a missing corner badge is cheaper than a lost reel and a billed GPU run. The pod log says so.
+- *SVG is refused in the console, not passed through:* the pod's ffmpeg decodes raster images only, and an SVG would otherwise surface only as a silent "rendered without it". Settings disables the switch and says why.
+- *Size is proportional, not fixed:* 8% of frame width, inset 1/60 of the width, corner radius 12% of logo width, chosen by eye on a real PGC clip. A 1px edge is trimmed first, because uploads often carry a stray border line.
+
+**Order to ship.** (1) Apply `20260923000000_brand_logo_on_reels.sql` to production. (2) Push the console (Netlify auto-deploys). (3) Push pic-vision; the runner restarts on the `cloud_pipeline/` change. Steps 2 and 3 are each safe without the other: an old runner ignores `logo_url`, and a job with no `logo_url` renders without a logo.
+
+**Checked.** A real-ffmpeg test (`tests/test_render.py`): the clip keeps its padded length (the `-t` placement is easy to get wrong with a second input), the logo pixels are white in the lower-right corner, the opposite corner is untouched, and the logo's outer corner pixel is rounded away. Paired tests show the command is unchanged without a logo. Runner tests cover logo present, null, and missing (an older console). Console tests cover switch on/off, no upload, SVG, and a missing brand.
+
+**Not covered.** No production job has rendered with a logo. The pod's BtbN ffmpeg build is assumed, not verified, to include the `geq` filter the rounded corners use (it's a standard GPL-build filter; the first real job confirms it).

@@ -34,7 +34,7 @@ DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       weights=WEIGHTS, pad_sec=PAD_SEC):
+                       weights=WEIGHTS, pad_sec=PAD_SEC, logo_path=None):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -77,7 +77,7 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
           file=sys.stderr)
 
     manifest = cut_clips(video, chosen, out_dir, court_id=session_id,
-                          session_id=session_id, pad_sec=pad_sec)
+                          session_id=session_id, pad_sec=pad_sec, logo_path=logo_path)
     by_rank = sorted(manifest, key=lambda c: -(c["score"] or 0.0))
     for rank, clip in enumerate(by_rank, 1):
         clip["rank"] = rank

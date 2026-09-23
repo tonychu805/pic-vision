@@ -39,7 +39,7 @@ WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # (duration, peak_crossing_rate, n_spikes) -- c
 
 
 def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path=None,
-                weights=WEIGHTS, include_chronological=True):
+                weights=WEIGHTS, include_chronological=True, logo_path=None):
     """Detect rally candidates, rank them, and cut a highlight reel.
 
     Writes highlight_by_rank.mp4 (best-scored first) to out_dir, plus
@@ -126,7 +126,7 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
 
     scored = [{**r, "score": r["score"]} for r in chosen]
     manifest = cut_clips(video, scored, out_dir, court_id=session_id,
-                          session_id=session_id, pad_sec=PAD_SEC)
+                          session_id=session_id, pad_sec=PAD_SEC, logo_path=logo_path)
     if include_chronological:
         chrono_path = concat_clips(manifest, out_dir)  # chronological -> out_dir/highlight.mp4
     else:
