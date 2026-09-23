@@ -1,0 +1,79 @@
+# Builds the code a self-driving GPU pod runs and stores it in R2 under the
+# commit SHA (ADR-125, step 2 of moving the job runner off the workstation).
+#
+# Until now the runner packed this from the operator's working tree on
+# every job, so a pod ran whatever was on that disk, uncommitted edits
+# included. The cloud orchestrator hands pods this CI-built copy instead:
+# only code that reached main ever runs on a GPU.
+#
+# Harmless while the workstation runner is still live: it keeps building
+# its own tarball per job and never reads these keys.
+#
+# Needs, under Settings -> Secrets and variables -> Actions:
+#   secrets:   R2_POD_DEPS_ACCESS_KEY_ID, R2_POD_DEPS_SECRET_ACCESS_KEY
+#              (an R2 API token scoped to Object Read & Write on the
+#              private ingest bucket only -- NOT the account-wide keys)
+#   variables: CLOUDFLARE_R2_ACCOUNT_ID, R2_PRIVATE_INGEST_BUCKET
+name: pod deps
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "cloud_pipeline/pod_driver.py"
+      - "cloud_pipeline/pod_deps.py"
+      - "src/**"
+      - "scripts/**"
+      - ".github/workflows/pod-deps.yml"
+  workflow_dispatch:
+
+# Two pushes in quick succession must not race on latest.json: the later
+# commit's run waits, so latest always ends on the newest commit.
+concurrency:
+  group: pod-deps
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Build the tarball
+        run: python -m cloud_pipeline.pod_deps build pod_deps.tar
+
+      - name: Every file in it compiles
+        # A syntax error caught here costs a red CI run; caught on the pod
+        # it costs a GPU start and a venue's job.
+        run: |
+          mkdir check && tar -xf pod_deps.tar -C check
+          python -m compileall -q check
+
+      - name: Not configured yet -- build checked, nothing uploaded
+        if: ${{ vars.R2_PRIVATE_INGEST_BUCKET == '' }}
+        run: echo "::notice::R2_PRIVATE_INGEST_BUCKET is not set; skipped the upload (see this file's header)"
+
+      - name: Upload to R2 under the commit SHA, then point latest at it
+        if: ${{ vars.R2_PRIVATE_INGEST_BUCKET != '' }}
+        env:
+          AWS_ACCESS_KEY_ID: ${{ secrets.R2_POD_DEPS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_POD_DEPS_SECRET_ACCESS_KEY }}
+          AWS_DEFAULT_REGION: auto
+          ENDPOINT: https://${{ vars.CLOUDFLARE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+          BUCKET: ${{ vars.R2_PRIVATE_INGEST_BUCKET }}
+        run: |
+          set -euo pipefail
+          key=$(python -c "from cloud_pipeline import pod_deps; print(pod_deps.ci_key('${GITHUB_SHA}'))")
+          latest=$(python -c "from cloud_pipeline import pod_deps; print(pod_deps.LATEST_KEY)")
+          sha256=$(sha256sum pod_deps.tar | cut -d' ' -f1)
+          # Tarball first, pointer second: latest.json must never name a
+          # key that isn't there yet.
+          aws s3 cp pod_deps.tar "s3://${BUCKET}/${key}" --endpoint-url "$ENDPOINT" --only-show-errors
+          printf '{"sha":"%s","key":"%s","sha256":"%s"}\n' "$GITHUB_SHA" "$key" "$sha256" > latest.json
+          aws s3 cp latest.json "s3://${BUCKET}/${latest}" --endpoint-url "$ENDPOINT" \
+            --content-type application/json --only-show-errors
+          echo "stored ${key} (sha256 ${sha256})"

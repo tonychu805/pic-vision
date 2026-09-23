@@ -36,7 +36,6 @@ import os
 import shutil
 import socket
 import sys
-import tarfile
 import tempfile
 import time
 import uuid
@@ -48,7 +47,7 @@ REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, REPO_ROOT)
 load_dotenv(os.path.join(REPO_ROOT, ".env"))
 
-from cloud_pipeline import r2_storage, runpod_pod  # noqa: E402
+from cloud_pipeline import pod_deps, r2_storage, runpod_pod  # noqa: E402
 from cloud_pipeline.save_calibration import build_calibration  # noqa: E402
 
 CONSOLE_URL = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
@@ -257,20 +256,10 @@ def _cancel_job(job_id, pod_id=None):
     return "cancelled"
 
 
-# pod_driver.py's own dependency closure -- same explicit-file-list
-# reasoning as run_cloud_job.py's old POD_REEL_DEPS comment (a new
-# unrelated src/ module shouldn't silently ride along), just tarred at
-# job time instead of baked into an image (see runpod_pod.py's
-# create_selfdriving_pod for why: baking it into an image was tried and
-# reliably broke container start on RunPod, for a reason never found).
-POD_DEPS_FILES = [
-    "src/__init__.py", "src/job_log.py", "src/calib.py", "src/ball.py",
-    "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
-    "src/drift.py", "src/video_quality.py",
-    "scripts/check_drift.py", "scripts/rank_and_reel.py",
-    "scripts/burst_moment_reel.py", "scripts/top_rallies_reel.py",
-    "scripts/pod_infer.py",
-]
+# The file list and the tarball build live in cloud_pipeline/pod_deps.py,
+# shared with the CI build (.github/workflows/pod-deps.yml, ADR-125) so the
+# two can't drift. Re-exported here for the existing tests.
+POD_DEPS_FILES = pod_deps.POD_DEPS_FILES
 POD_DEPS_KEY = "pipeline/pod_deps.tar"
 
 
@@ -282,10 +271,7 @@ def _upload_pod_deps(bucket):
     with tempfile.NamedTemporaryFile(suffix=".tar", delete=False) as tmp:
         tar_path = tmp.name
     try:
-        with tarfile.open(tar_path, "w") as tar:
-            tar.add(os.path.join(REPO_ROOT, "cloud_pipeline", "pod_driver.py"), arcname="pod_driver.py")
-            for rel in POD_DEPS_FILES:
-                tar.add(os.path.join(REPO_ROOT, rel), arcname=rel)
+        pod_deps.build(tar_path)
         r2_storage.upload_file(bucket, tar_path, POD_DEPS_KEY)
     finally:
         os.remove(tar_path)
