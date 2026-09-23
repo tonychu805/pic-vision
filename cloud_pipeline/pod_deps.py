@@ -33,9 +33,9 @@ POD_DEPS_FILES = [
 ]
 POD_DRIVER = "cloud_pipeline/pod_driver.py"
 
-# R2 layout for CI-built tarballs, in the private ingest bucket under the
-# pipeline/ prefix every job's scoped read credential already covers
-# (pic-vision-cloud-console/lib/podGrants.ts, SHARED_READ_PREFIXES).
+# R2 layout for CI-built tarballs, in their own bucket (pic-vision-pod-code;
+# see pod-deps.yml for why not the ingest bucket). The pod reads the
+# tarball through a presigned link, so no pod credential needs this bucket.
 CI_PREFIX = "pipeline/pod_deps"
 LATEST_KEY = f"{CI_PREFIX}/latest.json"
 

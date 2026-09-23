@@ -11,9 +11,15 @@
 #
 # Needs, under Settings -> Secrets and variables -> Actions:
 #   secrets:   R2_POD_DEPS_ACCESS_KEY_ID, R2_POD_DEPS_SECRET_ACCESS_KEY
-#              (an R2 API token scoped to Object Read & Write on the
-#              private ingest bucket only -- NOT the account-wide keys)
-#   variables: CLOUDFLARE_R2_ACCOUNT_ID, R2_PRIVATE_INGEST_BUCKET
+#              (an Account API token, Object Read & Write, on the
+#              pic-vision-pod-code bucket ONLY)
+#   variables: CLOUDFLARE_R2_ACCOUNT_ID, R2_POD_DEPS_BUCKET
+#
+# A bucket of its own, not the private ingest bucket: R2 tokens scope to
+# whole buckets, not prefixes, so a token for the ingest bucket could read
+# and delete every venue's footage. Leaked, this one exposes only our own
+# code. The pod never needs a credential for it either -- it fetches the
+# tarball through a presigned link the console mints.
 name: pod deps
 
 on:
@@ -54,17 +60,17 @@ jobs:
           python -m compileall -q check
 
       - name: Not configured yet -- build checked, nothing uploaded
-        if: ${{ vars.R2_PRIVATE_INGEST_BUCKET == '' }}
-        run: echo "::notice::R2_PRIVATE_INGEST_BUCKET is not set; skipped the upload (see this file's header)"
+        if: ${{ vars.R2_POD_DEPS_BUCKET == '' }}
+        run: echo "::notice::R2_POD_DEPS_BUCKET is not set; skipped the upload (see this file's header)"
 
       - name: Upload to R2 under the commit SHA, then point latest at it
-        if: ${{ vars.R2_PRIVATE_INGEST_BUCKET != '' }}
+        if: ${{ vars.R2_POD_DEPS_BUCKET != '' }}
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.R2_POD_DEPS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.R2_POD_DEPS_SECRET_ACCESS_KEY }}
           AWS_DEFAULT_REGION: auto
           ENDPOINT: https://${{ vars.CLOUDFLARE_R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
-          BUCKET: ${{ vars.R2_PRIVATE_INGEST_BUCKET }}
+          BUCKET: ${{ vars.R2_POD_DEPS_BUCKET }}
         run: |
           set -euo pipefail
           key=$(python -c "from cloud_pipeline import pod_deps; print(pod_deps.ci_key('${GITHUB_SHA}'))")

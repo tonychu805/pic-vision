@@ -53,9 +53,6 @@ def test_a_missing_dependency_fails_the_build_by_name(tmp_path):
         pod_deps.build(str(tmp_path / "x.tar"), repo_root=str(fake_root))
 
 
-def test_ci_keys_live_under_a_prefix_every_job_can_read():
-    # pic-vision-cloud-console/lib/podGrants.ts grants every job's read
-    # credential the shared 'pipeline/' prefix; a key outside it would be
-    # unreadable by the pod that needs it.
+def test_ci_keys_are_per_commit_with_one_latest_pointer():
     assert pod_deps.ci_key("abc123") == "pipeline/pod_deps/abc123.tar"
     assert pod_deps.LATEST_KEY.startswith("pipeline/")
