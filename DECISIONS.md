@@ -2738,3 +2738,18 @@ What it deliberately does not resume:
 **Update (2026-09-23): step 3's footage and cap pieces, as decided with the operator.**
 - *Footage is a per-venue retention choice, not a hard-coded delete.* Today R2 space is limited, so a finished job's recording is deleted. The operator wants to keep footage for model fine-tuning later, and reusing recordings for training is a consent question separate from filming and delivering reels (PIC-60/61/62). So `brands.retain_footage_for_training` (off by default) records a venue's agreement. The console deletes a `done` job's segments unless it's on (`lib/footageRetention.ts`; an unreadable choice keeps, since a delete can't be undone). A kept venue is also dropped from the ADR-112 14-day expiry on the next `sync:lifecycle`; otherwise R2 would delete the kept footage anyway. `job_runner.py` no longer deletes segments at all.
 - *The concurrency cap stays at today's 4*, now enforced by `claim_next_job(p_runner, p_max_running_reels)` under an advisory lock, so every runner goes through it. Calibrations are never held back. A job only holds a slot while it has reported in the last 15 minutes. Checked in PGlite (Postgres 18.3, in-process) across six cases before production. It is a limit on simultaneous GPUs, not a spend budget; PIC-80 remains the budget question.
+
+**Update (2026-09-23): step 4 built, not deployed.** `pic-vision-cloud-console/orchestrator-worker/` is a Worker named `pic-vision-orchestrator`. Its every-minute cron claims **reel jobs only** and starts one `ReelJobWorkflow` per job. It does nothing unless `CLAIMING_ENABLED = "true"`. All the decision logic lives in `src/reelJob.ts`, a step-for-step port of `run_reel_job`/`_run_pod_attempt` with the Workflow step, clock, console and RunPod injected. 30 tests port `tests/test_job_runner.py`'s cases and add Workflow-specific ones:
+- unique step names;
+- a replay after eviction rents no second pod;
+- a full 3h job stays well under the Free plan's 1,024 steps;
+- no secret is ever a (persisted) step result;
+- parity checks that read `runpod_pod.py`/`job_runner.py` directly, so the pod start command, image and GPU lists, and pod environment keys can't drift from the Python.
+
+Two deliberate mutations were each caught by the test written for them. One behaviour change from the Python: RunPod answering anything but 200/404 is "unknown", not "pod gone". The old reading would error the job and stop watching a still-billing pod.
+
+Supporting changes, both backward compatible and live:
+- `claim_next_job` gained `p_kinds text[] default null`, replacing the two-argument overload (tested in PGlite, including that the deployed console's two-argument call still resolves).
+- The claim route accepts an optional `kinds`. `job_runner.py` sends `RUNNER_KINDS` if set, so at cutover the workstation can keep calibrations only.
+
+Remaining for cutover (step 5): set the Worker's `RUNNER_TOKEN`/`RUNPOD_API_KEY` secrets and deploy; set `RUNNER_KINDS=calibration` on the workstation and restart it; flip `CLAIMING_ENABLED`; run one real job.

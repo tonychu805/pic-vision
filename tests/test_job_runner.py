@@ -1052,3 +1052,28 @@ def test_no_logo_from_the_console_means_no_logo_on_the_pod(monkeypatch):
     # sends the field at all must both reach the pod as "no logo".
     assert _capture_pod_env(monkeypatch, {**JOB, "logo_url": None})["LOGO_URL"] == ""
     assert _capture_pod_env(monkeypatch, dict(JOB))["LOGO_URL"] == ""
+
+
+# --- RUNNER_KINDS (ADR-125): the workstation keeps only calibrations at cutover ---
+
+
+def _claim_body(monkeypatch, kinds):
+    sent = {}
+
+    class R:
+        status_code = 204
+
+    monkeypatch.setattr(job_runner, "RUNNER_KINDS", kinds)
+    monkeypatch.setattr(job_runner.requests, "post", lambda url, json=None, **kw: sent.update(json) or R())
+    job_runner.claim_job()
+    return sent
+
+
+def test_an_unrestricted_runner_claims_exactly_as_before(monkeypatch):
+    # The paired half: without RUNNER_KINDS nothing changes, so an existing
+    # runner can't silently stop picking up a kind of job.
+    assert "kinds" not in _claim_body(monkeypatch, None)
+
+
+def test_a_calibration_only_runner_says_so_when_claiming(monkeypatch):
+    assert _claim_body(monkeypatch, ["calibration"])["kinds"] == ["calibration"]

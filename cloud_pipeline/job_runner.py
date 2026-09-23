@@ -55,6 +55,12 @@ RUNNER_TOKEN = os.environ.get("RUNNER_TOKEN")
 WORK_DIR = os.environ.get("RUNNER_WORK_DIR", os.path.join(REPO_ROOT, "cloud_pipeline", "jobs", "runner"))
 RUNNER_ID = os.environ.get("RUNNER_ID", socket.gethostname())
 
+# Which job kinds this runner claims, e.g. RUNNER_KINDS=calibration (ADR-125):
+# once reel jobs run on the Cloudflare orchestrator, this workstation keeps
+# only calibrations, which need OpenCV until the fit is ported into the
+# console. Unset = every kind, exactly as before.
+RUNNER_KINDS = [k.strip() for k in os.environ.get("RUNNER_KINDS", "").split(",") if k.strip()] or None
+
 POLL_SEC = 5
 
 # Backoff while there is nothing to do (2026-09-20). This loop used to
@@ -168,8 +174,11 @@ def _headers():
 
 
 def claim_job():
+    body = {"runnerId": RUNNER_ID}
+    if RUNNER_KINDS:
+        body["kinds"] = RUNNER_KINDS
     r = requests.post(f"{CONSOLE_URL}/api/runner/jobs/claim",
-                      json={"runnerId": RUNNER_ID}, headers=_headers(), timeout=30)
+                      json=body, headers=_headers(), timeout=30)
     if r.status_code == 204:
         return None
     r.raise_for_status()
@@ -698,7 +707,8 @@ def main():
         sys.exit("RUNNER_TOKEN is not set (add it to .env; same value as the console's)")
     os.makedirs(WORK_DIR, exist_ok=True)
     _log(f"polling {CONSOLE_URL} as {RUNNER_ID}, work dir {WORK_DIR}, "
-         f"up to {MAX_CONCURRENT_JOBS} job(s) at once")
+         f"up to {MAX_CONCURRENT_JOBS} job(s) at once, "
+         f"kinds: {', '.join(RUNNER_KINDS) if RUNNER_KINDS else 'all'}")
     idle_polls = 0
     in_flight = set()
     with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_CONCURRENT_JOBS) as executor:
