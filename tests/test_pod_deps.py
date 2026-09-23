@@ -38,10 +38,12 @@ def test_the_same_code_always_builds_the_same_bytes(tmp_path):
     a = pod_deps.build(str(tmp_path / "a.tar"), repo_root=str(root))
     for src, _ in pod_deps.members(str(root)):
         os.utime(src, (1_000_000_000, 1_000_000_000))  # new mtimes, same content
+        os.chmod(src, os.stat(src).st_mode | 0o020)  # group-writable, as the workstation's umask checks out; CI's doesn't
     b = pod_deps.build(str(tmp_path / "b.tar"), repo_root=str(root))
     assert _sha(a) == _sha(b)
     for m in tarfile.open(a).getmembers():
         assert (m.mtime, m.uid, m.gid, m.uname, m.gname) == (0, 0, 0, "", "")
+        assert m.mode in (0o644, 0o755)  # git's two file modes, nothing umask-dependent
 
 
 def test_a_missing_dependency_fails_the_build_by_name(tmp_path):

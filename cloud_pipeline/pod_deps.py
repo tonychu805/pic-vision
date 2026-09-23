@@ -8,7 +8,7 @@ One definition, two builders:
     on the operator's disk.
 
 The build is deterministic -- fixed member order, zeroed mtimes and
-ownership -- so the same commit always produces byte-identical bytes, and
+ownership, git-style permissions -- so the same commit always produces byte-identical bytes, and
 "which code did this job run" can be answered by comparing hashes.
 
     python -m cloud_pipeline.pod_deps build OUT.tar
@@ -51,6 +51,11 @@ def members(repo_root=REPO_ROOT):
 
 
 def _normalize(info):
+    # Permissions the way git stores them (644, or 755 if executable):
+    # the operator's workstation checks files out 664 and GitHub's runner
+    # 644, and that alone made the same commit hash differently
+    # (found comparing the first CI upload against a local build).
+    info.mode = 0o755 if info.mode & 0o111 else 0o644
     info.mtime = 0
     info.uid = info.gid = 0
     info.uname = info.gname = ""
