@@ -642,30 +642,18 @@ def run_calibration_job(job):
 
 
 def _cleanup(job, job_dir):
-    """Local scratch always goes; the venue's uploaded segments only go if
-    the job actually succeeded.
+    """Local scratch only. The venue's uploaded segments are not this
+    process's to delete anymore (ADR-125).
 
-    This used to delete the segments unconditionally, from a `finally`, so
-    ANY failure destroyed the job's own input and the only way to retry was
-    for the venue to upload the whole session again (2026-09-19: it ate a
-    271MB clip between two failed attempts, which is how this was found).
-    On a real two-hour session that is ~2.5GB back over a venue's uplink --
-    on the bimodal link ADR-092 measured, potentially hours -- spent
-    because a pod hit a transient error. The pod-level one-shot retry does
-    not help: it only covers a stuck container *within* a run, and by the
-    time a failure is reported the input was already gone.
+    The console deletes them when the job is marked `done`, unless that
+    venue has agreed to keep its footage for model training
+    (pic-vision-cloud-console/lib/footageRetention.ts). A runner deleting
+    them here would quietly override that choice -- and this runner is
+    being retired, so the decision lives where it outlasts it.
 
-    Note the status has to be READ BACK from the console, not inferred from
-    whether run_one caught an exception: pod_driver.py reports its own
-    terminal status and self-terminates, so a job that errored on the pod
-    returns through run_one's success path -- both of 2026-09-19's failed
-    runs logged "finished". An exception here is the rare case, not the
-    normal one.
-
-    Segments for a job that never reaches `done` are left for an R2
-    lifecycle rule on the ingest/ prefix to reclaim, which is the right
-    tool for "delete this eventually" and does not need to be correct
-    on the first try to avoid costing a venue an upload.
+    Every other outcome keeps them, as it has since 2026-09-19 (PIC-157):
+    a failed job's footage is what a retry runs on, and the 14-day expiry
+    on <venue>/ingest/ (ADR-112) reclaims what is never retried.
     """
     logs = os.path.join(WORK_DIR, "logs")
     os.makedirs(logs, exist_ok=True)
@@ -673,21 +661,6 @@ def _cleanup(job, job_dir):
     if os.path.exists(log_src):
         shutil.copyfile(log_src, os.path.join(logs, f"{job['id']}.log"))
     shutil.rmtree(job_dir, ignore_errors=True)
-
-    status = get_job_status(job["id"])
-    if status != "done":
-        keys = job.get("segment_keys") or []
-        if keys:
-            _log(f"job {job['id']}: status is {status or 'unknown'}, not done -- "
-                 f"keeping {len(keys)} uploaded segment(s) so a retry doesn't "
-                 f"need a re-upload")
-        return
-
-    for key in job.get("segment_keys") or []:
-        try:
-            r2_storage.delete_object(job["bucket"], key)
-        except Exception as e:  # noqa: BLE001 - cleanup is best-effort
-            _log(f"job {job['id']}: couldn't delete {key}: {e}")
 
 
 def run_one(job):
