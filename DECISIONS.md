@@ -2759,3 +2759,21 @@ Remaining for cutover (step 5): set the Worker's `RUNNER_TOKEN`/`RUNPOD_API_KEY`
 The gate was parity, not inspection. All 15 real calibrations on record were re-run through today's `calibrate.py`, which reproduces all 15 stored results exactly. The TypeScript port must match that: same landmark assignment, same worst point, and court positions within 1e-3 ft. Measured worst case: **0.008 mm**; rmse within 2e-6 ft; ~40 ms per fit. OpenCV's RANSAC random sampling was replaced by an exhaustive search over all 495 four-point fits, deterministic and never worse. Deleting the refinement step fails the gate.
 
 Consequence for step 5: no calibration jobs will reach a runner any more, so the workstation needs no `RUNNER_KINDS=calibration`. At cutover it can simply stop. The kinds filter stays as a harmless safeguard.
+
+**Update (2026-09-23): cutover done and accepted.** The workstation runner is stopped and disabled (`systemctl disable --now` on both units). `pic-vision-orchestrator` has `CLAIMING_ENABLED = "true"`.
+
+UAT on real venue actions:
+- **Calibration:** Court 6 was fitted by the console (`runner_id = console`), 0.299 ft. Re-running the same clicks, entered in a new order, through `calibrate.py` gave rmse within 8.5e-7 ft and the same worst point.
+- **Reel job 486b6ac5 (Court 6):**
+  1. Upload from the venue app.
+  2. Claimed by `cloudflare-orchestrator`.
+  3. Pod created, which bootstrapped from the CI-built tarball.
+  4. Setup → download (scoped credentials) → convert → inference → cut → upload.
+  5. `done` with 12 reels recorded, PGC logo burnt in, share page 200.
+  6. Venue segment deleted by the console after `done`.
+  7. Pod self-terminated, nothing left on RunPod.
+
+  Claim to done took 14 minutes, 9 of them inference.
+- **13 automated production checks** passed: endpoint auth, pod-code checksum and currency, health, share page, CDN, the GitHub uptime check, and orchestrator ticks.
+
+**Rollback** is unchanged: set `CLAIMING_ENABLED = "false"` and redeploy; `sudo systemctl enable --now pic-vision-runner.path pic-vision-runner.service`.
