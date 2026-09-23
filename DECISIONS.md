@@ -2698,3 +2698,39 @@ What it deliberately does not resume:
 **Checked.** A real-ffmpeg test (`tests/test_render.py`): the clip keeps its padded length (the `-t` placement is easy to get wrong with a second input), the logo pixels are white in the lower-right corner, the opposite corner is untouched, and the logo's outer corner pixel is rounded away. Paired tests show the command is unchanged without a logo. Runner tests cover logo present, null, and missing (an older console). Console tests cover switch on/off, no upload, SVG, and a missing brand.
 
 **Not covered.** No production job has rendered with a logo. The pod's BtbN ffmpeg build is assumed, not verified, to include the `geq` filter the rounded corners use (it's a standard GPL-build filter; the first real job confirms it).
+
+## ADR-125 — Move the job runner off the workstation: one Cloudflare Workflow per reel job, calibration fit ported into the console
+
+**Date:** 2026-09-23 · **Status:** decided, nothing built. Implements PIC-123 (which ADR-093 set up); supersedes the "runner is a single point of failure" half of PIC-109.
+
+**Why now.** `cloud_pipeline/job_runner.py` on the operator's workstation is the last part of the pipeline that is not in the cloud. If that machine sleeps, restarts or goes offline, no reel gets made, and the uptime check (ADR-106) can only report it afterwards, not prevent it. ADR-093 made the GPU pod self-driving and ADR-123 made the runner concurrent, so what remains in the runner is supervision, not work: it never touches a video byte.
+
+**What the runner does today, and where each duty goes.**
+
+| Duty | Today | After |
+|---|---|---|
+| Claim work | `main()` polls `POST /api/runner/jobs/claim` | `scheduler-worker`'s existing every-minute cron claims, and starts one Workflow instance per job, **instance id = job id** (a job can't be started twice) |
+| Package pod code | `_upload_pod_deps()` tars `POD_DEPS_FILES` **from the workstation's disk**, every job | A GitHub Action on push to `main` builds the same tarball and stores it in R2 under the commit SHA; the console hands out a presigned link. Jobs only ever run committed code. |
+| Scoped R2 credentials | `fetch_pod_credentials()` → console | Unchanged endpoint, called from the Workflow |
+| Create pod, GPU-capacity retry, stuck-container retry on the backup image, first-check-in timeout, operator cancel, 3h deadline, "pod vanished without reporting" | `run_reel_job` / `_run_pod_attempt` / `_create_pod_with_capacity_retry` | Ported step for step into the Workflow. Waits are `step.sleep`, so they are durable and free |
+| Delete segments after `done` | `_cleanup()` using the account R2 keys | The console, on the transition to `done` (it already holds the keys; the Workflow then needs none) |
+| Calibration fit | `run_calibration_job()`, Python + OpenCV | **Ported to TypeScript inside the console**; the Calibrate request computes it directly, with no job queue |
+| Concurrency cap | `MAX_CONCURRENT_JOBS = 4` thread pool | Server-side: the claim route returns nothing while N jobs are `running`. This is a first version of PIC-80, enforced where a second runner can't bypass it |
+
+**Unchanged:** `pod_driver.py`, the console's runner API contract, the desktop app, the venue's experience, and the pod's own environment. The pod still gets the shared `RUNNER_TOKEN` and the full `RUNPOD_API_KEY` for self-termination; that is PIC-138's remaining part, left as is. The Workflow becoming the durable outside watchdog is the prerequisite for removing that key later.
+
+**Why a Workflow, not a Container or a Worker loop** (checked against Cloudflare's docs, 2026-09-23): a reel job is minutes of waiting per second of work. A Workflow persists after every step, resumes after a platform restart instead of losing the job, and costs no CPU while sleeping. Waiting instances don't count toward concurrency limits. Containers would have to hold the job in memory and are the wrong shape for mostly-waiting work (PIC-123's original reasoning).
+
+**Constraint that shapes the port:** the Workers **Free** plan allows **1,024 steps per Workflow instance** (Paid: 10,000). Today's loop checks the pod every 15s, which is up to 720 checks over the 3h deadline. The Workflow checks every **30–60s** and folds each check (pod exists? job updated? cancel requested?) into one step. That is safely under the Free limit and loses nothing: the pod terminates itself when done; the poll only notices a crashed one a little later. The Paid plan ($5/mo) removes this concern if finer polling is ever wanted.
+
+**Calibration: port, verified by parity, not by eye.** The fit is `calibrate.py`'s `solve_assignment` (convex hull, then `findHomography` over every ordering of candidate corners) and `compute_calibration` (`findHomography` with RANSAC, `perspectiveTransform`, RMSE). Porting it is about 150 lines of linear algebra. The risk is a silent numeric difference that makes every future camera slightly miscalibrated. So the switch is gated on replaying **all 15 past calibration jobs** (their stored points) through both implementations and requiring the homography, per-point errors and chosen corner assignment to match within a stated tolerance. RANSAC's random sampling is the one place exact equality can't be assumed; with 12 hand-clicked points and no gross outliers it should converge to the same inliers, and the parity run is what confirms that rather than this sentence.
+
+**Order of work** (each step safe on its own; nothing is switched until step 5):
+1. This ADR and PIC-123 update.
+2. GitHub Action that builds and stores the pod-code tarball. The current runner ignores it.
+3. Console: presigned tarball link, segment deletion on `done`, server-side concurrency cap. All backward compatible with the Python runner.
+4. The Workflow in `scheduler-worker` (or a sibling Worker), with tests ported from `tests/test_job_runner.py`'s retry/stuck/cancel/deadline cases. Deployed with claiming **off**.
+5. Cutover on one real job: stop `pic-vision-runner`, turn claiming on, and confirm the reels, progress messages, segment cleanup and **no pod left running**. Rollback is `systemctl start pic-vision-runner`; both can serve the same queue safely (`FOR UPDATE SKIP LOCKED`).
+6. Calibration port plus the parity run, then retire the workstation runner.
+
+**Not decided here:** whether to move to Workers Paid, and alerting for a Workflow that errors (a failed instance is visible in the dashboard, but nothing pushes it yet; the existing uptime check still catches the consequence, a job stuck `running` or `queued`).
