@@ -2681,7 +2681,7 @@ What it deliberately does not resume:
 
 ## ADR-124 — A venue can put its own logo on its reel videos
 
-**Date:** 2026-09-23 · **Status:** built and tested locally (Python 229, console 174, `tsc --noEmit` clean); **database column not yet applied to production, nothing pushed, no real job has rendered a logo yet**
+**Date:** 2026-09-23 · **Status:** built and tested locally (Python 229, console 174, `tsc --noEmit` clean); shipped 2026-09-23 (column applied by the operator in the SQL editor, console and pipeline pushed, runner already on the new code); **no real job has rendered a logo yet**
 
 **What.** A "Show logo on reel videos" switch in the console's Settings (off by default, new column `brands.logo_on_reels`). When it's on, the venue's uploaded logo is burnt into the lower-right corner of every clip a job cuts: the full reel, the burst reel, and each top-rally clip. The reels are `-c copy` joins of those clips, so they carry the logo too.
 
