@@ -2843,3 +2843,28 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 - Desktop log: "<camera>: no rallies found" instead of "reel ready" with no detail.
 
 **Checked:** zero-candidate path reproduced on the real part-2 footage (old code raises, new returns `[]`); one-candidate path builds all three reels; 3 new tests (Python 234, desktop 246).
+
+## ADR-130 — Keep a GPU machine for a playing session's next part; convert skip built but off
+
+**Date:** 2026-09-24 · **Status:** keep-running **live** (console, orchestrator, pod code 56ae700); end-to-end rehearsal passed (EXPERIMENTS.md 2026-09-24: a waiting pod took part 3 with no rental, a second waiter stood down, the last idle pod shut itself down after 12 min, all 4 parts on one link, nothing left running). Convert skip **built, off** (`CONVERT_SKIP=1` to enable) pending a label-scored comparison.
+
+**Why.** The auto-split rehearsals (EXPERIMENTS.md 2026-09-23) showed that each 10-minute part paid ~2–6 minutes to rent and boot a machine, plus ~1–2 minutes of setup, before any detection. The last part after Stop, the one players wait for, paid it too.
+
+**Decision: a finished part's machine stays for the session's next part.**
+- **The pod asks for the next part.** After a part of a playing session, `pod_driver.py` asks `POST /api/runner/sessions/:id/next-part` every 15 s, for up to 12 minutes (`WARM_IDLE_SEC`), and never within 40 minutes of the orchestrator's 3-hour deadline (`WARM_ACCEPT_UNTIL`).
+- **The console decides, atomically, under the claim lock.** `warm_pod_next` either hands over the session's oldest queued part, registers the pod as the session's **one** waiter (a second pod is told to stop), or answers "nothing yet".
+- **The waiter holds the session's parts.** While it keeps asking, `claim_next_job` skips that session's queued parts. A waiter that goes quiet for 45 s, because it's busy or gone, releases them back to the normal queue. A busy machine therefore never delays a part: a part that arrives while its machine is working still gets a fresh machine, as before.
+- **A kept part gets exactly what a fresh pod gets.** It carries the same per-job settings and its own scoped, expiring storage pass. The claim and credential code moved to `lib/runnerJob.ts`, and a console test holds the console's key list equal to `pod_driver.py`'s `JOB_ENV_KEYS`.
+- **When a pod disappears, its unfinished parts fail.** The Workflow that rented the pod keeps watching it until it's gone, as it already did. It then calls `POST /api/runner/pods/:id/gone`, so any later part the pod was running is failed with a plain reason instead of sitting `running`.
+- **A failed part still ends the pod.** A fresh machine takes the next part.
+
+**Checked.**
+- Unit tests: pod 34, orchestrator 37 + 10 component (including a 2h50m kept pod within the 1,024-step Workflow limit, and a deadline kill that fails its running parts), console 199.
+- The SQL, run in a local Postgres: 12 cases, including the orchestrator skipping a held part and a quiet waiter releasing it.
+- Live against production (W1–W4): the waiter holds the part and a second pod is told to stop; the handover includes the settings, storage pass and session link; a gone pod fails its running part; unauthenticated or malformed calls are refused.
+
+**Convert skip: built, and deliberately off.**
+- **How it works.** When a recording is H.264, at most 1080p, starts at 0 and has every frame gap within 25–45 ms at an average of 30.00 fps, the pod repackages the file instead of re-encoding it: **0.4 s instead of 34 s** locally, and 25 s to 2m18s on the rented machines seen.
+- **What went wrong.** On a real 10-minute desktop recording (Tournament 1), TrackNet was deterministic: two runs on the same file gave 3,152 of 3,152 identical detections. But the repackaged copy's detections differed from the converted copy's on ~40% of frames. The encode is lossy and adds one leading frame, a 1-frame offset that was verified and accounted for. The rally list went from 11 to 9, with 4 in common.
+- **Why that matters.** Every tuned constant and accuracy number was measured on converted video, so this is a quality change, not just a speed change. It stays off until it's scored against hand labels (below).
+- **Scored against hand labels** (EXPERIMENTS.md 2026-09-24, 3 clips, 37 labelled rallies, IoU ≥ 0.5): skip P 0.50 / R 0.24; encode P 0.45 / R 0.24. Identical recall, one fewer false rally with the skip. **No measurable accuracy cost.** Turning it on is the operator's call.

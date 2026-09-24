@@ -2348,3 +2348,46 @@ Matches `sqrt`'s fp/10min improvement without its regression: **re-ran `pb_draft
 - **Same card, different speed:** on the 1080p footage, A part 1 detected at **91 fps** and A part 2 at **49 fps**, both on an RTX 4090.
 - **Other slow steps:** a slow download (2m24s) and a slow convert (2m13s) each appeared on a single host.
 - **Conclusion:** reordering GPU types alone wouldn't remove this. Per-job `gpu_type`/`pod_id` now make it traceable.
+
+## 2026-09-24 — Convert skip (ADR-130): does repackaging instead of re-encoding change detection?
+
+**Question.** The pod re-encodes every recording to 30fps CFR H.264 before TrackNet. For a desktop recording that already is 30fps CFR H.264, a repackage (`-c copy`, 0.4 s) would do instead of the encode (34 s locally, 25 s to 2m18s on rented pods). Does skipping the encode change results?
+
+**1. A real desktop recording** (Tournament 1, `session-001.mkv`, 10 min, 1080p H.264, frame gaps 33–34 ms; the skip check passes).
+- **TrackNet is deterministic:** two runs on the same encoded file gave 3,152 / 3,152 identical detections and the same 11 rallies.
+- **The encode shifts frames by one:** it adds one leading frame (18,001 frames vs 18,000). 1,926 of 3,152 detections match the repackaged copy's at a 1-frame offset.
+- **The rest differ:** ~40% of detections change, because the encode is lossy. The rally list went from 11 (encoded) to 9 (repackaged), with 4 in common. Where both found the same rally, the times are identical, so there's no timing drift.
+- No labels exist for this footage, so this shows only that the change is real, not which version is better.
+
+**2. Scored against hand labels.** Three labelled IMG_7893 clips (37 rallies; already H.264 30fps CFR). Each was scored as-is (= skip) vs after one more encode with the pod's exact recipe (= today). Shipped constants, IoU ≥ 0.5.
+
+| Clip | Skip: found / matched | Encode: found / matched | Labelled |
+|---|---|---|---|
+| 390–690s | 8 / 6 | 9 / 6 | 13 |
+| 090–390s | 5 / 2 | 5 / 2 | 13 |
+| 1230–1590s | 5 / 1 | 6 / 1 | 11 |
+| **Total** | **18 / 9: P 0.50, R 0.24** | **20 / 9: P 0.45, R 0.24** | 37 |
+
+The 390–690s encode arm's 6/13 (0.46) matches the 09-06 baseline for that clip (EXPERIMENTS.md 2026-09-06), so the harness agrees with earlier numbers.
+
+**Conclusion.** Recall is identical, and skipping gave one fewer false rally in two of three clips. There is **no measurable accuracy cost** on this sample.
+
+**Caveats.**
+- The sample is small: 37 rallies, one camera, phone footage.
+- The test is a second-generation encode (the clips were encoded once already), not a camera's own stream.
+- The rally-list churn in part 1 shows that borderline rallies flip on small pixel differences either way; this is detection noise, not something the skip introduces.
+
+## 2026-09-24 — Keep-running rehearsal (ADR-130): one camera, 10-minute parts, real cloud
+
+**Setup.** Same stand-in-camera harness as 09-23 (Court 4 clip, 1080p, test venue). Recording ran 01:05–01:38 UTC with 10-minute auto-split: 3 full parts plus a 3-minute last part. Pod code 56ae700; orchestrator with warm-pod env. The convert skip was off.
+
+**What happened** (from the watcher log, job rows and RunPod's pod list):
+- **Part 1** went to a fresh pod A (`yegufqcw…`). It finished at 01:30 and **became the session's waiter**.
+- **Part 2** had arrived at 01:26 while A was busy, so it went to a fresh pod B (the correct behaviour: a busy machine never delays a part). B finished at 01:35, found A already waiting, and **shut itself down** (one waiter per session).
+- **Part 3** arrived at ~01:38 and was **taken by the waiting pod A** (`runner_id = warm-pod`), with no rental and no boot. It finished at 01:48.
+- **Part 4** (the last, after Stop) arrived while A was busy, so it went to a fresh pod C and finished at 01:44. C then waited, found no further part, and **shut itself down after its 12-minute idle limit** (01:56).
+- **All four parts landed on the one session link:** 30 reels, tagged p1–p4.
+- **No machine was left running;** RunPod's pod list was empty at 01:56.
+- **Stop → last reels:** 9m 39s (part 3, on the kept pod).
+
+**Takeaway.** The mechanism works end to end. With parts every 10 minutes and ~12–17 minutes of work per part on the cheaper cards, a kept pod is usually still busy when the next part arrives. So it saves rentals on some parts, not every one (here 1 of 3 possible). Saving more would need holding a part briefly for a nearly-finished pod; that isn't built.
