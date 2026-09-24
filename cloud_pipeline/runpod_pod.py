@@ -73,6 +73,14 @@ FALLBACK_GPU_TYPES = [
     "NVIDIA GeForce RTX 4080 SUPER",
     "NVIDIA GeForce RTX 4070 Ti",
 ]
+# Tried only when every card above is taken (operator, 2026-09-24): at 08:20
+# that day none of the five was available anywhere on RunPod. A part costs a
+# few cents more on these rather than failing after ~10 minutes of waiting.
+LAST_RESORT_GPU_TYPES = [
+    "NVIDIA GeForce RTX 4090",
+    "NVIDIA RTX 5000 Ada Generation",
+    "NVIDIA RTX 6000 Ada Generation",
+]
 
 
 def _headers():

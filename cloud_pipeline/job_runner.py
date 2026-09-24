@@ -480,7 +480,7 @@ def _create_pod_with_capacity_retry(job_id, env, image, deadline):
         try:
             return runpod_pod.create_selfdriving_pod(
                 name=f"cloud-pipeline-{env['SESSION_ID']}", env=env, image=image,
-                gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES)
+                gpu_type_ids=runpod_pod.FALLBACK_GPU_TYPES + runpod_pod.LAST_RESORT_GPU_TYPES)
         except RuntimeError as e:
             last_error = e
         if attempt == attempts:
