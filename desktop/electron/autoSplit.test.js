@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor } from "./autoSplit.js";
+import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta } from "./autoSplit.js";
 
 const seg = (i) => `session-${String(i).padStart(3, "0")}.mkv`;
 
@@ -110,4 +110,25 @@ test("session fields: a recording from before sessions (or a start without one) 
   writeSessionMeta(none, {});
   const [p] = makeDueParts(none, { stillRecording: false, partMinutes: 20, flush: true });
   assert.deepEqual(sessionFieldsFor(p.dir, p.segments), {});
+});
+
+test("a booking's stop ends only its own recording (the 2026-09-24 05:00 back-to-back case)", () => {
+  const mine = { recordingSessionId: "s-new" };
+  // The old booking's stop, arriving after the new booking's recording started: keep recording.
+  assert.equal(stopTargets({ schedule_booking_id: "b-old", recording_session_id: "s-old" }, mine), false);
+  // The booking's own stop: stop.
+  assert.equal(stopTargets({ schedule_booking_id: "b-new", recording_session_id: "s-new" }, mine), true);
+  // The console's Stop button (no session named): stop, as always.
+  assert.equal(stopTargets(null, mine), true);
+  assert.equal(stopTargets({}, mine), true);
+  // A recording with no session saved (older build, failed write): stop -- never leave it running.
+  assert.equal(stopTargets({ recording_session_id: "s-old" }, null), true);
+  assert.equal(stopTargets({ recording_session_id: "s-old" }, {}), true);
+});
+
+test("the session saved at start is read back for the stop check", () => {
+  const dir = recording(1);
+  assert.equal(readSessionMeta(dir), null);
+  writeSessionMeta(dir, { recording_session_id: "s-1", schedule_booking_id: "b-1" });
+  assert.deepEqual(readSessionMeta(dir), { recordingSessionId: "s-1", bookingId: "b-1" });
 });

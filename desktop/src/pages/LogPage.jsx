@@ -23,6 +23,7 @@ const EVENT_META = {
   camera_offline: { icon: "ph ph-plugs", tone: "bad" },
   recording_started: { icon: "ph ph-record", tone: "ok" },
   recording_stopped: { icon: "ph ph-stop-circle", tone: "quiet" },
+  recording_stop_skipped: { icon: "ph ph-record", tone: "quiet" },
   recording_failed: { icon: "ph ph-warning-circle", tone: "bad" },
   calibration_done: { icon: "ph ph-check-circle", tone: "ok" },
   calibration_failed: { icon: "ph ph-warning-circle", tone: "bad" },

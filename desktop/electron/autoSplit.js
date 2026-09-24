@@ -150,6 +150,35 @@ export function writeSessionMeta(recordingDir, params) {
   writeFileSync(path.join(recordingDir, SESSION_FILE), JSON.stringify({ recordingSessionId, bookingId }, null, 2));
 }
 
+/** The session saved for a recording, or null (none saved, or unreadable). */
+export function readSessionMeta(recordingDir) {
+  try {
+    return JSON.parse(readFileSync(path.join(recordingDir, SESSION_FILE), "utf8"));
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Whether a stop command should end the camera's current recording.
+ *
+ * A booking's stop names the recording session it belongs to (console,
+ * 2026-09-24). "Stop" used to mean "stop whatever this camera is recording",
+ * so a booking's stop killed a recording that wasn't the booking's -- at
+ * 05:00 that day it killed the next booking's recording six seconds in.
+ *
+ * Declined only when the current recording positively belongs to a
+ * DIFFERENT session. A recording with no session saved (older build, or a
+ * failed write) is stopped as before: never stopping it would leave it
+ * running, and its parts billing, with nothing to end it.
+ */
+export function stopTargets(commandParams, currentMeta) {
+  const wanted = commandParams?.recording_session_id;
+  const current = currentMeta?.recordingSessionId;
+  if (!wanted || !current) return true;
+  return wanted === current;
+}
+
 /**
  * What an upload of `dir` tells the console about its session: the
  * session id, and -- for a part folder (<recording>/parts/part-NN) -- its
@@ -160,12 +189,7 @@ export function sessionFieldsFor(dir, fileNames) {
   const partMatch = PART_RE.exec(path.basename(dir));
   const isPart = partMatch && path.basename(path.dirname(dir)) === "parts";
   const recordingDir = isPart ? path.dirname(path.dirname(dir)) : dir;
-  let recordingSessionId = null;
-  try {
-    recordingSessionId = JSON.parse(readFileSync(path.join(recordingDir, SESSION_FILE), "utf8")).recordingSessionId ?? null;
-  } catch {
-    recordingSessionId = null;
-  }
+  const recordingSessionId = readSessionMeta(recordingDir)?.recordingSessionId ?? null;
   if (!recordingSessionId) return {};
   if (!isPart) return { recordingSessionId };
   const first = [...fileNames].map((f) => path.basename(f)).filter((f) => SEGMENT_RE.test(f)).sort()[0];

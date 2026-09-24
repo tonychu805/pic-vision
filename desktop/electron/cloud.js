@@ -13,7 +13,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets } from "./autoSplit.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename } from "node:path";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
@@ -751,6 +751,14 @@ async function runCommand(command) {
     return started;
   }
   if (command.type === "stop_recording") {
+    // A booking's stop ends that booking's recording, not whatever else this
+    // camera is recording now (see stopTargets).
+    const current = activeOutDir(camera.id);
+    if (current && !stopTargets(command.params, readSessionMeta(current))) {
+      logEvent("recording_stop_skipped", `Kept recording ${camera.label}`,
+        "A booking ended, but the recording running now belongs to a different session.");
+      return { stopped: false, skipped: "the current recording belongs to a different session" };
+    }
     const result = await stopRecording(camera.id);
     // Re-measure from what was actually captured. Free (a local file), more
     // truthful than probing the live stream, and the only thing that would
