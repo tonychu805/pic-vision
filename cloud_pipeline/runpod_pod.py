@@ -64,13 +64,12 @@ DEFAULT_GPU_TYPES = [
 # explicitly chose to add the consumer Ada cards but NOT go further into
 # Ampere/Community-Cloud territory -- ordered here roughly professional-tier
 # first, consumer-tier after.
+# Only cards at or under $0.50/hr on RunPod's secure tier (operator, 2026-09-24):
+# RTX 4090 ($0.74), RTX 5000 Ada ($0.83) and RTX 6000 Ada ($0.84) removed.
 FALLBACK_GPU_TYPES = [
     "NVIDIA RTX 2000 Ada Generation",
     "NVIDIA RTX 4000 Ada Generation",
     "NVIDIA RTX 4000 SFF Ada Generation",
-    "NVIDIA RTX 5000 Ada Generation",
-    "NVIDIA RTX 6000 Ada Generation",
-    "NVIDIA GeForce RTX 4090",
     "NVIDIA GeForce RTX 4080 SUPER",
     "NVIDIA GeForce RTX 4070 Ti",
 ]
