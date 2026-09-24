@@ -378,3 +378,117 @@ def test_a_stretch_with_no_rallies_finishes_done_with_no_reels(console_url, monk
     assert body["message"] == "no rallies found"
     assert body["result"]["reels"] == []
     assert body["result"]["share_id"] == "11111111-1111-4111-8111-111111111111"
+
+
+# --- Skipping the convert step (ADR-130) ---
+
+H264 = {"codec_name": "h264", "pix_fmt": "yuv420p", "height": 1080}
+
+
+def _mkv_times(n, start=0.0):
+    # A desktop .mkv stores millisecond timestamps: 30fps lands as 33/34 ms steps.
+    return [start + round(i / 30, 3) for i in range(n)]
+
+
+def test_convert_is_skipped_for_a_clean_30fps_h264_recording():
+    ok, why = pod_driver.cfr_verdict(H264, _mkv_times(18000))
+    assert ok, why
+
+
+def test_convert_is_kept_for_anything_the_encode_would_change():
+    t = _mkv_times(18000)
+    cases = {
+        "hevc": ({**H264, "codec_name": "hevc"}, t),
+        "4:2:2 pixels": ({**H264, "pix_fmt": "yuv422p"}, t),
+        "above 1080p": ({**H264, "height": 1620}, t),
+        "15fps camera": (H264, [i / 15 for i in range(9000)]),
+        "a dropped frame": (H264, t[:500] + t[501:]),
+        "a duplicated timestamp": (H264, t[:500] + [t[500]] + t[500:]),
+        "starts late": (H264, _mkv_times(18000, start=5.0)),
+        "unreadable": (None, []),
+    }
+    for name, (stream, pts) in cases.items():
+        ok, why = pod_driver.cfr_verdict(stream, pts)
+        assert not ok, f"{name} should convert, got skip ({why})"
+
+
+def test_convert_is_kept_when_the_probe_fails(tmp_path):
+    ok, why = pod_driver.convert_skippable(str(tmp_path / "missing.mkv"))
+    assert not ok and "could not probe" in why
+
+
+# --- Keeping the machine for the next part (ADR-130) ---
+
+class _Clock:
+    def __init__(self):
+        self.t = 1000.0
+
+    def now(self):
+        return self.t
+
+    def sleep(self, s):
+        self.t += s
+
+
+def test_a_waiting_pod_takes_the_next_part_when_it_arrives():
+    c = _Clock()
+    answers = iter([{}, {}, {"env": {"JOB_ID": "job-2"}}])
+    env = pod_driver.wait_for_next_part("s1", "pod-1", idle_sec=720, accept_until=c.t + 3600,
+                                        now=c.now, sleep=c.sleep, ask=lambda s, p: next(answers))
+    assert env == {"JOB_ID": "job-2"}
+    assert c.t == 1000.0 + 2 * pod_driver.WARM_POLL_SEC
+
+
+def test_a_waiting_pod_gives_up_after_the_idle_limit():
+    c = _Clock()
+    asks = []
+    env = pod_driver.wait_for_next_part("s1", "pod-1", idle_sec=60, accept_until=c.t + 3600,
+                                        now=c.now, sleep=c.sleep, ask=lambda s, p: asks.append(1) or {})
+    assert env is None
+    assert c.t >= 1060 and len(asks) == 60 // pod_driver.WARM_POLL_SEC
+
+
+def test_a_pod_near_the_job_deadline_takes_no_more_parts():
+    c = _Clock()
+    env = pod_driver.wait_for_next_part("s1", "pod-1", idle_sec=720, accept_until=c.t - 1,
+                                        now=c.now, sleep=c.sleep, ask=lambda s, p: {"env": {"JOB_ID": "x"}})
+    assert env is None
+
+
+def test_a_second_waiting_pod_is_told_to_stop():
+    c = _Clock()
+    env = pod_driver.wait_for_next_part("s1", "pod-2", idle_sec=720, accept_until=c.t + 3600,
+                                        now=c.now, sleep=c.sleep, ask=lambda s, p: {"stop": True})
+    assert env is None and c.t == 1000.0
+
+
+def _next_part_env(job_id="job-2"):
+    return {
+        "JOB_ID": job_id, "BRAND_ID": "brand-1", "LOGO_URL": "", "BUCKET": "in-bucket", "OUTPUT_BUCKET": "out-bucket",
+        "SEGMENT_KEYS_JSON": '["a/seg.mkv"]', "CALIB_JSON": "{}", "TARGET_SEC": "180", "SESSION_ID": "s",
+        "REEL_ID": "r", "BURST_REEL_ID": "b", "SHARE_ID": "sh", "RECORDING_SESSION_ID": "rs",
+        "R2_READ_ACCESS_KEY_ID": "k1", "R2_READ_SECRET_ACCESS_KEY": "s1", "R2_READ_SESSION_TOKEN": "t1",
+        "R2_WRITE_ACCESS_KEY_ID": "k2", "R2_WRITE_SECRET_ACCESS_KEY": "s2", "R2_WRITE_SESSION_TOKEN": "t2",
+    }
+
+
+def test_taking_the_next_part_reports_to_that_part_and_uses_its_storage_pass(console_url, monkeypatch):
+    for k in pod_driver.JOB_ENV_KEYS:
+        monkeypatch.setenv(k, "old")
+    for g in ("JOB_ID", "BUCKET", "OUTPUT_BUCKET", "BRAND_ID", "LOGO_URL"):
+        monkeypatch.setattr(pod_driver, g, getattr(pod_driver, g))
+    pod_driver.apply_job_env(_next_part_env("job-2"))
+    assert (pod_driver.JOB_ID, pod_driver.BUCKET, pod_driver.OUTPUT_BUCKET) == ("job-2", "in-bucket", "out-bucket")
+    assert os.environ["R2_READ_ACCESS_KEY_ID"] == "k1" and os.environ["LOGO_URL"] == ""
+    seen = console_url([(200, "{}")])
+    pod_driver.patch_job(stage="setup")
+    assert seen[0]["path"] == "/api/runner/jobs/job-2"
+
+
+def test_a_next_part_without_its_storage_pass_is_refused(monkeypatch):
+    for g in ("JOB_ID", "BUCKET", "OUTPUT_BUCKET", "BRAND_ID", "LOGO_URL"):
+        monkeypatch.setattr(pod_driver, g, getattr(pod_driver, g))
+    env = _next_part_env()
+    del env["R2_READ_ACCESS_KEY_ID"]
+    with pytest.raises(ValueError, match="R2_READ_ACCESS_KEY_ID"):
+        pod_driver.apply_job_env(env)

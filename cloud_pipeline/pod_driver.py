@@ -81,6 +81,7 @@ console is answered with whether the operator asked to cancel (same
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -470,14 +471,78 @@ def _self_terminate(pod_id):
         _log(f"WARNING: self-terminate failed ({e}) -- an external sweep must catch this")
 
 
+# --- Skipping the convert step (ADR-130) ---
+# The convert re-encodes every recording to H.264 on an exact 30fps clock,
+# because rally times come from counting frames. A desktop recording from a
+# healthy camera already is exactly that, so the encode (25s-2m per 10-minute
+# part) buys nothing. Skipped only when every condition below holds, read
+# from the file's own packet timestamps; anything else converts as before.
+# Behind CONVERT_SKIP=1 (off): see the call site.
+CFR_FPS = 30.0
+CFR_MAX_FPS_ERROR = 0.05       # measured average rate vs 30
+CFR_GAP_RANGE = (0.025, 0.045)  # every frame-to-frame gap, seconds (1/30 = 0.0333; mkv stores ms)
+CFR_MAX_START_SEC = 0.1         # clips are cut by time from the start
+
+
+def cfr_verdict(stream, pts):
+    """(skippable, reason) from a stream description and its packet times.
+
+    Pure, so every rule is tested without video files."""
+    if not stream or not pts:
+        return False, "could not read the video stream"
+    if stream.get("codec_name") != "h264":
+        return False, f"codec is {stream.get('codec_name')}, not h264"
+    if stream.get("pix_fmt") not in ("yuv420p", "yuvj420p"):
+        return False, f"pixel format is {stream.get('pix_fmt')}"
+    if int(stream.get("height") or 0) > 1080:
+        return False, f"height {stream.get('height')} is above 1080"
+    t = sorted(pts)
+    if len(t) < 2 or t[-1] <= t[0]:
+        return False, "too few frames"
+    if t[0] > CFR_MAX_START_SEC:
+        return False, f"first frame at {t[0]:.3f}s, not 0"
+    fps = (len(t) - 1) / (t[-1] - t[0])
+    if abs(fps - CFR_FPS) > CFR_MAX_FPS_ERROR:
+        return False, f"average rate {fps:.3f} fps"
+    gaps = [b - a for a, b in zip(t, t[1:])]
+    lo, hi = min(gaps), max(gaps)
+    if lo < CFR_GAP_RANGE[0] or hi > CFR_GAP_RANGE[1]:
+        return False, f"irregular frame timing (gaps {lo * 1000:.0f}-{hi * 1000:.0f} ms)"
+    return True, f"{len(t)} frames at {fps:.3f} fps, gaps {lo * 1000:.0f}-{hi * 1000:.0f} ms"
+
+
+def convert_skippable(video):
+    """Probe `video` and apply cfr_verdict. Any probe failure = convert."""
+    try:
+        info = json.loads(subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "stream=codec_name,pix_fmt,height", "-of", "json", video],
+            capture_output=True, text=True, check=True, timeout=60).stdout)
+        stream = (info.get("streams") or [None])[0]
+        out = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0",
+             "-show_entries", "packet=pts_time", "-of", "csv=p=0", video],
+            capture_output=True, text=True, check=True, timeout=300).stdout
+        pts = [float(x) for x in out.split() if x and x != "N/A"]
+    except Exception as e:  # noqa: BLE001 -- unsure means convert
+        return False, f"could not probe ({e})"
+    return cfr_verdict(stream, pts)
+
+
 def run():
     s3_in, s3_out = _r2_clients()
+    # Fresh per job: a pod kept for a session's next part (ADR-130) must
+    # never cut or upload the previous part's files.
+    shutil.rmtree(WORKDIR, ignore_errors=True)
     os.makedirs(WORKDIR, exist_ok=True)
 
     # Must land before anything below shells out to "ffmpeg"/"ffprobe" --
-    # the first such call is the segment concat a few lines down.
+    # the first such call is the segment concat a few lines down. Once per
+    # pod: a kept pod already has them.
     _check_cancel("setup", "fetching ffmpeg...")
     for local_path, key in ((FFMPEG_LOCAL, FFMPEG_R2_KEY), (FFPROBE_LOCAL, FFPROBE_R2_KEY)):
+        if os.path.exists(local_path):
+            continue
         s3_in.download_file(BUCKET, key, local_path)
         os.chmod(local_path, 0o755)
 
@@ -542,8 +607,23 @@ def run():
     # and this is not the change to fold a cosmetic rename into.
     _check_cancel("convert", "converting to 30fps CFR...")
     cfr_video = os.path.join(WORKDIR, "video_cfr.mp4")
-    _encode_h264(["-err_detect", "ignore_err", "-i", raw_video],
-                 ["-an", "-vsync", "cfr", "-r", "30", cfr_video])
+    # Off unless CONVERT_SKIP=1: skipping changes which frames TrackNet sees
+    # (the encode is lossy), which moved ~40% of ball detections on a real
+    # recording (2026-09-24) -- to be scored against hand labels first.
+    if os.environ.get("CONVERT_SKIP") == "1":
+        skip, why = convert_skippable(raw_video)
+    else:
+        skip, why = False, "convert skip is off"
+    if skip:
+        # Already exactly what the encode below would produce (ADR-130):
+        # repackage the video stream as-is, in seconds, instead of re-encoding.
+        _log(f"recording is already 30fps CFR H.264 ({why}) -- repackaging instead of re-encoding")
+        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", raw_video, "-map", "0:v:0", "-c", "copy",
+                     "-an", "-movflags", "+faststart", cfr_video])
+    else:
+        _log(f"converting to 30fps CFR: {why}")
+        _encode_h264(["-err_detect", "ignore_err", "-i", raw_video],
+                     ["-an", "-vsync", "cfr", "-r", "30", cfr_video])
 
     _check_cancel("proxy", "preparing the inference/upload resolution...")
     if not calib.get("calibration_resolution"):
@@ -651,26 +731,127 @@ def finish_with_no_rallies():
     })
 
 
-def main():
-    pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod
+# --- Keeping the machine for the session's next part (ADR-130) ---
+# Renting and setting up a machine costs ~2-6 minutes per part. A pod that
+# finished a part of a playing session asks the console for the session's
+# next part instead of shutting down; while it is asking, the console keeps
+# that part for it rather than renting another machine. Only one pod waits
+# per session, and it gives up after WARM_IDLE_SEC or once it's too close to
+# the orchestrator's job deadline (WARM_ACCEPT_UNTIL, epoch seconds).
+WARM_POLL_SEC = 15
+# Per-job settings the console sends for a next part: exactly the keys the
+# orchestrator's podEnv sets per job. Anything else in a response is ignored.
+JOB_ENV_KEYS = (
+    "JOB_ID", "BRAND_ID", "LOGO_URL", "BUCKET", "OUTPUT_BUCKET", "SEGMENT_KEYS_JSON", "CALIB_JSON",
+    "TARGET_SEC", "SESSION_ID", "REEL_ID", "BURST_REEL_ID", "SHARE_ID", "RECORDING_SESSION_ID",
+    "R2_READ_ACCESS_KEY_ID", "R2_READ_SECRET_ACCESS_KEY", "R2_READ_SESSION_TOKEN",
+    "R2_WRITE_ACCESS_KEY_ID", "R2_WRITE_SECRET_ACCESS_KEY", "R2_WRITE_SESSION_TOKEN",
+)
+
+
+def apply_job_env(env):
+    """Switch this process to another job: the same settings a fresh pod
+    would have read from its environment at start."""
+    global JOB_ID, BUCKET, OUTPUT_BUCKET, BRAND_ID, LOGO_URL
+    missing = [k for k in ("JOB_ID", "BUCKET", "OUTPUT_BUCKET", "BRAND_ID", "SEGMENT_KEYS_JSON", "CALIB_JSON",
+                           "R2_READ_ACCESS_KEY_ID", "R2_WRITE_ACCESS_KEY_ID") if not env.get(k)]
+    if missing:
+        raise ValueError(f"next part is missing {', '.join(missing)}")
+    for k in JOB_ENV_KEYS:
+        os.environ[k] = str(env.get(k) or "")
+    JOB_ID = os.environ["JOB_ID"]
+    BUCKET = os.environ["BUCKET"]
+    OUTPUT_BUCKET = os.environ["OUTPUT_BUCKET"]
+    BRAND_ID = os.environ["BRAND_ID"]
+    LOGO_URL = os.environ.get("LOGO_URL") or None
+
+
+def ask_for_next_part(session_id, pod_id):
+    """One ask: {"env": {...}} (a part, now claimed by this pod), {"stop": true}
+    (another pod is already waiting, or the console said no), or {} (nothing
+    yet). A failed ask is {}: keep waiting, the idle limit still applies."""
+    try:
+        r = requests.post(f"{CONSOLE_URL}/api/runner/sessions/{session_id}/next-part",
+                          headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
+                          json={"podId": pod_id}, timeout=30)
+    except requests.RequestException as e:
+        _log(f"next-part ask failed ({e}) -- will ask again")
+        return {}
+    if r.status_code == 204:
+        return {}
+    if r.status_code != 200:
+        _log(f"next-part ask refused (HTTP {r.status_code}) -- stopping")
+        return {"stop": True}
+    try:
+        return r.json()
+    except ValueError:
+        return {}
+
+
+def wait_for_next_part(session_id, pod_id, idle_sec, accept_until, now=time.time, sleep=time.sleep, ask=None):
+    """The next part's settings, or None when it's time to shut down."""
+    ask = ask or ask_for_next_part
+    give_up = now() + idle_sec
+    while now() < min(give_up, accept_until):
+        answer = ask(session_id, pod_id)
+        if answer.get("env"):
+            return answer["env"]
+        if answer.get("stop"):
+            return None
+        sleep(WARM_POLL_SEC)
+    return None
+
+
+def run_reporting():
+    """run(), with every ending reported to the console. 'done', 'cancelled' or 'failed'."""
     try:
         run()
+        return "done"
     except Cancelled:
         _log("cancelled by operator")
         report_final_job_status(cancelled=True, message="cancelled")
+        return "cancelled"
     except Exception as e:  # noqa: BLE001 -- report every failure, this pod is billed either way
         _log(f"FAILED: {e}")
         try:
             # Also retried: a failure nobody is told about leaves the job
-            # sitting at 'running' until job_runner.py's own deadline, with
+            # sitting at 'running' until the orchestrator's own deadline, with
             # the real reason only ever printed in this pod's log -- and the
             # pod is about to delete itself.
             report_final_job_status(error=str(e)[:2000])
         except Exception:  # noqa: BLE001
             pass
-        raise
+        return "failed"
+
+
+def main():
+    pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod
+    idle_sec = float(os.environ.get("WARM_IDLE_SEC") or 0)
+    accept_until = float(os.environ.get("WARM_ACCEPT_UNTIL") or 0)
+    outcome = None
+    try:
+        while True:
+            outcome = run_reporting()
+            session_id = os.environ.get("RECORDING_SESSION_ID")
+            # A failure stops here: whatever broke may break the next part
+            # too, and a fresh machine will take it instead.
+            if outcome == "failed" or not (session_id and pod_id and idle_sec > 0):
+                break
+            _log(f"waiting up to {idle_sec / 60:.0f} min for this session's next part...")
+            env = wait_for_next_part(session_id, pod_id, idle_sec, accept_until)
+            if not env:
+                _log("no next part -- shutting down")
+                break
+            try:
+                apply_job_env(env)
+            except ValueError as e:
+                _log(f"could not take the next part ({e}) -- shutting down")
+                break
+            _log(f"took the session's next part: job {JOB_ID}")
     finally:
         _self_terminate(pod_id)
+    if outcome == "failed":
+        sys.exit(1)
 
 
 if __name__ == "__main__":
