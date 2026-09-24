@@ -172,6 +172,7 @@ export default function SettingsPage({ onBack }) {
         </div>
 
         <AutoSplitCard />
+        <PowerCard />
 
         <div className="card">
           <div className="section-label">How long to wait</div>
@@ -244,6 +245,46 @@ function AutoSplitCard() {
         While a camera records, each finished part is sent to the cloud straight away, so its highlights are ready
         while play continues. When recording stops, the remainder is sent as the last part -- whether it was a
         scheduled session or stopped by hand. Each part gets its own set of reels.
+      </p>
+    </div>
+  );
+}
+
+// Keeping this computer ready for bookings (electron/power.js): awake while
+// the app runs, and the app opening at login. Both on by default.
+function PowerCard() {
+  const [settings, setSettings] = useState(null);
+  const [error, setError] = useState(null);
+  useEffect(() => { window.powerAPI?.get().then(setSettings).catch(() => setSettings(null)); }, []);
+
+  async function change(setter, on) {
+    setError(null);
+    try {
+      setSettings(await window.powerAPI[setter](on));
+    } catch (err) {
+      setError(err.message);
+    }
+  }
+
+  if (!settings) return null;
+  return (
+    <div className="card">
+      <div className="section-label">Keep this computer ready</div>
+      <label className="field" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={settings.keepAwake} onChange={(e) => change("setKeepAwake", e.target.checked)} />
+        Keep this computer awake while the app is open
+      </label>
+      <label className="field" style={{ display: "flex", alignItems: "center", gap: 8 }}>
+        <input type="checkbox" checked={settings.openAtLogin} disabled={!settings.loginItemAvailable}
+          onChange={(e) => change("setOpenAtLogin", e.target.checked)} />
+        Open the app automatically when this computer starts
+      </label>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{error}</p>}
+      <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
+        A sleeping computer can't start a booked recording or keep one going. The screen can still turn off.
+        macOS still sleeps a MacBook when its lid is closed (unless it's plugged in with an external display) --
+        use a Mac mini or leave the lid open. For power cuts, also turn on "Start up automatically after a power
+        failure" in System Settings, and log in automatically.
       </p>
     </div>
   );

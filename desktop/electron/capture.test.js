@@ -91,3 +91,16 @@ test("an implausible result (corrupt timestamps) is rejected rather than reporte
   const times = steadyTimes(200, 1 / 2000);
   assert.equal(estimateFpsFromPacketTimes(times), null);
 });
+
+import { nextSegmentNumber, reconnectDelayMs, RECONNECT_DELAYS_MS } from "./capture.js";
+
+test("a reconnected recording numbers on from the last piece, so nothing is overwritten", () => {
+  assert.equal(nextSegmentNumber([]), 0);
+  assert.equal(nextSegmentNumber(["session-000.mkv", "session-001.mkv", "session.json", "parts"]), 2);
+  assert.equal(nextSegmentNumber(["session-009.mkv", "session-003.mkv"]), 10);
+});
+
+test("reconnect attempts back off, then keep trying every 30 seconds", () => {
+  assert.deepEqual([0, 1, 2, 3].map(reconnectDelayMs), RECONNECT_DELAYS_MS);
+  assert.equal(reconnectDelayMs(50), 30_000);
+});

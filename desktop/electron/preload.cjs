@@ -40,6 +40,12 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
 });
 
+contextBridge.exposeInMainWorld("powerAPI", {
+  get: () => ipcRenderer.invoke("power:get"),
+  setKeepAwake: (on) => ipcRenderer.invoke("power:setKeepAwake", on),
+  setOpenAtLogin: (on) => ipcRenderer.invoke("power:setOpenAtLogin", on),
+});
+
 contextBridge.exposeInMainWorld("autoSplitAPI", {
   get: () => ipcRenderer.invoke("autoSplit:get"),
   set: (minutes) => ipcRenderer.invoke("autoSplit:set", minutes),

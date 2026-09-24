@@ -32,6 +32,7 @@ import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow } from "./cloud.js";
 import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
+import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
@@ -307,6 +308,10 @@ function registerAutoSplitHandlers() {
   ipcMain.handle("autoSplit:get", async () => ({ minutes: getAutoSplitMinutes() }));
   ipcMain.handle("autoSplit:set", async (_event, minutes) => ({ minutes: setAutoSplitMinutes(minutes) }));
   ipcMain.handle("autoSplit:sendNow", async (_event, cameraId) => autoSplitSendNow(cameraId));
+  // Keeping the venue computer awake and opening at login (power.js). Scalars only.
+  ipcMain.handle("power:get", async () => getPowerSettings());
+  ipcMain.handle("power:setKeepAwake", async (_event, on) => setKeepAwake(on === true));
+  ipcMain.handle("power:setOpenAtLogin", async (_event, on) => setOpenAtLogin(on === true));
 }
 
 // Every 30s: any recording in progress sends the parts that are due. Cheap
@@ -658,6 +663,7 @@ app.whenReady().then(() => {
       connection: getCloudConnection(),
     };
   });
+  applyPowerSettings(); // stay awake and open at login, unless turned off in Settings
   startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
   setInterval(() => { autoSplitTick().catch((err) => console.error(`[autosplit] ${err.message}`)); }, AUTO_SPLIT_TICK_MS);
   syncCommandChannel().catch(() => {}); // instant commands where possible; the poll above is the floor

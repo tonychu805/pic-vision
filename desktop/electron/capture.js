@@ -336,17 +336,37 @@ export function recordingStatus(cameraId) {
 // failure (the pcm_alaw/MP4 bug above), not assumed.
 const STARTUP_GRACE_MS = 2000;
 
-export function startRecording(camera) {
-  if (active.has(camera.id)) throw new Error("Already recording this camera");
-  // Refuse rather than record footage the pipeline can't get rallies out
-  // of -- a low frame rate halves detection and would otherwise fail
-  // silently, hours later, as a thin reel with no explanation.
-  assertUsableFrameRate(camera);
+// A camera stream that drops mid-game (Wi-Fi blip, router or camera
+// restart) used to end the recording for good: ffmpeg exited, nothing
+// restarted it, nothing said so, and the rest of the game was lost
+// (found 2026-09-24). Now the recording reconnects on its own, into the
+// same folder, numbering on from the last piece, so the game keeps its one
+// session and one link; it keeps trying until the recording is stopped.
+export const RECONNECT_DELAYS_MS = [5_000, 10_000, 20_000, 30_000]; // then every 30s
+// Treated as reconnected once a restarted ffmpeg has run this long.
+const RECONNECTED_AFTER_MS = 10_000;
+// ffmpeg gives up on a stream that goes silent after this, instead of
+// hanging forever on a dead TCP connection (rtsp demuxer -timeout, in
+// microseconds; ffmpeg 5+).
+const STREAM_TIMEOUT_US = 15_000_000;
 
-  const outDir = path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
-  mkdirSync(outDir, { recursive: true });
+export function reconnectDelayMs(attempt) {
+  return RECONNECT_DELAYS_MS[Math.min(attempt, RECONNECT_DELAYS_MS.length - 1)];
+}
 
+/** The number the next piece of a recording should get: one after the highest there. */
+export function nextSegmentNumber(fileNames) {
+  let max = -1;
+  for (const f of fileNames) {
+    const m = /^session-(\d+)\.mkv$/.exec(f);
+    if (m) max = Math.max(max, Number(m[1]));
+  }
+  return max + 1;
+}
+
+function spawnSegmenter(camera, record) {
   const url = authenticatedStreamUri(camera);
+  const start = nextSegmentNumber(existsSync(record.outDir) ? readdirSync(record.outDir) : []);
   // .mkv, not TECH_SPEC.md §1.2's literal .mp4 -- real bug caught by
   // actually running this against a real camera (2026-09-01), not by
   // copying the spec's example verbatim: the Tapo C200 streams pcm_alaw
@@ -358,23 +378,72 @@ export function startRecording(camera) {
   // ffprobe-valid, before this was trusted.
   const args = [
     "-rtsp_transport", "tcp",
+    "-timeout", String(STREAM_TIMEOUT_US),
     "-i", url,
     "-use_wallclock_as_timestamps", "1",
     "-c", "copy",
     "-f", "segment",
     "-segment_time", "600",
+    "-segment_start_number", String(start),
     "-reset_timestamps", "1",
-    path.join(outDir, "session-%03d.mkv"),
+    path.join(record.outDir, "session-%03d.mkv"),
   ];
-
   const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
-  const startedAt = new Date().toISOString();
-  let stderrTail = "";
+  record.proc = proc;
+  record.stderrTail = "";
   proc.stderr.on("data", (chunk) => {
-    stderrTail = (stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
+    record.stderrTail = (record.stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
   });
+  return proc;
+}
 
-  const record = { proc, outDir, startedAt, stderrTail: () => stderrTail };
+function lastError(record, code) {
+  return record.stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
+}
+
+// The stream dropped after the recording had started: log it once, then
+// retry until it comes back or the recording is stopped.
+function reconnect(camera, record, reason, attempt = 0) {
+  if (record.stopping) return;
+  if (attempt === 0) {
+    record.interruptions += 1;
+    logEvent("recording_interrupted", `${camera.label} lost its camera stream -- reconnecting`, reason);
+  }
+  record.proc = null;
+  record.retryTimer = setTimeout(() => {
+    record.retryTimer = null;
+    if (record.stopping) return;
+    const proc = spawnSegmenter(camera, record);
+    const healthy = setTimeout(() => {
+      if (record.proc === proc && !record.stopping) {
+        logEvent("recording_resumed", `${camera.label} is recording again`, record.outDir);
+      }
+    }, RECONNECTED_AFTER_MS);
+    const startedAt = Date.now();
+    proc.on("exit", (code) => {
+      clearTimeout(healthy);
+      if (record.proc !== proc || record.stopping) return;
+      // Ran a while, then dropped again: a new interruption. Died straight
+      // away: the camera still isn't there -- keep trying, a bit slower.
+      if (Date.now() - startedAt >= RECONNECTED_AFTER_MS) reconnect(camera, record, lastError(record, code), 0);
+      else reconnect(camera, record, lastError(record, code), attempt + 1);
+    });
+  }, reconnectDelayMs(attempt));
+}
+
+export function startRecording(camera) {
+  if (active.has(camera.id)) throw new Error("Already recording this camera");
+  // Refuse rather than record footage the pipeline can't get rallies out
+  // of -- a low frame rate halves detection and would otherwise fail
+  // silently, hours later, as a thin reel with no explanation.
+  assertUsableFrameRate(camera);
+
+  const outDir = path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
+  mkdirSync(outDir, { recursive: true });
+
+  const startedAt = new Date().toISOString();
+  const record = { proc: null, outDir, startedAt, stderrTail: "", stopping: false, retryTimer: null, interruptions: 0 };
+  const proc = spawnSegmenter(camera, record);
   active.set(camera.id, record);
 
   return new Promise((resolve, reject) => {
@@ -385,16 +454,17 @@ export function startRecording(camera) {
       resolve({ outDir, startedAt });
     }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
-      // Only clear if this is still the tracked process for this camera --
-      // a fast stop-then-restart could otherwise let a late exit event
-      // from the OLD process clobber the NEW one's tracked state.
-      if (active.get(camera.id) === record) active.delete(camera.id);
       clearTimeout(timer);
-      // An exit after the grace period is stopRecording's own SIGINT --
-      // expected, already logged there, not a failure. Only an exit
-      // *before* the grace period ever resolved is a real start failure.
-      if (started) return;
-      const reason = stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
+      if (record.proc !== proc || record.stopping) return; // stopRecording's own SIGINT, or already replaced
+      if (started) {
+        // Dropped mid-recording: reconnect, same folder, same session.
+        reconnect(camera, record, lastError(record, code));
+        return;
+      }
+      // Died before the grace period: a real start failure (bad address,
+      // wrong password, camera offline) -- say so rather than retry.
+      if (active.get(camera.id) === record) active.delete(camera.id);
+      const reason = lastError(record, code);
       logEvent("recording_failed", `${camera.label} recording failed to start`, reason);
       reject(new Error(reason));
     });
@@ -404,20 +474,27 @@ export function startRecording(camera) {
 // Clean stop only -- SIGINT, never SIGKILL (ADR-031: a hard kill was
 // observed to corrupt the output container). ffmpeg finalizes the
 // current segment on SIGINT and exits on its own; this resolves once
-// that actually happens rather than assuming it did.
+// that actually happens rather than assuming it did. A recording that is
+// between reconnect attempts has no ffmpeg running: it just stops trying.
 export function stopRecording(cameraId) {
   const rec = active.get(cameraId);
   if (!rec) return Promise.resolve({ stopped: false });
+  rec.stopping = true;
+  if (rec.retryTimer) clearTimeout(rec.retryTimer);
+  const finish = () => {
+    if (active.get(cameraId) === rec) active.delete(cameraId);
+    logEvent("recording_stopped", "Stopped recording", rec.outDir);
+    // Free, and better evidence than probing the live stream: this is
+    // exactly what got captured and what the pipeline will be given. Also
+    // how an RTSP camera's rate stays current after someone changes it in
+    // the camera's own settings -- nothing else would ever notice.
+    return { stopped: true, outDir: rec.outDir, measureFrom: newestSegment(rec.outDir) };
+  };
+  const proc = rec.proc;
+  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve(finish());
   return new Promise((resolve) => {
-    rec.proc.once("exit", () => {
-      logEvent("recording_stopped", "Stopped recording", rec.outDir);
-      // Free, and better evidence than probing the live stream: this is
-      // exactly what got captured and what the pipeline will be given. Also
-      // how an RTSP camera's rate stays current after someone changes it in
-      // the camera's own settings -- nothing else would ever notice.
-      resolve({ stopped: true, outDir: rec.outDir, measureFrom: newestSegment(rec.outDir) });
-    });
-    rec.proc.kill("SIGINT");
+    proc.once("exit", () => resolve(finish()));
+    proc.kill("SIGINT");
   });
 }
 
