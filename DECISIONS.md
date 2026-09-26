@@ -2868,3 +2868,15 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 - **What went wrong.** On a real 10-minute desktop recording (Tournament 1), TrackNet was deterministic: two runs on the same file gave 3,152 of 3,152 identical detections. But the repackaged copy's detections differed from the converted copy's on ~40% of frames. The encode is lossy and adds one leading frame, a 1-frame offset that was verified and accounted for. The rally list went from 11 to 9, with 4 in common.
 - **Why that matters.** Every tuned constant and accuracy number was measured on converted video, so this is a quality change, not just a speed change. It stays off until it's scored against hand labels (below).
 - **Scored against hand labels** (EXPERIMENTS.md 2026-09-24, 3 clips, 37 labelled rallies, IoU ≥ 0.5): skip P 0.50 / R 0.24; encode P 0.45 / R 0.24. Identical recall, one fewer false rally with the skip. **No measurable accuracy cost.** Turning it on is the operator's call.
+
+## ADR-131 — 30fps becomes a soft floor; the hard floor drops to 25
+
+**Date:** 2026-09-26 · **Status:** built and tested, **not yet released** (desktop needs a version bump; console and pod code go live on push). Amends ADR-087.
+
+**Context.** At the PGC venue on 2026-09-25, a camera that had recorded at 30fps from 18:00 read 28fps at 20:00, and the desktop refused that scheduled recording (`agent_commands`: "PGC - court 1 is set to 28 fps"). That hour produced nothing. Earlier the same day, court 1 (23fps) and court 2 (25fps) were blocked from calibration until their settings were fixed. ADR-087 set a single 29fps floor (30 with slack), justified by a measured result: **15fps halved recall** (EXPERIMENTS.md 2026-09-06). But **only 30 and 15 were ever scored.** A camera dipping to 28 was treated like one running at 15, and the whole session was lost to guard against a shortfall nobody has measured.
+
+**Decision (operator).** There are now two floors, applied the same way at all three gates: desktop record/calibrate (`desktop/electron/cameras/frameRate.js`), the console's buttons (`cameras-client.tsx`), and the pod's input check (`src/video_quality.py`).
+- **Soft floor, 29fps (30 with the same NTSC/measurement slack):** below it the camera records and calibrates normally. A warning goes to the desktop Log (`recording_low_fps` / `calibration_low_fps`), into the command's result (`frameRateWarning`), and into the console's camera panel. The pod records `below_target_fraction` and logs it. The warnings give no figure for rallies lost, because none was measured in this band.
+- **Hard floor, 25fps (inclusive):** below it everything is refused, as before. 25 is the PAL default, so a camera left on it still records.
+
+**Unverified.** Detection quality between 25 and 28fps is unmeasured. The pod converts every recording to 30fps CFR (`-vsync cfr -r 30`), so a 25fps source reaches TrackNet with about one duplicated frame in six. That was already the case for 29.x sources, but it has never been scored at 25. If reels from low-fps sessions look thin, score a 25fps re-encode of labelled footage the same way ADR-087's 15fps test was run.

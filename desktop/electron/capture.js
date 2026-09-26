@@ -435,8 +435,10 @@ export function startRecording(camera) {
   if (active.has(camera.id)) throw new Error("Already recording this camera");
   // Refuse rather than record footage the pipeline can't get rallies out
   // of -- a low frame rate halves detection and would otherwise fail
-  // silently, hours later, as a thin reel with no explanation.
-  assertUsableFrameRate(camera);
+  // silently, hours later, as a thin reel with no explanation. Between the
+  // soft and hard floors it records, and the warning travels with the result.
+  const frameRateWarning = assertUsableFrameRate(camera);
+  if (frameRateWarning) logEvent("recording_low_fps", frameRateWarning);
 
   const outDir = path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });
@@ -451,7 +453,7 @@ export function startRecording(camera) {
     const timer = setTimeout(() => {
       started = true;
       logEvent("recording_started", `Started recording ${camera.label}`, outDir);
-      resolve({ outDir, startedAt });
+      resolve(frameRateWarning ? { outDir, startedAt, frameRateWarning } : { outDir, startedAt });
     }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
       clearTimeout(timer);

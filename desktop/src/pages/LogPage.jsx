@@ -27,6 +27,8 @@ const EVENT_META = {
   recording_interrupted: { icon: "ph ph-warning", tone: "bad" },
   recording_resumed: { icon: "ph ph-record", tone: "ok" },
   recording_failed: { icon: "ph ph-warning-circle", tone: "bad" },
+  recording_low_fps: { icon: "ph ph-warning", tone: "warn" },
+  calibration_low_fps: { icon: "ph ph-warning", tone: "warn" },
   calibration_done: { icon: "ph ph-check-circle", tone: "ok" },
   calibration_failed: { icon: "ph ph-warning-circle", tone: "bad" },
   pipeline_started: { icon: "ph ph-cloud-arrow-up", tone: "info" },
@@ -42,6 +44,7 @@ const DEFAULT_META = { icon: "ph ph-info", tone: "quiet" };
 const TONE_COLOR = {
   ok: "var(--color-success)",
   bad: "var(--color-danger)",
+  warn: "var(--color-warning)",
   info: "var(--color-accent-300)",
   quiet: "var(--text-3)",
 };

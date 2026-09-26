@@ -19,22 +19,26 @@
 // that was caught.
 
 // 30fps is what every shipped constant was tuned against (config.yaml's
-// `capture.fps`, `track_ball`'s max_jump, `min_crossings`), and 30 is now
-// the requirement rather than a recommendation (operator's call). An
-// earlier version allowed down to 24 so a 25fps PAL-region camera would
-// pass; that leniency was never backed by evidence either -- only 30 and 15
-// were ever measured -- so requiring the rate everything was actually tuned
-// at is the more defensible line.
+// `capture.fps`, `track_ball`'s max_jump, `min_crossings`), so it stays the
+// target. It is a soft floor, not a hard one (operator, 2026-09-26): at the
+// PGC venue on 2026-09-25 a camera set to 30 read 28 an hour later and the
+// scheduled recording was refused outright -- a lost booked hour, to guard
+// against a shortfall nobody has measured. Only 30 and 15 were ever scored;
+// 25-28 is unmeasured, so between the two floors the camera records and the
+// operator is told, rather than the session being thrown away.
 export const MIN_FPS = 30;
 
-// ...but compared with a little slack, for two honest reasons. 29.97 is a
-// real, extremely common rate (NTSC) that means "30" everywhere in
-// practice. And the measured rate is sampled over a few seconds of live
-// video, so it carries noise -- blocking a genuine 30fps camera because it
-// read 29.6 would be a false alarm sending a venue to change a setting
-// that is already correct. Anything at or above this passes; 25fps and
-// below still doesn't.
-export const BLOCK_BELOW_FPS = 29;
+// Compared with slack, for two honest reasons. 29.97 is a real, extremely
+// common rate (NTSC) that means "30" everywhere in practice. And the
+// measured rate is sampled over a few seconds of live video, so it carries
+// noise -- warning a genuine 30fps camera because it read 29.6 would be a
+// false alarm sending a venue to change a setting that is already correct.
+export const WARN_BELOW_FPS = 29;
+
+// The hard floor. 25 is the PAL-region default, so a camera left on it
+// still records (with the warning); anything slower is refused. 15fps was
+// measured to halve the rallies found and no threshold recovered them.
+export const BLOCK_BELOW_FPS = 25;
 
 const number = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
 
@@ -48,11 +52,19 @@ const number = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v 
 // to change a setting that is already correct wastes their time and costs
 // trust, so the two cases get different messages.
 //
-// Measured wins the pass/fail decision, since detection quality depends on
-// the frames that actually arrive, not on what the camera intended to send.
+// Measured wins the decision, since detection quality depends on the
+// frames that actually arrive, not on what the camera intended to send.
 export function effectiveFps(camera) {
   const p = camera?.profile;
   return number(p?.measuredFps) ?? number(p?.fps);
+}
+
+// The camera is set correctly and the frames still aren't arriving: a
+// network fault, which nothing else in the system would ever surface.
+function isNetworkShortfall(camera) {
+  const configured = number(camera?.profile?.fps);
+  const measured = number(camera?.profile?.measuredFps);
+  return configured !== null && configured >= WARN_BELOW_FPS && measured !== null;
 }
 
 // Only ever blocks on a frame rate we actually know. What stays unknown --
@@ -63,18 +75,13 @@ export function frameRateProblem(camera) {
   const effective = effectiveFps(camera);
   if (effective === null || effective >= BLOCK_BELOW_FPS) return null;
 
-  const configured = number(camera?.profile?.fps);
-  const measured = number(camera?.profile?.measuredFps);
   const label = camera?.label ?? "This camera";
   const rounded = Math.round(effective);
 
-  // The camera is set correctly and the frames still aren't arriving. This
-  // is a network fault, and nothing else in the system would ever surface
-  // it -- the recording would simply succeed and the reel would be thin.
-  if (configured !== null && configured >= BLOCK_BELOW_FPS && measured !== null) {
+  if (isNetworkShortfall(camera)) {
     return (
-      `${label} is set to ${configured} fps but only about ${rounded} fps are reaching this computer. ` +
-      `Rally detection needs ${MIN_FPS} fps, and that gap halves the rallies found. ` +
+      `${label} is set to ${number(camera.profile.fps)} fps but only about ${rounded} fps are reaching this computer. ` +
+      `Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) -- at 15 fps it finds only half the rallies. ` +
       `The camera's own settings are fine — this is a network problem: ` +
       `check its Wi-Fi signal, or connect it by cable, then try again.`
     );
@@ -82,14 +89,38 @@ export function frameRateProblem(camera) {
 
   const where = camera?.hostname ? `http://${camera.hostname}` : "the camera's own settings page";
   return (
-    `${label} is set to ${rounded} fps. Rally detection needs ${MIN_FPS} fps — ` +
-    `at ${rounded} fps it finds roughly half the rallies. ` +
+    `${label} is set to ${rounded} fps. Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) -- ` +
+    `at 15 fps it finds only half the rallies. ` +
     `Sign in to the camera at ${where}, set the video frame rate to ${MIN_FPS}, ` +
     `then try again.`
   );
 }
 
+// Between the two floors: go ahead, but say so. No figure for how many
+// rallies are lost, because none was ever measured at these rates.
+export function frameRateWarning(camera) {
+  const effective = effectiveFps(camera);
+  if (effective === null || effective >= WARN_BELOW_FPS || effective < BLOCK_BELOW_FPS) return null;
+
+  const label = camera?.label ?? "This camera";
+  const rounded = Math.round(effective);
+  if (isNetworkShortfall(camera)) {
+    return (
+      `${label} is set to ${number(camera.profile.fps)} fps but only about ${rounded} fps are reaching this computer. ` +
+      `Recording anyway, but rally detection is tuned for ${MIN_FPS} fps and may miss some rallies -- ` +
+      `check the camera's Wi-Fi signal, or connect it by cable.`
+    );
+  }
+  return (
+    `${label} is running at ${rounded} fps. Recording anyway, but rally detection is tuned for ${MIN_FPS} fps ` +
+    `and may miss some rallies -- set the camera's video frame rate to ${MIN_FPS} when you can.`
+  );
+}
+
+// Throws below the hard floor; otherwise returns the soft warning (or null)
+// so the caller can log it and pass it back with its result.
 export function assertUsableFrameRate(camera) {
   const problem = frameRateProblem(camera);
   if (problem) throw new Error(problem);
+  return frameRateWarning(camera);
 }

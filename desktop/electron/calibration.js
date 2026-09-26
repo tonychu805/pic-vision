@@ -41,13 +41,14 @@ export async function grabAndUploadSnapshot(camera) {
   // Same gate as recording: calibrating a camera that can't produce usable
   // footage just wastes the operator's time clicking 14 points for a
   // camera that will never yield decent reels. Better to say so first.
-  assertUsableFrameRate(camera);
+  const frameRateWarning = assertUsableFrameRate(camera);
+  if (frameRateWarning) logEvent("calibration_low_fps", frameRateWarning);
   const snapshot = await takeCalibrationSnapshot(camera);
   try {
     const { url, publicUrl } = await consoleFetch("/api/agents/calibration-snapshots", { method: "POST" });
     await uploadFile(url, snapshot.path);
     logEvent("calibration_snapshot", `Grabbed a calibration frame from ${camera.label}`);
-    return { snapshotUrl: publicUrl };
+    return frameRateWarning ? { snapshotUrl: publicUrl, frameRateWarning } : { snapshotUrl: publicUrl };
   } finally {
     discardSnapshot(snapshot.path);
   }

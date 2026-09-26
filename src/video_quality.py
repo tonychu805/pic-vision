@@ -36,10 +36,16 @@ log = logging.getLogger(__name__)
 MIN_FPS = 30.0
 
 # ...compared with slack. 29.97 (NTSC) is a real rate meaning "30" in
-# practice, and a measurement off real packets carries noise; failing a
-# correctly-configured camera on a rounding artefact would be worse than
-# the problem. Mirrors desktop/electron/cameras/frameRate.js.
-BLOCK_BELOW_FPS = 29.0
+# practice, and a measurement off real packets carries noise. Below this is
+# only a warning: 30 is a soft floor, 25 the hard one (operator, 2026-09-26,
+# after a camera set to 30 read 28 at the PGC venue and a booked hour was
+# refused). 25-28 has never been scored -- only 30 and 15 -- so a session in
+# that band is processed and the shortfall recorded, not thrown away.
+# Mirrors desktop/electron/cameras/frameRate.js.
+WARN_BELOW_FPS = 29.0
+
+# The hard floor: a window below this counts against the session.
+BLOCK_BELOW_FPS = 25.0
 
 # A bucket that falls this far below the session's own median is a real dip
 # rather than jitter -- used only to describe *where* it sagged, never to
@@ -149,9 +155,16 @@ def evaluate(profile, stream=None, video_path="video"):
     """The pass/fail decision, separated from probing so it can be tested
     against constructed profiles rather than synthesised video files."""
     result = {"passes": True, "reason": None, "below_floor_fraction": 0.0,
-              "frame_rate": profile, "stream": stream or {}}
+              "below_target_fraction": 0.0, "frame_rate": profile, "stream": stream or {}}
     if not profile:
         return result
+
+    # Soft floor: recorded and logged, never a reason to fail.
+    slow = [b for b in profile["buckets"] if b["fps"] < WARN_BELOW_FPS]
+    result["below_target_fraction"] = round(len(slow) / len(profile["buckets"]), 2)
+    if slow:
+        log.warning("%s: %.0f%% of the session is below %.0f fps (the rate detection was tuned at)",
+                    video_path, result["below_target_fraction"] * 100, MIN_FPS)
 
     # Judged on how much of the session is unusable, NOT on the median.
     # A session that ran at 30 for half its length and 15 for the other half
@@ -177,12 +190,12 @@ def evaluate(profile, stream=None, video_path="video"):
     if result["below_floor_fraction"] >= 0.9:
         result["reason"] = (
             f"recorded at {profile['median_fps']:.1f} fps throughout, below the "
-            f"{MIN_FPS:.0f} fps the detector needs -- at this rate roughly half the "
-            f"rallies go undetected. The camera is configured too low; this is not "
+            f"{BLOCK_BELOW_FPS:.0f} fps minimum ({MIN_FPS:.0f} is best) -- at 15 fps half "
+            f"the rallies go undetected. The camera is configured too low; this is not "
             f"a mid-session drop.")
     else:
         result["reason"] = (
-            f"frame rate was below {MIN_FPS:.0f} fps for "
+            f"frame rate was below {BLOCK_BELOW_FPS:.0f} fps for "
             f"{result['below_floor_fraction'] * 100:.0f}% of this session, dropping to "
             f"{worst['fps']:.1f} fps around {int(worst['start_sec'] // 60)} min in. "
             f"The camera did not start out slow, so this is conditions changing "

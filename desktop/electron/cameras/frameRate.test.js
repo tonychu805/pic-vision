@@ -1,7 +1,7 @@
 // Run with: npm test  (node's built-in runner, no dependency)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BLOCK_BELOW_FPS, MIN_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem } from "./frameRate.js";
+import { BLOCK_BELOW_FPS, MIN_FPS, WARN_BELOW_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem, frameRateWarning } from "./frameRate.js";
 
 const camera = (fps, extra = {}) => ({
   label: "Court 1",
@@ -32,10 +32,23 @@ test("a genuine 30fps camera measured slightly low is not blocked", () => {
   assert.equal(frameRateProblem(both(30, 29.4)), null);
 });
 
-test("25fps is refused now the floor is 30", () => {
-  const problem = frameRateProblem(camera(25));
-  assert.ok(problem, "25fps should not pass a 30fps floor");
-  assert.match(problem, /needs 30 fps/);
+test("25 and 28fps record, with a warning -- 30 is a soft floor, 25 the hard one", () => {
+  // 2026-09-25, PGC: a camera set to 30 read 28 an hour later and a booked
+  // hour was refused outright. Between the floors it records and says so.
+  for (const fps of [25, 28]) {
+    assert.equal(frameRateProblem(camera(fps)), null, `${fps}fps should not be blocked`);
+    const warning = frameRateWarning(camera(fps));
+    assert.ok(warning, `${fps}fps should warn`);
+    assert.match(warning, /Recording anyway/);
+    assert.match(warning, /set the camera's video frame rate to 30/);
+  }
+});
+
+test("24fps is refused", () => {
+  const problem = frameRateProblem(camera(24));
+  assert.ok(problem);
+  assert.match(problem, /at least 25 fps/);
+  assert.equal(frameRateWarning(camera(24)), null, "a blocked camera gets the block, not a warning too");
 });
 
 test("15fps is refused, since it halves the rallies found", () => {
@@ -64,15 +77,27 @@ test("a camera whose frame rate we don't know is never blocked", () => {
   assert.equal(frameRateProblem(camera("30")), null);
 });
 
-test("the boundary is inclusive, and sits at the tolerance not the requirement", () => {
+test("both boundaries are inclusive, and the soft one sits at the tolerance not the target", () => {
   assert.equal(MIN_FPS, 30);
+  assert.equal(WARN_BELOW_FPS, 29);
+  assert.equal(BLOCK_BELOW_FPS, 25);
+  assert.equal(frameRateWarning(camera(WARN_BELOW_FPS)), null);
+  assert.ok(frameRateWarning(camera(WARN_BELOW_FPS - 0.1)));
   assert.equal(frameRateProblem(camera(BLOCK_BELOW_FPS)), null);
   assert.ok(frameRateProblem(camera(BLOCK_BELOW_FPS - 0.1)));
 });
 
-test("assertUsableFrameRate throws the same message it reports", () => {
-  assert.doesNotThrow(() => assertUsableFrameRate(camera(30)));
+test("assertUsableFrameRate throws below the hard floor and returns the warning above it", () => {
+  assert.equal(assertUsableFrameRate(camera(30)), null);
+  assert.match(assertUsableFrameRate(camera(28)), /Recording anyway/);
   assert.throws(() => assertUsableFrameRate(camera(15)), /15 fps/);
+});
+
+test("a camera set to 30 but only 27 arriving is warned about the network, not the setting", () => {
+  const warning = frameRateWarning(both(30, 27));
+  assert.match(warning, /set to 30 fps but only about 27/);
+  assert.match(warning, /Wi-Fi/);
+  assert.doesNotMatch(warning, /set the camera's video frame rate/);
 });
 
 

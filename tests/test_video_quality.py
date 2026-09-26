@@ -5,7 +5,7 @@ decision is what matters here, and building real files at exact frame rates
 is slow and imprecise (an early attempt produced 33% degradation when 50%
 was intended, purely from ffmpeg's timestamp handling).
 """
-from src.video_quality import BLOCK_BELOW_FPS, MAX_DEGRADED_FRACTION, evaluate
+from src.video_quality import BLOCK_BELOW_FPS, MAX_DEGRADED_FRACTION, WARN_BELOW_FPS, evaluate
 
 
 def profile(rates, bucket_sec=30.0):
@@ -74,3 +74,19 @@ def test_an_unprobeable_file_never_fails_a_job():
     r = evaluate(None)
     assert r["passes"] is True
     assert r["frame_rate"] is None
+
+
+def test_a_session_between_the_floors_passes_and_records_the_shortfall():
+    # 2026-09-25, PGC: a camera set to 30 read 28. 30 is the soft floor,
+    # 25 the hard one -- 25 to 28 is processed, with the shortfall kept.
+    for rate in (25.0, 28.0):
+        r = evaluate(profile([rate] * 10))
+        assert r["passes"] is True, rate
+        assert r["below_floor_fraction"] == 0.0
+        assert r["below_target_fraction"] == 1.0
+
+
+def test_the_floors():
+    assert WARN_BELOW_FPS == 29.0
+    assert BLOCK_BELOW_FPS == 25.0
+    assert evaluate(profile([24.0] * 10))["passes"] is False
