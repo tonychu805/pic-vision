@@ -2880,3 +2880,15 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 - **Hard floor, 25fps (inclusive):** below it everything is refused, as before. 25 is the PAL default, so a camera left on it still records.
 
 **Unverified.** Detection quality between 25 and 28fps is unmeasured. The pod converts every recording to 30fps CFR (`-vsync cfr -r 30`), so a 25fps source reaches TrackNet with about one duplicated frame in six. That was already the case for 29.x sources, but it has never been scored at 25. If reels from low-fps sessions look thin, score a 25fps re-encode of labelled footage the same way ADR-087's 15fps test was run.
+
+## ADR-132 — A finishing pod also waits while the session has a part uploading
+
+**Date:** 2026-09-28 · **Status:** built and tested locally; migration `20260928000000_warm_pod_wait_for_upload.sql` **not yet applied to production**
+
+**Why.** ADR-130 keeps one waiting machine per session: a pod that finishes while another is already waiting is told to stop. But the waiting pod may be about to take a part that is still uploading. Once it takes it, the session has no waiting machine, and the next part rents a fresh one. Field test 9/25, Court B 21:11 session (5 parts, 3 machines): pod A finished part 3 at 21:42:41 and was sent home because pod B was waiting. Part 4 was still uploading (created 21:41:35, picked up 21:43:40; the database doesn't record upload completion, so this is inferred from that gap). The last part then waited ~1.7 min for a fresh machine. This is the part players wait for.
+
+**Decision.** In `warm_pod_next`, when another pod is the registered waiter, a finishing pod is told to **wait** instead of stop if the session has a reel part in `uploading` created in the last 20 minutes. It is not registered, so the first pod keeps holding the session's parts as before. Whichever pod asks first after the upload finishes takes the part. The other registers as the waiter on its next ask, or is told to stop once nothing is uploading. The pod's 12-minute idle limit still bounds any wait.
+
+**Cost.** At most a second pod idles until the upload finishes, usually a minute or two, instead of shutting down. That saves the fresh machine's start-up (0.8–4.5 min in the field test) on the next part.
+
+**Checked.** 20 checks against the real function in PGlite (Postgres in Node): the old function sends the second pod home in the 9/25 case and the new one keeps it. The full sequence ends with the last part going to a kept pod. The 25-minute-old abandoned upload, another session's upload and a cancelled upload don't hold a pod. A quiet waiter is still replaced after 45 s. **Not checked:** a live session end to end.
