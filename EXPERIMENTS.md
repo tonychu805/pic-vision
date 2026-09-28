@@ -2452,3 +2452,16 @@ Per camera, the median hard shots at the same cut-off were court 1 **7**, Court 
 **Conclusion.** The hard-shot half-point (12) holds exactly, and the length curve is unaffected. PGC's pace runs lower (p90 2.00 vs 2.67), so a 2.0 cap would spread PGC's pace scores across the full range; 2.67 still works, it just compresses them. The finding that matters: **the hard-shot count depends on the camera** (a 2× spread between cameras at one venue). Normalising by the net's pixel width doesn't make speed camera-independent across these angles; that is also why PGC's own p90 speed sits at 3.57 against 1.80. Scores therefore compare fairly **within one camera** (a session's top 10, which is what the share page needs), but not across cameras or venues ("best rally of the day" across courts) until speed is measured in real court units.
 
 **Caveats.** No hand grades at PGC, so this checks the constants' scale, not ranking quality. One chunk per session; the part choice favoured busy parts (10 rally clips).
+
+## 2026-09-28 — 9:16 ball-following crop over a whole session (Court B, 9/26 13:48, 3 parts)
+
+**Why.** The vertical crop had only been tried on single hand-picked rallies. This is a first whole-session run, of everything the share page would show.
+
+**Setup.** `scripts/follow_crop_session.py` on the session's 3 parts (re-detected locally: pod convert + `pod_infer.py` + k14, each job's calibration). It builds the page as it will be once ADR-133 is live: the top 10 rallies across all parts by the 0–100 score (±3 s), a whole-session full reel (those 10 joined, 160 s) and quick hits (5 peak moments, 30 s). The window follows the tracked ball (0.5 s smoothing, pan capped at 0.6 frame widths/s); the PGC logo is burnt in.
+
+**Result.**
+- The top 10 came from all three parts (part 1: 3, part 2: 4, part 3: 3); scores 60.9–75.9 out of 41 candidates.
+- **Ball inside the window: 1,357 of 1,360 frames where it was tracked (99.8%).** The ball was tracked in only ~30% of frames (1,336 of 4,806); in between, the window glides between known positions.
+- **From stills (not yet confirmed by playback): in this doubles game, one of the two near-side players is often outside the window**, usually the right-hand one. The far pair mostly stays in. That was expected: the window is ~1/3 of the frame's width, and this camera is side-on.
+
+**Next.** Watch the 12 clips (reel-page `/demo/vertical`, prototype branch) before deciding. If near-side players are really cut out often, frame on the players (all four when they fit, the ball when they don't) instead of the ball alone. That needs player detection on the clip frames (a GPU model, only on the clips' few seconds).

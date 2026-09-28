@@ -91,6 +91,58 @@ def vertical_logo_filter(w, h):
             f"[0][logo]overlay=W-w-{mx}:H-h-{my}")
 
 
+def render_vertical(video, xs_all, fps, start_sec, end_sec, out, logo=None, debug=True,
+                    smooth_sec=0.5, max_pan=0.6):
+    """Render [start_sec, end_sec] of `video` as a 1080x1920 clip that pans to
+    follow the ball (xs_all: tracked ball x per frame of the whole video), to
+    <out>.mp4, plus <out>_debug.mp4 (the wide shot with the window drawn on)
+    when debug. Returns {"frames", "seen", "inside"}: frames rendered, frames
+    with the ball tracked, and how many of those had it inside the window."""
+    cap = cv2.VideoCapture(video)
+    W, H = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    f0 = max(0, int(start_sec * fps))
+    f1 = min(n_total, int(end_sec * fps))
+    crop_w = int(round(H * 9 / 16)) // 2 * 2
+
+    xs = list(xs_all[f0:f1])
+    xs += [None] * (f1 - f0 - len(xs))
+    lefts = window_path(xs, fps, W, crop_w, smooth_sec, max_pan)
+    visible = sum(x is not None for x in xs)
+    inside = sum(1 for x, l in zip(xs, lefts) if x is not None and l <= x <= l + crop_w)
+
+    def writer(path, w, h, logo=None):
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
+               "-s", f"{w}x{h}", "-r", str(fps), "-i", "-"]
+        if logo:
+            cmd += ["-i", logo, "-filter_complex", vertical_logo_filter(w, h)]
+        cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart", path]
+        return subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    vert = writer(f"{out}.mp4", 1080, 1920, logo)
+    dbg_w, dbg_h = 960, int(960 * H / W) // 2 * 2
+    dbg = writer(f"{out}_debug.mp4", dbg_w, dbg_h) if debug else None
+    cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
+    for i in range(f1 - f0):
+        ok, frame = cap.read()
+        if not ok:
+            break
+        l = lefts[i]
+        crop = frame[:, l:l + crop_w]
+        vert.stdin.write(cv2.resize(crop, (1080, 1920), interpolation=cv2.INTER_LANCZOS4).tobytes())
+        if dbg:
+            d = frame.copy()
+            cv2.rectangle(d, (l, 0), (l + crop_w - 1, H - 1), (0, 255, 255), 6)
+            if xs[i] is not None:
+                cv2.line(d, (int(xs[i]), 0), (int(xs[i]), H), (0, 0, 255), 3)
+            dbg.stdin.write(cv2.resize(d, (dbg_w, dbg_h)).tobytes())
+    for p in (vert, dbg):
+        if p:
+            p.stdin.close()
+            p.wait()
+    return {"frames": f1 - f0, "seen": visible, "inside": inside}
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", required=True)
@@ -116,49 +168,12 @@ def main():
         ranked = rank_segments(cand["segments"], cand["times_crossed"], cand["speeds"], cand["threshold"])
         seg = ranked[a.rank - 1]
 
-    cap = cv2.VideoCapture(a.video)
-    W, H = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    n_total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-    f0 = max(0, int((seg["start"] - a.pad_sec) * fps))
-    f1 = min(n_total, int((seg["end"] + a.pad_sec) * fps))
-    crop_w = int(round(H * 9 / 16)) // 2 * 2
-
-    xs = ball_xs(a.csv, calib, fps)[f0:f1]
-    xs += [None] * (f1 - f0 - len(xs))
-    lefts = window_path(xs, fps, W, crop_w, a.smooth_sec, a.max_pan)
-    visible = sum(x is not None for x in xs)
-    inside = sum(1 for x, l in zip(xs, lefts) if x is not None and l <= x <= l + crop_w)
+    xs_all = ball_xs(a.csv, calib, fps)
+    st = render_vertical(a.video, xs_all, fps, seg["start"] - a.pad_sec, seg["end"] + a.pad_sec, a.out,
+                         logo=a.logo, smooth_sec=a.smooth_sec, max_pan=a.max_pan)
     print(f"{'range' if a.start is not None else f'rally #{a.rank}'}: {seg['start']:.1f}-{seg['end']:.1f}s ({seg['end'] - seg['start']:.1f}s), "
-          f"score {seg['score']:.2f}; ball seen in {visible}/{f1 - f0} frames, "
-          f"inside the window in {inside}/{visible} of those")
-
-    def writer(path, w, h, logo=None):
-        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
-               "-s", f"{w}x{h}", "-r", str(fps), "-i", "-"]
-        if logo:
-            cmd += ["-i", logo, "-filter_complex", vertical_logo_filter(w, h)]
-        cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
-                "-movflags", "+faststart", path]
-        return subprocess.Popen(cmd, stdin=subprocess.PIPE)
-    vert = writer(f"{a.out}.mp4", 1080, 1920, a.logo)
-    dbg_w, dbg_h = 960, int(960 * H / W) // 2 * 2
-    dbg = writer(f"{a.out}_debug.mp4", dbg_w, dbg_h)
-    cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
-    for i in range(f1 - f0):
-        ok, frame = cap.read()
-        if not ok:
-            break
-        l = lefts[i]
-        crop = frame[:, l:l + crop_w]
-        vert.stdin.write(cv2.resize(crop, (1080, 1920), interpolation=cv2.INTER_LANCZOS4).tobytes())
-        d = frame.copy()
-        cv2.rectangle(d, (l, 0), (l + crop_w - 1, H - 1), (0, 255, 255), 6)
-        if xs[i] is not None:
-            cv2.line(d, (int(xs[i]), 0), (int(xs[i]), H), (0, 0, 255), 3)
-        dbg.stdin.write(cv2.resize(d, (dbg_w, dbg_h)).tobytes())
-    for p in (vert, dbg):
-        p.stdin.close()
-        p.wait()
+          f"score {seg['score']:.2f}; ball seen in {st['seen']}/{st['frames']} frames, "
+          f"inside the window in {st['inside']}/{st['seen']} of those")
     print(f"wrote {a.out}.mp4 and {a.out}_debug.mp4")
 
 
