@@ -70,6 +70,27 @@ def window_path(xs, fps, width, crop_w, smooth_sec, max_pan):
     return [int(round(min(max(c - crop_w / 2, 0), width - crop_w))) for c in out]
 
 
+# The venue logo on a vertical clip: the same rounded badge as the 16:9 reels
+# (src/render.py logo_filter), about the same size on screen (14% of the
+# vertical frame's width, 152 px at 1080), but inset 10% from the right edge:
+# a full-screen player (object-fit: cover) on a 19.5:9 phone cuts ~9% off
+# each side of a 9:16 video, which would slice a logo sitting at the edge.
+V_LOGO_WIDTH_FRAC = 0.14
+V_LOGO_INSET_X_FRAC = 0.10
+V_LOGO_INSET_Y_FRAC = 0.035
+
+
+def vertical_logo_filter(w, h):
+    lw = max(2, round(w * V_LOGO_WIDTH_FRAC / 2) * 2)
+    r = round(lw * 0.12)
+    mx, my = round(w * V_LOGO_INSET_X_FRAC), round(h * V_LOGO_INSET_Y_FRAC)
+    corner = (f"hypot(max(0,{r}-min(X+0.5,W-X-0.5)),"
+              f"max(0,{r}-min(Y+0.5,H-Y-0.5)))")
+    return (f"[1]crop=iw-2:ih-2:1:1,scale={lw}:-2:flags=lanczos,format=rgba,"
+            f"geq=r='r(X,Y)':g='g(X,Y)':b='b(X,Y)':a='255*clip({r}+0.5-{corner},0,1)'[logo];"
+            f"[0][logo]overlay=W-w-{mx}:H-h-{my}")
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--video", required=True)
@@ -82,6 +103,7 @@ def main():
     ap.add_argument("--smooth-sec", type=float, default=0.5)
     ap.add_argument("--max-pan", type=float, default=0.6, help="frame widths per second")
     ap.add_argument("--out", required=True)
+    ap.add_argument("--logo", help="venue logo image, burnt into the vertical clip's lower right")
     a = ap.parse_args()
 
     calib = json.load(open(a.calib))
@@ -110,12 +132,15 @@ def main():
           f"score {seg['score']:.2f}; ball seen in {visible}/{f1 - f0} frames, "
           f"inside the window in {inside}/{visible} of those")
 
-    def writer(path, w, h):
-        return subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
-                                 "-s", f"{w}x{h}", "-r", str(fps), "-i", "-", "-c:v", "libx264", "-crf", "20",
-                                 "-preset", "medium", "-pix_fmt", "yuv420p", "-movflags", "+faststart", path],
-                                stdin=subprocess.PIPE)
-    vert = writer(f"{a.out}.mp4", 1080, 1920)
+    def writer(path, w, h, logo=None):
+        cmd = ["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
+               "-s", f"{w}x{h}", "-r", str(fps), "-i", "-"]
+        if logo:
+            cmd += ["-i", logo, "-filter_complex", vertical_logo_filter(w, h)]
+        cmd += ["-c:v", "libx264", "-crf", "20", "-preset", "medium", "-pix_fmt", "yuv420p",
+                "-movflags", "+faststart", path]
+        return subprocess.Popen(cmd, stdin=subprocess.PIPE)
+    vert = writer(f"{a.out}.mp4", 1080, 1920, a.logo)
     dbg_w, dbg_h = 960, int(960 * H / W) // 2 * 2
     dbg = writer(f"{a.out}_debug.mp4", dbg_w, dbg_h)
     cap.set(cv2.CAP_PROP_POS_FRAMES, f0)
