@@ -2,11 +2,11 @@
 no concatenation, no fixed time budget, unlike rank_and_reel.py's
 build_reel() or burst_moment_reel.py's build_burst_reel().
 
-Ranks candidates the same way build_reel() does (src/select.py's
-rank_segments, ADR-063, identical default weights) so "top rally" means
-the same thing here as it already does in the "full" reel's ranked
-ordering (highlight_by_rank.mp4) -- this just delivers the same ranking
-as N separate files instead of one concatenated reel.
+Ranks candidates by the fixed-scale 0-100 rally score (src/select.py's
+score_segments, ADR-133), not rank_segments' within-set scaling: each
+clip's score is reported with it, so a session's parts can be ranked
+together (the share page sorts every part's clips by it). The "full" and
+burst reels still order by rank_segments (ADR-063).
 
 Usage:
     python3 scripts/top_rallies_reel.py --video videos/x_30fps.mp4 \
@@ -20,16 +20,15 @@ import sys
 sys.path.insert(0, ".")
 
 from src.rallies import detect_candidates
-from src.select import rank_segments
+from src.select import net_width_px, score_segments
 from src.render import cut_clips
 
 PAD_SEC = 3.0  # same as rank_and_reel.py's build_reel -- full rally context
-WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # same score as build_reel's ranking (ADR-063)
 DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       weights=WEIGHTS, pad_sec=PAD_SEC, logo_path=None):
+                       pad_sec=PAD_SEC, logo_path=None):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -46,10 +45,15 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     {"n_candidates", "n_chosen"}.
     """
     cand = detect_candidates(video, csv, calib_path)
-    segments, times_crossed, speeds, threshold = cand["segments"], cand["times_crossed"], cand["speeds"], cand["threshold"]
+    segments, times_crossed, speeds = cand["segments"], cand["times_crossed"], cand["speeds"]
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
 
-    ranked = rank_segments(segments, times_crossed, speeds, threshold, weights=weights)
+    with open(calib_path) as f:
+        net_px = net_width_px(json.load(f))
+    if net_px is None:
+        print("calibration has no net end points: scoring on length and pace only",
+              file=sys.stderr)
+    ranked = score_segments(segments, times_crossed, speeds, net_px)
     chosen = ranked[:n]
     print(f"chose top {len(chosen)}/{len(ranked)} rallies by score (n={n})",
           file=sys.stderr)
@@ -75,14 +79,11 @@ def main():
     ap.add_argument("--n", type=int, default=DEFAULT_N,
                      help="how many top-ranked rallies to cut (default 10)")
     ap.add_argument("--session-id", default="top_rallies")
-    ap.add_argument("--weights", type=float, nargs=3, default=None,
-                     metavar=("W_DURATION", "W_PEAK_CROSSING_RATE", "W_N_SPIKES"),
-                     help="override the default ranking weights (ADR-063)")
     args = ap.parse_args()
 
     result = build_top_rallies(
         args.video, args.csv, args.calib, args.out_dir, args.session_id,
-        n=args.n, weights=tuple(args.weights) if args.weights else WEIGHTS)
+        n=args.n)
     print(json.dumps(result["stats"]))
 
 

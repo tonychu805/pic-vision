@@ -33,6 +33,7 @@ for now") -- not yet checked against the quality:1/quality:2 hand grades the
 way duration/crossing-rate/top-5-velocity were validated earlier that day.
 Revisit if that check turns up a problem.
 """
+import math
 import statistics
 
 
@@ -129,5 +130,72 @@ def rank_segments(segments, crossing_times, speeds, threshold,
     for r, a, b, c in zip(rows, d_n, p_n, s_n):
         r["score"] = w_d * a + w_p * b + w_s * c
 
+    rows.sort(key=lambda r: -r["score"])
+    return rows
+
+
+# --- A fixed-scale 0-100 rally score (ADR-133, 2026-09-28) -------------------
+#
+# rank_segments above scales each signal min-max within the set it is given,
+# so a session sent in 10-minute parts (ADR-127/128) is scored part by part:
+# every part's best rally scores ~1 however dull it was, and scores from
+# different parts can't be compared. This score is on a fixed scale, given
+# once per rally, so any set of rallies (a whole session) can be sorted by it.
+#
+# Same three signals, fixed units, each levelling off so no single outlier
+# dominates:
+#   length  35 * (1 - exp(-seconds / 12))
+#   pace    35 * min(1, peak crossings per second / 2.0)
+#   hard    30 * n / (n + 12), n = ball-speed readings above 1.80 court
+#           widths per second (pixel speed / the calibrated net's pixel width)
+# Validated against the quality:1/quality:2 hand grades (EXPERIMENTS.md
+# 2026-09-28: 18 of 33 highlight-worthy rallies into top 10s vs 15 for
+# rank_segments) and its constants re-measured on PGC footage (same day:
+# pace cap 2.67 -> 2.0; the hard-shot half-point 12 held). Comparable within
+# one camera; NOT yet across cameras, since the hard-shot count still varies
+# ~2x with camera angle.
+SCORE_LENGTH_SEC = 12.0
+SCORE_PACE_CAP = 2.0
+SCORE_HARD_HALF = 12.0
+SCORE_HARD_CUTOFF = 1.80  # court widths per second
+SCORE_WEIGHTS = (35.0, 35.0, 30.0)
+
+
+def rally_score(duration, peak_crossing_rate, n_hard):
+    """0-100 for one rally, from its three signals (see above)."""
+    w_len, w_pace, w_hard = SCORE_WEIGHTS
+    length = 1 - math.exp(-max(duration, 0.0) / SCORE_LENGTH_SEC)
+    pace = min(1.0, max(peak_crossing_rate, 0.0) / SCORE_PACE_CAP)
+    hard = n_hard / (n_hard + SCORE_HARD_HALF) if n_hard > 0 else 0.0
+    return round(w_len * length + w_pace * pace + w_hard * hard, 1)
+
+
+def net_width_px(calib):
+    """The calibrated net's width in image pixels, or None if the calibration
+    doesn't have the net's two end points."""
+    pts = calib.get("net_image_points") or []
+    if len(pts) != 2:
+        return None
+    (x0, y0), (x1, y1) = pts
+    width = math.hypot(x1 - x0, y1 - y0)
+    return width if width > 0 else None
+
+
+def score_segments(segments, crossing_times, speeds, net_px, window=3.0, step=0.25):
+    """Each segment with 'duration', 'peak_crossing_rate', 'n_hard' and a
+    0-100 'score' added, sorted best first. speeds are (t, px/sec) from
+    frame_speeds. Without a net width (net_px None) nothing counts as a hard
+    shot, and the score comes from length and pace alone. Doesn't mutate the
+    input."""
+    rows = []
+    for s in segments:
+        start, end = s["start"], s["end"]
+        seg_crossings = [t for t in crossing_times if start <= t <= end]
+        pcr = peak_rate(seg_crossings, start, end, window=window, step=step)
+        n_hard = 0 if not net_px else sum(
+            1 for t, v in speeds if start <= t <= end and v / net_px >= SCORE_HARD_CUTOFF)
+        dur = end - start
+        rows.append({**s, "duration": dur, "peak_crossing_rate": pcr, "n_hard": n_hard,
+                     "score": rally_score(dur, pcr, n_hard)})
     rows.sort(key=lambda r: -r["score"])
     return rows

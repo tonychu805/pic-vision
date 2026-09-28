@@ -703,6 +703,9 @@ def run():
         reels.append({
             "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
             "rank": clip["rank"],
+            # 0-100, fixed scale (ADR-133): the share page ranks a session's
+            # parts together by it.
+            "score": clip["score"],
             "stats": {"total_duration_sec": clip["duration"], "n_chosen": 1},
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})

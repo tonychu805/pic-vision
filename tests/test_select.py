@@ -90,3 +90,52 @@ def test_rank_segments_with_no_candidates_is_an_empty_ranking():
 def test_spike_threshold_with_too_few_detections_counts_nothing_as_a_spike():
     assert spike_threshold([]) == float("inf")
     assert spike_threshold([(1.0, 40.0)]) == float("inf")
+
+
+# --- the fixed-scale 0-100 rally score (ADR-133) ---
+
+from src.select import net_width_px, rally_score, score_segments  # noqa: E402
+
+
+def test_rally_score_matches_the_formula_and_stays_within_0_100():
+    assert rally_score(0.0, 0.0, 0) == 0.0
+    # 12 s -> 35*(1-1/e) = 22.1; pace at the cap -> 35; 12 hard -> 15.
+    assert rally_score(12.0, 2.0, 12) == 72.1
+    assert rally_score(600.0, 50.0, 10_000) <= 100.0
+    assert rally_score(600.0, 50.0, 10_000) > 99.0
+
+
+def test_rally_score_rises_with_each_signal():
+    base = rally_score(8.0, 1.0, 6)
+    assert rally_score(16.0, 1.0, 6) > base
+    assert rally_score(8.0, 1.5, 6) > base
+    assert rally_score(8.0, 1.0, 12) > base
+
+
+def test_net_width_px_from_calibration():
+    assert net_width_px({"net_image_points": [[100, 300], [400, 300]]}) == 300.0
+    assert net_width_px({}) is None
+    assert net_width_px({"net_image_points": [[5, 5], [5, 5]]}) is None
+
+
+def test_score_segments_is_fixed_scale_not_relative_to_the_set():
+    # The same rally scores the same alone or next to a much better one --
+    # the property rank_segments lacks and the share page relies on.
+    seg = {"start": 0.0, "end": 10.0}
+    crossings = [1.0, 2.0, 3.0, 4.0, 5.0]
+    speeds = [(t / 10, 600.0) for t in range(0, 600)]  # 600 px/s over a 300 px net = 2 cw/s
+    alone = score_segments([seg], crossings, speeds, 300.0)[0]["score"]
+    big = {"start": 20.0, "end": 60.0}
+    many = [20.0 + i * 0.3 for i in range(100)]
+    together = score_segments([seg, big], crossings + many, speeds, 300.0)
+    assert together[0]["start"] == 20.0  # better one first
+    assert [r for r in together if r["start"] == 0.0][0]["score"] == alone
+
+
+def test_score_segments_counts_hard_shots_in_court_widths_per_second():
+    seg = {"start": 0.0, "end": 10.0}
+    slow = [(t / 10, 300.0) for t in range(0, 100)]  # 1 cw/s: below the 1.80 cut-off
+    fast = [(t / 10, 900.0) for t in range(0, 100)]  # 3 cw/s
+    assert score_segments([seg], [], slow, 300.0)[0]["n_hard"] == 0
+    assert score_segments([seg], [], fast, 300.0)[0]["n_hard"] == 100
+    assert score_segments([seg], [], fast, None)[0]["n_hard"] == 0  # no net: length+pace only
