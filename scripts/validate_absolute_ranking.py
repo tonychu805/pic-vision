@@ -33,6 +33,7 @@ scripts/validate_ranking.py (IoU >= 0.5):
      and by sorting absolute scores; count graded rallies in each top 10.
 """
 import json
+import math
 import statistics
 import sys
 
@@ -51,6 +52,7 @@ MIN_CROSSINGS = 6
 IOU_THRESHOLD = 0.5
 PART_SEC = 600.0
 TOP_N = 10
+SCORES = (("rel", "shipped       "), ("abs", "absolute      "), ("pasted", "pasted        "), ("pasted_matched", "pasted,matched"))
 
 SESSIONS = [
     ("brickwall_30fps", "cache/brickwall_30fps_predictions_k14.csv",
@@ -125,6 +127,23 @@ def main():
     print(f"fixed spike cut-off {cutoff:.2f} court widths/s; references (medians of {len(every)} candidates): "
           + ", ".join(f"{k}={v:.2f}" for k, v in ref.items()))
 
+    # A 0-100 formula proposed 2026-09-28 (operator-supplied): 35 * length
+    # curve + 35 * capped pace + 30 * diminishing hard-shot count. Its
+    # constants assume pace ~0.6-1.2 and 0-10 hard shots; ours are a peak
+    # 3 s rate (median 1.67) and a count of fast speed READINGS (median 12,
+    # several per shot). So it's tested as written, and "matched" with the
+    # pace cap at our 90th percentile and the hard-shot half-point at our
+    # median -- scale constants from all candidates, never the grades.
+    pace_cap = statistics.quantiles([s["pcr"] for s in every], n=10)[8]
+    hard_half = ref["spikes_abs"]
+    for s in every:
+        s_len = 1 - math.exp(-s["duration"] / 12)
+        s["pasted"] = 35 * s_len + 35 * min(1.0, s["pcr"] / 1.0) + 30 * s["spikes_abs"] / (s["spikes_abs"] + 3)
+        s["pasted_matched"] = 35 * s_len + 35 * min(1.0, s["pcr"] / pace_cap) + 30 * s["spikes_abs"] / (s["spikes_abs"] + hard_half)
+    print(f"pasted formula as written: pace at its cap for {sum(s['pcr'] >= 1.0 for s in every)}/{len(every)} candidates, "
+          f"hard-shot term >= 0.75 for {sum(s['spikes_abs'] / (s['spikes_abs'] + 3) >= 0.75 for s in every)}/{len(every)}; "
+          f"matched: pace cap {pace_cap:.2f}, hard-shot half-point {hard_half:.0f}")
+
     # Shipped relative score, per whole video (as validate_ranking.py).
     rows = []
     for vid in videos:
@@ -136,20 +155,21 @@ def main():
             seg = best_match(lab, vid["segments"])
             if seg is not None:
                 seg["grade"] = lab["quality"]
-                rows.append({"video": vid["name"], "grade": lab["quality"], "rel": seg["rel_score"], "abs": seg["abs_score"]})
+                rows.append({"video": vid["name"], "grade": lab["quality"], "rel": seg["rel_score"], "abs": seg["abs_score"],
+                             "pasted": seg["pasted"], "pasted_matched": seg["pasted_matched"]})
 
     print(f"\n{len(rows)} graded rallies matched\n\n1. Per video -- does quality:1 score higher?")
     for vid in videos:
-        for key, label in (("rel", "shipped "), ("abs", "absolute")):
+        for key, label in SCORES:
             q1 = [r[key] for r in rows if r["video"] == vid["name"] and r["grade"] == 1]
             q2 = [r[key] for r in rows if r["video"] == vid["name"] and r["grade"] == 2]
             c = chance_q1_beats_q2(q1, q2)
-            print(f"  {vid['name']:16s} {label}  q1 mean {statistics.mean(q1):6.3f} (n={len(q1):2d})  "
-                  f"q2 mean {statistics.mean(q2):6.3f} (n={len(q2):2d})  "
+            print(f"  {vid['name']:16s} {label}  q1 mean {statistics.mean(q1):7.3f} (n={len(q1):2d})  "
+                  f"q2 mean {statistics.mean(q2):7.3f} (n={len(q2):2d})  "
                   f"{'q1 higher' if statistics.mean(q1) > statistics.mean(q2) else 'Q2 HIGHER'}  chance q1>q2 {c:.2f}")
 
     print("\n2. Pooled across videos -- chance a quality:1 rally outscores a quality:2 one from ANY video")
-    for key, label in (("rel", "shipped "), ("abs", "absolute")):
+    for key, label in SCORES:
         q1 = [r[key] for r in rows if r["grade"] == 1]
         q2 = [r[key] for r in rows if r["grade"] == 2]
         print(f"  {label}  {chance_q1_beats_q2(q1, q2):.2f}")
@@ -167,14 +187,15 @@ def main():
             ranked = rank_segments(parts[p], vid["crossed"], vid["speeds"], thr)
             ranked_parts.append([next(s for s in parts[p] if s["start"] == r["start"] and s["end"] == r["end"]) for r in ranked])
         interleaved = [rp[i] for i in range(max(map(len, ranked_parts))) for rp in ranked_parts if i < len(rp)][:TOP_N]
-        by_abs = sorted(vid["segments"], key=lambda s: -s["abs_score"])[:TOP_N]
+        by = {k: sorted(vid["segments"], key=lambda s: -s[k])[:TOP_N] for k in ("abs_score", "pasted", "pasted_matched")}
         n_q1_total = sum(1 for s in vid["segments"] if s.get("grade") == 1)
 
         def tally(sel):
             g = [s.get("grade") for s in sel]
             return f"q1 {g.count(1):2d}  q2 {g.count(2):2d}  ungraded {g.count(None):2d}"
-        print(f"  {vid['name']:16s} {len(parts)} parts, {n_q1_total:2d} q1 available | "
-              f"today (interleave): {tally(interleaved)} | absolute: {tally(by_abs)}")
+        print(f"  {vid['name']:16s} {len(parts)} parts, {n_q1_total:2d} q1 available\n"
+              f"      today (interleave) {tally(interleaved)}\n      absolute           {tally(by['abs_score'])}\n"
+              f"      pasted             {tally(by['pasted'])}\n      pasted, matched    {tally(by['pasted_matched'])}")
 
 
 if __name__ == "__main__":

@@ -2420,3 +2420,15 @@ The 390–690s encode arm's 6/13 (0.46) matches the 09-06 baseline for that clip
 **Reproduction drift, found in passing.** `scripts/validate_ranking.py` re-run today no longer matches its 2026-08-24 entry: 90 matched (was 88), and IMG_7744's shipped score is now **q2-higher** (0.328 vs 0.341; was 0.405 vs 0.371), so "q1 higher on all four, no exceptions" no longer holds. Labels, cache and calibration for IMG_7744 are unchanged since 08-23, so the detector chain changed. The likeliest cause is `track_ball`'s re-confirmation change (3866f28, 2026-09-04), **not verified**. IMG_7744 has only 2 matched `quality:1` rallies, so the flip is within noise, but the ADR-063 wording overstates today's evidence.
 
 **Caveats.** Four videos, 90 rallies, 33 `quality:1`. The part simulation cuts at fixed 10-minute marks from each video's start, ignoring rallies that cross a boundary. Court-width speed is a flat approximation (the net's pixel width, ignoring perspective across the court).
+
+**Follow-up, same day: an operator-supplied 0–100 formula.** `35·(1 − e^(−length/12)) + 35·min(1, pace/1.0) + 30·hard/(hard+3)`. It was tested as written and "matched": pace capped at our 90th percentile (2.67) and the hard-shot half-point at our median (12). Its constants assume pace ≈ 0.6–1.2 and 0–10 hard shots. On our units, as written, **pace sat at its cap for 119/120 candidates** (so it adds the same 35 to everything) and the hard-shot term was ≥ 0.75 for 81/120. The scale constants in the matched version come from all candidates, never the grades.
+
+| | Shipped | Absolute | Pasted | Pasted, matched |
+|---|---|---|---|---|
+| Pooled chance q1>q2 | 0.61 | 0.66 | 0.67 | 0.66 |
+| q1 in top 10, 4 videos summed (of 33) | 15 | 15 | 16 | 18 |
+| q1 in top 10, the 3 multi-part videos | 10 | 12 | 13 | 14 |
+
+Per-video chance q1>q2 for pasted / matched: brickwall_30fps 0.67 / 0.65, pb_draft_cup 0.55 / 0.60, IMG_7744 0.75 / 0.57 (n=2 q1), brickwall-SEMI 0.59 / 0.59.
+
+**Conclusion.** Every fixed-scale variant lands in the same place (pooled 0.66–0.67); the matched version picks 1–3 more highlight-worthy rallies into a top 10 than the others, still within noise. The written version doing as well with pace effectively switched off suggests **length and hard shots carry nearly all the signal these grades can detect**. The pasted shape's real advantages are practical: a bounded 0–100 scale, and diminishing returns so no single outlier dominates. It needs our own constants, not the ones as written.
