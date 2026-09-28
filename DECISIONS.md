@@ -2892,3 +2892,21 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 **Cost.** At most a second pod idles until the upload finishes, usually a minute or two, instead of shutting down. That saves the fresh machine's start-up (0.8–4.5 min in the field test) on the next part.
 
 **Checked.** 20 checks against the real function in PGlite (Postgres in Node): the old function sends the second pod home in the 9/25 case and the new one keeps it. The full sequence ends with the last part going to a kept pod. The 25-minute-old abandoned upload, another session's upload and a cancelled upload don't hold a pod. A quiet waiter is still replaced after 45 s. **Not checked:** a live session end to end.
+
+## ADR-133 — Rally clips get a fixed-scale 0–100 score; a session's top 10 is picked by it
+
+**Date:** 2026-09-28 · **Status:** built and tested in all three repos; the database migration (`20260928010000_reels_score.sql`, applied as `reels_score`) is **live**. Pipeline, console and share page wait for the operator's push.
+
+**Why.** A session arrives in 10-minute parts (ADR-127/128), each ranked by `rank_segments` (ADR-063), which scales each signal within the set it is given. Every part's best rally therefore scores ~1 however dull it was, and the share page could only interleave parts by rank (part 1's #1, part 2's #1, …). ADR-128 accepted that because scores from different parts weren't comparable.
+
+**Decision.** Top-rally clips are ranked by a fixed-scale score (`src/select.py` `score_segments` / `rally_score`), reported with each clip and stored in `reels.score`:
+
+`score = 35·(1 − e^(−length/12 s)) + 35·min(1, pace/2.0) + 30·n/(n + 12)`
+
+Pace = peak net crossings/s in any 3 s; n = ball-speed readings above 1.80 court widths/s (pixel speed ÷ the calibrated net's pixel width). The share page (`lib/mergeParts.ts`) sorts every part's rally clips by score when all of them have one; older sessions keep the interleave. The full and burst reels still order by `rank_segments`.
+
+**Evidence** (EXPERIMENTS.md 2026-09-28, three entries). Against the quality:1/quality:2 hand grades on four videos, it put 18 of 33 highlight-worthy rallies into top 10s, against 15 for `rank_segments`. That is within noise, not proven better. Across videos it ranks at least as well (0.66 vs 0.61 chance a highlight beats an ordinary rally). The shape was operator-proposed; its constants were measured on the test videos, then re-measured on 180 PGC rallies (pace cap 2.67 → 2.0; the hard-shot half-point 12 held exactly). On a real PGC part the scores ran from 46 to 72, and #2 was the same rally the live product ranked #2.
+
+**Limit.** Scores compare fairly **within one camera** only. At PGC the hard-shot count varied ~2× by camera (court 1 median 7, Court 2 16), so net-width normalisation doesn't make speed camera-independent across angles. Don't rank across courts or venues until speed is measured in court units.
+
+**Deploy order.** Migration first (done: it only adds a nullable column and a return field, and the old code ignores both), then the console (it writes `score`), and the pipeline (pushing `main` builds the pod tarball, `pod-deps.yml`) and share page in any order. Before the console is live, a pod's `score` is dropped; a clip without one just falls back to the interleave.
