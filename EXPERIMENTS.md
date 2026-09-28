@@ -2432,3 +2432,23 @@ The 390–690s encode arm's 6/13 (0.46) matches the 09-06 baseline for that clip
 Per-video chance q1>q2 for pasted / matched: brickwall_30fps 0.67 / 0.65, pb_draft_cup 0.55 / 0.60, IMG_7744 0.75 / 0.57 (n=2 q1), brickwall-SEMI 0.59 / 0.59.
 
 **Conclusion.** Every fixed-scale variant lands in the same place (pooled 0.66–0.67); the matched version picks 1–3 more highlight-worthy rallies into a top 10 than the others, still within noise. The written version doing as well with pace effectively switched off suggests **length and hard shots carry nearly all the signal these grades can detect**. The pasted shape's real advantages are practical: a bounded 0–100 scale, and diminishing returns so no single outlier dominates. It needs our own constants, not the ones as written.
+
+## 2026-09-28 — The 0–100 rally score's constants, re-measured on PGC field-test footage
+
+**Why.** The matched 0–100 formula (entry above: pace cap 2.67, hard-shot half-point 12, spike cut-off 1.80 court widths/s) took its constants from four older test videos. The product scores PGC's cameras.
+
+**Setup.** `scripts/pgc_score_constants.py`. 13 PGC parts from 9/25–26 (3 each from court 1, Court 2, Court A and Court B, plus Court B 9/26 13:58), re-detected locally with the pod's own convert + `pod_infer.py` + k14 weights + each job's calibration, then `src/rallies.detect_candidates`. 180 candidate rallies (ungraded).
+
+| | Test videos | PGC |
+|---|---|---|
+| Typical length (median s) | 8.82 | 7.77 |
+| Typical pace (median crossings/s) | 1.67 | 1.33 |
+| Pace cap (p90) | 2.67 | **2.00** |
+| Hard shots, median, at the 1.80 cut-off | 12 | **12** |
+| Own p90 speed (court widths/s) | 1.80 | 3.57 |
+
+Per camera, the median hard shots at the same cut-off were court 1 **7**, Court B 10, Court A 14, Court 2 **16**. With the test constants, PGC scores ran from 26 to 93 (median 47, p90 74); 5/180 were at the pace cap.
+
+**Conclusion.** The hard-shot half-point (12) holds exactly, and the length curve is unaffected. PGC's pace runs lower (p90 2.00 vs 2.67), so a 2.0 cap would spread PGC's pace scores across the full range; 2.67 still works, it just compresses them. The finding that matters: **the hard-shot count depends on the camera** (a 2× spread between cameras at one venue). Normalising by the net's pixel width doesn't make speed camera-independent across these angles; that is also why PGC's own p90 speed sits at 3.57 against 1.80. Scores therefore compare fairly **within one camera** (a session's top 10, which is what the share page needs), but not across cameras or venues ("best rally of the day" across courts) until speed is measured in real court units.
+
+**Caveats.** No hand grades at PGC, so this checks the constants' scale, not ranking quality. One chunk per session; the part choice favoured busy parts (10 rally clips).
