@@ -66,21 +66,40 @@ DEFAULT_GPU_TYPES = [
 # first, consumer-tier after.
 # Only cards at or under $0.50/hr on RunPod's secure tier (operator, 2026-09-24):
 # RTX 4090 ($0.74), RTX 5000 Ada ($0.83) and RTX 6000 Ada ($0.84) removed.
+#
+# Widened again 2026-09-26, after the weekend venue test's real jobs table
+# showed 33 of 105 completed reel jobs (31%) had to fall back all the way to
+# LAST_RESORT_GPU_TYPES -- the $0.50 tier was exhausted often enough that
+# capping the price ceiling there (below) would have meant real jobs retrying
+# or failing during actual play, not a rare edge case. Checked RunPod's live
+# GraphQL pricing (secure-cloud-only lowestPrice, not the unfiltered field
+# which blends in Community Cloud offers) rather than guessing: added
+# NVIDIA L4 ($0.49/hr, Secure Cloud only, same Ada Lovelace family as the
+# rest of this list) for headroom with no new tradeoff. Also added NVIDIA A40
+# ($0.49/hr, Secure Cloud only) -- Ampere, not Ada, so it carries the same
+# unverified cross-architecture cuDNN-consistency caveat as the consumer Ada
+# cards above already do (ADR-064/065's "explicit availability-over-certainty
+# trade, not a re-proof of consistency"), not a new category of risk.
 FALLBACK_GPU_TYPES = [
     "NVIDIA RTX 2000 Ada Generation",
     "NVIDIA RTX 4000 Ada Generation",
     "NVIDIA RTX 4000 SFF Ada Generation",
     "NVIDIA GeForce RTX 4080 SUPER",
     "NVIDIA GeForce RTX 4070 Ti",
+    "NVIDIA L4",
+    "NVIDIA A40",
 ]
-# Tried only when every card above is taken (operator, 2026-09-24): at 08:20
-# that day none of the five was available anywhere on RunPod. A part costs a
-# few cents more on these rather than failing after ~10 minutes of waiting.
-LAST_RESORT_GPU_TYPES = [
-    "NVIDIA GeForce RTX 4090",
-    "NVIDIA RTX 5000 Ada Generation",
-    "NVIDIA RTX 6000 Ada Generation",
-]
+# Emptied 2026-09-26 (operator: "having 4090 or anything more expensive than
+# 0.5 dollar is not the right choice"). Real cost data from the weekend test
+# showed the $0.74-0.84/hr cards here materially hurt margin at real usage
+# levels -- worth more than the reliability this tier bought. A job that
+# exhausts every FALLBACK_GPU_TYPES card now retries with backoff
+# (GPU_CAPACITY_RETRY_DELAYS_SEC) and, if still exhausted, fails with a plain
+# "no GPU capacity" message instead of paying above $0.50/hr. Left as an
+# empty list rather than deleted: call sites concatenate it with
+# FALLBACK_GPU_TYPES unconditionally, so restoring a last-resort tier later
+# (or during a real capacity crunch) is a one-line change, not a refactor.
+LAST_RESORT_GPU_TYPES = []
 
 
 def _headers():
