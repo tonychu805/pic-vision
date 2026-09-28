@@ -72,12 +72,12 @@ def window_path(xs, fps, width, crop_w, smooth_sec, max_pan):
 
 # The venue logo on a vertical clip: the same rounded badge as the 16:9 reels
 # (src/render.py logo_filter), about the same size on screen (14% of the
-# vertical frame's width, 152 px at 1080), but inset 10% from the right edge:
-# a full-screen player (object-fit: cover) on a 19.5:9 phone cuts ~9% off
-# each side of a 9:16 video, which would slice a logo sitting at the edge.
+# vertical frame's width, 152 px at 1080), close in to the lower-right corner
+# (operator, 2026-09-28). A full-screen player on a phone taller than 9:16
+# must crop from the LEFT (object-position: right) to keep it in view.
 V_LOGO_WIDTH_FRAC = 0.14
-V_LOGO_INSET_X_FRAC = 0.10
-V_LOGO_INSET_Y_FRAC = 0.035
+V_LOGO_INSET_X_FRAC = 0.025
+V_LOGO_INSET_Y_FRAC = 0.025
 
 
 def vertical_logo_filter(w, h):
