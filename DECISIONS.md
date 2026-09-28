@@ -2883,7 +2883,7 @@ Fix: the logo routes write logo columns with the service role and delete only a 
 
 ## ADR-132 — A finishing pod also waits while the session has a part uploading
 
-**Date:** 2026-09-28 · **Status:** built and tested locally; migration `20260928000000_warm_pod_wait_for_upload.sql` **not yet applied to production**
+**Date:** 2026-09-28 · **Status:** **live**: migration `20260928000000_warm_pod_wait_for_upload.sql` applied to production 2026-09-28 (as `warm_pod_wait_for_upload`); the function definition and grants were verified after applying
 
 **Why.** ADR-130 keeps one waiting machine per session: a pod that finishes while another is already waiting is told to stop. But the waiting pod may be about to take a part that is still uploading. Once it takes it, the session has no waiting machine, and the next part rents a fresh one. Field test 9/25, Court B 21:11 session (5 parts, 3 machines): pod A finished part 3 at 21:42:41 and was sent home because pod B was waiting. Part 4 was still uploading (created 21:41:35, picked up 21:43:40; the database doesn't record upload completion, so this is inferred from that gap). The last part then waited ~1.7 min for a fresh machine. This is the part players wait for.
 
