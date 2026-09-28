@@ -2391,3 +2391,32 @@ The 390–690s encode arm's 6/13 (0.46) matches the 09-06 baseline for that clip
 - **Stop → last reels:** 9m 39s (part 3, on the kept pod).
 
 **Takeaway.** The mechanism works end to end. With parts every 10 minutes and ~12–17 minutes of work per part on the cheaper cards, a kept pod is usually still busy when the next part arrives. So it saves rentals on some parts, not every one (here 1 of 3 possible). Saving more would need holding a part briefly for a nearly-finished pod; that isn't built.
+
+## 2026-09-28 — Fixed-scale ("absolute") rally score vs the shipped one, and picking a session's top 10 across 10-minute parts
+
+**Why.** A session sent in parts (ADR-127/128) is ranked part by part, and the shipped score (`rank_segments`, ADR-063) scales each signal within the set it's given, so every part's best rally scores ~1. The share page can therefore only interleave parts by rank (part 1's #1, part 2's #1, …). The question: would a fixed-scale score, given once per rally and sortable across any set, pick at least as well?
+
+**Setup.** `scripts/validate_absolute_ranking.py`. Same detector chain and IoU≥0.5 matching to `quality:1`/`quality:2` grades as `scripts/validate_ranking.py`, on the same four graded videos. The absolute score uses the same three signals on fixed units: duration (s), peak crossing rate (crossings/s in the busiest 3 s), and spike count above a **fixed** speed cut-off in court widths per second (pixel speed ÷ calibrated net width in pixels; 1.80 cw/s = pooled 90th percentile). Each is divided by a fixed reference (the median over all 120 candidates, not the grades) and averaged with equal weights. "Chance q1>q2" = probability a random `quality:1` rally outscores a random `quality:2` one (0.5 = coin flip). 90 graded rallies matched.
+
+| Video | Shipped: chance q1>q2 | Absolute: chance q1>q2 |
+|---|---|---|
+| brickwall_30fps (12 q1 / 19 q2) | 0.66 | 0.66 |
+| pb_draft_cup (7 / 12) | 0.60 | 0.56 |
+| IMG_7744 (2 / 14) | 0.46 (q2 higher on mean) | 0.57 |
+| brickwall-SEMI (12 / 12) | 0.56 | 0.53 |
+| **Pooled across videos** | 0.61 | **0.66** |
+
+**Top 10 when the video is split into 10-minute parts** (q1 / q2 / ungraded in the 10):
+
+| Video | Parts | Today (interleave by rank) | Absolute (sort) |
+|---|---|---|---|
+| brickwall_30fps | 3 | 5 / 4 / 1 | **6** / 3 / 1 |
+| pb_draft_cup | 1 | **5** / 5 / 0 | 3 / 7 / 0 |
+| IMG_7744 | 3 | 1 / 6 / 3 | 1 / 6 / 3 |
+| brickwall-SEMI | 2 | 4 / 5 / 1 | **5** / 4 / 1 |
+
+**Conclusion.** The absolute score is **about as good as the shipped one, not clearly better or worse.** It is slightly better across videos (0.66 vs 0.61) and picked one more highlight-worthy rally on two of the three multi-part videos. It was worse on the single-part video, where today's method is just the shipped whole-video ranking (3 vs 5). Every difference is 1–2 rallies, inside the labelling noise floor (PIC-6: ~1/3 agreement on rally presence). Both scores agree with the grades only modestly (0.53–0.66). The case for the absolute score is therefore **simplicity**: score each rally once, sort any set (a session, a day), no end-of-session re-ranking. It is not a quality gain.
+
+**Reproduction drift, found in passing.** `scripts/validate_ranking.py` re-run today no longer matches its 2026-08-24 entry: 90 matched (was 88), and IMG_7744's shipped score is now **q2-higher** (0.328 vs 0.341; was 0.405 vs 0.371), so "q1 higher on all four, no exceptions" no longer holds. Labels, cache and calibration for IMG_7744 are unchanged since 08-23, so the detector chain changed. The likeliest cause is `track_ball`'s re-confirmation change (3866f28, 2026-09-04), **not verified**. IMG_7744 has only 2 matched `quality:1` rallies, so the flip is within noise, but the ADR-063 wording overstates today's evidence.
+
+**Caveats.** Four videos, 90 rallies, 33 `quality:1`. The part simulation cuts at fixed 10-minute marks from each video's start, ignoring rallies that cross a boundary. Court-width speed is a flat approximation (the net's pixel width, ignoring perspective across the court).
