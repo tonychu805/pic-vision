@@ -602,6 +602,77 @@ function CameraSignIn({ camera, onUpdated }) {
   );
 }
 
+// The known refusals updateCameraAddress (electron/cameras/store.js) throws
+// in plain words, worth showing as they are. Anything else is the camera
+// not answering, reported in words that say what to check (PIC-93).
+const ADDRESS_REFUSALS = /^(A sample clip has no address|Stop this camera's recording|Another camera, .* already uses that address|That address answers as a different camera)/;
+
+// Point this camera at its new address.
+//
+// Shown only while the camera isn't answering -- a repair tool, like the
+// sign-in form above, not a setting to fiddle with on a working camera.
+// Before this, a camera whose address changed (usually a router restart
+// handing out new IPs) could only be removed and added again, and a
+// re-added camera loses its calibration: it happened at the PGC field test.
+// It stays the same camera here, so nothing is lost -- provided it IS the
+// same camera, in the same place, which the page says plainly because an
+// RTSP camera can't be checked.
+export function CameraAddress({ camera, onUpdated }) {
+  const [hostname, setHostname] = useState(camera.hostname ?? "");
+  const [port, setPort] = useState(String(camera.port ?? ""));
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setSaving(true);
+    setError("");
+    let updated;
+    try {
+      updated = await window.cameraAPI.updateAddress(camera.id, hostname.trim(), Number(port) || undefined);
+    } catch (err) {
+      const message = cleanIpcError(err);
+      setError(ADDRESS_REFUSALS.test(message)
+        ? message
+        : "Nothing answered as this camera at that address — check the address, and that the camera is on and on the same network as this machine.");
+      setSaving(false);
+      return;
+    }
+    // Outside the try, for the reason CameraSignIn gives: the save has
+    // already succeeded by here.
+    onUpdated?.(updated);
+  };
+
+  return (
+    <form className="card" style={{ marginTop: 14 }} onSubmit={submit}>
+      <div className="section-label">Did this camera get a new address?</div>
+      <p className="text-3" style={{ fontSize: "var(--fs-body)", margin: "0 0 12px", lineHeight: 1.5 }}>
+        {camera.label} isn't answering at {camera.hostname}. If its address changed — a router restart often does
+        this — enter the new one. It stays the same camera, so its calibration and recordings are kept. Only do
+        this for the same camera still mounted in the same place; a camera that was moved needs calibrating again.
+      </p>
+      <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+        <div className="field" style={{ flex: 2 }}>
+          <label>IP address</label>
+          <input className="input" value={hostname} onChange={(e) => setHostname(e.target.value)} autoComplete="off" spellCheck={false} />
+        </div>
+        <div className="field" style={{ flex: 1 }}>
+          <label>Port</label>
+          <input className="input" value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" autoComplete="off" />
+        </div>
+        <button
+          className="btn btn-primary"
+          style={{ marginBottom: 2 }}
+          disabled={saving || !hostname.trim() || (hostname.trim() === camera.hostname && String(camera.port ?? "") === port)}
+        >
+          {saving ? "Checking…" : "Use this address"}
+        </button>
+      </div>
+      {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: "10px 0 0" }}>{error}</p>}
+    </form>
+  );
+}
+
 function InfoPanel({ title, rows }) {
   return (
     <div className="card">
@@ -751,6 +822,9 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
           state. */}
       {card.state === "auth" && (
         <CameraSignIn camera={card.camera} onUpdated={onCameraReconnected} />
+      )}
+      {card.state === "offline" && !isSampleClip(card.camera) && (
+        <CameraAddress camera={card.camera} onUpdated={onCameraReconnected} />
       )}
 
       {isSampleClip(card.camera) ? (

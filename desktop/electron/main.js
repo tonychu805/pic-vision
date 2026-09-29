@@ -13,7 +13,7 @@ import {
   addCamera,
   removeCamera,
   renameCamera,
-  updateCameraCredentials,
+  updateCameraCredentials, updateCameraAddress,
   testConnection,
   probeRtspFallback,
   addCameraViaRtsp,
@@ -144,6 +144,10 @@ function registerCameraHandlers() {
   // replace working credentials with broken ones.
   ipcMain.handle("cameras:updateCredentials", async (_event, id, username, password) => {
     return updateCameraCredentials(id, username, password);
+  });
+  // Same camera, new IP: keeps its id, so its calibration survives (2026-09-29).
+  ipcMain.handle("cameras:updateAddress", async (_event, id, hostname, port) => {
+    return updateCameraAddress(id, hostname, port);
   });
   ipcMain.handle("cameras:rename", async (_event, id, label) => {
     return publicCamera(await renameCamera(id, label));

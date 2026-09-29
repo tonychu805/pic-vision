@@ -20,7 +20,7 @@ import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { isSameCameraSource } from "./identity.js";
 import { vendorsForIps } from "./vendorLookup.js";
-import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri } from "../capture.js";
+import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri, isRecording } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
@@ -497,6 +497,75 @@ export async function updateCameraCredentials(id, username, password) {
   saveCameras(next);
   notifyCamerasChanged();
   return publicCamera(next.find((c) => c.id === id));
+}
+
+// Point an existing camera at its new address -- the same camera, same
+// place, new IP (2026-09-29). There used to be no way to do this: a camera
+// whose address changed (a router restart handing out new IPs is the usual
+// cause) could only be removed and added again, and the re-added camera is
+// a new camera to the console, so its calibration was gone. Production
+// showed it happening at the PGC field test: "PGC - court 1" calibrated,
+// re-added, calibrated again the same day.
+//
+// Same id, so the calibration, recordings and bookings stay. That is only
+// right if it really is the same camera, still where it was calibrated
+// (ADR-049). An ONVIF camera says its serial number, so a different one is
+// refused; an RTSP camera says nothing about itself, so the page warns
+// instead. Verified against the real camera before anything is saved, like
+// a credentials change. The stream path is kept -- an address change is a
+// new host (and maybe port), not a different stream.
+export const ADDRESS_ERRORS = {
+  sampleClip: "A sample clip has no address to change.",
+  recording: "Stop this camera's recording before changing its address.",
+  taken: (label) => `Another camera, ${label}, already uses that address.`,
+  otherCamera: "That address answers as a different camera (its serial number doesn't match), so it wasn't changed. Add it as a new camera instead.",
+};
+
+/** A camera that reported a serial before, and now reports a different one. Pure. */
+export function isDifferentCamera(stored, reportedInfo) {
+  const before = stored?.serialNumber;
+  const now = reportedInfo?.serialNumber;
+  return Boolean(before && now && String(before).trim() !== String(now).trim());
+}
+
+export async function updateCameraAddress(id, hostname, port) {
+  const camera = listCameras().find((c) => c.id === id);
+  if (!camera) throw new Error("camera not found");
+  if (camera.connectionType === "sampleClip") throw new Error(ADDRESS_ERRORS.sampleClip);
+  // A running recording holds the old address for its reconnects.
+  if (isRecording(id)) throw new Error(ADDRESS_ERRORS.recording);
+
+  const candidate = { ...camera, hostname: String(hostname).trim(), port: Number(port) || camera.port };
+  const clash = listCameras().find((c) => c.id !== id && isSameCameraSource(c, candidate));
+  if (clash) throw new Error(ADDRESS_ERRORS.taken(clash.label));
+
+  // Throws if nothing answers, or it refuses the saved credentials -- nothing saved.
+  const result = await testConnection(candidate);
+  if (isDifferentCamera(camera, result.info)) throw new Error(ADDRESS_ERRORS.otherCamera);
+
+  const streamUri = candidate.connectionType === "rtsp"
+    ? `rtsp://${encodeURIComponent(camera.username)}:${encodeURIComponent(camera.password)}@${candidate.hostname}:${candidate.port}${camera.path}`
+    : result.streamUri ?? swapStreamHost(camera.streamUri, candidate.hostname);
+
+  const next = listCameras().map((c) =>
+    c.id === id ? { ...c, hostname: candidate.hostname, port: candidate.port, streamUri } : c,
+  );
+  saveCameras(next);
+  notifyCamerasChanged();
+  return publicCamera(next.find((c) => c.id === id));
+}
+
+// An ONVIF camera that didn't hand back a stream address: keep the one it
+// gave before, on the new host.
+function swapStreamHost(streamUri, hostname) {
+  if (!streamUri) return streamUri;
+  try {
+    const url = new URL(streamUri);
+    url.hostname = hostname;
+    return url.toString();
+  } catch {
+    return streamUri;
+  }
 }
 
 // Swaps the credentials inside a stored rtsp:// URL, leaving host, port,

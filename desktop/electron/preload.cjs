@@ -24,6 +24,7 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   rename: (id, label) => ipcRenderer.invoke("cameras:rename", id, label),
   updateCredentials: (id, username, password) =>
     ipcRenderer.invoke("cameras:updateCredentials", id, username, password),
+  updateAddress: (id, hostname, port) => ipcRenderer.invoke("cameras:updateAddress", id, hostname, port),
   testConnection: (config) => ipcRenderer.invoke("cameras:testConnection", config),
   revealStreamUri: (id) => ipcRenderer.invoke("cameras:revealStreamUri", id),
   // No options anymore -- scanSettings.js (extra ranges + timeout) is the

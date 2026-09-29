@@ -3020,3 +3020,35 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 - *Mutation check:* removing the count reset makes the "broken up" test fail.
 - *Console:* 214 tests, including a paired pair — a failed lookup throws *and* a working lookup that finds nothing is still null. `tsc` clean.
 - **Not verified** on a running app against a really removed machine.
+
+---
+
+## ADR-138 — A camera's address can be changed in place, so a new IP no longer costs its calibration
+
+**Date:** 2026-09-29 · **Status:** built and tested; ships with the next desktop release
+
+**Context.** From the 09.29 connection review: removing and re-adding a camera loses its calibration. The re-added camera gets a new id, the console's heartbeat sync deletes the old row, and the calibration lives on that row (ADR-084). Production, checked read-only: **6 of the 15 cameras ever calibrated were later deleted.** At least one was a real loss — "PGC - court 1" at the field test was calibrated on 09-25, re-added as "PGC - Court A", and calibrated again the same day. "Tournament" on the Office machine looks like one camera re-added as two streams (ADR-120). No other table references camera rows, so nothing else went with them.
+
+**Why people re-add:** the desktop let you rename a camera and re-enter its password, both keeping its id, but **not change its address**. A camera whose IP changes — a venue router restarting is the usual cause — could only be fixed by removing and re-adding it.
+
+**Decision.** `updateCameraAddress(id, hostname, port)` changes the address and keeps the id, so the calibration, recordings and bookings stay.
+- **Verified before saving**, like a credentials change: nothing is saved unless the camera answers at the new address.
+- **Refused:**
+  - while the camera is recording — the recording's reconnects hold the old address;
+  - when another camera already uses that address;
+  - for an ONVIF camera whose serial number differs, since that's a different camera, and a kept calibration would be silently wrong (ADR-049).
+- **RTSP cameras report no serial**, so the page says it plainly: only for the same camera still in the same place; a moved camera needs calibrating again.
+- **The stream path is kept.** A new IP is a new host, not a different stream.
+- **Shown only while the camera is "Not answering"** — a repair tool, like the sign-in form, not a setting on a working camera.
+
+**Considered, not done now.**
+- *Keeping removed cameras on the console* and offering "use the calibration from <old camera>", with the old photo beside a live one. This covers accidental removals and re-adds that still happen. It's a console change, worth doing if re-adds continue after this.
+- *Automatic matching by serial or network address* was rejected: RTSP cameras have no serial, and the network address seen during a scan is never stored.
+
+**Verified.**
+- *Desktop suite:* 285 tests.
+- *Against fake RTSP cameras* (local servers answering like a camera; no real camera): an address change keeps the id, name and stream path, *and* an address where nothing answers changes nothing; an address another camera uses is refused, naming it.
+- *Serial check:* a different serial is refused, *and* the same serial or no serial is not.
+- *The form, rendered:* it starts from the current address and says what's kept, *and* it carries the moved-camera warning and won't save an unchanged address.
+- *Mutation check:* removing the connection check fails the "nothing answers" test.
+- **Not verified** in the running app or against a real camera.

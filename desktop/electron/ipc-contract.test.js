@@ -79,7 +79,9 @@ const FRESH_INPUT_ONLY = new Set([
 // are an error's text, never an entity, and carry no secret that could
 // have been stripped on the way out. `on`: the true/false of a Settings
 // switch (power:setKeepAwake, power:setOpenAtLogin), coerced with `=== true`.
-const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|minutes|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack|on)$/;
+// `hostname`/`port`: a typed-in camera address (cameras:updateAddress), a
+// string and a number -- the camera itself is looked up in main by `id`.
+const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|minutes|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack|on|hostname|port)$/;
 
 function isObjectParam(param) {
   // `{ a, b }` / `[a, b]` -- destructured, therefore an object.
