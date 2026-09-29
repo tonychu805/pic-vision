@@ -13,7 +13,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, listParts, SEGMENT_RE } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE } from "./autoSplit.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
@@ -23,6 +23,7 @@ import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
 import { withDeadline } from "./deadline.js";
+import { rememberedResult, rememberResult } from "./commandMemory.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -748,6 +749,12 @@ async function runCommand(command) {
     if (startArrivedTooLate(command.params)) {
       throw new Error("The booking had already ended when this machine received its start, so nothing was recorded");
     }
+    // Already recording what this start asks for -- Start pressed twice, or
+    // this very command run a second time -- so it has succeeded already.
+    const current = activeOutDir(camera.id);
+    if (current && startMatchesCurrent(command.params, readSessionMeta(current))) {
+      return { outDir: current, alreadyRecording: true };
+    }
     const started = await startRecording(camera);
     // The playing session the console issued with this start (ADR-128):
     // every upload of this recording, whole or in parts, carries it back.
@@ -1031,12 +1038,25 @@ async function processCommands() {
   // arriving in one batch (e.g. a fast double-click before the console's
   // own button re-renders) should apply in order, not race.
   for (const command of commands) {
-    try {
-      const result = await withDeadline(runCommand(command), COMMAND_DEADLINE_MS, command.type);
-      await completeCommand(connection, command.id, "done", result);
-    } catch (err) {
-      await completeCommand(connection, command.id, "error", { error: err.message });
+    // Already carried out; only the report went missing. Say it again
+    // rather than do it again (commandMemory.js).
+    const earlier = rememberedResult(command.id);
+    if (earlier) {
+      await completeCommand(connection, command.id, earlier.status, earlier.result);
+      continue;
     }
+    let status = "done";
+    let result;
+    try {
+      result = await withDeadline(runCommand(command), COMMAND_DEADLINE_MS, command.type);
+    } catch (err) {
+      status = "error";
+      result = { error: err.message };
+    }
+    // Written down before the report, so a report that never arrives
+    // can't make it run again.
+    rememberResult(command.id, status, result);
+    await completeCommand(connection, command.id, status, result);
   }
 }
 

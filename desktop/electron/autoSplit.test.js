@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta } from "./autoSplit.js";
+import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta, startMatchesCurrent } from "./autoSplit.js";
 
 const seg = (i) => `session-${String(i).padStart(3, "0")}.mkv`;
 
@@ -131,4 +131,23 @@ test("the session saved at start is read back for the stop check", () => {
   assert.equal(readSessionMeta(dir), null);
   writeSessionMeta(dir, { recording_session_id: "s-1", schedule_booking_id: "b-1" });
   assert.deepEqual(readSessionMeta(dir), { recordingSessionId: "s-1", bookingId: "b-1" });
+});
+
+test("a start that finds the camera recording: the same request again succeeds as it is", () => {
+  // Start clicked twice by hand (09-21): the second is the same request.
+  assert.equal(startMatchesCurrent({ recording_session_id: "s2" }, { recordingSessionId: "s1", bookingId: null }), true);
+  // A hand start during a booking, while that booking is recording.
+  assert.equal(startMatchesCurrent({ schedule_booking_id: "b1", recording_session_id: "s2" }, { recordingSessionId: "s1", bookingId: "b1" }), true);
+  // A recording with no session file (older build): a hand start is still just "again".
+  assert.equal(startMatchesCurrent({}, null), true);
+});
+
+// Paired: a DIFFERENT booking, or a booking over a hand recording, must still
+// fail -- quietly taking over someone else's recording would put their
+// footage under this booking's link (the 09-26 reasoning).
+test("a start for a different booking, or a booking over a hand recording, still fails", () => {
+  assert.equal(startMatchesCurrent({ schedule_booking_id: "b2" }, { recordingSessionId: "s1", bookingId: "b1" }), false);
+  assert.equal(startMatchesCurrent({ schedule_booking_id: "b2" }, { recordingSessionId: "s1", bookingId: null }), false);
+  // A hand start with no booking while a booking records: not the same thing either.
+  assert.equal(startMatchesCurrent({}, { recordingSessionId: "s1", bookingId: "b1" }), false);
 });

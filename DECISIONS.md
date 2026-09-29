@@ -2966,3 +2966,32 @@ A token-possession check was drafted first (move across accounts only if the req
 **Limits.** An upload that fails *after* the console created its job is not retried here (a pre-existing gap, shown in the recording's row). A hand-started recording has no end time and behaves as before, apart from crash cleanup. Stopping a booking early by hand now sends it at once — before, a hand-stopped booking was never sent at all, because the booking's own stop later found nothing recording.
 
 **Deploy order.** Either side can go first. An old desktop ignores `ends_at`; a new desktop against the old console simply has no end time to act on, and behaves as before.
+
+---
+
+## ADR-136 — A command already carried out is answered, not run again; and Start pressed twice succeeds
+
+**Date:** 2026-09-29 · **Status:** built and tested; ships with the next desktop release and console push
+
+**Context.** From the 09.29 connection review: a command stays `pending` until its result is reported, and nothing marks it as picked up, so a lost report means it runs again. Production was checked before building anything (every `agent_commands` row, read-only). **No command in ~200 has visibly run twice.** A start run twice fails "Already recording" on its own row, and all three such failures have other causes:
+- **09-26 06:00, two cameras:** the hand-start-then-booking case, already fixed that day.
+- **09-21 06:12:** a *second* Start command 10s after the first — a double click, i.e. the same request sent twice, which the console showed as a failure while the camera was recording.
+
+A console-side "claim" (hand each command out once) was judged too big for that evidence. Two desktop-side changes cover both shapes instead.
+
+**Decision.**
+1. **Start is forgiving about the same request** (`autoSplit.js`'s `startMatchesCurrent`). A start that finds the camera already recording what it asks for — a hand start over a hand recording, or a start of the booking that is recording — succeeds with `alreadyRecording: true`. A booking start over a *different* recording still fails: adopting someone else's footage as the booking's is the 09-26 hazard, and the console's plain stop clears the camera ahead of every booking start anyway.
+2. **The machine remembers what it has done** (`commandMemory.js`, on disk, newest 50). The result is written down after the work and before the report. A command handed over again is answered from memory, not run. This covers the costly case — `send_to_cloud` sending a clip twice, meaning a second GPU job and duplicate reels — as well as repeat snapshots, and holds across a restart.
+3. **Console:** a hand Start during a booking now carries the booking's `ends_at`, like the dispatcher's start. Without it, ADR-135's on-the-machine stop never applied to a booking restarted by hand — a gap in ADR-135 found while reading this route.
+
+**Verified.**
+- *Desktop suite:* 271 tests, including paired tests: the same request succeeds *and* a different booking still fails; a remembered command *and* a new one still runs.
+- *End to end against the stand-in console:*
+  - Start twice gives one recording and a success;
+  - a booking start over a hand recording still fails;
+  - a lost report is re-answered with the original result, and no second recording;
+  - lost report plus restart, across two processes: answered from memory, nothing restarted.
+- *Mutation check:* switching the memory off makes the lost-report check fail — without it, the forgiving start would have masked the re-run.
+- *ADR-135's four scenarios* re-run clean on this code.
+- *Console:* `tsc` and 212 tests pass.
+- **Not verified** on a real Mac or camera.

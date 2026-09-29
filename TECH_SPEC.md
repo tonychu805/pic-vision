@@ -836,6 +836,10 @@ pic-vision/
 │   │   │                              # cloud.js's bookingEndTick/recoverRecordings-
 │   │   │                              # AfterRestart; capture.js stops recordings
 │   │   │                              # a crash left running
+│   │   ├── commandMemory.js             # 2026-09-29 (ADR-136): results of the
+│   │   │                              # last 50 commands carried out, on disk --
+│   │   │                              # a command handed over again (its report
+│   │   │                              # was lost) is answered, not run again
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel, plus (PIC-68)
 │   │   │                              # pickCalibFile -- native file dialog, now the

@@ -180,6 +180,28 @@ export function stopTargets(commandParams, currentMeta) {
 }
 
 /**
+ * Whether a start that finds this camera already recording is asking for
+ * the recording that is running -- in which case it succeeds as it is,
+ * instead of failing with "Already recording" (2026-09-29).
+ *
+ * That failure is what a Start clicked twice looked like (09-21 06:12: the
+ * second click, 10s after the first, reported failure while the camera was
+ * recording), and what a start would look like if it ran twice because its
+ * "done" never reached the console.
+ *
+ * Yes for a hand start with no booking (the same button, again), and for a
+ * start of the same booking that is already recording. No when a booking
+ * starts while something else is recording: that must not quietly adopt
+ * someone else's footage as the booking's (the 09-26 reasoning), and the
+ * console's plain stop ahead of every booking start clears the camera first.
+ */
+export function startMatchesCurrent(startParams, currentMeta) {
+  const booking = startParams?.schedule_booking_id;
+  if (!booking) return !currentMeta?.bookingId;
+  return currentMeta?.bookingId === booking;
+}
+
+/**
  * What an upload of `dir` tells the console about its session: the
  * session id, and -- for a part folder (<recording>/parts/part-NN) -- its
  * number and where it starts in the session (its first segment's index x 10
