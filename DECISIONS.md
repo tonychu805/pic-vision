@@ -2910,3 +2910,23 @@ Pace = peak net crossings/s in any 3 s; n = ball-speed readings above 1.80 court
 **Limit.** Scores compare fairly **within one camera** only. At PGC the hard-shot count varied ~2× by camera (court 1 median 7, Court 2 16), so net-width normalisation doesn't make speed camera-independent across angles. Don't rank across courts or venues until speed is measured in court units.
 
 **Deploy order.** Migration first (done: it only adds a nullable column and a return field, and the old code ignores both), then the console (it writes `score`), and the pipeline (pushing `main` builds the pod tarball, `pod-deps.yml`) and share page in any order. Before the console is live, a pod's `score` is dropped; a clip without one just falls back to the interleave.
+
+---
+
+## ADR-134 — A machine's record belongs to one account; switching accounts gives it a new one there
+
+**Date:** 2026-09-29 · **Status:** built and tested; production migration and deploy pending operator approval · **Amends:** ADR-094 (the "move" path)
+
+**Context.** The connection design review (progress/09.29) found the takeover ADR-094 had filed and left open: `/api/agents/register` looked a `device_id` up across **every** account and re-homed the machine to whoever called — authenticated only as "some signed-in user", with sign-up open to anyone and the `device_id` printed on the desktop's "This machine" page. One request from any computer would move a venue's machine, its cameras, their calibrations and (since ownership derives from `agent_id`) its reels into a stranger's account, and knock the real machine offline with a rotated token.
+
+A token-possession check was drafted first (move across accounts only if the request carries the machine's current token). The operator's question — *"can the server only find the machine under the signed-in account?"* — was simpler and closed it more completely: there is nothing to prove if another account's machine is never found at all.
+
+**Decision.** The register route only ever looks inside the caller's own brand (`lib/agentDevice.ts`, `findOwnAgentByDevice`). `device_id` becomes unique **per brand** (`20260929000000_agents_device_id_per_brand.sql`), so a machine signed into a second account gets a separate `agents` row there. The first account's row — calibrations, reels, history — is never touched, and shows the machine offline.
+
+**What this gives up, deliberately.** Calibrations no longer follow an account switch: they live on the old account's camera rows. Cameras do reappear by themselves (they live on the machine). Switching back finds the old row, calibrations intact. The operator judged this the right trade: account switching is common, physical moves between venues rare, and a setup calibration done under the wrong account is re-done in minutes. The practical rule: set a venue's machine up signed in as the venue.
+
+**Desktop.** ADR-094's dialog still blocks until someone answers — which account records tonight is still a person's call — but "Move it to …" is now "Connect it to …", and says that calibrations stay behind and past reels stay with the account that made them.
+
+**Verified.** Paired tests (console 212): another account cannot find a venue's machine by its id, *and* the owning account still finds its own; one machine with a row in each of two accounts resolves to the right row for each. A gate fails if any file under `app/` looks a machine up by `device_id` directly — it fails on the pre-fix route. Desktop 253 tests, lint and build clean. **Not verified:** the register route against the live database, and the dialog on a running app.
+
+**Deploy order.** Migration first: the old route's global `maybeSingle()` lookup stays correct while every `device_id` is still globally unique, which it is until the new route creates a second row for one. Then the console. The desktop dialog is wording only and can ship in any later release.
