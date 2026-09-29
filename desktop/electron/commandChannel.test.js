@@ -45,3 +45,25 @@ test("stopping when nothing was started is safe", async () => {
   await stopCommandChannel();
   assert.equal(isCommandChannelLive(), false);
 });
+
+// Wiring, checked in main.js's source because main.js can't be imported
+// outside Electron (same approach as ipc-contract.test.js). The channel
+// authenticates with the session and filters on the agent id, so every
+// handler that changes either must rebind it. Sign-in was missing until
+// 2026-09-29: a fresh install registers inside signIn(), so its first
+// Calibrate waited on the 60s poll until the app was restarted. The
+// "no token -> nothing starts" half of sign-out is pinned above.
+test("every handler that changes the session or the registration rebinds the channel", async () => {
+  const { readFileSync } = await import("node:fs");
+  const source = readFileSync(new URL("./main.js", import.meta.url), "utf8");
+  const body = (channel) => {
+    const start = source.indexOf(`ipcMain.handle("${channel}"`);
+    assert.notEqual(start, -1, `${channel} no longer exists in main.js`);
+    const next = source.indexOf("ipcMain.handle(", start + 1);
+    return source.slice(start, next === -1 ? undefined : next);
+  };
+  for (const channel of ["auth:signIn", "auth:signOut", "cloud:register"]) {
+    assert.match(body(channel), /syncCommandChannel\(\)/, `${channel} must call syncCommandChannel()`);
+  }
+  assert.match(body("cloud:disconnect"), /stopCommandChannel\(\)/, "cloud:disconnect must stop the channel");
+});

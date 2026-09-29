@@ -452,11 +452,22 @@ function registerCloudHandlers() {
 // (auth.js's `registerDevice`), so a successful sign-in is what actually
 // connects this device to the console.
 function registerAuthHandlers() {
+  // Both rebind the push channel. It authenticates with the session, so it
+  // changes whenever the session does: sign-in is where a fresh install
+  // first registers (inside signIn(), not via cloud:register), and until
+  // 2026-09-29 nothing bound the channel there -- a new venue's first
+  // Calibrate waited on the 60s poll until the app was restarted. Sign-out
+  // tears it down (no token, so syncCommandChannel starts nothing); the
+  // poll keeps this machine obeying commands either way.
   ipcMain.handle("auth:signIn", async (_event, email, password) => {
-    return signIn(email, password);
+    const session = await signIn(email, password);
+    await syncCommandChannel().catch(() => {});
+    return session;
   });
   ipcMain.handle("auth:signOut", async () => {
-    return signOut();
+    const result = await signOut();
+    await syncCommandChannel().catch(() => {});
+    return result;
   });
   ipcMain.handle("auth:getSession", async () => {
     return getSession();
