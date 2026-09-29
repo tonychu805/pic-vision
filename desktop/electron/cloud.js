@@ -411,7 +411,10 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
     res = await fetch(`${consoleUrl}/api/agents/register`, {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${accessToken}` },
-      body: JSON.stringify({ deviceId: getOrCreateDeviceId(), agentName: getAgentName() }),
+      // The token this machine was using, if any: when it's moving to another
+      // account, that's how the console knows it may release the record in
+      // the old one -- only the machine has it (console lib/agentDevice.ts).
+      body: JSON.stringify({ deviceId: getOrCreateDeviceId(), agentName: getAgentName(), previousApiToken: getCloudConnection()?.apiToken ?? undefined }),
       signal: AbortSignal.timeout(timeoutMs),
     });
   } catch (err) {

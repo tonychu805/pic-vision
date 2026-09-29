@@ -3052,3 +3052,28 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 - *The form, rendered:* it starts from the current address and says what's kept, *and* it carries the moved-camera warning and won't save an unchanged address.
 - *Mutation check:* removing the connection check fails the "nothing answers" test.
 - **Not verified** in the running app or against a real camera.
+
+---
+
+## ADR-139 — Console code review of the 09.29 changes: the booking stop is always queued again; a machine leaving an account releases its old record only with proof
+
+**Date:** 2026-09-29 · **Status:** fixes built and tested; the scheduler correction was applied to production on 2026-09-29, after confirming no booking was near and no start or stop was pending. It is verified in place: the stop is always queued, the stop-suppression and the tag are gone, `ends_at` is kept, execute is `service_role`-only, and one manual run was clean. The flawed version was live for a few hours with no booking in that time. Console push and desktop release pending · **Amends:** ADR-134, ADR-135
+
+**Context.** A high-effort code review of the console's five unpushed commits raised 8 findings. Each was checked before acting on it.
+
+**Real, fixed.**
+1. **The scheduler withheld a booking's stop from a machine that was recording** (ADR-135's migration, `20260929010000`, already applied). It treated a still-`pending` start as "never ran". But a command stays pending until the machine *reports*, so a machine that started recording and then lost the internet had its start expired and its stop never queued. A pre-09-29 desktop, which ignores `ends_at`, would then record on with no stop ever arriving, even after reconnecting — the case ADR-135 set out to fix. A pending hand Start carrying the booking (ADR-136) did the same, and tagging the plain stop with `for_booking_id` broke its `distinct`, so it became one per booking instead of one per camera.
+   - **Fix** (`20260929020000_booking_stop_always_queued.sql`): the stop is always queued, as before ADR-135; only the pending start is expired, and the plain stop is untagged.
+   - A machine that was off the whole time still records nothing: its expired start is no longer pending, so it never runs, and the stop finds nothing recording.
+   - On PGlite, with both migrations applied in production order, 10/10 checks pass, including the reviewer's exact scenario. The same checks fail 4/10 against the version live now.
+2. **Switching a machine to another account left its old record "paired", with a valid token** (ADR-134). The old account saw a phantom offline machine, and its bookings kept sending it commands. Releasing every record for the device id — the reviewer's suggestion — would hand back half of the ADR-094 takeover, since any account knowing a device id could knock a venue's machine offline.
+   - **Fix:** the desktop sends the token it was using (`previousApiToken`), and `releaseFromOtherAccounts` releases only the other-account record *that token belongs to*. Only the machine holds it.
+   - Paired tests: the right token releases it, *and* a device id with a wrong or missing token releases nothing; the new account's own record is never released.
+3. **The anti-takeover gate only scanned `app/`, and only for `.eq('device_id'`.** It now scans `lib/` too, excluding the scoped helper itself, and also catches `.match({ device_id })`, `.filter`, `.in` and `.neq`. A planted `.match({ device_id })` in `lib/brand.ts` fails it.
+
+**Checked, not an issue.**
+- *"The old index name may not match"* — it did. Production had `agents_device_id_key`, checked before applying; afterwards only `agents_brand_device_id_key` exists.
+- *"A cancelled start leaves an empty recording session"* — nothing in the console lists recording sessions; they're read only when a job exists.
+
+**Accepted as is.** `authenticateAgent` now throws on a failed lookup, and no route catches it, so Next answers its default 500 rather than the JSON `{ error }` and labelled log line of `serverErrorResponse`. The one thing that matters — not a 401 — holds. The desktop classifies on status alone, and the thrown message still reaches the function logs. Consolidating the eleven call sites is tidying, not a fix.
+

@@ -406,3 +406,25 @@ test("reconnecting clears 'removed'", async () => {
     disconnectCloud();
   });
 });
+
+// Moving to another account: the console may only release the old account's
+// record when the machine proves it held it, by sending its previous token.
+test("registering again sends the token this machine was using; a first registration sends none", async () => {
+  const bodies = [];
+  await withServer((req, res, raw) => {
+    if (req.url.includes("register")) bodies.push(JSON.parse(raw));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.url.includes("register")
+      ? { agentId: "agent-1", apiToken: `tok-${bodies.length}`, brandName: "Test Venue" }
+      : {}));
+  }, async (url) => {
+    disconnectCloud(); // a machine with no connection yet
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await connectTo(url); // e.g. the "connect it to <other account>" dialog
+    await settleFirstHeartbeat();
+    assert.equal(bodies[0].previousApiToken, undefined);
+    assert.equal(bodies[1].previousApiToken, "tok-1");
+    disconnectCloud();
+  });
+});
