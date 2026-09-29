@@ -3180,3 +3180,25 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 3. **Only after both are verified live, delete the reels' public copies** (irreversible, separate approval). Keep `vertical-test/` public until the 9:16 prototype (`/r/<id>/test`) is done: it still reads the CDN.
 
 **Follow-up in this project:** move the calibration photos (C3) to private storage the same way, keeping only the current one per camera.
+
+---
+
+## ADR-143 — A calibration is its numbers; the photo is deleted once it's saved
+
+**Date:** 2026-09-29 · **Status:** built and tested; the 60 stored photos deleted; console deploy pending · **Project:** Data Retention & Removal (P-PIC-34)
+
+**Context.** Calibration photos (court snapshots, with whoever was on court) sat in the public bucket behind `cdn.picvisionai.com` and were never deleted. There were 60, and one is grabbed every time someone opens a camera's menu (ADR-100). The operator asked whether a calibration could just be the 14 points. Checked: it already is. The stored calibration holds image points, court points, homography, net points, resolution and error figures, and no picture. Reel processing reads only those, and the in-console fit reads nothing from the photo but its PNG header (width and height).
+
+**Decision.**
+- **Photos live in the private ingest bucket** while they exist.
+  - The console hands the desktop a presigned upload **and a 1-hour signed view address**. It's returned in the existing `publicUrl` field because shipped desktops pass that field straight to the console's `<img>`, so **no desktop change or release is needed**.
+  - Same key shape (`<brand>/calibration-snapshots/<uuid>.png`), outside every pod's read grant.
+- **Deleted right after a successful save**, once the fit has read its size. Kept when the fit rejects the clicks, so the operator can re-click the same photo.
+- **Unused photos swept after an hour** (the console only reuses a pre-warmed photo under 2 minutes old), every tenth minute on the existing dispatch call.
+- The key is read back from whichever address form arrives — signed host-style, path-style, or the old CDN form from a desktop mid-calibration across the deploy (`snapshotKeyFromUrl`) — and the fit falls back to the public bucket for such a photo.
+- **The earlier idea of keeping one photo per camera is dropped.** Spotting a moved camera, or offering a re-added camera its old calibration (PIC-189), is done by **drawing the saved points over a fresh photo**: if they sit on the court lines, it hasn't moved. That's a clearer check, and no picture is stored.
+
+**Verified.**
+- *Console:* 228 tests, `tsc` clean. Paired tests: the key is read from all three address forms, *and* a non-URL gives none; photos over an hour are swept, *and* a fresh one, a non-snapshot key (raw footage) or one with no date is left.
+- *Cleanup:* the 60 existing photos were deleted from the public bucket; none remain. All 11 calibrated cameras still hold their full calibration numbers.
+- **Not verified end to end:** a real calibration through the new path (it needs a signed-in console and a desktop). Check it after the console deploy.
