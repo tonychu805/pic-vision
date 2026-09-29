@@ -67,6 +67,41 @@ function isNetworkShortfall(camera) {
   return configured !== null && configured >= WARN_BELOW_FPS && measured !== null;
 }
 
+// A frame rate as a person should read it: whole when it is whole (30,
+// 29.97 -> 30), one decimal when rounding would lie (2026-09-29). A camera
+// measured at 24.8 fps used to be shown as "25 fps" beside "recording is
+// disabled" -- a number that passes, next to a verdict that it failed.
+export function formatFps(v) {
+  const r = Math.round(v * 10) / 10;
+  return Number.isInteger(r) ? String(r) : r.toFixed(1);
+}
+
+/**
+ * The one reading of the rule every screen shows (2026-09-29):
+ *   'blocked' -- below the hard floor: recording and calibration refused
+ *   'low'     -- records, with a warning
+ *   'ok'
+ *   'unknown' -- never measured, so not checked
+ * The camera page, the camera list and Diagnostics each used to keep their
+ * own copy of the thresholds; the camera page's still blocked below 29 after
+ * ADR-131 lowered the floor to 25, so it told venues recording was disabled
+ * on cameras that were recording.
+ */
+export function frameRateLevel(camera) {
+  const effective = effectiveFps(camera);
+  if (effective === null) return "unknown";
+  if (effective < BLOCK_BELOW_FPS) return "blocked";
+  if (effective < WARN_BELOW_FPS) return "low";
+  return "ok";
+}
+
+// "is set to 25 fps" only when the camera said so. An RTSP camera reports no
+// setting at all -- only how many frames arrived was counted.
+function rateClause(camera, effective) {
+  const configured = number(camera?.profile?.fps);
+  return configured !== null ? `is set to ${formatFps(configured)} fps` : `is sending about ${formatFps(effective)} fps`;
+}
+
 // Only ever blocks on a frame rate we actually know. What stays unknown --
 // a sample clip (no camera at all), or a stream whose probe failed -- passes
 // rather than being guessed at, since blocking a real setup over missing
@@ -76,12 +111,11 @@ export function frameRateProblem(camera) {
   if (effective === null || effective >= BLOCK_BELOW_FPS) return null;
 
   const label = camera?.label ?? "This camera";
-  const rounded = Math.round(effective);
 
   if (isNetworkShortfall(camera)) {
     return (
-      `${label} is set to ${number(camera.profile.fps)} fps but only about ${rounded} fps are reaching this computer. ` +
-      `Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) -- at 15 fps it finds only half the rallies. ` +
+      `${label} is set to ${formatFps(number(camera.profile.fps))} fps but only about ${formatFps(effective)} fps are reaching this computer. ` +
+      `Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) — at 15 fps it finds only half the rallies. ` +
       `The camera's own settings are fine — this is a network problem: ` +
       `check its Wi-Fi signal, or connect it by cable, then try again.`
     );
@@ -89,7 +123,7 @@ export function frameRateProblem(camera) {
 
   const where = camera?.hostname ? `http://${camera.hostname}` : "the camera's own settings page";
   return (
-    `${label} is set to ${rounded} fps. Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) -- ` +
+    `${label} ${rateClause(camera, effective)}. Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) — ` +
     `at 15 fps it finds only half the rallies. ` +
     `Sign in to the camera at ${where}, set the video frame rate to ${MIN_FPS}, ` +
     `then try again.`
@@ -103,17 +137,16 @@ export function frameRateWarning(camera) {
   if (effective === null || effective >= WARN_BELOW_FPS || effective < BLOCK_BELOW_FPS) return null;
 
   const label = camera?.label ?? "This camera";
-  const rounded = Math.round(effective);
   if (isNetworkShortfall(camera)) {
     return (
-      `${label} is set to ${number(camera.profile.fps)} fps but only about ${rounded} fps are reaching this computer. ` +
-      `Recording anyway, but rally detection is tuned for ${MIN_FPS} fps and may miss some rallies -- ` +
+      `${label} is set to ${formatFps(number(camera.profile.fps))} fps but only about ${formatFps(effective)} fps are reaching this computer. ` +
+      `Recording anyway, but rally detection is tuned for ${MIN_FPS} fps and may miss some rallies — ` +
       `check the camera's Wi-Fi signal, or connect it by cable.`
     );
   }
   return (
-    `${label} is running at ${rounded} fps. Recording anyway, but rally detection is tuned for ${MIN_FPS} fps ` +
-    `and may miss some rallies -- set the camera's video frame rate to ${MIN_FPS} when you can.`
+    `${label} ${rateClause(camera, effective)}. Recording anyway, but rally detection is tuned for ${MIN_FPS} fps ` +
+    `and may miss some rallies — set the camera's video frame rate to ${MIN_FPS} when you can.`
   );
 }
 

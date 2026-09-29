@@ -40,7 +40,7 @@ function describeRange(input) {
   return { ok: true, text: `= ${count} addresses` };
 }
 
-export default function SettingsPage({ onBack }) {
+export default function SettingsPage() {
   const [primaryCidr, setPrimaryCidr] = useState(null);
   const [extraRanges, setExtraRanges] = useState([]);
   const [newRange, setNewRange] = useState("");
@@ -103,22 +103,29 @@ export default function SettingsPage({ onBack }) {
 
   return (
     <div className="page">
-      {/* Reached from the Cameras page's "Scan options" now rather than
-          from the sidebar, so it needs its own way back -- same pattern
-          as the camera detail page. */}
-      <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", marginBottom: 8 }} onClick={onBack}>
-        <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />All cameras
-      </button>
-      <div className="page-title" style={{ marginBottom: 4 }}>Scan options</div>
-      <p className="page-sub" style={{ marginBottom: 16 }}>
-        "Scan" on the Cameras page already checks your whole network automatically. These settings extend that when
-        the default doesn't cover your setup.
-      </p>
+      {/* In the sidebar again (2026-09-29). It left the sidebar when all it
+          held was the Scan button's options; since then it gained "Keep this
+          computer ready" and "Send in parts while recording" -- what decides
+          whether a booked recording happens at all -- and nobody looks for
+          those under "Scan options". The Cameras page's scan icon still
+          opens this page. */}
+      <div className="page-title" style={{ marginBottom: 16 }}>Settings</div>
 
       {/* One column, not a 1fr 1fr grid: the right-hand panel holds a
           single number field and ended about a third of the way down the
           left one, leaving a large empty block beside a tall panel. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
+        <PowerCard />
+        <AutoSplitCard />
+
+        <div>
+          <div className="page-title" style={{ fontSize: "var(--fs-strong)", margin: "10px 0 2px" }}>Finding cameras</div>
+          <p className="page-sub" style={{ margin: 0 }}>
+            "Scan" on the Cameras page already checks your whole network. These settings extend it when the
+            default doesn't cover your setup.
+          </p>
+        </div>
+
         <div className="card">
           <div className="section-label">Where to look</div>
           <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
@@ -170,9 +177,6 @@ export default function SettingsPage({ onBack }) {
             </p>
           </details>
         </div>
-
-        <AutoSplitCard />
-        <PowerCard />
 
         <div className="card">
           <div className="section-label">How long to wait</div>

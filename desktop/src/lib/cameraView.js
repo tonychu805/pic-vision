@@ -1,3 +1,4 @@
+import { frameRateLevel } from "../../electron/cameras/frameRate.js";
 // Derives the mockup's card/detail view-model (STATE_META, card(), sel())
 // from real data: configured cameras (cameraAPI.list()/add()), transient
 // discovery results (cameraAPI.discover()), and per-camera live-test status
@@ -167,6 +168,28 @@ export function deviceDetail(device) {
   return parts.length ? parts.join(" · ") : null;
 }
 
+/**
+ * What a camera that answers is actually ready for (2026-09-29).
+ *
+ * The list used to say "Online" for any camera it could reach -- including
+ * one whose frame rate is too low to record at all, and without saying which
+ * camera was recording or still needed calibrating. The list is the home
+ * screen; "can I reach it?" is the wrong question for it to answer.
+ *
+ * Calibration only counts once the console has reported it
+ * (`calibrationKnown`); before that "not calibrated" just means "not heard".
+ * A sample clip can't record, so it is only ever Ready or Needs calibration.
+ */
+export function readiness(camera) {
+  const fps = frameRateLevel(camera);
+  if (camera.isRecording) return { label: "Recording", tagClass: "tag tag-accent" };
+  if (fps === "blocked") return { label: "Frame rate too low", tagClass: "tag tag-danger" };
+  if (camera.calibrationKnown && !camera.isCalibrated) return { label: "Needs calibration", tagClass: "tag tag-warning" };
+  if (fps === "low") return { label: "Low frame rate", tagClass: "tag tag-warning" };
+  if (!camera.calibrationKnown) return { label: STATE_META.ok.label, tagClass: STATE_META.ok.tagClass };
+  return { label: "Ready", tagClass: "tag tag-success" };
+}
+
 export function cardVisuals(card) {
   const meta = STATE_META[card.state];
   const live = card.state === "ok";
@@ -174,10 +197,11 @@ export function cardVisuals(card) {
   // presence at all -- STATE_META's "ok" for one of those just means "its
   // file is there," so say that instead.
   const isSampleClip = card.kind === "configured" && card.camera.connectionType === "sampleClip";
+  const ready = card.kind === "configured" && card.state === "ok" ? readiness(card.camera) : null;
   return {
     ...card,
-    stateLabel: isSampleClip && card.state === "ok" ? "File ready" : meta.label,
-    stateTagClass: meta.tagClass,
+    stateLabel: ready ? (isSampleClip && ready.label === STATE_META.ok.label ? "File ready" : ready.label) : meta.label,
+    stateTagClass: ready ? ready.tagClass : meta.tagClass,
     live,
     thumbIcon: live
       ? "ph ph-video-camera"

@@ -13,12 +13,8 @@ import { listCameras, testConnection } from "./cameras/store.js";
 import { consoleFetch } from "./consoleApi.js";
 import { getCloudConnection } from "./cloud.js";
 import { CAMERA_MBPS } from "./bandwidth.js";
+import { frameRateLevel } from "./cameras/frameRate.js";
 
-// 30fps is a hard requirement, not a preference: at 15fps recall halves
-// (ADR-086/087). A camera can pass its connection check and still be
-// useless, so the survey has to look at the measured rate, not just
-// whether the stream opens.
-const REQUIRED_FPS = 30;
 
 /**
  * Round-trip to the cloud console over the agent's own authenticated
@@ -76,7 +72,11 @@ export async function checkCameras() {
       width: profile.width ?? null,
       height: profile.height ?? null,
       fps,
-      fpsOk: fps == null ? null : fps >= REQUIRED_FPS - 0.5,
+      // The same reading of the rule as recording and the camera page
+      // (2026-09-29): this used to be its own threshold (29.5), which called
+      // a 25fps camera merely "check fps" while its page said recording was
+      // off -- two severities for one camera.
+      fpsLevel: frameRateLevel(camera),
       bitrateKbps: profile.bitrateKbps ?? null,
       measuredAt: profile.measuredAt ?? null,
     });

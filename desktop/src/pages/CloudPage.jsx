@@ -285,7 +285,9 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
                 {signingOut ? "Signing out…" : "Sign out"}
               </button>
               <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", lineHeight: 1.45 }}>
-                This machine keeps recording and reporting.
+                {/* Not "and reporting" once the console has removed it
+                    (2026-09-29): the card above has just said it stopped. */}
+                {connection.removed ? "This machine keeps recording." : "This machine keeps recording and reporting."}
               </span>
             </div>
           </>
@@ -363,7 +365,8 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           -- the machine stops reporting to this venue until someone
           reconnects it -- not the everyday sign-out it used to sit next
           to as an equal-looking "Disconnect" button. */}
-      {connection && (
+      {/* Nothing to remove it from once the console already has (2026-09-29). */}
+      {connection && !connection.removed && (
         <div style={{ maxWidth: 420, marginTop: 14 }}>
           {confirmingRemove ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>

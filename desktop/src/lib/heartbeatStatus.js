@@ -126,3 +126,23 @@ export function heartbeatStatus(connection, now = Date.now()) {
       : `This machine has not checked in to ${brandName} successfully yet. The Log tab has the reason.`,
   };
 }
+
+/**
+ * The sidebar's one-line version of the same answer (2026-09-29).
+ *
+ * The sidebar box used to say "Connected" about the local network -- right
+ * where anyone looks for "is this machine connected", and it went on saying
+ * it while the console had removed the machine or couldn't be reached.
+ * Derived from heartbeatStatus so the two can never disagree; only the
+ * wording is shorter, since the sidebar is 196px wide.
+ */
+export function sidebarConnection(connection, now = Date.now()) {
+  if (connection === undefined) return { tone: "pending", title: "Checking…", detail: null };
+  if (connection === null) return { tone: "lost", title: "Not connected", detail: "Sign in to connect this machine" };
+  const full = heartbeatStatus(connection, now);
+  if (full.canReconnect) return { tone: "lost", title: "Removed from venue", detail: "Open This machine to reconnect" };
+  if (full.tone === "ok") return { tone: "ok", title: "Connected", detail: full.detail };
+  if (full.tone === "pending") return { tone: "pending", title: "Connecting…", detail: "Waiting for the first check-in" };
+  if (connection.lastAttemptOk) return { tone: "lost", title: "Not checking in", detail: "Open This machine for details" };
+  return { tone: "lost", title: "Connection lost", detail: "Open This machine for details" };
+}

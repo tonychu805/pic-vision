@@ -122,3 +122,24 @@ test("an ordinary failure is still 'Connection lost', with no Reconnect", () => 
   assert.equal(status.title, "Connection lost");
   assert.equal(status.canReconnect, undefined);
 });
+
+// The sidebar box (2026-09-29): the console connection, not the LAN.
+import { sidebarConnection } from "./heartbeatStatus.js";
+
+test("the sidebar says Removed / Connection lost / Not connected, never 'Connected', when the console link is broken", () => {
+  const base = { brandName: "Riverside Courts", lastHeartbeatAt: null };
+  assert.equal(sidebarConnection({ ...base, lastAttemptOk: false, removed: true }, NOW).title, "Removed from venue");
+  assert.equal(sidebarConnection({ ...base, lastAttemptOk: false }, NOW).title, "Connection lost");
+  assert.equal(sidebarConnection(null, NOW).title, "Not connected");
+  const stale = sidebarConnection({ ...base, lastAttemptOk: true, lastHeartbeatAt: new Date(NOW - 10 * 60_000).toISOString() }, NOW);
+  assert.equal(stale.title, "Not checking in");
+});
+
+// Paired: a machine that is checking in must still read Connected.
+test("a machine checking in reads Connected; one just starting reads Connecting…", () => {
+  const ok = sidebarConnection({ brandName: "V", lastAttemptOk: true, lastHeartbeatAt: new Date(NOW - 20_000).toISOString() }, NOW);
+  assert.equal(ok.title, "Connected");
+  assert.equal(ok.tone, "ok");
+  assert.equal(sidebarConnection({ brandName: "V", lastAttemptOk: null, lastHeartbeatAt: null }, NOW).title, "Connecting…");
+  assert.equal(sidebarConnection(undefined, NOW).title, "Checking…");
+});

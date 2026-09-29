@@ -7,11 +7,12 @@ import { useEffect, useState } from "react";
 import logoOnDark from "../assets/pic-vision-logo-white.png";
 import logoOnLight from "../assets/pic-vision-logo.png";
 import ThemeToggle from "./ThemeToggle.jsx";
+import { sidebarConnection } from "../lib/heartbeatStatus.js";
 
-// "Scan settings" used to sit here as a fourth peer, but all it does is
-// configure the Cameras page's Scan button -- top-level standing it hadn't
-// earned, in a four-item nav. It's reached from the control it affects
-// now (CamerasPage's "Scan options"), not from here.
+// Settings is back as a peer (2026-09-29). It left when all it held was the
+// Scan button's options; it has since gained "Keep this computer ready" and
+// "Send in parts while recording", which decide whether a booked recording
+// happens at all -- not something to file under the Cameras page's scan icon.
 const NAV_ITEMS = [
   { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
   { key: "log", label: "Log", icon: "ph-list-bullets" },
@@ -21,6 +22,7 @@ const NAV_ITEMS = [
   // connection (ADR-096) -- naming it after the remote thing implied a
   // second place to go and connect.
   { key: "cloud", label: "This machine", icon: "ph-cloud" },
+  { key: "settings", label: "Settings", icon: "ph-gear-six" },
 ];
 
 function navButtonStyle(active) {
@@ -43,6 +45,9 @@ function navButtonStyle(active) {
 export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch = 0 }) {
   const [network, setNetwork] = useState(null);
   const [brandName, setBrandName] = useState(null);
+  // The console connection, for the status box: undefined until the first
+  // read, null when this machine isn't registered.
+  const [connection, setConnection] = useState(undefined);
 
   useEffect(() => {
     window.systemAPI?.getNetworkInfo().then(setNetwork).catch(() => setNetwork(null));
@@ -57,6 +62,7 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
     if (typeof window.cloudAPI?.status !== "function") return;
     const poll = () =>
       window.cloudAPI.status().then((c) => {
+        setConnection(c ?? null);
         if (c?.brandName) return setBrandName(c.brandName);
         // Not paired to a location yet -- fall back to the signed-in
         // account's own brand (electron/auth.js's getBrand) so the
@@ -64,7 +70,9 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
         window.authAPI?.getBrand().then((b) => setBrandName(b?.name ?? null)).catch(() => {});
       }).catch(() => {});
     poll();
-    const id = setInterval(poll, 30_000);
+    // 15s: cheap (a local read, no network call) and the status box
+    // should notice a lost or removed connection soon after the heartbeat does.
+    const id = setInterval(poll, 15_000);
     return () => clearInterval(id);
     // connectionEpoch re-reads immediately when the connection is
     // replaced under us (moving this machine to another venue), instead
@@ -110,34 +118,29 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
         <ThemeToggle />
       </div>
 
-      {/* Used to show the raw CIDR + interface name ("192.168.1.0/24" /
-          "Interface · enp1s0") as the headline -- meaningless to a
-          non-technical venue owner and the first thing a plain-language
-          walkthrough (2026-09-01) noticed. Kept available as a hover
-          tooltip for troubleshooting, not in the primary view.
-          The second line used to read "Scanning this network for
-          cameras", which stopped being true on 2026-09-03 when
-          auto-scan-on-launch was removed (operator's call) -- nothing
-          scans until someone clicks Scan, so it claimed continuous
-          background work the app doesn't do. */}
-      <div
+      {/* The console connection (2026-09-29), not the local network. This
+          box used to say "Connected" about the LAN -- where anyone looks for
+          "is this machine connected" -- and kept saying it while the console
+          had removed the machine or couldn't be reached. The network is
+          still in the tooltip for troubleshooting. Clicking opens This
+          machine, where the full status and the fixes are. */}
+      <button
+        type="button"
+        onClick={() => onNavigate("cloud")}
         style={{
           padding: "10px 8px",
           borderRadius: "var(--radius-md)",
           background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
+          border: "none",
+          textAlign: "left",
+          cursor: "pointer",
+          color: "inherit",
+          font: "inherit",
         }}
         title={network?.cidr ? `Network: ${network.cidr}${network.interfaceName ? ` (${network.interfaceName})` : ""}` : undefined}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
-          <i className="ph ph-wifi-high" style={{ fontSize: 14, color: "var(--color-accent-300)" }} />
-          <span style={{ fontSize: "var(--fs-fine)", fontWeight: 500 }}>
-            {network?.cidr ? "Connected" : "Checking…"}
-          </span>
-        </div>
-        <div style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", marginTop: 2 }}>
-          {network?.cidr ? "Scan from the Cameras tab" : "Looking for a network connection"}
-        </div>
-      </div>
+        <SidebarConnectionLine status={sidebarConnection(connection)} />
+      </button>
 
       {/* Bottom-left, matching pic-vision-cloud-console's sidebar footer
           (components/app/Sidebar.tsx) -- operator's call 2026-09-06, so
@@ -163,5 +166,22 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
         </div>
       )}
     </div>
+  );
+}
+
+const TONE_ICON = { ok: "ph-cloud-check", pending: "ph-clock-clockwise", lost: "ph-cloud-slash" };
+const TONE_COLOR = { ok: "var(--color-success)", pending: "var(--text-3)", lost: "var(--color-danger)" };
+
+export function SidebarConnectionLine({ status }) {
+  return (
+    <>
+      <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+        <i className={`ph ${TONE_ICON[status.tone]}`} style={{ fontSize: 14, color: TONE_COLOR[status.tone] }} />
+        <span style={{ fontSize: "var(--fs-fine)", fontWeight: 500 }}>{status.title}</span>
+      </div>
+      {status.detail && (
+        <div style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", marginTop: 2 }}>{status.detail}</div>
+      )}
+    </>
   );
 }

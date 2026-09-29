@@ -284,6 +284,15 @@ export function getCalibrationState(cameraId) {
   return calibrationByCameraId.get(cameraId) ?? { isCalibrated: false, calibrationRmseFt: null, calibratedAt: null };
 }
 
+// Whether the console has told this machine about calibration at all. Until
+// it has (launch, or a machine that isn't connected), "not calibrated" only
+// means "not heard yet" -- the camera list must not claim every camera
+// needs calibrating on that basis (2026-09-29).
+let calibrationHeard = false;
+export function calibrationKnown() {
+  return calibrationHeard;
+}
+
 export function getCloudConnection() {
   const connection = store.get("connection", null);
   if (!connection) return connection;
@@ -630,6 +639,7 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
       otherAgentNames = body.otherAgentNames.filter((n) => typeof n === "string");
     }
     if (Array.isArray(body.cameras)) {
+      calibrationHeard = true;
       calibrationByCameraId.clear();
       for (const c of body.cameras) {
         calibrationByCameraId.set(c.cameraId, {

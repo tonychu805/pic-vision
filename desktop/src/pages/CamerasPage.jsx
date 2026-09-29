@@ -376,6 +376,15 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
     if (active) refreshConfigured();
   }, [active]);
 
+  // Keeps each card's readiness current -- a recording the console started,
+  // a calibration that just finished -- while this tab is open. Re-reads the
+  // list only: no camera is contacted, unlike refreshConfigured above.
+  useEffect(() => {
+    if (!active) return undefined;
+    const id = setInterval(() => { window.cameraAPI.list().then(setConfigured).catch(() => {}); }, 10_000);
+    return () => clearInterval(id);
+  }, [active]);
+
   const startScan = async () => {
     const run = ++scanRun.current;
     setScanning(true);

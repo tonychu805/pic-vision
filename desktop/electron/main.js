@@ -30,7 +30,7 @@ import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, calibrationKnown, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
 import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
 import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
@@ -125,7 +125,14 @@ function registerCameraHandlers() {
   // listCameras() itself stays for internal callers -- capture.js and the
   // heartbeat genuinely need the real credentials.
   ipcMain.handle("cameras:list", async () => {
-    return listCamerasForRenderer().map((c) => ({ ...c, ...getCalibrationState(c.id) }));
+    // isRecording and calibrationKnown feed the camera list's readiness
+    // label (cameraView.js's readiness): "Recording", "Needs calibration"...
+    return listCamerasForRenderer().map((c) => ({
+      ...c,
+      ...getCalibrationState(c.id),
+      calibrationKnown: calibrationKnown(),
+      isRecording: isRecording(c.id),
+    }));
   });
   // The one deliberate way credentials reach the renderer: the Streams
   // panel's Copy button, so pasting into VLC still works. An explicit act,

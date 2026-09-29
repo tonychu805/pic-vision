@@ -5,6 +5,11 @@ import { cleanIpcError } from "../lib/ipcError.js";
 // surfaces show the same mark.
 import logo from "../assets/pic-vision-logo-white.png";
 
+// Where an account is created (the console's sign-in page has a "Create one"
+// switch). Production, the same default electron/cloud.js uses; nobody is
+// signed in here yet, so there is no stored console address to use instead.
+const CONSOLE_SIGN_UP_URL = "https://console.picvisionai.com/sign-in";
+
 // Gates App.jsx's render until an operator signs in with the same account
 // used on the cloud console (Supabase auth, electron/auth.js). Signing in
 // also registers this device with the console automatically (ADR-079) --
@@ -137,28 +142,37 @@ export default function SignInPage({ onSignedIn }) {
                   Worth building for real only if venues start sharing a
                   machine, where "don't save my login here" is a genuine
                   request. It is not one today. */}
-              <div style={{ display: "flex", alignItems: "center", justifyContent: "flex-end", marginBottom: 18 }}>
-                <span style={{ fontSize: "var(--fs-body)", opacity: 0.5, cursor: "not-allowed" }} title="Password reset isn't built yet">
-                  Forgot password
-                </span>
-              </div>
+              {/* "Forgot password" stood here, greyed out with an "isn't built
+                  yet" tooltip -- the same never-wired mockup leftover as "Keep
+                  me signed in" above, and a dead end for exactly the person
+                  who needs help. Removed 2026-09-29: there is no password
+                  reset anywhere yet, the console included. */}
+              <div style={{ marginBottom: 18 }} />
 
               {error && <p className="text-muted" style={{ fontSize: "var(--fs-body)", marginBottom: 14 }}>{error}</p>}
 
               <button type="submit" className="btn btn-primary" disabled={submitting || !email.trim() || !password} style={{ width: "100%", marginBottom: 8 }}>
                 {submitting ? "Signing in…" : "Sign in"}
               </button>
-              <button type="button" className="btn btn-secondary" disabled style={{ width: "100%" }} title="Single sign-on isn't built yet">
-                Continue with single sign-on
-              </button>
+              {/* "Continue with single sign-on" stood here, permanently
+                  disabled -- a mockup control for a feature that doesn't
+                  exist. Removed 2026-09-29. */}
             </form>
           )}
 
           <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 20 }}>
-            Don't have an account yet? Create one on the cloud console.
+            Don't have an account yet?{" "}
+            {/* A real link now (2026-09-29); it was plain text. */}
+            <a
+              href={CONSOLE_SIGN_UP_URL}
+              onClick={(e) => { e.preventDefault(); window.systemAPI?.openExternal?.(CONSOLE_SIGN_UP_URL); }}
+              style={{ color: "var(--color-accent-300)" }}
+            >
+              Create one on the cloud console
+            </a>
           </p>
           <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 6 }}>
-            Once signed in, this device connects to the Cloud console automatically.
+            Once signed in, this machine connects to the cloud console automatically.
           </p>
         </div>
       </div>

@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
+import { frameRateLevel, frameRateProblem, frameRateWarning } from "../../electron/cameras/frameRate.js";
 import { cardVisuals, detailPanels } from "../lib/cameraView.js";
 
 function formatElapsed(startedAt) {
@@ -162,25 +163,16 @@ function ConsolePointer() {
 // The one camera setting that stops everything working (ADR-087). Shown
 // here rather than only in the collapsed "Streams" detail panel, because a
 // camera below the floor is refused for both recording and calibration and
-// the venue needs to know why without going looking. Mirrors
-// electron/cameras/frameRate.js, which is the actual gate -- 30 is the
-// requirement, compared with slack so 29.97 (NTSC) and a slightly noisy
-// measurement of a genuine 30fps camera aren't false alarms.
-const MIN_FPS = 30;
-const BLOCK_BELOW_FPS = 29;
-
+// the venue needs to know why without going looking.
+//
+// Reads electron/cameras/frameRate.js itself -- the actual gate -- rather
+// than a copy of its thresholds (2026-09-29). The copy that lived here still
+// blocked below 29 after ADR-131 lowered the floor to 25, so it told venues
+// "recording and calibration are disabled" for cameras that were recording.
 function FrameRateWarning({ camera }) {
-  const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
-  const configured = num(camera.profile?.fps);
-  const measured = num(camera.profile?.measuredFps);
-  const effective = measured ?? configured;
-  if (effective !== null && effective >= BLOCK_BELOW_FPS) return null;
-  const rounded = Math.round(effective);
-  // Set correctly but not arriving: a network fault, not a settings one,
-  // and telling them to change a correct setting would send them in circles.
-  const networkFault = configured !== null && configured >= BLOCK_BELOW_FPS && measured !== null;
-  const unknown = effective === null;
-  if (unknown) {
+  const level = frameRateLevel(camera);
+  if (level === "ok") return null;
+  if (level === "unknown") {
     return (
       <div className="notice notice-quiet" style={{ marginBottom: 10 }}>
         <i className="ph ph-question text-3" style={{ fontSize: 15, flex: "none", marginTop: 1 }} />
@@ -191,23 +183,13 @@ function FrameRateWarning({ camera }) {
       </div>
     );
   }
+  const blocked = level === "blocked";
   return (
-    <div className="notice notice-warning" style={{ marginBottom: 10 }}>
-      <i className="ph ph-warning" style={{ fontSize: 15, color: "var(--color-warning)", flex: "none", marginTop: 1 }} />
+    <div className={`notice ${blocked ? "notice-danger" : "notice-warning"}`} style={{ marginBottom: 10 }}>
+      <i className="ph ph-warning" style={{ fontSize: 15, color: blocked ? "var(--color-danger)" : "var(--color-warning)", flex: "none", marginTop: 1 }} />
       <span>
-        {networkFault ? (
-          <>
-            This camera is set to <b>{configured} fps</b> but only about <b>{rounded} fps</b> are reaching
-            this computer, so recording and calibration are disabled. The camera's own settings are fine —
-            this is a network problem: check its Wi-Fi signal, or connect it by cable.
-          </>
-        ) : (
-          <>
-            This camera is set to <b>{rounded} fps</b>. Rally detection needs {MIN_FPS} fps, so recording
-            and calibration are disabled — at this rate about half the rallies go undetected. Sign in to the camera
-            {camera.hostname ? <> at <b>{camera.hostname}</b></> : null} and set its video frame rate to <b>30</b>.
-          </>
-        )}
+        {blocked && <b>Recording and calibration are turned off for this camera. </b>}
+        {blocked ? frameRateProblem(camera) : frameRateWarning(camera)}
       </span>
     </div>
   );

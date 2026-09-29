@@ -89,10 +89,10 @@ export default function App() {
       ) : (
       <div style={{ flex: 1, minHeight: 0, display: "flex" }}>
         <Sidebar
-          // "detail" and "settings" are both reached from the Cameras
-          // tab and have no nav entry of their own, so the Cameras item
-          // stays lit while you're in either.
-          nav={nav === "detail" || nav === "settings" ? "cameras" : nav}
+          // "detail" is reached from the Cameras tab and has no nav entry
+          // of its own, so the Cameras item stays lit there. Settings has
+          // its own entry again (2026-09-29).
+          nav={nav === "detail" ? "cameras" : nav}
           onNavigate={(k) => { setSelectedCard(null); setNav(k); }}
           deviceCount={cameraCount}
           connectionEpoch={connectionEpoch}
@@ -141,7 +141,7 @@ export default function App() {
           )}
           {nav === "log" && <LogPage />}
           {nav === "diagnostics" && <DiagnosticsPage />}
-          {nav === "settings" && <SettingsPage onBack={() => setNav("cameras")} />}
+          {nav === "settings" && <SettingsPage />}
           {nav === "cloud" && (
             <CloudPage
               session={session}

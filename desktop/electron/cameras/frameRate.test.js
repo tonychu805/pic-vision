@@ -1,7 +1,7 @@
 // Run with: npm test  (node's built-in runner, no dependency)
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { BLOCK_BELOW_FPS, MIN_FPS, WARN_BELOW_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem, frameRateWarning } from "./frameRate.js";
+import { BLOCK_BELOW_FPS, MIN_FPS, WARN_BELOW_FPS, assertUsableFrameRate, effectiveFps, frameRateProblem, frameRateWarning , formatFps, frameRateLevel } from "./frameRate.js";
 
 const camera = (fps, extra = {}) => ({
   label: "Court 1",
@@ -142,4 +142,37 @@ test("a failed measurement falls back to the configured rate", () => {
   assert.equal(effectiveFps(both(30, null)), 30);
   assert.equal(frameRateProblem(both(30, null)), null);
   assert.ok(frameRateProblem(both(15, null)));
+});
+
+// 2026-09-29: one reading of the rule for every screen.
+test("the level matches the actual gate: blocked below 25, low from 25 to 29, fine from 29", () => {
+  assert.equal(frameRateLevel(camera(15)), "blocked");
+  assert.equal(frameRateLevel({ profile: { measuredFps: 24.8 } }), "blocked");
+  assert.equal(frameRateLevel(camera(25)), "low");
+  assert.equal(frameRateLevel(camera(28)), "low");
+  assert.equal(frameRateLevel(camera(29.97)), "ok");
+  assert.equal(frameRateLevel(camera(undefined)), "unknown");
+});
+
+// Paired with the gate itself: the level must never disagree with what
+// recording actually does, which is the bug the camera page had.
+test("a camera the level calls blocked is exactly one recording refuses", () => {
+  for (const fps of [10, 15, 24, 24.8, 25, 26, 28.9, 29, 30]) {
+    assert.equal(frameRateLevel(camera(fps)) === "blocked", frameRateProblem(camera(fps)) !== null, `${fps} fps`);
+  }
+});
+
+test("a frame rate is never rounded across a limit", () => {
+  assert.equal(formatFps(24.8), "24.8");
+  assert.equal(formatFps(30), "30");
+  assert.equal(formatFps(29.97), "30");
+  assert.equal(formatFps(15), "15");
+});
+
+test("a camera that only reports what arrives isn't described as 'set to' a rate", () => {
+  const rtsp = { label: "Court 2", hostname: "192.168.1.22", profile: { measuredFps: 24.8 } };
+  assert.match(frameRateProblem(rtsp), /Court 2 is sending about 24\.8 fps/);
+  assert.doesNotMatch(frameRateProblem(rtsp), /set to 25/);
+  // Paired: a camera that did report its setting still says so.
+  assert.match(frameRateProblem(camera(15)), /is set to 15 fps/);
 });

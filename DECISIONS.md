@@ -3077,3 +3077,31 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 
 **Accepted as is.** `authenticateAgent` now throws on a failed lookup, and no route catches it, so Next answers its default 500 rather than the JSON `{ error }` and labelled log line of `serverErrorResponse`. The one thing that matters — not a 401 — holds. The desktop classifies on status alone, and the thrown message still reaches the function logs. Consolidating the eleven call sites is tidying, not a fix.
 
+
+---
+
+## ADR-140 — The desktop says whether things will work, not just whether they answer
+
+**Date:** 2026-09-29 · **Status:** built and tested; ships with the next desktop release
+
+**Context.** A design review of the desktop app, run on the real renderer with made-up data (a stand-in launcher answering every IPC call; no production, no camera), found six places where the app misled the operator. These are fixed here. Seventeen more — jargon, naming, recording names, page order, and polish — are left for a later pass.
+
+**Decision and fixes.**
+1. **The camera list shows readiness** (`cameraView.js`'s `readiness`). For a camera that answers, the list now says *Recording*, *Frame rate too low*, *Needs calibration*, *Low frame rate* or *Ready* instead of "Online" for all of them. It used to call a camera Online that couldn't record at all, and never said which camera was recording or uncalibrated.
+   - "Needs calibration" only counts once the console has reported calibration (`calibrationKnown`). Otherwise every camera on an unconnected machine would be accused of needing it.
+   - The list re-reads every 10s while it's open. That's a local read only: no camera is contacted.
+2. **The sidebar box shows the console connection** (`sidebarConnection`, derived from `heartbeatStatus`): *Connected · Connecting… · Not checking in · Connection lost · Removed from venue · Not connected*. It used to say "Connected" about the local network, and kept saying so while the machine was removed or cut off. Clicking it opens This machine.
+3. **Settings is back in the sidebar**, titled Settings, with "Keep this computer ready" and "Send in parts while recording" first and camera scanning below. It left the sidebar when it held only scan options; since then it has gained what decides whether a booking records at all.
+4. **"Removed" no longer contradicts itself.** Sign out no longer says "keeps recording and reporting", and the redundant "Remove this machine" link is gone.
+5. **One frame-rate rule on every screen** (`frameRate.js`'s `frameRateLevel` / `formatFps`). The camera page kept its own copy of the thresholds, and it still blocked below 29 after ADR-131 lowered the floor to 25. So it told venues recording was disabled on 25–28 fps cameras that were recording. Diagnostics had a third copy (warned below 29.5). Both now read the gate itself, and a test pins the level to the gate at every rate from 10 to 30.
+   - Numbers are never rounded across a limit: 24.8 used to show as "25".
+   - A camera that reports no setting is described as "sending about X fps", not "set to X".
+6. **Sign-in has no dead ends.** The permanently disabled "single sign-on" button and "Forgot password" are gone, and "Create one on the cloud console" is a real link. **Gap found:** there is no password reset anywhere, the console included, so a venue owner who forgets their password has no self-service path.
+
+**Verified.**
+- *Desktop suite:* 300 tests, with paired new ones:
+  - readiness says "Frame rate too low" for a slow camera, *and* unreachable cameras keep their own status; "Needs calibration" when known, *and* nothing claimed before the console reports;
+  - the sidebar never says "Connected" when broken, *and* does when checking in;
+  - the level matches the recording gate at every tested rate.
+- *Screens:* every changed screen was re-screenshotted with the stand-in launcher and read.
+- **Not verified** on a real Mac or against real cameras.

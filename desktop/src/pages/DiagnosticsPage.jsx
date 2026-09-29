@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from "react";
+import { formatFps } from "../../electron/cameras/frameRate.js";
 
 // The venue-survey page: is this site actually able to run a session?
 //
@@ -246,20 +247,22 @@ export default function DiagnosticsPage() {
                     ? c.detail
                     : [
                         c.width && c.height ? `${c.width}×${c.height}` : null,
-                        c.fps ? `${c.fps.toFixed(0)} fps` : "frame rate unknown",
+                        c.fps ? `${formatFps(c.fps)} fps` : "frame rate unknown",
                         c.bitrateKbps ? `${(c.bitrateKbps / 1000).toFixed(1)} Mbps` : null,
-                        c.fpsOk === false ? "below the 30 fps this pipeline needs" : null,
+                        c.fpsLevel === "blocked" ? "too slow to record — needs at least 25 fps (30 is best)" : null,
+                        c.fpsLevel === "low" ? "records, but rally detection works best at 30 fps" : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")
                 }
                 value={
-                  !c.reachable ? (c.isSampleClip ? "File missing" : "Offline")
-                  : c.fpsOk === false ? "Check fps"
+                  !c.reachable ? (c.isSampleClip ? "File missing" : "Not answering")
+                  : c.fpsLevel === "blocked" ? "Frame rate too low"
+                  : c.fpsLevel === "low" ? "Low frame rate"
                   : c.isSampleClip ? "File ready"
                   : "Online"
                 }
-                tone={!c.reachable ? "danger" : c.fpsOk === false ? "warning" : "success"}
+                tone={!c.reachable || c.fpsLevel === "blocked" ? "danger" : c.fpsLevel === "low" ? "warning" : "success"}
               />
             ))
           )}
