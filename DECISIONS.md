@@ -3133,3 +3133,50 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 - *Real-folder sweep:* on a throwaway folder it removed exactly an old-reel recording, a 40-day unsent one and a fully-sent parts recording. It kept a recent reel, a young unsent one, a parts recording with an unsent piece, one whose part failed, a non-recording folder, and a file outside.
 - *Mutation check:* removing the "every piece was sent" check fails the sweep test.
 - **Not verified** on a real venue machine.
+
+---
+
+## ADR-142 — Reels are private: signed 1-hour addresses, links that expire at 30 days, deletion at 90, and a Remove button
+
+**Date:** 2026-09-29 · **Status:** built and tested; database and storage changes live; console and share-page deploys pending; public copies not yet removed · **Supersedes:** ADR-075 (stable public reel URLs) · **Project:** Data Retention & Removal (P-PIC-34)
+
+**Context.** The published privacy policy promises share links that stop after 30 days and reels deleted after 90. Neither happened. Worse, checking storage showed **reels lived in the public bucket behind `cdn.picvisionai.com`**, so a link "expiring" could only ever close the page: anyone holding a video's own address kept it. The same bucket also held raw test videos with guessable names (C5, deleted today) and the court calibration photos. And there was no way at all to take a reel down.
+
+**Decision.**
+- **New bucket `pic-vision-reels-private`**, with no public address.
+  - Its browser access is limited to `share.picvisionai.com`, the console and localhost.
+  - A lifecycle rule deletes objects 90 days after upload. Reels copied in today count from today, a few extra weeks for the oldest; the database side counts from each reel's real date.
+  - It's separate from the private ingest bucket because a pod's two scoped credentials must name two different buckets (ADR-114).
+- **Pods write reels there** (`runnerJob` `outputBucket: reelsBucket()`).
+- **All 958 existing reels (+12 vertical-prototype clips) were copied and verified** (970 files, 5.9 GB, sizes match), and every `reels.r2_bucket` was updated.
+- **Signed addresses, 1 hour** (`lib/reelAccess.ts`):
+  - `GET /api/share/<id>/videos` hands them out, only while the share is valid.
+  - The share page (reel-page) asks when it renders and refreshes before they run out. A video that is playing keeps its source rather than restart; it has at least 5 minutes left.
+  - A copied address therefore dies within the hour.
+  - An hour covers watching a few-minute reel with room to spare; longer would only let an escaped address outlive the link.
+- **30-day links:** `get_reels_by_share_id` returns nothing once a share's *first* reel is 30 days old, so a session sent in parts gets one deadline. Page and videos both stop.
+- **90 days:** `delete_expired_reels()` runs on the existing once-a-minute dispatch call; the console list hides anything older.
+- **Remove:** the console Reels page has grid/list views and a checkbox per game (all its videos) and, in list view, per video (e.g. one rally with an objecting player). One Remove whose confirmation states the count ("Remove 12 videos from 2 games?"). `DELETE /api/reels` reads the rows through the owner's session, so RLS decides whose reels can go. It deletes the file from both buckets while the move is under way, then the rows. Each game also shows "Link expires in N days".
+- **Bucket names on rows are checked, never trusted.** The console's keys reach every bucket, including raw footage, so only the two reel buckets can be signed from or cleared.
+
+**Verified.**
+- *Automated:* console 224 tests; share page 18; both `next build` clean. Paired tests:
+  - link expired at 30 days *and* working at 29 with 1 day left;
+  - refresh near expiry *and* not with time left;
+  - only reel buckets allowed;
+  - the confirmation counts.
+- *Locally against production data (read-only), a real share:*
+  - all 33 addresses signed from the private bucket and none from the CDN;
+  - a signed address returns `206 video/mp4` with the share origin allowed, and other origins get no CORS header;
+  - a tampered signature returns 403;
+  - the rendered page carries 27 signed addresses; its only CDN references are the venue logo;
+  - unknown or malformed shares give 404; Remove without a session gives 401, and a bad body 400.
+- *Migration:* applied after confirming no share or reel was past either limit. The real share is still served, and anon can read shares but not delete.
+- **Not verified:** the console Reels page UI (it needs a signed-in session) and a real Remove.
+
+**Rollout order.**
+1. Push the console first: the share page depends on its new route.
+2. Then push reel-page.
+3. **Only after both are verified live, delete the reels' public copies** (irreversible, separate approval). Keep `vertical-test/` public until the 9:16 prototype (`/r/<id>/test`) is done: it still reads the CDN.
+
+**Follow-up in this project:** move the calibration photos (C3) to private storage the same way, keeping only the current one per camera.

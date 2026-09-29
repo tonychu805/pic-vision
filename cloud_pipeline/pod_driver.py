@@ -23,8 +23,11 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            private since PIC-153, never the one the public
                            CDN domain fronts
     OUTPUT_BUCKET         separate R2 bucket the finished reel/burst/clips
-                           get uploaded to -- the public one, same as
-                           before PIC-153. Deliberately not the same value
+                           get uploaded to -- private since ADR-142
+                           (2026-09-29): pic-vision-reels-private, served
+                           only as 1-hour signed addresses by the console;
+                           it was the public, CDN-fronted one before that.
+                           Deliberately not the same value
                            as BUCKET: that conflation is the mistake
                            PIC-153 found.
     LOGO_URL              optional: public CDN URL of the venue's logo, set
@@ -61,7 +64,7 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            expiring ~4h out. READ can only get/head this
                            job's segments plus pipeline/ and weights/ in
                            the private bucket; WRITE can only put under
-                           <brand>/reels/ in the public one. Neither can
+                           <brand>/reels/ in the reels bucket. Neither can
                            list or delete, and neither can touch another
                            venue. See lib/podGrants.ts in the console.
     RUNPOD_API_KEY         so this pod can delete itself when done. Same
@@ -684,8 +687,9 @@ def run():
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
     burst_reel_id = os.environ.get("BURST_REEL_ID")
-    # Brand-prefixed, and uploaded to OUTPUT_BUCKET (the public one), not
-    # BUCKET (this job's private input) -- PIC-153, 2026-09-18. Before this,
+    # Brand-prefixed, and uploaded to OUTPUT_BUCKET (the private reels bucket
+    # since ADR-142, 2026-09-29; the public one before), not BUCKET (this
+    # job's private input) -- PIC-153, 2026-09-18. Before this,
     # every reel/burst/clip key was a flat reels/<id>.mp4 with no venue
     # attached to it at all; lib/reels.ts (console) still accepts that
     # exact old shape too, for the separate SSH-driven path that wasn't
