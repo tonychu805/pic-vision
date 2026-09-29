@@ -2995,3 +2995,28 @@ A console-side "claim" (hand each command out once) was judged too big for that 
 - *ADR-135's four scenarios* re-run clean on this code.
 - *Console:* `tsc` and 212 tests pass.
 - **Not verified** on a real Mac or camera.
+
+---
+
+## ADR-137 — A machine the console refuses three times running is "removed", not "connection lost"
+
+**Date:** 2026-09-29 · **Status:** built and tested; ships with the next desktop release and console push
+
+**Context.** From the 09.29 connection review. After the console removes a machine, every heartbeat is refused (401), and the machine kept knocking every minute forever while its page said "Connection lost" — the same words as a Wi-Fi drop, for a problem that only a person can fix, and one that never goes away on its own.
+
+One thing had to change first. The shared token check (`lib/agentAuth.ts`) returned null — and so 401 — when its own **database lookup failed**, not only for an unknown or removed token. Acting on a single 401 would have let a database hiccup disconnect every venue.
+
+**Decision.**
+- **Console:** a failed lookup throws, so the route answers 500. A 401 now means only unknown or removed. No route calls the check inside a `try` that could turn the error back into a 401 (checked), and the workers don't use it.
+- **Desktop:** three 401s in a row, about two minutes, mean removed. Any success or other answer resets the count. It's three rather than one because a venue may meet the older console before this push. Once removed, the heartbeat stops (camera changes and renames don't restart it) and the Log says so once. The page reads "Removed from <venue>", says that recordings on the machine are kept, and offers **Reconnect this machine**, which re-registers and clears the state.
+- **It never reconnects by itself.** The venue may have removed the machine on purpose, and a launch quietly undoing that is ADR-094's "Disconnect undid itself" again. A relaunch finds out afresh after three refusals.
+
+**Verified.**
+- *Desktop suite:* 278 tests, including paired ones, some against a real local server:
+  - removed wording *and* ordinary failures unchanged, with no button;
+  - the button renders *and* not for a plain failure, disabled while reconnecting;
+  - three refusals mean removed *and* refusals broken up by a 500 or a success never do;
+  - Reconnect clears it.
+- *Mutation check:* removing the count reset makes the "broken up" test fail.
+- *Console:* 214 tests, including a paired pair — a failed lookup throws *and* a working lookup that finds nothing is still null. `tsc` clean.
+- **Not verified** on a running app against a really removed machine.

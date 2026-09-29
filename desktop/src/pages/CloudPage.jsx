@@ -274,7 +274,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
             {/* Re-rendered by the 5s poll above, so "Last check-in 2
                 minutes ago" keeps counting up instead of freezing at
                 whatever it said when the page opened. */}
-            <ConnectionStatus connection={connection} />
+            <ConnectionStatus connection={connection} onReconnect={retryRegister} reconnecting={registering} />
             {session?.user && (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>
                 Signed in as {session.user.email}

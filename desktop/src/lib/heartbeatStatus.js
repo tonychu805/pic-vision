@@ -60,7 +60,20 @@ export function timeAgo(iso, now = Date.now()) {
 export function heartbeatStatus(connection, now = Date.now()) {
   if (!connection) return null;
 
-  const { brandName, lastAttemptOk, lastHeartbeatAt } = connection;
+  const { brandName, lastAttemptOk, lastHeartbeatAt, removed } = connection;
+
+  // The console refused this machine three times running: it was removed
+  // from the venue there (2026-09-29). Not "Connection lost" -- that reads as
+  // a network problem that fixes itself, and this one only a person can fix.
+  // `canReconnect` is what puts the button on the page.
+  if (removed) {
+    return {
+      tone: "lost",
+      title: `Removed from ${brandName}`,
+      detail: `This machine was removed in the cloud console, so it has stopped reporting and won't pick up commands. Recordings already on it are kept. If that was a mistake, reconnect it.`,
+      canReconnect: true,
+    };
+  }
 
   // No attempt has completed yet -- a launch, or a registration a moment
   // ago. Saying "Connected" here is the same guess that caused this

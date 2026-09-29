@@ -41,8 +41,8 @@ before(async () => {
   ({ default: ConnectionStatus } = await import(BUNDLE));
 });
 
-const render = (connection) =>
-  renderToStaticMarkup(React.createElement(ConnectionStatus, { connection }));
+const render = (connection, props = {}) =>
+  renderToStaticMarkup(React.createElement(ConnectionStatus, { connection, ...props }));
 
 test("a reporting machine renders Connected, with a tick and when it checked in", () => {
   const html = render({
@@ -99,4 +99,19 @@ test("the two cases the page draws itself render nothing at all", () => {
   // "not registered", the page would show two competing status lines.
   assert.equal(render(undefined), "");
   assert.equal(render(null), "");
+});
+
+test("a removed machine renders the Reconnect button", () => {
+  const html = render({ brandName: "Riverside Courts", lastAttemptOk: false, lastHeartbeatAt: null, removed: true }, { onReconnect: () => {} });
+  assert.match(html, /Removed from Riverside Courts/);
+  assert.match(html, /<button[^>]*>Reconnect this machine<\/button>/);
+  assert.doesNotMatch(html, /Connection lost/);
+});
+
+// Paired: no button for an ordinary failure, or while reconnecting a second click.
+test("no Reconnect button for an ordinary failure; disabled while reconnecting", () => {
+  const lost = render({ brandName: "V", lastAttemptOk: false, lastHeartbeatAt: null, removed: false }, { onReconnect: () => {} });
+  assert.doesNotMatch(lost, /Reconnect/);
+  const busy = render({ brandName: "V", lastAttemptOk: false, lastHeartbeatAt: null, removed: true }, { onReconnect: () => {}, reconnecting: true });
+  assert.match(busy, /<button[^>]*disabled[^>]*>Reconnecting…<\/button>/);
 });

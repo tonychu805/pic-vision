@@ -106,3 +106,19 @@ test("a check-in within the last few beats still says Connected", () => {
     assert.match(status.title, /^Connected to V/);
   }
 });
+
+test("a machine the console removed says so, and offers to reconnect", () => {
+  const status = heartbeatStatus({ brandName: "Riverside Courts", lastAttemptOk: false, lastHeartbeatAt: null, removed: true }, NOW);
+  assert.equal(status.title, "Removed from Riverside Courts");
+  assert.match(status.detail, /removed in the cloud console/);
+  assert.match(status.detail, /Recordings already on it are kept/);
+  assert.equal(status.canReconnect, true);
+});
+
+// Paired: an ordinary failure must still read as a lost connection, and must
+// not offer Reconnect -- that would invite re-registering over a Wi-Fi drop.
+test("an ordinary failure is still 'Connection lost', with no Reconnect", () => {
+  const status = heartbeatStatus({ brandName: "Riverside Courts", lastAttemptOk: false, lastHeartbeatAt: null, removed: false }, NOW);
+  assert.equal(status.title, "Connection lost");
+  assert.equal(status.canReconnect, undefined);
+});

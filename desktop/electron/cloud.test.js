@@ -176,7 +176,7 @@ test("a freshly registered machine is 'not checked in yet', not 'connected'", as
     // asserting the heartbeat's result, not registration's.
     // The whole ticket in one assertion: registration succeeded, and the
     // answer is still "unknown" rather than "connected".
-    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
   });
 });
 
@@ -257,7 +257,7 @@ test("disconnecting clears the health, so a later connection can't inherit it", 
     await sendHeartbeat();
     assert.equal(getHeartbeatState().lastAttemptOk, true);
     disconnectCloud();
-    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
   });
 });
 
@@ -288,7 +288,7 @@ test("a heartbeat with no connection stored is a no-op, not a failure", async ()
   // put "Connection lost" on a page whose real state is "not connected".
   disconnectCloud();
   await sendHeartbeat();
-  assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null });
+  assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
 });
 
 // --- the heartbeat tick's command sweep (2026-09-20, watchdog 2026-09-22) --
@@ -339,4 +339,70 @@ test("a live channel skips the sweep right after one just ran", () => {
 test("a live channel that has gone quiet past the watchdog sweeps anyway", () => {
   assert.equal(shouldSweepCommands(true, COMMAND_SWEEP_WATCHDOG_MS), true);
   assert.equal(shouldSweepCommands(true, COMMAND_SWEEP_WATCHDOG_MS + 1), true);
+});
+
+// --- Removed in the console (2026-09-29) --------------------------------
+//
+// Three 401s in a row mean the console no longer knows this machine; the
+// heartbeat stops and the page offers Reconnect. Fewer, or a run broken by
+// any other answer, must not -- a 401 could be the console's own database
+// hiccup (fixed console-side the same day, but a venue may meet an older
+// console).
+
+/** A console whose heartbeat answers come from `codes`, in order (then the last one repeats). */
+function consoleAnswering(codes) {
+  let i = 0;
+  return (req, res) => {
+    if (req.url.includes("register")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+      return;
+    }
+    if (!req.url.includes("heartbeat")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end("{}");
+      return;
+    }
+    const code = codes[Math.min(i++, codes.length - 1)];
+    res.writeHead(code, { "content-type": "application/json" });
+    res.end(code === 200 ? JSON.stringify({ brandName: "Test Venue" }) : "{}");
+  };
+}
+
+test("three refusals in a row: the machine counts as removed", async () => {
+  await withServer(consoleAnswering([401]), async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat(); // refusal 1 (registration's own first tick)
+    await sendHeartbeat(); // 2
+    assert.equal(getHeartbeatState().removed, false, "two is not yet enough");
+    await sendHeartbeat(); // 3
+    assert.equal(getHeartbeatState().removed, true);
+    disconnectCloud();
+  });
+});
+
+// Paired: the count must be of refusals IN A ROW. A 500 or a success between
+// them is a console that is up and answering, so it starts over.
+test("refusals broken up by any other answer never count as removed", async () => {
+  await withServer(consoleAnswering([401, 500, 401, 200, 401, 401]), async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat(); // 401
+    for (let i = 0; i < 5; i++) await sendHeartbeat(); // 500, 401, 200, 401, 401
+    assert.equal(getHeartbeatState().removed, false);
+    disconnectCloud();
+  });
+});
+
+test("reconnecting clears 'removed'", async () => {
+  await withServer(consoleAnswering([401]), async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await sendHeartbeat();
+    await sendHeartbeat();
+    assert.equal(getHeartbeatState().removed, true);
+    await connectTo(url); // what the Reconnect button does
+    assert.equal(getHeartbeatState().removed, false);
+    await settleFirstHeartbeat();
+    disconnectCloud();
+  });
 });

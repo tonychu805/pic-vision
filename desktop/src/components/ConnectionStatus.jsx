@@ -13,7 +13,7 @@ import { heartbeatStatus } from "../lib/heartbeatStatus.js";
 const STATUS_ICON = { ok: "ph-check-circle", pending: "ph-clock-clockwise", lost: "ph-cloud-slash" };
 const STATUS_COLOR = { ok: "var(--color-success)", pending: "var(--text-3)", lost: "var(--color-danger)" };
 
-export default function ConnectionStatus({ connection }) {
+export default function ConnectionStatus({ connection, onReconnect, reconnecting = false }) {
   const status = heartbeatStatus(connection);
   // Loading and not-registered have their own layouts in CloudPage; this
   // component is only ever asked about a machine that has a connection.
@@ -27,6 +27,11 @@ export default function ConnectionStatus({ connection }) {
       <p style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", margin: "4px 0 0", lineHeight: 1.45 }}>
         {status.detail}
       </p>
+      {status.canReconnect && onReconnect && (
+        <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onReconnect} disabled={reconnecting}>
+          {reconnecting ? "Reconnecting…" : "Reconnect this machine"}
+        </button>
+      )}
     </>
   );
 }

@@ -155,6 +155,22 @@ let lastAttemptOk = null;
 // needs to tell them apart.
 let lastHeartbeatAt = null;
 
+// Removed from the venue in the console (2026-09-29). A removed machine's
+// token is refused (401) on every heartbeat, forever; before this it kept
+// trying every minute and the page said "Connection lost" -- the same words
+// as a Wi-Fi drop, for a problem only a person can fix.
+//
+// Three in a row, not one: until the console change of the same day, its
+// token check also answered 401 when its own database lookup failed, so a
+// single 401 could be a hiccup. Any success, or any other answer, resets
+// the count. Once removed, the heartbeat stops and the page offers
+// Reconnect. It never reconnects by itself: the venue may have removed the
+// machine on purpose, and a launch undoing that is the lesson of ADR-094's
+// "Disconnect undid itself".
+export const REJECTIONS_BEFORE_REMOVED = 3;
+let consecutiveRejections = 0;
+let removedFromVenue = false;
+
 /**
  * What the Cloud page shows instead of "is a connection stored locally".
  *
@@ -164,7 +180,14 @@ let lastHeartbeatAt = null;
  * The renderer gets state, not a message it would be tempted to print.
  */
 export function getHeartbeatState() {
-  return { lastAttemptOk, lastHeartbeatAt };
+  return { lastAttemptOk, lastHeartbeatAt, removed: removedFromVenue };
+}
+
+function resetHealth() {
+  lastAttemptOk = null;
+  lastHeartbeatAt = null;
+  consecutiveRejections = 0;
+  removedFromVenue = false;
 }
 
 // Calibration state as last reported by the console (ADR-084 -- the
@@ -432,9 +455,9 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
   saveConnection(connection);
   // Fresh connection: back to "not checked yet", so a stale prior failure
   // can't log a false "reconnected" on the first tick AND the page doesn't
-  // claim a working link before one heartbeat has proved it (PIC-92).
-  lastAttemptOk = null;
-  lastHeartbeatAt = null;
+  // claim a working link before one heartbeat has proved it (PIC-92). Also
+  // how Reconnect clears "removed".
+  resetHealth();
   logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
   startHeartbeatLoop();
   return connection;
@@ -463,8 +486,7 @@ export function disconnectCloud() {
   // Otherwise a later reconnection inherits this one's health, and the
   // page could show a "last check-in" belonging to a connection that no
   // longer exists.
-  lastAttemptOk = null;
-  lastHeartbeatAt = null;
+  resetHealth();
   // Remembered, because the app re-registers a signed-in device that has
   // no connection every time it launches (that retry exists for a first
   // registration that failed). Without this flag, Disconnect undid itself
@@ -581,8 +603,16 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
       console.error(`[cloud] heartbeat rejected: HTTP ${res.status}`);
       if (lastAttemptOk !== false) logEvent("cloud_disconnected", "Lost connection to the cloud console", `HTTP ${res.status}`);
       lastAttemptOk = false;
+      consecutiveRejections = res.status === 401 ? consecutiveRejections + 1 : 0;
+      if (consecutiveRejections >= REJECTIONS_BEFORE_REMOVED && !removedFromVenue) {
+        removedFromVenue = true;
+        stopHeartbeatLoop();
+        logEvent("cloud_removed", `This machine was removed from ${connection.brandName ?? "its venue"} in the cloud console`,
+          "It has stopped reporting. Recordings on this machine are kept. Reconnect it from the This machine page if that was a mistake.");
+      }
       return;
     }
+    consecutiveRejections = 0;
     if (lastAttemptOk === false) logEvent("cloud_connected", "Reconnected to the cloud console");
     lastAttemptOk = true;
     lastHeartbeatAt = new Date().toISOString();
@@ -633,6 +663,9 @@ let heartbeatInFlight = null;
 let heartbeatRerun = false;
 
 function runHeartbeat({ rerunIfBusy = false } = {}) {
+  // Removed: every heartbeat would be refused. A camera change or a rename
+  // mustn't restart the knocking.
+  if (removedFromVenue) return Promise.resolve();
   if (heartbeatInFlight) {
     if (rerunIfBusy) heartbeatRerun = true;
     return heartbeatInFlight;
