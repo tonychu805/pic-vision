@@ -3202,3 +3202,17 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
 - *Console:* 228 tests, `tsc` clean. Paired tests: the key is read from all three address forms, *and* a non-URL gives none; photos over an hour are swept, *and* a fresh one, a non-snapshot key (raw footage) or one with no date is left.
 - *Cleanup:* the 60 existing photos were deleted from the public bucket; none remain. All 11 calibrated cameras still hold their full calibration numbers.
 - **Not verified end to end:** a real calibration through the new path (it needs a signed-in console and a desktop). Check it after the console deploy.
+
+---
+
+## ADR-144 — Every venue's 14-day rule for failed uploads is kept in place automatically; players remove reels through the venue
+
+**Date:** 2026-09-29 · **Status:** built and tested; console deploy pending · **Project:** Data Retention & Removal (P-PIC-34)
+
+**Failed uploads.** A venue's failed-upload footage expires after 14 days through a per-venue R2 lifecycle rule (PIC-158, ADR-112). Rules can't use wildcards, so there's one per venue — but the rules were only ever written by running `scripts/syncIngestLifecycle.ts` by hand, so a venue onboarded afterwards kept every failed upload forever, silently.
+- **Change:** `syncIngestLifecycle()` (`lib/ingestLifecycle.ts`) runs once an hour on the existing scheduled dispatch. It writes only when the rules differ, because each write replaces the bucket's whole configuration.
+- Unmanaged rules (R2's default multipart-abort) are preserved. Venues with `retain_footage_for_training` stay without an expiry, as before; PGC's setting is parked.
+- The script remains as a report-only check.
+- **Verified:** paired tests — a new venue gets its rule and existing rules are kept, *and* an up-to-date bucket is never rewritten; a training venue gets none. The report run against the real bucket said "up to date" (Syno Pickleball ruled, PGC excluded).
+
+**Player-requested removal: decided not to build.** The share page gets no player-facing "Remove this video". The operator's reasoning: under player-started recording (P-PIC-35) the players who start a recording have agreed to it. Anyone who wants a reel taken down writes to the venue or to support, who remove it with the console's Remove button (ADR-142).
