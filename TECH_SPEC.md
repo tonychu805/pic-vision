@@ -840,6 +840,11 @@ pic-vision/
 │   │   │                              # last 50 commands carried out, on disk --
 │   │   │                              # a command handed over again (its report
 │   │   │                              # was lost) is answered, not run again
+│   │   ├── recordingRetention.js        # 2026-09-29 (ADR-141): recordings leave
+│   │   │                              # this computer 7 days after their reel
+│   │   │                              # (30 if none was made, warned the day
+│   │   │                              # before); never while recording or
+│   │   │                              # uploading. Launch + hourly, from main.js
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel, plus (PIC-68)
 │   │   │                              # pickCalibFile -- native file dialog, now the
