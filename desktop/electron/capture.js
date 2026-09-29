@@ -545,6 +545,11 @@ function stopActiveRecording(cameraId, rec) {
   });
 }
 
+/** Every folder being recorded into right now -- never to be cleaned up. */
+export function activeRecordingDirs() {
+  return new Set([...active.values()].map((r) => r.outDir));
+}
+
 /** Where a camera is recording right now, or null. */
 export function activeOutDir(cameraId) {
   return active.get(cameraId)?.outDir ?? null;

@@ -256,6 +256,9 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
       progress: stopping ? null : job.progress ?? null,
       error: job.error ?? null,
       done: job.status === "done",
+      // When the reel was finished, for the venue computer's 7-day cleanup
+      // (recordingRetention.js). Written once: the loop ends right after.
+      ...(job.status === "done" ? { doneAt: new Date().toISOString() } : {}),
       ...(job.result ?? {}),
     });
 

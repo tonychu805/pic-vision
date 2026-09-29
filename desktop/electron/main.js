@@ -35,6 +35,7 @@ import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoS
 import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
+import { retentionSweep } from "./recordingRetention.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 import { getEvents, clearEvents, logEvent } from "./activityLog.js";
@@ -702,6 +703,12 @@ app.whenReady().then(() => {
       syncCommandChannel().catch(() => {}); // instant commands where possible; the poll is the floor
       // A booking's recording stops on this machine's clock, internet or not.
       setInterval(() => { bookingEndTick().catch((err) => console.error(`[recordings] booking end: ${err.message}`)); }, BOOKING_END_TICK_MS);
+      // Recordings leave this computer 7 days after their reel (30 if none
+      // was ever made) -- after recovery, so nothing it resumes is judged
+      // mid-restart. Hourly: the rules are in days.
+      const sweep = () => { try { retentionSweep(); } catch (err) { console.error(`[recordings] retention: ${err.message}`); } };
+      sweep();
+      setInterval(sweep, 60 * 60 * 1000);
     });
   setInterval(() => { autoSplitTick().catch((err) => console.error(`[autosplit] ${err.message}`)); }, AUTO_SPLIT_TICK_MS);
   // Catches two cases where sign-in's own registration didn't happen or

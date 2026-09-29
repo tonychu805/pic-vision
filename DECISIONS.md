@@ -3105,3 +3105,31 @@ One thing had to change first. The shared token check (`lib/agentAuth.ts`) retur
   - the level matches the recording gate at every tested rate.
 - *Screens:* every changed screen was re-screenshotted with the stand-in launcher and read.
 - **Not verified** on a real Mac or against real cameras.
+
+---
+
+## ADR-141 — Recordings leave the venue computer 7 days after their reel, and never later than 30 days
+
+**Date:** 2026-09-29 · **Status:** built and tested; ships with the next desktop release · **Project:** Data Retention & Removal (P-PIC-34)
+
+**Context.** Pickle Day asked about portrait use and data protection. Checking the published privacy policy against the system found raw recordings on the venue computer were never deleted, while the policy says raw recordings are deleted 30 days after recording. The cloud copy already goes as soon as the reel is made.
+
+**Decision** (`electron/recordingRetention.js`, run at launch after recovery, then hourly):
+
+| Recording | Removed |
+|---|---|
+| reel done | 7 days after the reel was **done** |
+| never sent, or reel failed | 30 days after recording, with a Log warning the day before |
+| recording now, or uploading | never |
+
+- **The clock starts at the reel, not the recording**, because once the cloud copy is gone this is the only copy: a machine offline for a week must not lose a booking before its reel exists. `pipeline.js` now stamps `doneAt` in `status.json`; older statuses fall back to the file's modified time.
+- **Recordings sent in parts are removed as one folder**, 7 days after the last part's reel, and only if every piece was in a part. Deleting part by part was rejected: parts share the folder, and no recording runs anywhere near 7 days.
+- **Only timestamp-named folders under `~/pic-vision-recordings/<camera>/` are touched**; paths are checked to stay inside it. Sample clips (the operator's own files elsewhere) are never considered.
+- Each removal is logged, saying which camera and why.
+
+**Verified.**
+- *Desktop suite:* 306 tests.
+- *Paired rule tests:* removed 7+ days after the reel, *and* kept under 7 days however old the recording; no-reel kept, then warned once, then removed at 30 days; *and* nothing in use is ever removed.
+- *Real-folder sweep:* on a throwaway folder it removed exactly an old-reel recording, a 40-day unsent one and a fully-sent parts recording. It kept a recent reel, a young unsent one, a parts recording with an unsent piece, one whose part failed, a non-recording folder, and a file outside.
+- *Mutation check:* removing the "every piece was sent" check fails the sweep test.
+- **Not verified** on a real venue machine.
