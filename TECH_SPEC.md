@@ -826,6 +826,16 @@ pic-vision/
 │   │   │                              # persistence (capped at 200, electron-
 │   │   │                              # store JSON, same per-concern convention
 │   │   │                              # as cameras.json/cloud.json/auth.json)
+│   │   ├── bookingRecordings.js         # 2026-09-29 (ADR-135): a booking's end
+│   │   │                              # time, kept on disk -- the machine stops
+│   │   │                              # the recording itself at that time
+│   │   │                              # (internet or not), resumes it after a
+│   │   │                              # restart, refuses a start that arrives
+│   │   │                              # after its booking, and retries the send
+│   │   │                              # until the console has it. Driven by
+│   │   │                              # cloud.js's bookingEndTick/recoverRecordings-
+│   │   │                              # AfterRestart; capture.js stops recordings
+│   │   │                              # a crash left running
 │   │   ├── system.js                   # real local network CIDR (os.networkInterfaces)
 │   │   │                              # for the sidebar's Network panel, plus (PIC-68)
 │   │   │                              # pickCalibFile -- native file dialog, now the

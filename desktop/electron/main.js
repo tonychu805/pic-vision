@@ -30,7 +30,7 @@ import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow } from "./cloud.js";
+import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
 import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
 import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
@@ -317,6 +317,10 @@ function registerAutoSplitHandlers() {
 // Every 30s: any recording in progress sends the parts that are due. Cheap
 // when off (one settings read) and when nothing is recording.
 const AUTO_SPLIT_TICK_MS = 30_000;
+// How late a booking's recording can stop past its end time. Short: the
+// next booking often starts on the same minute, and every second over is
+// the next group's play under this group's link.
+const BOOKING_END_TICK_MS = 5_000;
 
 function registerScanSettingsHandlers() {
   ipcMain.handle("scanSettings:get", async () => {
@@ -675,9 +679,20 @@ app.whenReady().then(() => {
     };
   });
   applyPowerSettings(); // stay awake and open at login, unless turned off in Settings
-  startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
+  // Recordings first: stop anything a crash left running, carry on a booking
+  // that is still on, send one that ended while the app was down -- all
+  // before the heartbeat or a command can start a recording of its own.
+  // Bounded by cleanUpOrphanedRecordings' own grace period, and never allowed
+  // to keep the machine from connecting.
+  recoverRecordingsAfterRestart()
+    .catch((err) => console.error(`[recordings] recovery after restart failed: ${err.message}`))
+    .finally(() => {
+      startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
+      syncCommandChannel().catch(() => {}); // instant commands where possible; the poll is the floor
+      // A booking's recording stops on this machine's clock, internet or not.
+      setInterval(() => { bookingEndTick().catch((err) => console.error(`[recordings] booking end: ${err.message}`)); }, BOOKING_END_TICK_MS);
+    });
   setInterval(() => { autoSplitTick().catch((err) => console.error(`[autosplit] ${err.message}`)); }, AUTO_SPLIT_TICK_MS);
-  syncCommandChannel().catch(() => {}); // instant commands where possible; the poll above is the floor
   // Catches two cases where sign-in's own registration didn't happen or
   // didn't stick: registration never succeeded (console unreachable the
   // first time, or this is a relaunch right after that failure), and a

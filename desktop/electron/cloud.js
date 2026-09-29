@@ -12,10 +12,12 @@ import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
-import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets } from "./autoSplit.js";
+import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, listParts, SEGMENT_RE } from "./autoSplit.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
-import { basename } from "node:path";
+import { basename, join } from "node:path";
+import { existsSync, readdirSync } from "node:fs";
+import { bookingEndsAt, startArrivedTooLate, noteBookingRecording, listBookingRecordings, findBookingRecording, updateBookingRecording, forgetBookingRecording, bookingsToFinish, sendDue, planAfterRestart } from "./bookingRecordings.js";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
@@ -740,6 +742,12 @@ async function runCommand(command) {
   }
 
   if (command.type === "start_recording") {
+    // Queued while this machine was off or offline, and only reached it
+    // after the booking was over. Starting now would record whoever is on
+    // the court next, under this booking's link.
+    if (startArrivedTooLate(command.params)) {
+      throw new Error("The booking had already ended when this machine received its start, so nothing was recorded");
+    }
     const started = await startRecording(camera);
     // The playing session the console issued with this start (ADR-128):
     // every upload of this recording, whole or in parts, carries it back.
@@ -747,6 +755,12 @@ async function runCommand(command) {
       writeSessionMeta(started.outDir, command.params);
     } catch (err) {
       console.error(`[cloud] could not save the session for ${camera.label}: ${err.message}`);
+    }
+    // A booking: remember when it ends, so this machine stops it on time
+    // with or without the internet, and can pick it back up after a restart.
+    const bookingId = command.params?.schedule_booking_id;
+    if (bookingId && bookingEndsAt(command.params) != null) {
+      noteBookingRecording({ cameraId: camera.id, bookingId, endsAt: command.params.ends_at, outDir: started.outDir });
     }
     return started;
   }
@@ -760,6 +774,19 @@ async function runCommand(command) {
       return { stopped: false, skipped: "the current recording belongs to a different session" };
     }
     const result = await stopRecording(camera.id);
+    const scheduled = Boolean(command.params?.schedule_booking_id);
+    // A booking this machine is tracking: it sends it, not this stop --
+    // one sender, retried until the console has it. Marking it stopped
+    // hands it over now rather than at the booking's end on this machine's
+    // clock. Covers the recording this stop just ended and one that had
+    // already ended (the app restarted mid-booking and couldn't resume).
+    const note = (result.stopped && findBookingRecording({ cameraId: camera.id, outDir: result.outDir }))
+      || (scheduled && findBookingRecording({ bookingId: command.params.schedule_booking_id }));
+    if (note) {
+      updateBookingRecording(note, { stopped: true });
+      bookingEndTick().catch((err) => console.error(`[recordings] booking end: ${err.message}`));
+    }
+    if (!result.stopped) return result;
     // Re-measure from what was actually captured. Free (a local file), more
     // truthful than probing the live stream, and the only thing that would
     // ever notice someone changing the camera's frame rate after it was
@@ -771,27 +798,12 @@ async function runCommand(command) {
         .catch((err) => console.error(`[cloud] post-recording fps check failed: ${err.message}`));
     }
     // A booked session has to produce a reel without anyone touching
-    // anything -- that is the entire point of booking it. Stopping the
-    // recording used to be where the scheduler's involvement ended, so a
-    // scheduled session recorded to disk and sat there until someone
-    // clicked "Send to cloud" by hand.
-    //
-    // Only for scheduled stops: `schedule_booking_id` is set by the
-    // dispatcher (see the console's dispatch_due_schedule_bookings). A stop
-    // the operator triggered themselves keeps its manual send, since
-    // silently spending GPU money on a recording someone stopped by hand
-    // isn't obviously wanted.
-    if (result.stopped && result.outDir) {
-      if (getAutoSplitMinutes() > 0) {
-        // Auto-split on: whatever hasn't gone out yet leaves now as the
-        // final part -- for any stop, since the operator chose to have this
-        // recording sent in parts. Awaited only as far as creating the part;
-        // the upload itself runs in the background like every other send.
-        await sendDueParts(camera, result.outDir, { stillRecording: false, flush: true });
-      } else if (command.params?.schedule_booking_id) {
-        sendRecordingToCloud(camera, result.outDir);
-      }
-    }
+    // anything -- that is the entire point of booking it. A stop the
+    // operator triggered themselves keeps its manual send, since silently
+    // spending GPU money on a recording someone stopped by hand isn't
+    // obviously wanted. (Auto-split sends in parts for any stop; see
+    // finishRecording.)
+    if (result.outDir && !note) await finishRecording(camera, result.outDir, { send: scheduled });
     return result;
   }
   // Console-driven calibration (ADR-080) -- see calibration.js's header
@@ -837,6 +849,124 @@ function sendRecordingToCloud(camera, recordingDir, sessionIdOverride) {
     console.error(`[cloud] scheduled send failed for ${camera.label}: ${err.message}`);
     logEvent("pipeline_failed", `${camera.label} scheduled upload failed`, err.message);
   });
+}
+
+// What happens to a recording nobody is tracking as a booking once it has
+// stopped -- a hand start, or a booking from a console that doesn't send
+// its end time. Auto-split on: whatever hasn't gone out yet leaves now as
+// the final part, for any stop, since the operator chose to have
+// recordings sent in parts; awaited only as far as creating the part.
+// Otherwise the whole recording goes when `send` says so (a booking).
+async function finishRecording(camera, outDir, { send }) {
+  if (getAutoSplitMinutes() > 0) {
+    await sendDueParts(camera, outDir, { stillRecording: false, flush: true });
+    return;
+  }
+  if (send) sendRecordingToCloud(camera, outDir);
+}
+
+// ---------- bookings end on this machine's clock (bookingRecordings.js) ----------
+
+// Has this recording reached the console -- a job exists for it (whole),
+// or every piece of it is in a part that has one (auto-split)? That, not
+// "a send was tried", is when a booking's note can go.
+function reachedConsole(outDir) {
+  if (getAutoSplitMinutes() > 0) {
+    const parts = listParts(outDir);
+    const inParts = new Set(parts.flatMap((p) => p.segments));
+    return readdirSync(outDir).filter((f) => SEGMENT_RE.test(f)).every((f) => inParts.has(f))
+      && parts.every((p) => existsSync(join(p.dir, "cloud_job", "job.json")));
+  }
+  return existsSync(join(outDir, "cloud_job", "job.json"));
+}
+
+// Sends in progress, by recording folder. An upload runs for as long as the
+// uplink needs, far longer than one tick; this is what stops the next tick
+// starting a second one.
+const bookingSendsInFlight = new Set();
+
+let bookingTickRunning = false;
+
+/**
+ * Stop, send, and keep sending until the console has it: every booking
+ * recording whose booking is over (or whose stop already came). Runs on a
+ * short timer from main.js, internet or not, and is the only thing that
+ * sends a tracked booking -- the console's stop just marks it.
+ *
+ * The console's stop may be stopping the same recording at the same moment;
+ * stopRecording() gives `stopped: true` to only one of them, and the other
+ * is simply seen as "not recording" on the next tick.
+ */
+export async function bookingEndTick(now = Date.now()) {
+  if (bookingTickRunning) return;
+  bookingTickRunning = true;
+  try {
+    for (const note of bookingsToFinish(listBookingRecordings(), now)) {
+      const camera = listCameras().find((c) => c.id === note.cameraId);
+      if (!camera || !existsSync(note.outDir)) {
+        forgetBookingRecording(note);
+        continue;
+      }
+      if (activeOutDir(camera.id) === note.outDir) {
+        const result = await stopRecording(camera.id);
+        if (!result.stopped) continue; // being stopped elsewhere right now; next tick
+        logEvent("recording_stopped", `Stopped ${camera.label} at the end of its booking`, note.outDir);
+      }
+      if (!newestSegment(note.outDir)) {
+        logEvent("pipeline_failed", `${camera.label}: nothing was recorded for this booking, so nothing was sent`, note.outDir);
+        forgetBookingRecording(note);
+        continue;
+      }
+      if (reachedConsole(note.outDir)) {
+        forgetBookingRecording(note);
+        continue;
+      }
+      if (bookingSendsInFlight.has(note.outDir) || isPipelineRunning(note.outDir)) continue;
+      if (!sendDue(note, now)) continue;
+      if (note.lastSendAt) logEvent("pipeline_started", `Trying again to send ${camera.label}'s booking`, note.outDir);
+      updateBookingRecording(note, { stopped: true, lastSendAt: now });
+      bookingSendsInFlight.add(note.outDir);
+      // Not awaited: an upload takes as long as the uplink needs. Whether it
+      // reached the console is re-checked on a later tick, from disk.
+      Promise.resolve(getAutoSplitMinutes() > 0
+        ? sendDueParts(camera, note.outDir, { stillRecording: false, flush: true })
+        : sendRecordingToCloud(camera, note.outDir))
+        .catch((err) => console.error(`[recordings] sending ${camera.label}: ${err.message}`))
+        .finally(() => bookingSendsInFlight.delete(note.outDir));
+    }
+  } finally {
+    bookingTickRunning = false;
+  }
+}
+
+/**
+ * Called once at launch, before the heartbeat or any command can start a
+ * recording. First stops anything a crash left running, then carries on
+ * every booking that is still on; one that ended while the app was down is
+ * left to bookingEndTick, run straight after, to send.
+ */
+export async function recoverRecordingsAfterRestart(now = Date.now()) {
+  await cleanUpOrphanedRecordings();
+  const cameras = listCameras();
+  const plan = planAfterRestart(listBookingRecordings(), now, {
+    cameraIds: new Set(cameras.map((c) => c.id)),
+    folderExists: existsSync,
+  });
+  for (const { note, action } of plan) {
+    if (action === "drop") {
+      forgetBookingRecording(note);
+    } else if (action === "resume") {
+      const camera = cameras.find((c) => c.id === note.cameraId);
+      try {
+        await startRecording(camera, { resumeInto: note.outDir });
+      } catch (err) {
+        // Keep the note: at the booking's end, bookingEndTick sends what
+        // was recorded before the restart.
+        logEvent("recording_failed", `${camera.label} couldn't pick its booking back up after the app restarted`, err.message);
+      }
+    }
+  }
+  await bookingEndTick(now);
 }
 
 // ---------- auto-split (autoSplit.js) ----------

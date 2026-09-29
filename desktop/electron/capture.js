@@ -22,6 +22,7 @@ import os from "node:os";
 import { logEvent } from "./activityLog.js";
 import { FFMPEG, FFPROBE } from "./binaries.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
+import Store from "electron-store";
 
 export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 
@@ -30,6 +31,29 @@ export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 // camera's detail page (it's a background process, not tied to any
 // particular page being open).
 const active = new Map();
+
+// Every ffmpeg this app has running, by camera, written to disk the moment
+// it starts (2026-09-29). A recording is a separate process: if the app
+// CRASHES (as opposed to quitting, which stops recordings cleanly), that
+// process carries on alone -- measured: still writing a minute after its
+// parent was killed -- with nothing left that knows it exists or can stop
+// it. This is how the next launch finds it (cleanUpOrphanedRecordings).
+const processStore = new Store({ name: "recordingProcesses", configFileMode: 0o600 });
+// What the PREVIOUS run left, read once as this module loads -- before this
+// run can start any recording and overwrite a camera's entry with its own.
+const leftFromLastRun = processStore.get("byCamera", {});
+processStore.set("byCamera", {});
+
+function rememberProcess(cameraId, pid, outDir) {
+  processStore.set("byCamera", { ...processStore.get("byCamera", {}), [cameraId]: { pid, outDir } });
+}
+
+function forgetProcess(cameraId, pid) {
+  const all = processStore.get("byCamera", {});
+  if (all[cameraId]?.pid !== pid) return; // a newer ffmpeg (a reconnect) already replaced it
+  delete all[cameraId];
+  processStore.set("byCamera", all);
+}
 
 // Only the legacy layout below still needs this -- kept exported for
 // store.js's one-time migration off it.
@@ -390,6 +414,10 @@ function spawnSegmenter(camera, record) {
   ];
   const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
   record.proc = proc;
+  if (proc.pid) {
+    rememberProcess(camera.id, proc.pid, record.outDir);
+    proc.once("exit", () => forgetProcess(camera.id, proc.pid));
+  }
   record.stderrTail = "";
   proc.stderr.on("data", (chunk) => {
     record.stderrTail = (record.stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
@@ -431,7 +459,12 @@ function reconnect(camera, record, reason, attempt = 0) {
   }, reconnectDelayMs(attempt));
 }
 
-export function startRecording(camera) {
+// `resumeInto`: carry on in an existing recording's folder rather than
+// start a new one -- after an app restart in the middle of a booking
+// (bookingRecordings.js). Pieces number on from the last one there, the
+// same way a dropped stream reconnects, so it stays one recording, one
+// session, one link.
+export function startRecording(camera, { resumeInto = null } = {}) {
   if (active.has(camera.id)) throw new Error("Already recording this camera");
   // Refuse rather than record footage the pipeline can't get rallies out
   // of -- a low frame rate halves detection and would otherwise fail
@@ -440,7 +473,7 @@ export function startRecording(camera) {
   const frameRateWarning = assertUsableFrameRate(camera);
   if (frameRateWarning) logEvent("recording_low_fps", frameRateWarning);
 
-  const outDir = path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
+  const outDir = resumeInto ?? path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });
 
   const startedAt = new Date().toISOString();
@@ -452,7 +485,8 @@ export function startRecording(camera) {
     let started = false;
     const timer = setTimeout(() => {
       started = true;
-      logEvent("recording_started", `Started recording ${camera.label}`, outDir);
+      if (resumeInto) logEvent("recording_resumed", `${camera.label} is recording again after the app restarted`, outDir);
+      else logEvent("recording_started", `Started recording ${camera.label}`, outDir);
       resolve(frameRateWarning ? { outDir, startedAt, frameRateWarning } : { outDir, startedAt });
     }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
@@ -478,9 +512,20 @@ export function startRecording(camera) {
 // current segment on SIGINT and exits on its own; this resolves once
 // that actually happens rather than assuming it did. A recording that is
 // between reconnect attempts has no ffmpeg running: it just stops trying.
+//
+// Only the FIRST caller gets `stopped: true` (2026-09-29). A booking can now
+// be stopped from two places at once -- the machine's own end-of-booking
+// timer and the console's stop -- and whoever gets `stopped: true` is the
+// one that sends the recording. Both getting it would send it twice.
 export function stopRecording(cameraId) {
   const rec = active.get(cameraId);
   if (!rec) return Promise.resolve({ stopped: false });
+  if (rec.stopPromise) return rec.stopPromise.then(() => ({ stopped: false }));
+  rec.stopPromise = stopActiveRecording(cameraId, rec);
+  return rec.stopPromise;
+}
+
+function stopActiveRecording(cameraId, rec) {
   rec.stopping = true;
   if (rec.retryTimer) clearTimeout(rec.retryTimer);
   const finish = () => {
@@ -503,6 +548,61 @@ export function stopRecording(cameraId) {
 /** Where a camera is recording right now, or null. */
 export function activeOutDir(cameraId) {
   return active.get(cameraId)?.outDir ?? null;
+}
+
+// Is `pid` still one of OUR recordings? Checked against its command line,
+// not just "is something running with that number": the OS reuses process
+// numbers, and after a reboot this one could belong to anything.
+function isOurRecordingProcess(pid, outDir) {
+  try {
+    process.kill(pid, 0);
+  } catch {
+    return false; // not running (or not ours to signal)
+  }
+  const ps = spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+  return ps.status === 0 && ps.stdout.includes(outDir);
+}
+
+async function waitForExit(pid, timeoutMs) {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return true;
+    }
+    await new Promise((r) => setTimeout(r, 200));
+  }
+  return false;
+}
+
+/**
+ * Stop any recording a crashed run of the app left behind. Call once at
+ * launch, before anything can start a recording.
+ *
+ * Stopped the clean way (SIGINT) so ffmpeg finishes its current piece --
+ * a hard kill damages the file (ADR-031) -- with a hard kill only if it
+ * ignores that. Returns what was stopped, so the caller can decide what
+ * each recording should become (bookingRecordings.js).
+ */
+// `entries` defaults to what the previous run left; a test passes its own.
+export async function cleanUpOrphanedRecordings({ graceMs = 15_000, entries = leftFromLastRun } = {}) {
+  const stopped = [];
+  for (const [cameraId, entry] of Object.entries(entries)) {
+    if (!entry?.pid || !entry.outDir) continue;
+    if (active.get(cameraId)?.proc?.pid === entry.pid) continue; // can't be: a new run's ffmpeg has a new pid
+    if (!isOurRecordingProcess(entry.pid, entry.outDir)) continue;
+    try {
+      process.kill(entry.pid, "SIGINT");
+      if (!(await waitForExit(entry.pid, graceMs))) process.kill(entry.pid, "SIGKILL");
+    } catch {
+      // Exited between the check and the signal: nothing left to stop.
+    }
+    logEvent("recording_orphan_stopped", "Stopped a recording left running when the app closed unexpectedly", entry.outDir);
+    stopped.push({ cameraId, outDir: entry.outDir });
+  }
+  for (const key of Object.keys(entries)) delete entries[key];
+  return stopped;
 }
 
 export function stopAllRecordings() {

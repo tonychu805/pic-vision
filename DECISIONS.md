@@ -2930,3 +2930,39 @@ A token-possession check was drafted first (move across accounts only if the req
 **Verified.** Paired tests (console 212): another account cannot find a venue's machine by its id, *and* the owning account still finds its own; one machine with a row in each of two accounts resolves to the right row for each. A gate fails if any file under `app/` looks a machine up by `device_id` directly — it fails on the pre-fix route. Desktop 253 tests, lint and build clean. **Not verified:** the register route against the live database, and the dialog on a running app.
 
 **Deploy order.** Migration first: the old route's global `maybeSingle()` lookup stays correct while every `device_id` is still globally unique, which it is until the new route creates a second row for one. Then the console. The desktop dialog is wording only and can ship in any later release.
+
+---
+
+## ADR-135 — A booked recording ends on the machine's own clock, and survives a restart or a crash
+
+**Date:** 2026-09-29 · **Status:** built and tested; desktop release, console migration and deploy pending operator approval
+
+**Context.** From the 09.29 connection review. A booking's recording ended only when the console's stop command reached the machine; the start never said when the booking ended. Four failures followed, the first two checked for real rather than read from code:
+
+- **An app crash left the recording running with nothing able to stop it.** Measured: ffmpeg launched exactly as `capture.js` launches it (synthetic test pattern, no camera) was still writing a minute after its parent was force-killed, owned by PID 1. The relaunched app didn't know it existed. Measured on Linux; macOS orphan semantics are the same but it was not run on a Mac.
+- **An app restart mid-booking lost the rest of the booking, and never sent what was recorded** — quitting stops recordings cleanly, nothing restarted them, and the booking's stop then found nothing recording, so nothing was sent. Confirmed from the code: the only recovery after a relaunch is an upload that had already started.
+- **Internet down at the end:** the recording ran on until the stop arrived, so the next group's play landed under this group's share link and the next booking started late.
+- **Machine off for a whole booking:** its start and stop ran back to back on return and sent seconds of video to a GPU.
+
+**Decision.**
+- **Console** (`20260929010000_booking_start_carries_end.sql`): the start carries `ends_at`. When a booking ends and its start is still `pending`, the start (and the plain stop dispatched with it, now tagged `for_booking_id`) is closed as expired and no stop is queued.
+- **Desktop** (`bookingRecordings.js`, `cloud.js`, `capture.js`): the machine notes each booking's end time on disk. `bookingEndTick` (every 5s) stops it at that time and is the **only** sender of a tracked booking — the console's stop just marks the note. The note stays until the recording has reached the console (a job exists), with a retry every minute: an on-time stop is precisely what happens when the internet is down, and a send then fails. A start arriving after its booking ended is refused with a reason. At launch, `recoverRecordingsAfterRestart` stops any recording a crash left behind (SIGINT, checked against the process's command line so a reused process number is never touched), resumes a booking still on into the same folder, and sends one that ended while the app was down.
+- `stopRecording` gives `stopped: true` to only its first caller, so two stops at once cannot both send.
+- Stops **at** the booking's end, not after: the next booking often starts on the same minute.
+
+**Found while building, and fixed before it shipped:** the first version sent once at the stop and forgot the booking. With the internet down that send fails, a half-made upload folder is left behind, and a later "already sent?" check would have mistaken it for sent — trading a late stop that sent fine for an on-time stop that never sent. Hence keep-until-reached-console.
+
+**Verified.**
+- *Desktop suite:* 266 tests. New paired tests: two simultaneous stops yield exactly one winner *and* a single stop still wins; a crash leftover is stopped cleanly *and* an unrelated process reusing its number is left alone. These run against real ffmpeg, with a local port that accepts and never answers standing in for the camera. Both halves were confirmed to fail against deliberately broken code.
+- *End to end, real `cloud.js`/`capture.js` against a stand-in console, all 18 checks passing:*
+  - internet down at the end: stops on time, holds the send, no retry storm, sends once when back, and the late console stop is a no-op;
+  - a late start is refused, and a hand start still records;
+  - a restart across two separate processes resumes into the same folder and is sent once;
+  - a console stop and the timer at the same moment send once.
+- *Crash, end to end:* one run force-killed mid-recording; the next launch found and stopped its ffmpeg.
+- *Migration:* run against real Postgres (PGlite 0.5.8 / PG 18) on tables built from production's columns, 12 checks including the paired "a booking that is recording still gets its stop".
+- **Not verified:** on a real Mac, against a real camera, or on the live database.
+
+**Limits.** An upload that fails *after* the console created its job is not retried here (a pre-existing gap, shown in the recording's row). A hand-started recording has no end time and behaves as before, apart from crash cleanup. Stopping a booking early by hand now sends it at once — before, a hand-stopped booking was never sent at all, because the booking's own stop later found nothing recording.
+
+**Deploy order.** Either side can go first. An old desktop ignores `ends_at`; a new desktop against the old console simply has no end time to act on, and behaves as before.
