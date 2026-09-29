@@ -2915,7 +2915,7 @@ Pace = peak net crossings/s in any 3 s; n = ball-speed readings above 1.80 court
 
 ## ADR-134 — A machine's record belongs to one account; switching accounts gives it a new one there
 
-**Date:** 2026-09-29 · **Status:** built and tested; production migration and deploy pending operator approval · **Amends:** ADR-094 (the "move" path)
+**Date:** 2026-09-29 · **Status:** built and tested; production migration applied 2026-09-29 (unique index `agents_brand_device_id_key` verified); console deploy pending · **Amends:** ADR-094 (the "move" path)
 
 **Context.** The connection design review (progress/09.29) found the takeover ADR-094 had filed and left open: `/api/agents/register` looked a `device_id` up across **every** account and re-homed the machine to whoever called — authenticated only as "some signed-in user", with sign-up open to anyone and the `device_id` printed on the desktop's "This machine" page. One request from any computer would move a venue's machine, its cameras, their calibrations and (since ownership derives from `agent_id`) its reels into a stranger's account, and knock the real machine offline with a rotated token.
 
@@ -2935,7 +2935,7 @@ A token-possession check was drafted first (move across accounts only if the req
 
 ## ADR-135 — A booked recording ends on the machine's own clock, and survives a restart or a crash
 
-**Date:** 2026-09-29 · **Status:** built and tested; desktop release, console migration and deploy pending operator approval
+**Date:** 2026-09-29 · **Status:** built and tested; console migration applied 2026-09-29 (function verified in place, one manual run clean, `service_role`-only execute unchanged); desktop release and console deploy pending
 
 **Context.** From the 09.29 connection review. A booking's recording ended only when the console's stop command reached the machine; the start never said when the booking ended. Four failures followed, the first two checked for real rather than read from code:
 
