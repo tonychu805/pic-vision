@@ -589,6 +589,9 @@ pic-vision/
 │                              # authoritative for anything after (see CLAUDE.md)
 ├── LABELING.md               # rally-labeling + highlight-worthy grading protocol
 ├── README.md                 # how to run
+├── legal/                    # draft contract templates (venue purchase, SI/partner
+│                              # revenue-share) -- not lawyer-reviewed, see each file's
+│                              # own header before use
 ├── AGENTS.md                 # agent-facing pointers
 ├── .github/workflows/        # CI. desktop-mac.yml: builds the venue-facing
 │                              # desktop agent as an unsigned macOS DMG on a
