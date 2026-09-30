@@ -3279,3 +3279,19 @@ Triggered partly by a real inbound email from a prospective venue (Pickle Day So
 - **Found and fixed along the way:** `pic-vision-reel/lib/consent.ts`'s `CONSENT_VERSION` constant had stayed at `2026-09-27` when ADR-146 bumped the database functions to `2026-09-30` — the two were meant to be hand-kept in sync and weren't. `/consent`'s own gate would have treated a player's outdated consent as current while `get_check_in_options` correctly said otherwise. Fixed to match.
 
 **Verified.** `tsc --noEmit`, tests (14 on `pic-vision-reel`, 231 on the console), and `next build` all clean on both. `set_training_consent` checked directly against production via impersonation (insert then update-in-place both confirmed); `get_advisors` shows only the same pre-existing boilerplate warning. Not yet verified end to end through a real signed-in browser session.
+
+---
+
+## ADR-148 — LINE Login only works on a player's first-ever link; every repeat login fails inside Supabase's own auth service
+
+**Date:** 2026-09-30 · **Status:** confirmed and reproduced on a real device; root cause is outside this codebase, not yet resolved · **Project:** pic-vision-reel
+
+**Context.** Real-device testing of the self-serve player system (same session as ADR-145–147) found LINE Login working for a first sign-up but failing every time afterward — a returning player landing on `/login?auth_error=1`. Several wrong theories were tested and ruled out in order: a double-tap starting two `signInWithOAuth()` calls at once (real logs showed two "Redirecting to external provider" entries per failed attempt; added a ref-based guard, a single clean tap still failed); LINE's in-app browser losing a PKCE cookie handed off to Safari (fails identically opened directly in Safari); a general problem with the PKCE/cookie mechanism itself (Google, through the exact same app code and redirect flow, succeeds every time, including repeat logins).
+
+**Root cause, from Supabase's own auth logs.** A successful LINE login shows `/callback` completing, then a separate `"action":"login","metering":true` event, then a `/token` POST (`grant_type: pkce`) completing 200. A failing repeat login shows `/callback` completing (302, `auth_event.action: login`) and `auth.identities.updated_at` visibly bumping for that identity — GoTrue received and processed LINE's response — but the metering "Login" event and the `/token` exchange never happen, and no WARN/ERROR-level log line appears anywhere. GoTrue partially updates the identity, then fails before minting a session, silently, on its own side. This is inside Supabase's managed Auth service (the custom OIDC provider's token/session handling), not something this app's code can intercept or fix.
+
+**Decisive confirmation:** deleted the test account's `auth.identities` row for `custom:line` directly (`delete from auth.identities where ...`), forcing the next LINE login to be treated as a brand-new first-time link. It succeeded immediately and created a fresh `players` row.
+
+**Impact.** LINE Login is currently unusable for any returning player — the normal case, since a player plays more than once. This blocks LINE as a real login method for launch. Google and email are unaffected and work correctly on repeat logins.
+
+**Not yet done:** filing this with Supabase support (the evidence above is a clean, reproducible bug report); deciding whether to de-emphasize the LINE button in the UI until it's resolved, given LINE is likely the most natural login method for Taiwanese venue-goers. See `project_line_login_repeat_auth_broken` memory for the full evidence trail.
