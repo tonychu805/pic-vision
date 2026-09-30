@@ -859,6 +859,28 @@ async function runCommand(command) {
     if (result.outDir && !note) await finishRecording(camera, result.outDir, { send: scheduled });
     return result;
   }
+  // A player extended (or otherwise changed) their check-in's end time
+  // after it started recording (pic-vision-cloud-console's
+  // player_update_check_in_end). The booking's original end time was
+  // already noted locally in bookingRecordings' store at start time (see
+  // start_recording above) -- bookingEndTick only ever reads that local
+  // copy, never the database, so without this command a player's
+  // extension would silently do nothing and the camera would still stop
+  // at the old, too-early time. No note found means nothing to update --
+  // the recording already ended, or this machine never tracked it (an
+  // older desktop version, or a restart lost it), either way there is
+  // nothing here to correct.
+  if (command.type === "update_recording_end") {
+    const bookingId = command.params?.schedule_booking_id;
+    const newEndsAt = bookingEndsAt(command.params);
+    if (!bookingId || newEndsAt == null) {
+      throw new Error("update_recording_end needs both schedule_booking_id and ends_at");
+    }
+    const note = findBookingRecording({ bookingId });
+    if (!note) return { updated: false, reason: "no local recording tracked for this booking" };
+    updateBookingRecording({ bookingId }, { endsAt: command.params.ends_at });
+    return { updated: true };
+  }
   // Console-driven calibration (ADR-080) -- see calibration.js's header
   // for why this replaced ADR-077's "scoped out" call on moving it here.
   if (command.type === "grab_calibration_snapshot") return await grabAndUploadSnapshot(camera);
