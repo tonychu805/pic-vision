@@ -1,5 +1,24 @@
 # Release notes
 
+## 1.7.1 — 2026-09-30
+
+- **Fixed: recordings on this machine were never actually deleted.** The
+  privacy policy has said raw recordings are removed 30 days after
+  recording, but nothing on this machine ever did that. Local recordings
+  now clear themselves automatically: 7 days after a reel is made from
+  one, or 30 days if no reel ever comes (you'll see a warning the day
+  before). A recording still being made or still uploading is never
+  touched, and a recording split into parts only clears once every part's
+  reel is done. Only the app's own `~/pic-vision-recordings` timestamp
+  folders are affected.
+- **A player extending or shortening their check-in's end time on the
+  venue's QR-code page now actually changes when this machine stops
+  recording.** Previously that only updated the cloud console — this
+  machine kept recording (or stopped) on whatever end time it had when
+  the recording started, silently ignoring any later change. The console
+  now tells this machine directly, the same way Start and Stop already
+  do.
+
 ## 1.6.6 — 2026-09-22
 
 - **Changed: sending two cameras' recordings to the cloud at once no
