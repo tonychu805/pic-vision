@@ -1,6 +1,12 @@
 # Release notes
 
-## 1.7.1 — 2026-09-30
+## 1.7.2 — 2026-09-30
+
+**There is no 1.7.1 to install.** It was tagged, but its build failed on CI
+before any installer was made — an unrelated test (a debounce-timing check
+with a margin too tight for a loaded build machine) failed twice in a row on
+GitHub's own capacity-constrained macOS runners, never on a real machine.
+1.7.2 is that release, unchanged apart from the test fix.
 
 - **Fixed: recordings on this machine were never actually deleted.** The
   privacy policy has said raw recordings are removed 30 days after
