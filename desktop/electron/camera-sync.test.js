@@ -210,8 +210,17 @@ test("a burst of changes collapses into one heartbeat, not one probe of every ca
   // triggering four full sweeps would hammer cameras that may allow only
   // one RTSP session.
   await quiesce();
-  const made = [];
-  for (let i = 0; i < 4; i++) made.push(await addClip(`Burst ${i}`));
+  // requestHeartbeat() is a LEADING debounce: the first call arms a
+  // HEARTBEAT_DEBOUNCE_MS timer, and every call while it's pending is a
+  // no-op -- it does not reset. So all four adds must actually land
+  // within that one window for this test to mean anything; awaiting each
+  // addClip in turn (real file I/O per call) leaves that to chance on a
+  // slower or colder machine -- confirmed failing exactly this way on
+  // GitHub's macOS CI runner (consistently 2 heartbeats, never locally)
+  // while this repo's own build.mac notes those runners as capacity-
+  // constrained. Firing all four concurrently keeps them within the
+  // window regardless of how long any single copy takes.
+  const made = await Promise.all([0, 1, 2, 3].map((i) => addClip(`Burst ${i}`)));
   await waitFor(() => heartbeats.length >= 1, "the burst's heartbeat");
   await sleep(HEARTBEAT_DEBOUNCE_MS + 600);
   assert.equal(heartbeats.length, 1, `expected one heartbeat for the whole burst, got ${heartbeats.length}`);
