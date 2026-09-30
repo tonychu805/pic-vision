@@ -3292,6 +3292,8 @@ Triggered partly by a real inbound email from a prospective venue (Pickle Day So
 
 **Decisive confirmation:** deleted the test account's `auth.identities` row for `custom:line` directly (`delete from auth.identities where ...`), forcing the next LINE login to be treated as a brand-new first-time link. It succeeded immediately and created a fresh `players` row.
 
+**Cleanest repro:** on that same freshly-linked identity, sign out, then immediately tap "Continue with LINE" again — no delay, no other action in between. Fails every time. Rules out elapsed time or session staleness as the trigger; it's simply any second use of an already-linked LINE identity.
+
 **Impact.** LINE Login is currently unusable for any returning player — the normal case, since a player plays more than once. This blocks LINE as a real login method for launch. Google and email are unaffected and work correctly on repeat logins.
 
 **Not yet done:** filing this with Supabase support (the evidence above is a clean, reproducible bug report); deciding whether to de-emphasize the LINE button in the UI until it's resolved, given LINE is likely the most natural login method for Taiwanese venue-goers. See `project_line_login_repeat_auth_broken` memory for the full evidence trail.
