@@ -3330,3 +3330,20 @@ Frontend: `tsc --noEmit`, `next build` (new route present, no errors), `npm test
 Deliberate UX trade-off, decided with the operator: `disable_auto_login=true` means LINE never hands off to its native app anymore, even though that's normally the more familiar flow for LINE-heavy users. Chosen because the native handoff wasn't intermittently worse, it was **structurally broken every time** with this Auth0 setup — LINE's own docs describe a "try native handoff, retry with `disable_auto_login` only on failure" pattern for cases where it's occasional, but that would mean every login visibly flashes open the LINE app and bounces back before landing in the browser anyway, likely worse than just going straight there.
 
 **Not yet done:** filing ADR-148's underlying GoTrue bug with Supabase — now lower priority given this migration, but the bug itself is still real and still unfiled. The Management Script M2M application (privileged Auth0 Management API scopes) should be deleted now that its one-time job is done.
+
+---
+
+## ADR-150 — Delivery quality is gated before merge and release, not reconstructed after production finds the break
+
+**Date:** 2026-10-02 · **Status:** accepted; CI gates prepared, branch protection still to be configured · **Project:** pic-vision
+
+**Context.** A review of this repository's history found a rapid, mostly direct-to-`main` delivery cadence, with few merge commits and release checks that primarily run on a `desktop-v*` tag. The history also records several defects first found in an installed build or live operation: an app opening with no window, releases made unopenable by undefined variables, camera checks broken by a redaction change, and booking faults found live. The incident analyses and targeted regression tests were often strong, but the common prevention point — a repeatable pre-merge and pre-release gate — was inconsistent. A tag should identify an already-tested release artifact, not be its first integration test.
+
+**Decision.**
+- Make `main` the integration branch. Changes are developed on short-lived branches and merged through a PR, including self-authored work; the PR carries scope, verification, rollout, and rollback evidence.
+- Required checks run before merge: the relevant Python or desktop suite, lint/build checks, and any affected migration/integration test. CI must run these checks on proposed changes and `main`, not only on a release tag.
+- Build and exercise a release candidate before publication. Promote the same artifact and commit after acceptance; record its SHA, test evidence, version, rollout observation, and rollback procedure.
+- A defect discovered after release gets a regression check before the next release when practical. If it cannot, record the temporary manual gate, owner, and expiry rather than treating an ADR as the mitigation.
+- An urgent production fix may bypass the normal PR sequence only with an immediately recorded reason, scope, verification, and follow-up gate.
+
+**Consequences.** This adds small deliberate friction to a solo prototype, but makes every release explainable and reduces the repeated pattern of discovering a missing integration check only after a user or operator hits it. `python-tests.yml` and the expanded desktop workflow implement the CI side once merged; branch protection remains separate GitHub configuration and must not be represented as active until configured and verified.

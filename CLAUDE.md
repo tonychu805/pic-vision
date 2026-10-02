@@ -36,6 +36,33 @@ See `.gitignore` for the full list. In short: commit `eval/labels/*.jsonl` (hand
 
 `python3 -m pytest -q` or `make test`. Tests live in `tests/`.
 
+## Delivery and release gates
+
+`main` is the integration branch, not a scratchpad. Put a code, configuration,
+database, workflow, or documentation change on a short-lived branch and merge it
+through a PR, including when the author and reviewer are the same person. The PR
+must state the user-visible or operational effect, the verification actually run,
+and any rollout or rollback step. Keep the implementation, tests, migration (if
+any), and necessary documentation together so the change is reviewable as one
+unit; an ADR records a settled decision, not an investigation in progress.
+
+Before merging, run the relevant automated checks locally and require them in CI.
+At minimum, changes to the Python path run `make test`; desktop changes run
+`npm test` from `desktop/`; and a release candidate builds its distributable
+artifact. A green unit suite is not sufficient for a packaging, IPC, camera, or
+cloud-integration change: exercise the relevant end-to-end or installed-artifact
+smoke path and record the result. When an incident finds a missing check, add an
+automated regression gate before the next release when practical; otherwise log
+the explicit temporary manual gate and its owner.
+
+Release candidates are built and tested from a specific commit, then that exact
+artifact is promoted. Do not use a public version tag as the first test of a
+commit or publish an artifact that has not passed its required checks. Record the
+commit SHA, test/acceptance evidence, artifact version, rollout observation, and
+rollback procedure in the release notes or that day's progress entry. An urgent
+production fix may bypass the normal PR sequence only when the reason, scope,
+verification, and follow-up PR/check are recorded immediately afterward.
+
 ## Verifying a root-cause or precision/recall claim
 
 Judge rally-vs-dead-time calls from actual video playback, not still frames — a stills-based verdict has already been wrong once on this project (see `EXPERIMENTS.md`, the IMG_7744 false-positive review). A lead from a still frame is not a verdict until someone has watched the clip.

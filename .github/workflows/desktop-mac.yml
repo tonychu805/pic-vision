@@ -1,5 +1,6 @@
-# Builds the venue-facing desktop agent as an unsigned macOS DMG (PIC-84,
-# ADR-084) and attaches it to a GitHub Release.
+# Builds and verifies the venue-facing desktop agent as an unsigned macOS DMG
+# (PIC-84, ADR-084). On `main` and PRs this is a release-candidate gate; a
+# `desktop-v*` tag publishes only after that same build/test sequence passes.
 #
 # Apple silicon only (operator's call, 2026-09-07). Intel Macs are not
 # supported: every Mac sold since late 2020 is arm64, and a venue capture
@@ -22,10 +23,13 @@
 # build.mac.identity is null in package.json) until an Apple Developer
 # membership exists -- see desktop/README.md's install section for what
 # that costs the person installing it.
-name: Build desktop (macOS)
+name: Desktop CI and release (macOS)
 
 on:
+  pull_request:
+    branches: [main]
   push:
+    branches: [main]
     tags:
       - "desktop-v*"
   workflow_dispatch:
@@ -104,7 +108,10 @@ jobs:
             || { echo "ffmpeg not unpacked/executable"; exit 1; }
           echo "bundle checks passed"
 
+      # The DMG is a release artifact only. PR/main builds still run the full
+      # package and bundle checks above, but do not create disposable uploads.
       - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
         with:
           name: dmg-${{ matrix.arch }}
           path: desktop/release/*.dmg
