@@ -1604,6 +1604,11 @@ pic-vision/
 │   │   │                                 # gone (ADR-079, 2026-09-05): a device
 │   │   │                                 # registers itself automatically on
 │   │   │                                 # sign-in now, nothing left to generate
+│   │   │                                 # settings/booking-calendar.tsx (PIC-191,
+│   │   │                                 # 2026-10-04): "Booking calendar" section --
+│   │   │                                 # Sign in with Google, pick the calendar a
+│   │   │                                 # booking system (TinyBook) writes to, map
+│   │   │                                 # court labels -> cameras, turn on
 │   │   └── api/agents/
 │   │       ├── register/route.ts       # ADR-079 (2026-09-05) -- Bearer-token
 │   │       │                          # authenticated, but the token is a raw
@@ -1668,6 +1673,15 @@ pic-vision/
 │   │       └── commands/[id]/route.ts        # ADR-077, Bearer-token -- the agent
 │   │                                     # reports a command's done/error result
 │   │                                     # here right after executing it locally
+│   ├── api/integrations/google/{start,callback}/route.ts  # PIC-191 (2026-10-04).
+│   │                                  # Google OAuth for the booking calendar:
+│   │                                  # read-only calendar scope, HMAC state +
+│   │                                  # nonce cookie, refresh token stored in
+│   │                                  # Supabase Vault (store_booking_calendar_token)
+│   ├── api/brand/booking-calendar/route.ts  # PIC-191. Owner-only GET/PATCH/DELETE
+│   │                                  # for that Settings section (calendars,
+│   │                                  # detected courts, mappings, warnings,
+│   │                                  # disconnect)
 │   ├── api/commands/route.ts               # ADR-077 (2026-09-05), venue-owner
 │   │                                    # session -- first real cloud->agent
 │   │                                    # command (the gap ADR-071/ADR-073 both
@@ -1709,6 +1723,17 @@ pic-vision/
 │   │   │                                    # for heartbeat/reels/commands routes,
 │   │   │                                    # which authenticate via api_token_hash,
 │   │   │                                    # not a Supabase session)
+│   │   ├── bookingSync.ts, googleCalendar.ts  # PIC-191 (2026-10-04). Pure: TinyBook
+│   │   │                                    # event -> apply/warn/skip (never keeps
+│   │   │                                    # title/description), and a fetch-only
+│   │   │                                    # Google OAuth/Calendar client; both
+│   │   │                                    # unit-tested
+│   │   ├── bookingCalendarSync.ts             # PIC-191. Runs inside the once-a-minute
+│   │   │                                    # /api/schedule/dispatch call, before
+│   │   │                                    # dispatch: syncs each connected venue's
+│   │   │                                    # calendar into schedule_sessions
+│   │   │                                    # (source 'calendar') via
+│   │   │                                    # apply_calendar_booking
 │   │   ├── supabase/bearer.ts                 # 2026-09-05 (ADR-079) -- RLS-scoped
 │   │   │                                    # client for a raw Supabase access
 │   │   │                                    # token arriving as a bearer header
