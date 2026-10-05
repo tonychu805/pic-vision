@@ -1,5 +1,14 @@
 # Release notes
 
+## 1.7.3 — 2026-10-06
+
+- **The cloud processing status is simpler.** A recording's status used to
+  cycle through internal pipeline stage names (some of which no longer
+  matched what the cloud job was actually doing, after recent changes on
+  that side). It now just shows **Uploading…**, then **Processing in the
+  cloud…**, then **Done** — the stage-by-stage detail, when you want it,
+  has moved to the cloud console instead.
+
 ## 1.7.2 — 2026-09-30
 
 **There is no 1.7.1 to install.** It was tagged, but its build failed on CI
