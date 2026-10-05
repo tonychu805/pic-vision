@@ -220,6 +220,7 @@ def get_job_state(job_id):
         return {
             "updated_at": body.get("updated_at"),
             "cancel_requested": bool(body.get("cancel_requested")),
+            "status": body.get("status"),
         }
     except Exception:  # noqa: BLE001 - a failed status check must not crash the wait loop
         return None
@@ -282,14 +283,17 @@ CREDENTIAL_BACKOFF_SEC = 2.0
 
 
 def fetch_pod_credentials(job_id, _sleep=time.sleep):
-    """Ask the console for this job's two scoped R2 credentials.
+    """Ask the console for this job's scoped R2 credentials and job token.
 
     A pod used to be handed the account's own R2 keys: read, write and
     delete across every venue's footage and reels. It now runs with two
     credentials the console minted for THIS job -- one that can only read
     this job's segments (plus the shared tools and weights), one that can
     only write under this venue's reel folder -- each expiring in about
-    four hours (POST /api/runner/jobs/<id>/credentials, PIC-138).
+    four hours (POST /api/runner/jobs/<id>/credentials, PIC-138). The same
+    response also carries a job token (scoped to this job, or its
+    recording session) that replaces the account-wide RUNNER_TOKEN the pod
+    used to report its own status with.
 
     There is deliberately NO fallback to the account keys in this process's
     environment. If this fails the job fails, before a pod exists. Quietly
@@ -408,16 +412,24 @@ def run_reel_job(job):
         # (ADR-128), so every part's reels land on one page; else a fresh one.
         "SHARE_ID": job.get("share_id") or str(uuid.uuid4()),
         "CONSOLE_URL": CONSOLE_URL,
-        "RUNNER_TOKEN": RUNNER_TOKEN,
+        # Scoped to this job (or its recording session) alone, not the
+        # account-wide RUNNER_TOKEN this process uses for its own calls
+        # (PIC-138, 2026-10-05) -- see fetch_pod_credentials.
+        "JOB_TOKEN": credentials["jobToken"],
         # The account id alone -- it only builds the endpoint URL and is
         # not a secret. The account's R2 KEYS no longer go to the pod:
         # what it reads and writes with is scoped_r2_env() below.
         "CLOUDFLARE_R2_ACCOUNT_ID": os.environ["CLOUDFLARE_R2_ACCOUNT_ID"],
         **scoped_r2_env(credentials),
-        # Still the full account key, and still the global runner token
-        # above: PIC-138's remaining two thirds. Neither can be narrowed
-        # the same way -- see the ticket for the sequencing.
-        "RUNPOD_API_KEY": os.environ["RUNPOD_API_KEY"],
+        # No RUNPOD_API_KEY (PIC-138, 2026-10-05): the pod no longer
+        # self-terminates. This process's own watch loop below now
+        # terminates it as soon as it sees this job's own terminal status --
+        # safe here because this path has no ADR-130 kept-pod/next-part
+        # concept, so one job finishing always means the pod is done.
+        # (The Cloudflare orchestrator -- the path real traffic actually
+        # runs through today -- can't use the same check: it serves kept
+        # pods across several jobs, so it still relies on RunPod's own
+        # EXITED/TERMINATED pod state instead; see reelJob.ts.)
     }
 
     # Captured before pod creation, from the row's own state as of the
@@ -543,9 +555,19 @@ def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
     pod_created_at = time.monotonic()
     while time.monotonic() < deadline:
         time.sleep(POD_POLL_SEC)
+        state = get_job_state(job_id)
+
+        if state is not None and state["status"] in ("done", "error", "cancelled"):
+            # The pod reported its own ending via PATCH, same as always --
+            # but since PIC-138 removed its RunPod key, it can no longer
+            # delete itself afterward. This is what actually frees the GPU
+            # now, within one POD_POLL_SEC of the pod's last PATCH, not a
+            # backstop for a self-terminate race.
+            runpod_pod.terminate_pod(pod_id)
+            _log(f"job {job_id}: pod {pod_id} reported {state['status']}, terminated")
+            return "finished"
 
         if not first_checkin_seen:
-            state = get_job_state(job_id)
             current_updated_at = state["updated_at"] if state is not None else None
             # None means this particular check failed (network hiccup,
             # console blip) -- inconclusive, not evidence of a stuck pod,
@@ -601,13 +623,13 @@ def _run_pod_attempt(job_id, env, image, baseline_updated_at, deadline, attempt)
             _log(f"job {job_id}: pod {pod_id} finished")
             return "finished"
 
-    # Nothing but a hung/crashed pod gets here: pod_driver.py reports its
-    # own terminal status (done/error/cancelled) and self-terminates
-    # before this deadline in every path its own exception handling can
-    # catch. This is the backstop for what it can't -- a host failure, an
-    # OOM kill, anything that takes the process out before its own
-    # `finally` runs -- so the job doesn't sit "running" forever and the
-    # pod doesn't keep billing for nothing.
+    # Nothing but a hung/crashed pod gets here: a normal finish is caught
+    # by the terminal-status check at the top of the loop, well before
+    # this. This is the backstop for what pod_driver.py's own exception
+    # handling can't catch -- a host failure, an OOM kill, anything that
+    # takes the process out before it ever PATCHes a final status -- so
+    # the job doesn't sit "running" forever and the pod doesn't keep
+    # billing for nothing.
     _log(f"job {job_id}: pod {pod_id} exceeded {JOB_DEADLINE_SEC}s without finishing -- "
          f"terminating and marking errored")
     runpod_pod.terminate_pod(pod_id)

@@ -13,7 +13,7 @@ from http.server import BaseHTTPRequestHandler, HTTPServer
 import pytest
 
 os.environ.setdefault("JOB_ID", "test-job-id")
-os.environ.setdefault("RUNNER_TOKEN", "test-token")
+os.environ.setdefault("JOB_TOKEN", "test-token")
 os.environ.setdefault("BUCKET", "test-bucket")
 os.environ.setdefault("OUTPUT_BUCKET", "test-output-bucket")
 os.environ.setdefault("BRAND_ID", "test-brand-id")

@@ -31,13 +31,14 @@ FAKE_CREDENTIALS = {
     "writeBucket": "test-public-bucket",
     "read": {"accessKeyId": "READ-KEY", "secretAccessKey": "READ-SECRET", "sessionToken": "READ-TOKEN"},
     "write": {"accessKeyId": "WRITE-KEY", "secretAccessKey": "WRITE-SECRET", "sessionToken": "WRITE-TOKEN"},
+    "jobToken": "JOB-TOKEN-SECRET",
     "expiresAt": "2099-01-01T00:00:00.000Z",
 }
 
 
-def _state(updated_at, cancel_requested=False):
+def _state(updated_at, cancel_requested=False, status="running"):
     """What get_job_state() returns for a confirmed read of the job row."""
-    return {"updated_at": updated_at, "cancel_requested": cancel_requested}
+    return {"updated_at": updated_at, "cancel_requested": cancel_requested, "status": status}
 
 
 def _no_real_network(monkeypatch, credentials=None):
@@ -130,6 +131,30 @@ def test_happy_path_creates_one_pod_and_returns_once_it_disappears(monkeypatch):
     job_runner.run_reel_job(JOB)  # must not raise
     assert exists_calls["n"] == 3
     assert terminated == [], "a pod that finished on its own must not also be force-terminated"
+
+
+def test_a_pod_that_reports_done_is_terminated_promptly_without_waiting_for_it_to_vanish(monkeypatch):
+    # PIC-138: the pod no longer holds RUNPOD_API_KEY, so it can no longer
+    # delete itself once it PATCHes a terminal status. This loop must now do
+    # that itself, rather than keep polling pod_exists() until the deadline
+    # for a pod that will never disappear on its own again.
+    _no_real_network(monkeypatch)
+    monkeypatch.setattr(job_runner, "POD_POLL_SEC", 0.01)
+    monkeypatch.setattr(job_runner, "JOB_DEADLINE_SEC", 10)
+    monkeypatch.setattr(job_runner.runpod_pod, "create_selfdriving_pod", lambda **kw: ("pod-1", "gpu"))
+    # Still "there" from RunPod's own point of view -- exactly the state a
+    # pod that finished but can't delete itself would actually be in.
+    monkeypatch.setattr(job_runner.runpod_pod, "pod_exists", lambda pod_id: True)
+    terminated = []
+    monkeypatch.setattr(job_runner.runpod_pod, "terminate_pod", lambda pod_id: terminated.append(pod_id))
+    monkeypatch.setattr(job_runner, "patch_job", lambda job_id, **fields: True)
+    monkeypatch.setattr(job_runner, "get_job_state", lambda job_id: _state("2026-01-01T00:00:01Z", status="done"))
+
+    outcome = job_runner._run_pod_attempt("job-1", {"SESSION_ID": "sess-1"}, job_runner.runpod_pod.POD_IMAGES[0],
+                                           "2026-01-01T00:00:00Z", time.monotonic() + 10, 0)
+
+    assert outcome == "finished"
+    assert terminated == ["pod-1"], "must terminate on the first poll that sees a terminal status, not wait out the deadline"
 
 
 def test_a_pod_that_disappears_without_ever_reporting_is_marked_errored(monkeypatch):
@@ -507,6 +532,16 @@ def test_no_account_r2_key_reaches_the_pod(monkeypatch):
     assert "ACCOUNT-KEY-ID" not in everything
 
 
+def test_no_runner_token_or_runpod_key_reaches_the_pod(monkeypatch):
+    # PIC-138's other two thirds: the pod used to get the account-wide
+    # RUNNER_TOKEN (to report its own status) and RUNPOD_API_KEY (to delete
+    # itself). Neither belongs on a disposable, internet-facing machine.
+    env = _run_and_capture_pod_env(monkeypatch)
+    assert "RUNNER_TOKEN" not in env
+    assert "RUNPOD_API_KEY" not in env
+    assert env["JOB_TOKEN"] == "JOB-TOKEN-SECRET"
+
+
 def test_the_pod_does_receive_the_scoped_credentials(monkeypatch):
     # The paired half. Without it the test above passes for a pod holding
     # nothing -- one that fails at its first download.
@@ -836,16 +871,16 @@ def test_a_cancel_after_the_pod_has_checked_in_is_left_to_the_pod(monkeypatch):
 
 # --- get_job_state against a real local server --------------------------------
 
-def test_get_job_state_returns_both_fields(console):
+def test_get_job_state_returns_all_three_fields(console):
     console([(200, {"stage": "queued", "status": "running", "updated_at": BASELINE, "cancel_requested": True})])
-    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": True}
+    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": True, "status": "running"}
 
 
 def test_a_console_that_predates_the_field_reads_as_not_cancelled(console):
     # Deploy order: the console change goes out first, but a runner talking
     # to an older console must still work, and fail in the safe direction.
     console([(200, {"stage": "queued", "status": "running", "updated_at": BASELINE})])
-    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": False}
+    assert job_runner.get_job_state("job-1") == {"updated_at": BASELINE, "cancel_requested": False, "status": "running"}
 
 
 def test_a_failed_read_is_none_not_a_guess(console, monkeypatch):

@@ -44,14 +44,15 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            for its own R2 round trip)
     TARGET_SEC            reel length target
     SESSION_ID
-    CONSOLE_URL, RUNNER_TOKEN  same console API job_runner.py already
-                           uses (PATCH /api/runner/jobs/<id>) -- reused
-                           as-is rather than inventing a second reporting
-                           path. Known, accepted gap (ADR-093's own open
-                           risks list): this is the operator's
-                           account-wide runner token, not a token scoped
-                           to this one job. Scoping that is real future
-                           work, not done here.
+    CONSOLE_URL, JOB_TOKEN  same console API job_runner.py/the orchestrator
+                           already uses (PATCH /api/runner/jobs/<id>), but
+                           not the operator's account-wide RUNNER_TOKEN
+                           (PIC-138, 2026-10-05): a short-lived token the
+                           console mints scoped to this job alone, or to
+                           RECORDING_SESSION_ID when one is set -- a kept
+                           pod (ADR-130) reuses the same token across every
+                           part of a session, same as before, just scoped
+                           to the session instead of the whole account.
     CLOUDFLARE_R2_ACCOUNT_ID   only the account id, for the endpoint URL.
                            NOT the account's R2 keys (PIC-138, 2026-09-20):
                            a pod used to be handed full read/write/delete
@@ -67,9 +68,11 @@ that's the one interface RunPod's own pod-creation API gives a caller:
                            <brand>/reels/ in the reels bucket. Neither can
                            list or delete, and neither can touch another
                            venue. See lib/podGrants.ts in the console.
-    RUNPOD_API_KEY         so this pod can delete itself when done. Same
-                           gap: this is the full account key, not scoped
-                           to "delete only this pod."
+No RUNPOD_API_KEY (PIC-138, 2026-10-05): this pod used to hold the full
+account-wide RunPod key just so it could delete itself when done. It no
+longer does, and no longer self-terminates -- the orchestrator (or
+job_runner.py) now terminates it as soon as it sees this pod's own PATCH
+report a terminal status, which runs every POD_POLL_SEC anyway.
 
 Reuses, unmodified: `scripts/pod_infer.py` (subprocess -- the ADR-064/065
 byte-identical-output guarantee is pinned to not touching this code), and
@@ -163,7 +166,7 @@ _PROGRESS_RE = re.compile(r"^\s*(\d+)/(\d+)\s+(\d+)\s*fps\s+ETA\s+([\d.]+)\s*min
 PROGRESS_PATCH_INTERVAL_SEC = 20
 
 CONSOLE_URL = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
-RUNNER_TOKEN = os.environ["RUNNER_TOKEN"]
+JOB_TOKEN = os.environ["JOB_TOKEN"]
 JOB_ID = os.environ["JOB_ID"]
 # BUCKET is where this job's own raw segments are (private since PIC-153,
 # 2026-09-18 -- see r2_storage.py-adjacent lib/r2Presign.ts's
@@ -254,7 +257,7 @@ def patch_job(**fields):
     is not -- use report_final_job_status() for that."""
     try:
         r = requests.patch(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}",
-                           json=fields, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
+                           json=fields, headers={"Authorization": f"Bearer {JOB_TOKEN}"},
                            timeout=30)
         if r.status_code == 409:
             return True
@@ -288,7 +291,7 @@ def report_final_job_status(**fields):
     for attempt in range(1, FINAL_REPORT_ATTEMPTS + 1):
         try:
             r = requests.patch(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}",
-                               json=fields, headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
+                               json=fields, headers={"Authorization": f"Bearer {JOB_TOKEN}"},
                                timeout=30)
             if r.status_code == 409:
                 return True
@@ -458,20 +461,6 @@ def _run_inference_streaming(cmd):
             proc.kill()
     if returncode != 0:
         raise subprocess.CalledProcessError(returncode, cmd)
-
-
-def _self_terminate(pod_id):
-    key = os.environ.get("RUNPOD_API_KEY")
-    if not (key and pod_id):
-        _log("no RUNPOD_API_KEY/pod id available -- cannot self-terminate, "
-             "an external sweep must catch this (ADR-093 open risk)")
-        return
-    try:
-        requests.delete(f"https://rest.runpod.io/v1/pods/{pod_id}",
-                        headers={"Authorization": f"Bearer {key}"}, timeout=30)
-        _log(f"self-terminated pod {pod_id}")
-    except requests.RequestException as e:
-        _log(f"WARNING: self-terminate failed ({e}) -- an external sweep must catch this")
 
 
 # --- Skipping the convert step (ADR-130) ---
@@ -779,7 +768,7 @@ def ask_for_next_part(session_id, pod_id):
     yet). A failed ask is {}: keep waiting, the idle limit still applies."""
     try:
         r = requests.post(f"{CONSOLE_URL}/api/runner/sessions/{session_id}/next-part",
-                          headers={"Authorization": f"Bearer {RUNNER_TOKEN}"},
+                          headers={"Authorization": f"Bearer {JOB_TOKEN}"},
                           json={"podId": pod_id}, timeout=30)
     except requests.RequestException as e:
         _log(f"next-part ask failed ({e}) -- will ask again")
@@ -832,31 +821,33 @@ def run_reporting():
 
 
 def main():
-    pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod
+    pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod -- still used to identify this pod when asking for a session's next part, just not to delete itself any more (PIC-138)
     idle_sec = float(os.environ.get("WARM_IDLE_SEC") or 0)
     accept_until = float(os.environ.get("WARM_ACCEPT_UNTIL") or 0)
     outcome = None
-    try:
-        while True:
-            outcome = run_reporting()
-            session_id = os.environ.get("RECORDING_SESSION_ID")
-            # A failure stops here: whatever broke may break the next part
-            # too, and a fresh machine will take it instead.
-            if outcome == "failed" or not (session_id and pod_id and idle_sec > 0):
-                break
-            _log(f"waiting up to {idle_sec / 60:.0f} min for this session's next part...")
-            env = wait_for_next_part(session_id, pod_id, idle_sec, accept_until)
-            if not env:
-                _log("no next part -- shutting down")
-                break
-            try:
-                apply_job_env(env)
-            except ValueError as e:
-                _log(f"could not take the next part ({e}) -- shutting down")
-                break
-            _log(f"took the session's next part: job {JOB_ID}")
-    finally:
-        _self_terminate(pod_id)
+    while True:
+        outcome = run_reporting()
+        session_id = os.environ.get("RECORDING_SESSION_ID")
+        # A failure stops here: whatever broke may break the next part
+        # too, and a fresh machine will take it instead.
+        if outcome == "failed" or not (session_id and pod_id and idle_sec > 0):
+            break
+        _log(f"waiting up to {idle_sec / 60:.0f} min for this session's next part...")
+        env = wait_for_next_part(session_id, pod_id, idle_sec, accept_until)
+        if not env:
+            _log("no next part -- shutting down")
+            break
+        try:
+            apply_job_env(env)
+        except ValueError as e:
+            _log(f"could not take the next part ({e}) -- shutting down")
+            break
+        _log(f"took the session's next part: job {JOB_ID}")
+    # No self-terminate here any more (PIC-138): this pod no longer holds a
+    # RunPod key to do it with. run_reporting() above already PATCHed this
+    # job's final status to the console before returning, which is what the
+    # orchestrator/job_runner.py's own watch loop now acts on to terminate
+    # this pod from the outside, within one poll interval.
     if outcome == "failed":
         sys.exit(1)
 
