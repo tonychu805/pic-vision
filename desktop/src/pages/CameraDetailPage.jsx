@@ -215,33 +215,34 @@ function CalibrationControl({ camera }) {
   );
 }
 
-// STAGES from cloud_pipeline/run_cloud_job.py -- kept as a literal copy
-// here the same way webapp/pipeline.py falls back to one when it can't
-// import cloud_pipeline (a JS renderer never can); update by hand if that
-// list changes.
-const CLOUD_STAGE_LABELS = {
-  // Local to the agent (pipeline.js) -- everything below runs elsewhere.
-  upload: "Uploading to the cloud",
-  queued: "Waiting for processing",
-  download: "Fetching the recording",
-  calibrate: "Fitting the court calibration",
-  drift_check: "Checking camera drift",
-  convert: "Converting to 30fps CFR",
-  proxy: "Creating 720p upload proxy",
-  r2_upload: "Uploading to cloud storage",
-  pod_create: "Creating RunPod GPU pod",
-  pod_install: "Installing dependencies on pod",
-  pod_download: "Downloading video onto pod",
-  inference: "Running TrackNet inference",
-  r2_download: "Downloading results",
-  reel: "Detecting rallies, cutting reel",
-  done: "Done",
-  error: "Failed",
-  // Between the click and the job actually being stopped. Not terminal:
-  // a job already running on a pod hasn't stopped until the pod says so.
-  cancelling: "Stopping…",
-  cancelled: "Cancelled",
-};
+// Coarse status only (2026-10-05) -- this used to be a hand-copied map of
+// every cloud_pipeline/run_cloud_job.py stage name, and it had already
+// drifted from what pod_driver.py (the code that actually runs today)
+// emits: 'setup' and 'input_check' had no entry at all (shown as raw
+// text), the real 'cut' stage had no entry either (its intended label
+// sat under a 'reel' key nothing emits), and 'pod_create'/'pod_install'/
+// 'pod_download' could never fire (pod_driver.py doesn't exist yet during
+// that phase) -- three dead entries. Rather than fix the list, it's gone:
+// whoever opens this screen is occasional and rarely the same person
+// twice (operator, venue staff on a one-off task, a system integrator),
+// so a fine-grained pipeline trace assumes a continuity of attention
+// nobody in that position has, and nobody here can act on "pod_create"
+// or "running TrackNet inference" regardless. That detail now belongs on
+// the console (Cameras page badge + Reels page failed-job card, PIC-137
+// follow-up), checked by whoever's actually tracking it, repeatedly, not
+// read once off this one machine's screen.
+function coarseStageLabel(stage) {
+  if (stage === "upload") return "Uploading…";
+  if (stage === "done") return "Done";
+  if (stage === "cancelling") return "Stopping…";
+  if (stage === "cancelled") return "Cancelled";
+  if (stage === "error") return "Failed";
+  // Everything else -- queued, download, calibrate, drift_check, convert,
+  // proxy, r2_upload, input_check, inference, cut, r2_download, and any
+  // future pod_driver.py stage -- is "somewhere in the cloud pipeline,"
+  // which is all a one-off viewer here could act on anyway.
+  return "Processing in the cloud…";
+}
 
 // A job's terminal stages -- everything else in CLOUD_STAGE_LABELS is
 // still in progress. status.json has no separate "done" boolean; `stage`
@@ -313,7 +314,7 @@ function CloudJobRow({ camera, recording }) {
   // live check against a real completed job (Court 3) caught an earlier
   // version of this line offering "Retry" on a job that had actually worked.
   const failed = status?.stage === "error" || status?.stage === "cancelled";
-  const stageLabel = status?.stage ? (CLOUD_STAGE_LABELS[status.stage] || status.stage) : null;
+  const stageLabel = status?.stage ? coarseStageLabel(status.stage) : null;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: "var(--fs-body)" }}>
@@ -329,7 +330,13 @@ function CloudJobRow({ camera, recording }) {
       {hasRun && (
         <>
           <span style={{ flex: "none", color: status.stage === "error" ? "var(--color-danger)" : "var(--text-2)" }}>
-            {stageLabel}{status.progress ? ` (${status.progress.current}/${status.progress.total})` : ""}
+            {stageLabel}
+            {/* Only during the real upload: current/total means something
+                here (this machine's own segment count). A pod-side
+                progress reading (e.g. inference frame counts) isn't
+                meaningful to someone who can't act on it anyway, now that
+                the stage itself collapses to "Processing in the cloud…". */}
+            {status.stage === "upload" && status.progress ? ` (${status.progress.current}/${status.progress.total})` : ""}
           </span>
           {running && status.stage !== "cancelling" && (
             <button

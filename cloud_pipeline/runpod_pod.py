@@ -203,11 +203,11 @@ def create_selfdriving_pod(name, env, gpu_type_ids=None,
     pod_driver.py + its src/scripts dependency closure -- job_runner.py
     mints one fresh per job) alongside the rest of the job: JOB_ID,
     BUCKET, SEGMENT_KEYS_JSON, CALIB_JSON, TARGET_SEC, SESSION_ID,
-    REEL_ID, BURST_REEL_ID, SHARE_ID, CONSOLE_URL, RUNNER_TOKEN, the
-    CLOUDFLARE_R2_* keys, and RUNPOD_API_KEY (so the pod can delete
-    itself when done) -- see pod_driver.py's module docstring for the
-    accepted gap this implies (these are the operator's account-wide
-    credentials, not scoped to this one job)."""
+    REEL_ID, BURST_REEL_ID, SHARE_ID, CONSOLE_URL, JOB_TOKEN (scoped to
+    this job alone, not the operator's account-wide RUNNER_TOKEN -- PIC-138)
+    and the CLOUDFLARE_R2_* keys. No RUNPOD_API_KEY: the pod can no longer
+    delete itself, and no longer needs to -- see pod_driver.py's module
+    docstring."""
     body = {
         "name": name,
         "imageName": image,
@@ -230,9 +230,12 @@ def pod_exists(pod_id):
     """False once a pod is gone -- confirmed 2026-09-10 against a real
     terminated pod: RunPod returns a plain 404 ('pod not found'), same as
     an id that never existed, not some other terminal-but-still-listed
-    state. That's what create_selfdriving_pod()'s caller polls to learn a
-    self-driving pod (which self-terminates when it finishes, no SSH
-    connection to watch) is done."""
+    state. No in-between 'stopped but not deleted' value this function can
+    see (unlike the richer RunPod state the Cloudflare orchestrator reads,
+    see reelJob.ts's podState) -- which is why job_runner.py's own watch
+    loop doesn't wait on this alone any more to learn a job is done (PIC-138
+    removed the pod's ability to self-terminate); it also acts on the
+    job's own reported status and explicitly calls terminate_pod() below."""
     r = requests.get(f"{API_BASE}/pods/{pod_id}", headers=_headers(), timeout=15)
     return r.status_code == 200
 
