@@ -2465,3 +2465,23 @@ Per camera, the median hard shots at the same cut-off were court 1 **7**, Court 
 - **From stills (not yet confirmed by playback): in this doubles game, one of the two near-side players is often outside the window**, usually the right-hand one. The far pair mostly stays in. That was expected: the window is ~1/3 of the frame's width, and this camera is side-on.
 
 **Next.** Watch the 12 clips (reel-page `/demo/vertical`, prototype branch) before deciding. If near-side players are really cut out often, frame on the players (all four when they fit, the ball when they don't) instead of the ball alone. That needs player detection on the clip frames (a GPU model, only on the clips' few seconds).
+
+## 2026-10-06 — Does skipping trios for speed trade acceptably against recall? No — it collapses detection almost immediately
+
+**Why.** A prior Codex session tested something in this area locally; no record of its method or numbers survived anywhere searchable (not this file, not `DECISIONS.md`, not git history, not memory) — redone here from scratch with a clearly-specified method instead of guessing what that run did.
+
+**Not the same thing as the already-answered 15fps question (2026-09-06, above).** That test re-encoded the source to 15fps by *dropping* every other frame, which also halves the real time-spacing TrackNet sees between the 3 frames in its sliding window — a distribution shift from what it was trained on. This test instead evaluates fewer window positions while keeping every *evaluated* trio's three frames genuinely consecutive at the source's native 1/30s spacing (the skipped trios' frames are never decoded at all, via `cap.grab()` instead of `cap.read()`, and get a `Visibility=0` placeholder row so `predictions.csv` stays one row per source frame). New script: `scripts/skip_frame_infer.py`, `--decimate N` keeps 1 trio in every N. `--decimate 1` is a from-scratch reimplementation of `pod_infer.py`'s inference (same model, same `prep3`, same blob-confidence picking), written sequentially rather than with its double-buffered producer/consumer thread, specifically so decimate=1/2/3 are timed by the identical script and are a fair relative comparison with each other (the decimate=1 absolute fps is not meant to match `pod_infer.py`'s own pipelined ~58fps benchmark).
+
+**Setup.** `IMG_7893_390-690s.mp4` (the same clip as the 15fps test: 1920×1080, 300s, 13 labelled rallies), k14 weights, local RTX 2000 Ada (`/mnt/fast_scratch/tf215_env/`, TF 2.15.1). Same calibration, shipped constants (`gap_sec=3.0`, `min_crossings=6`, `margin_px=160`), IoU≥0.5. `decimate=1`'s output was byte-for-byte equivalent to the already-cached official `predictions.csv` (identical found/matched/precision/recall) — confirms the reimplementation is correct, not a different detector by accident.
+
+| Run | Wall speed | Raw crossings | Candidates found | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|
+| decimate=1 (baseline) | 36 fps | 122 | 8 | 6 | 0.75 | 0.46 |
+| decimate=2 (skip half) | 67 fps (+86%) | 81 (−34%) | **1** | **0** | **0.00** | **0.00** |
+| decimate=3 (skip 2/3) | 96 fps (+167%) | 68 (−44%) | 1 | 1 | 1.00 | **0.08** |
+
+**Conclusion: worse than the 15fps result, not a gentle tradeoff curve.** 15fps (dropping every other frame) held recall at 0.23 at the shipped threshold; decimate=2 (skipping every other *trio*, while keeping natural frame spacing) collapses recall to 0.00 outright. Same underlying mechanism as the 15fps finding — a rally's crossings fragment across a gap wider than `gap_sec=3.0` and the fragments fall under `min_crossings=6` individually — but sharper here: decimate doesn't thin crossings evenly across every rally, it creates real temporal blind spots, so nearly all 13 rallies in the clip collapse into a single surviving candidate rather than degrading one by one. The raw-crossing count alone (81 of 122, −34%) understates this badly — it looks like a mild loss until you look at what actually survives clustering.
+
+**Speed gain is real (+86% to +167%) but there is no usable middle ground at ratios that would matter.** Not worth re-deriving `min_crossings` downward to compensate, for the same reason the 15fps sweep already found: every lower threshold tried there traded precision away far faster than it recovered recall, and that was at a *milder* information loss than this.
+
+**Not tried, and a genuinely different idea if revisited:** skipping adaptively (e.g. only during stretches already flagged as likely dead-time, PIC-31's stillness signal) rather than on a fixed period — a fixed-period skip has no way to avoid skipping exactly the frames a real crossing happens on, which is the whole failure mode above.
