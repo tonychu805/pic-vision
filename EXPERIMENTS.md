@@ -2503,3 +2503,22 @@ Per camera, the median hard shots at the same cut-off were court 1 **7**, Court 
 **Conclusion: the 2026-08-26 finding holds on fresh real footage, and the local number is a different, machine-specific story, not a correction to it.** On the real pod, CPU preprocessing is still clearly the larger share (55.8% vs 40.1%) -- same GPU card, same weights, same code; RunPod's weaker virtualized CPU cores are still where the extra cost is going. Locally, the balance flips (GPU 49.2% vs preprocess 43.5%), because this workstation's CPU is strong enough to roughly keep pace with its own GPU. **Production runs on RunPod, not locally** -- so for the question that actually matters (what to optimize in the real pipeline), **NVIDIA DALI (GPU-side preprocessing) targets the bigger piece on the hardware that matters; TensorRT would help the smaller 40.1% share but isn't where the real cost is.**
 
 **Not yet done:** actually trying DALI or TensorRT and re-measuring -- this entry only re-confirms where the time goes, not that either fix delivers the hoped-for win in practice.
+
+## 2026-10-06 — Tried NVIDIA DALI: a closed negative result, not a tuning problem
+
+**Why.** The entry above identified CPU preprocessing (`cv2.resize`) as the larger cost on real RunPod hardware, and DALI exists specifically to move that step onto the GPU. Installed it locally first (`nvidia-dali-cuda120`, matches this machine's pip-bundled CUDA 12.2) to check correctness and speed before touching a paid pod.
+
+**Correctness, round 1: a real mismatch, found and fixed.** Comparing DALI's GPU decode+resize against the exact frames `cv2`'s pipeline produces (`IMG_7893_390-690s.mp4`, same 3 frames both ways): mean pixel diff 4.67, max 88, 22.8% of pixels off by more than 5. Isolated whether this was the decode or the resize by comparing full-resolution (no resize) output alone: mean diff only 1.60 -- normal hardware-vs-software decoder rounding, not the problem. Swept DALI's resize parameters: `antialias=True` (DALI's default) was the culprit -- `cv2.resize`'s default `INTER_LINEAR` doesn't apply an antialiasing filter on downscale, DALI's does. With `interp_type=LINEAR, antialias=False`, the diff dropped to 1.64 -- back down to decode-noise levels.
+
+**Correctness, round 2: fixing the pixel mismatch did not fix detection.** Ran full inference with DALI's corrected decode+resize replacing only that step (same model, same weights, same postprocessing) on the same labelled clip, same IoU>=0.5 scoring every other experiment in this project uses:
+
+| Run | Found | Matched | Precision | Recall | Raw crossings |
+|---|---|---|---|---|---|
+| cv2 baseline (official) | 8 | 6 | 0.75 | 0.46 | 122 |
+| DALI (corrected interp) | 5 | 2 | 0.40 | 0.15 | 90 (-26%) |
+
+A pixel diff of 1.64 (comparable to harmless decode noise) still produced a real recall collapse. TrackNet is evidently far more sensitive to whatever's left over than the raw pixel-diff number suggests -- possibly a frame-alignment issue in DALI's video reader specifically (the reader emitted an unprompted warning about `file_list_include_preceding_frame` defaulting to `False` with that default changing in a future release, which hints at non-obvious sequence-boundary behavior never fully isolated here).
+
+**Speed: also worse, not better.** 19.7fps vs the cv2 baseline's 36fps on the identical machine and clip -- roughly half speed. Calling `pipe.run()` once per trio in a plain Python loop likely has real fixed overhead (GPU-CPU-GPU round trips, small-batch pipeline launch cost) that swallowed whatever the GPU-side resize saved.
+
+**Conclusion: this is a closed negative result for the implementation tried, not a parameter to tune further.** Both the speed and the accuracy question came back negative independently -- not "needs tuning," two separate real problems (unexplained accuracy loss beyond the antialiasing fix, and no realized speed benefit from calling DALI one trio at a time). A real attempt would need batching multiple trios per `pipe.run()` call to amortize per-call overhead, and root-causing the remaining accuracy gap before it's credible -- meaningfully more work than this pass, and not attempted here. Not re-tried on the real RunPod pod, since the local result already closes the question for this implementation.
