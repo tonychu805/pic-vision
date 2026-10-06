@@ -2485,3 +2485,21 @@ Per camera, the median hard shots at the same cut-off were court 1 **7**, Court 
 **Speed gain is real (+86% to +167%) but there is no usable middle ground at ratios that would matter.** Not worth re-deriving `min_crossings` downward to compensate, for the same reason the 15fps sweep already found: every lower threshold tried there traded precision away far faster than it recovered recall, and that was at a *milder* information loss than this.
 
 **Not tried, and a genuinely different idea if revisited:** skipping adaptively (e.g. only during stretches already flagged as likely dead-time, PIC-31's stillness signal) rather than on a fixed period — a fixed-period skip has no way to avoid skipping exactly the frames a real crossing happens on, which is the whole failure mode above.
+
+## 2026-10-06 — Where does inference time actually go: local workstation vs a real RunPod pod, on real PGC footage
+
+**Why.** 2026-08-26's CPU-vs-GPU split (`scripts/profile_pod_infer.py`, ADR-043) is almost two months old, measured on a short synthetic clip, and the operator asked directly which optimization (TensorRT, which speeds up GPU inference, vs NVIDIA DALI, which moves CPU preprocessing onto the GPU) is actually worth pursuing. The two target different stages, so the answer depends on which stage actually dominates -- re-measured fresh on real footage instead of trusting a two-month-old number.
+
+**Setup.** Real PGC field-test footage (`recordingSessionId 0ede58e6`, "PGC - Court B", 2026-09-26), not synthetic. Local run: all 7 real 10-minute auto-split parts concatenated into one continuous file (`ffmpeg -c copy`, frame-count-verified clean: 107,806 of ~107,865 expected frames, well inside normal variance, not the catastrophic-truncation pattern real corruption shows) -- a genuine ~60-minute session, run on the local RTX 2000 Ada (`/mnt/fast_scratch/tf215_env/`). Pod run: a real, single 10-minute part (`session-000.mkv`, as production actually sends it -- one part per completed recording chunk, not a continuous hour), on an actual RunPod pod pinned to the identical GPU type as local (`NVIDIA RTX 2000 Ada Generation`, `DEFAULT_GPU_TYPES`) via `cloud_pipeline/runpod_pod.py`'s existing create/ssh/scp/terminate helpers -- same mechanism as ADR-043, not new pod-lifecycle code. Pod was confirmed terminated after (`runpodctl pod list` empty) regardless of the run's outcome, including after a failed first attempt (a `tar --no-same-owner` fix was needed: the local tarball's uid/gid couldn't be applied as root on the pod).
+
+| | Local (60 min, RTX 2000 Ada) | Real pod (10 min, same GPU type) |
+|---|---|---|
+| decode | 177.9s (6.3%) | 20.0s (3.6%) |
+| **preprocess (CPU resize)** | 1224.5s (**43.5%**) | 311.6s (**55.8%**) |
+| **GPU infer** | 1385.7s (**49.2%**) | 223.7s (**40.1%**) |
+| postprocess | 28.9s (1.0%) | 2.6s (0.5%) |
+| overall | 2817.9s total, 38.3fps | 558.4s total, 32.2fps |
+
+**Conclusion: the 2026-08-26 finding holds on fresh real footage, and the local number is a different, machine-specific story, not a correction to it.** On the real pod, CPU preprocessing is still clearly the larger share (55.8% vs 40.1%) -- same GPU card, same weights, same code; RunPod's weaker virtualized CPU cores are still where the extra cost is going. Locally, the balance flips (GPU 49.2% vs preprocess 43.5%), because this workstation's CPU is strong enough to roughly keep pace with its own GPU. **Production runs on RunPod, not locally** -- so for the question that actually matters (what to optimize in the real pipeline), **NVIDIA DALI (GPU-side preprocessing) targets the bigger piece on the hardware that matters; TensorRT would help the smaller 40.1% share but isn't where the real cost is.**
+
+**Not yet done:** actually trying DALI or TensorRT and re-measuring -- this entry only re-confirms where the time goes, not that either fix delivers the hoped-for win in practice.
