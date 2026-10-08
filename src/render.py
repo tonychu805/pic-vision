@@ -163,7 +163,15 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
                  i, n, start, end, end - start, seg.get("crossings", 0))
         subprocess.run(clip_command(video, start, end, os.path.join(out_dir, fname),
                                     logo_path=logo_path, video_width=video_width), check=True)
-        manifest.append(manifest_entry(seg, i, fname, court_id, session_id))
+        # The padded start/end actually cut into the file, not seg's raw
+        # detection bounds -- manifest_entry's own docstring calls this "a
+        # browse-ready record... for a cut clip", and the pad is exactly
+        # what distinguishes the two. Nothing read this distinction before
+        # Stage 3 (pic-vision's pod_driver.py) started persisting it as a
+        # rally's part_start_sec/part_end_sec; a desktop later trimming its
+        # own local high-res recording to those seconds would otherwise cut
+        # 2*pad_sec short of what the existing (lower-res) clip already shows.
+        manifest.append(manifest_entry({**seg, "start": start, "end": end}, i, fname, court_id, session_id))
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
         json.dump({"video": video, "court_id": court_id, "session_id": session_id,
                    "clips": manifest}, f, indent=2)
