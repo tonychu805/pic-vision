@@ -36,10 +36,10 @@ const store = new Store({ name: "cameras", configFileMode: 0o600 });
 // way into that one call and decrypting on the way out of listCameras
 // covers every reader/writer in this file for free.
 function encryptCamera(camera) {
-  return { ...camera, password: encryptField(camera.password), streamUri: encryptField(camera.streamUri) };
+  return { ...camera, password: encryptField(camera.password), streamUri: encryptField(camera.streamUri), subStreamUri: encryptField(camera.subStreamUri) };
 }
 function decryptCamera(camera) {
-  return { ...camera, password: decryptField(camera.password), streamUri: decryptField(camera.streamUri) };
+  return { ...camera, password: decryptField(camera.password), streamUri: decryptField(camera.streamUri), subStreamUri: decryptField(camera.subStreamUri) };
 }
 
 // What the renderer is allowed to see (PIC-97, 2026-09-06).
@@ -228,7 +228,16 @@ export async function testConnection({ hostname, port, username, password, path:
   // Digest realm="IPCam" there, plain 404 at the lowercase path) -- WS-
   // Discovery never found it either, so manual add is the only way in,
   // and it needs this override to actually reach the right endpoint.
-  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined, timeout: ONVIF_TIMEOUT_MS });
+  //
+  // preserveAddress: true -- a real find (2026-10-07, three Synology units
+  // checked via raw SOAP): GetCapabilities self-reports the Media service
+  // XAddr with no port (implying 80) or port 80 outright, but that service
+  // is only actually reachable on whatever port we just connected on
+  // (confirmed working: 8080). Without this flag the library trusts the
+  // camera's own (wrong) self-reported address for every subsequent Media
+  // call and silently fails to reach it; this makes it substitute back the
+  // host/port that actually got us connected in the first place.
+  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined, timeout: ONVIF_TIMEOUT_MS, preserveAddress: true });
   await cam.connect();
   const info = await cam.getDeviceInformation();
   let streamUri = null;
@@ -239,7 +248,49 @@ export async function testConnection({ hostname, port, username, password, path:
     // URI -- connection itself already succeeded, so don't fail the whole
     // test over this.
   }
-  return { info, streamUri, profile: streamProfile(cam) };
+  const { subProfile, subStreamUri } = await subStreamInfo(cam);
+  return { info, streamUri, profile: streamProfile(cam), subProfile, subStreamUri };
+}
+
+// A second ONVIF profile (confirmed real on real hardware, 2026-10-07/08:
+// two Synology units each report a genuine lower-res "sub" profile
+// alongside their main one, not just a theoretical Profile S feature) --
+// connect() already fetched the full `cam.profiles` array fetching the
+// main one, so finding a second entry costs nothing extra; only its
+// stream URI needs its own round-trip, same as the main profile's did.
+// Returns {subProfile: null, subStreamUri: null} for any camera that only
+// has the one profile -- this is additive, not a requirement.
+async function subStreamInfo(cam) {
+  const profiles = cam.profiles ?? [];
+  const mainToken = cam.activeSource?.profileToken;
+  const sub = profiles.find((p) => p.$?.token && p.$.token !== mainToken && p.videoEncoderConfiguration);
+  if (!sub) return { subProfile: null, subStreamUri: null };
+  let subStreamUri = null;
+  try {
+    subStreamUri = (await cam.getStreamUri({ protocol: "RTSP", profileToken: sub.$.token })).uri;
+  } catch {
+    // Same tolerance as the main profile above -- a profile that exists
+    // but won't hand back a stream URI shouldn't fail the whole connect.
+  }
+  return { subProfile: profileFromConfig(sub.videoEncoderConfiguration), subStreamUri };
+}
+
+// Same four fields streamProfile() reads off cam.activeSource, but usable
+// for any profile's own videoEncoderConfiguration directly -- there's no
+// activeSource-equivalent convenience property for a non-default profile.
+function profileFromConfig(configuration) {
+  if (!configuration) return null;
+  const toNumber = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  return {
+    codec: configuration.encoding ? String(configuration.encoding).toUpperCase() : null,
+    width: toNumber(configuration.resolution?.width),
+    height: toNumber(configuration.resolution?.height),
+    fps: toNumber(configuration.rateControl?.frameRateLimit),
+    bitrateKbps: toNumber(configuration.rateControl?.bitrateLimit),
+  };
 }
 
 // What the camera is actually about to send us: codec, resolution, frame
@@ -304,7 +355,7 @@ function existingSource(candidate) {
 export async function addCamera({ label, hostname, port, username, password, path }) {
   const existing = existingSource({ hostname, port, path, connectionType: "onvif" });
   if (existing) return existing;
-  const { info, streamUri, profile } = await testConnection({ hostname, port, username, password, path });
+  const { info, streamUri, profile, subProfile, subStreamUri } = await testConnection({ hostname, port, username, password, path });
   const camera = {
     id: randomUUID(),
     label: label || info.manufacturer + " " + info.model,
@@ -330,6 +381,14 @@ export async function addCamera({ label, hostname, port, username, password, pat
     profile: profile && streamUri
       ? { ...profile, measuredFps: await measureStreamFps(authenticatedStreamUri({ streamUri, username, password })) }
       : profile,
+    // null/null for any camera with only one ONVIF profile -- additive,
+    // not a requirement. Same measured-vs-configured treatment as the
+    // main profile above, for the same reason (ADR-087's logic applies
+    // equally to a second stream).
+    subStreamUri,
+    subProfile: subProfile && subStreamUri
+      ? { ...subProfile, measuredFps: await measureStreamFps(authenticatedStreamUri({ streamUri: subStreamUri, username, password })) }
+      : subProfile,
     connectionType: "onvif",
     addedAt: new Date().toISOString(),
   };
