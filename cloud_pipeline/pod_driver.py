@@ -700,6 +700,13 @@ def run():
             # parts together by it.
             "score": clip["score"],
             "stats": {"total_duration_sec": clip["duration"], "n_chosen": 1},
+            # Seconds within THIS part's proxy video (manifest_entry's
+            # start/end, already padded by cut_clips) -- not sent for
+            # full/burst below, since those concatenate many rallies and
+            # have no single start/end. Lets the desktop later locate the
+            # same stretch in its local high-res recording of this part
+            # (dual-stream plan Stage 4/5).
+            "start": clip["start"], "end": clip["end"],
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:

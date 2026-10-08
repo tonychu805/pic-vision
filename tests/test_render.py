@@ -60,6 +60,20 @@ def test_cut_clips_applies_padding(monkeypatch, tmp_path):
     assert dur  == 11.0          # (65-60) + 6s pad total
 
 
+# Paired with the above: manifest.json's start/end must describe the file
+# actually on disk (the padded cut), not the raw unpadded detection bounds
+# -- otherwise a reader of manifest.json (now including pic-vision's
+# pod_driver.py, persisted as a rally's part_start_sec/part_end_sec) thinks
+# the clip is 2*pad_sec shorter than it really is.
+def test_cut_clips_manifest_reports_the_padded_range_not_the_raw_one(monkeypatch, tmp_path):
+    monkeypatch.setattr(render.subprocess, "run", lambda cmd, check: None)
+    segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
+    manifest = cut_clips("game.mp4", segs, str(tmp_path), pad_sec=3.0)
+    assert manifest[0]["start"] == 57.0
+    assert manifest[0]["end"] == 68.0
+    assert manifest[0]["duration"] == 11.0
+
+
 def test_manifest_entry_carries_court_time_score():
     seg = {"start": 58.0, "end": 77.5, "score": 33}
     e = manifest_entry(seg, rally_id=3, file="rally_003.mp4",
