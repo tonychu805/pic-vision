@@ -44,15 +44,25 @@ const processStore = new Store({ name: "recordingProcesses", configFileMode: 0o6
 const leftFromLastRun = processStore.get("byCamera", {});
 processStore.set("byCamera", {});
 
-function rememberProcess(cameraId, pid, outDir) {
-  processStore.set("byCamera", { ...processStore.get("byCamera", {}), [cameraId]: { pid, outDir } });
+// Keyed by camera, then by slot ("main" or "sub") -- a dual-stream camera
+// (Stage 1 of the dual-stream plan) runs two independent ffmpeg processes,
+// and a crash needs to find and stop both, not just whichever started first.
+function rememberProcess(cameraId, slot, pid, outDir) {
+  const all = processStore.get("byCamera", {});
+  processStore.set("byCamera", { ...all, [cameraId]: { ...all[cameraId], [slot]: { pid, outDir } } });
 }
 
-function forgetProcess(cameraId, pid) {
+function forgetProcess(cameraId, slot, pid) {
   const all = processStore.get("byCamera", {});
-  if (all[cameraId]?.pid !== pid) return; // a newer ffmpeg (a reconnect) already replaced it
-  delete all[cameraId];
-  processStore.set("byCamera", all);
+  const entry = all[cameraId];
+  if (entry?.[slot]?.pid !== pid) return; // a newer ffmpeg (a reconnect) already replaced it
+  const { [slot]: _removed, ...rest } = entry;
+  if (Object.keys(rest).length === 0) {
+    const { [cameraId]: _droppedCamera, ...others } = all;
+    processStore.set("byCamera", others);
+  } else {
+    processStore.set("byCamera", { ...all, [cameraId]: rest });
+  }
 }
 
 // Only the legacy layout below still needs this -- kept exported for
@@ -88,11 +98,22 @@ export function cameraRecordingsDir(camera) {
 // by hand). ffmpeg needs them in the URL either way, so this fills them
 // in when missing rather than assuming every stored streamUri already
 // has what it needs.
-export function authenticatedStreamUri(camera) {
-  const url = new URL(camera.streamUri);
+function authenticatedUri(streamUri, camera) {
+  const url = new URL(streamUri);
   if (!url.username) url.username = encodeURIComponent(camera.username);
   if (!url.password) url.password = encodeURIComponent(camera.password);
   return url.toString();
+}
+
+export function authenticatedStreamUri(camera) {
+  return authenticatedUri(camera.streamUri, camera);
+}
+
+// The sub-stream profile's own RTSP URI (Stage 1 of the dual-stream plan)
+// -- same credentials, different stream, only present when ONVIF actually
+// resolved a usable second profile for this camera.
+export function authenticatedSubStreamUri(camera) {
+  return authenticatedUri(camera.subStreamUri, camera);
 }
 
 // Grabs one still frame from the *live* stream for calibration.js's
@@ -347,7 +368,7 @@ export function isRecording(cameraId) {
 
 export function recordingStatus(cameraId) {
   const rec = active.get(cameraId);
-  return rec ? { recording: true, outDir: rec.outDir, startedAt: rec.startedAt } : { recording: false };
+  return rec ? { recording: true, outDir: rec.main.outDir, startedAt: rec.startedAt } : { recording: false };
 }
 
 // How long to wait before trusting a start actually worked. Real gap
@@ -388,9 +409,13 @@ export function nextSegmentNumber(fileNames) {
   return max + 1;
 }
 
-function spawnSegmenter(camera, record) {
-  const url = authenticatedStreamUri(camera);
-  const start = nextSegmentNumber(existsSync(record.outDir) ? readdirSync(record.outDir) : []);
+// `slot` is `record.main` or `record.sub` -- the piece of per-stream state
+// (proc/outDir/stderrTail/retryTimer) this ffmpeg actually belongs to. A
+// dual-stream camera (Stage 1 of the dual-stream plan) runs this twice
+// concurrently, once per slot, against two different RTSP URLs from the
+// same physical camera.
+function spawnSegmenter(cameraId, slotName, url, slot) {
+  const start = nextSegmentNumber(existsSync(slot.outDir) ? readdirSync(slot.outDir) : []);
   // .mkv, not TECH_SPEC.md §1.2's literal .mp4 -- real bug caught by
   // actually running this against a real camera (2026-09-01), not by
   // copying the spec's example verbatim: the Tapo C200 streams pcm_alaw
@@ -399,7 +424,11 @@ function spawnSegmenter(camera, record) {
   // TECH_SPEC.md's own prose already says pcm_alaw requires MKV -- its
   // filename in the example command just didn't reflect that. Confirmed
   // fixed against this exact camera: real 1080p h264+pcm_alaw file,
-  // ffprobe-valid, before this was trusted.
+  // ffprobe-valid, before this was trusted. (Also why the sub-stream here
+  // needs no special audio handling despite a real pcm_mulaw/MP4 failure
+  // hit while *testing* dual capture standalone, 2026-10-08 -- that was
+  // an artifact of the throwaway test script using .mp4; production has
+  // always used .mkv, which doesn't have this limitation at all.)
   const args = [
     "-rtsp_transport", "tcp",
     "-timeout", String(STREAM_TIMEOUT_US),
@@ -410,51 +439,54 @@ function spawnSegmenter(camera, record) {
     "-segment_time", "600",
     "-segment_start_number", String(start),
     "-reset_timestamps", "1",
-    path.join(record.outDir, "session-%03d.mkv"),
+    path.join(slot.outDir, "session-%03d.mkv"),
   ];
   const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
-  record.proc = proc;
+  slot.proc = proc;
   if (proc.pid) {
-    rememberProcess(camera.id, proc.pid, record.outDir);
-    proc.once("exit", () => forgetProcess(camera.id, proc.pid));
+    rememberProcess(cameraId, slotName, proc.pid, slot.outDir);
+    proc.once("exit", () => forgetProcess(cameraId, slotName, proc.pid));
   }
-  record.stderrTail = "";
+  slot.stderrTail = "";
   proc.stderr.on("data", (chunk) => {
-    record.stderrTail = (record.stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
+    slot.stderrTail = (slot.stderrTail + chunk.toString()).slice(-4000); // last ~4KB, enough for a real error
   });
   return proc;
 }
 
-function lastError(record, code) {
-  return record.stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
+function lastError(slot, code) {
+  return slot.stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
 }
 
 // The stream dropped after the recording had started: log it once, then
-// retry until it comes back or the recording is stopped.
-function reconnect(camera, record, reason, attempt = 0) {
+// retry until it comes back or the recording is stopped. `record` carries
+// the shared stopping/interruptions state across both slots of a
+// dual-stream camera; `slot` is the specific stream (main or sub) that
+// actually dropped.
+function reconnect(cameraId, slotName, url, slot, record, cameraLabel, reason, attempt = 0) {
   if (record.stopping) return;
   if (attempt === 0) {
     record.interruptions += 1;
-    logEvent("recording_interrupted", `${camera.label} lost its camera stream -- reconnecting`, reason);
+    logEvent("recording_interrupted", `${cameraLabel} (${slotName}) lost its camera stream -- reconnecting`, reason);
   }
-  record.proc = null;
-  record.retryTimer = setTimeout(() => {
-    record.retryTimer = null;
+  slot.proc = null;
+  slot.retryTimer = setTimeout(() => {
+    slot.retryTimer = null;
     if (record.stopping) return;
-    const proc = spawnSegmenter(camera, record);
+    const proc = spawnSegmenter(cameraId, slotName, url, slot);
     const healthy = setTimeout(() => {
-      if (record.proc === proc && !record.stopping) {
-        logEvent("recording_resumed", `${camera.label} is recording again`, record.outDir);
+      if (slot.proc === proc && !record.stopping) {
+        logEvent("recording_resumed", `${cameraLabel} (${slotName}) is recording again`, slot.outDir);
       }
     }, RECONNECTED_AFTER_MS);
     const startedAt = Date.now();
     proc.on("exit", (code) => {
       clearTimeout(healthy);
-      if (record.proc !== proc || record.stopping) return;
+      if (slot.proc !== proc || record.stopping) return;
       // Ran a while, then dropped again: a new interruption. Died straight
       // away: the camera still isn't there -- keep trying, a bit slower.
-      if (Date.now() - startedAt >= RECONNECTED_AFTER_MS) reconnect(camera, record, lastError(record, code), 0);
-      else reconnect(camera, record, lastError(record, code), attempt + 1);
+      if (Date.now() - startedAt >= RECONNECTED_AFTER_MS) reconnect(cameraId, slotName, url, slot, record, cameraLabel, lastError(slot, code), 0);
+      else reconnect(cameraId, slotName, url, slot, record, cameraLabel, lastError(slot, code), attempt + 1);
     });
   }, reconnectDelayMs(attempt));
 }
@@ -476,10 +508,44 @@ export function startRecording(camera, { resumeInto = null } = {}) {
   const outDir = resumeInto ?? path.join(cameraRecordingsDir(camera), new Date().toISOString().replace(/[:.]/g, "-"));
   mkdirSync(outDir, { recursive: true });
 
+  // Dual-stream (Stage 2 of the dual-stream plan): a camera whose
+  // sub-profile was actually resolved by ONVIF (Stage 1) also records its
+  // lower-res stream concurrently, into its own sibling folder -- never
+  // uploaded whole (pipeline.js keeps pointing at the main outDir below,
+  // unchanged), kept purely so a later step can selectively pull high-res
+  // segments out of the main recording once rally timestamps are known.
+  // Gated on subStreamUri's mere presence rather than a separate opt-in
+  // flag: Stage 1 only ever populates it when ONVIF actually confirmed a
+  // usable second profile, which is already the right signal for whether
+  // this is worth attempting -- a separate remote-controlled flag can be
+  // added later if that ever needs to be overridden, but nothing needs it
+  // yet.
+  const hasSubStream = Boolean(camera.subStreamUri);
+  const subOutDir = hasSubStream ? `${outDir}-sub` : null;
+  if (hasSubStream) mkdirSync(subOutDir, { recursive: true });
+
   const startedAt = new Date().toISOString();
-  const record = { proc: null, outDir, startedAt, stderrTail: "", stopping: false, retryTimer: null, interruptions: 0 };
-  const proc = spawnSegmenter(camera, record);
+  const main = { proc: null, outDir, stderrTail: "", retryTimer: null };
+  const sub = hasSubStream ? { proc: null, outDir: subOutDir, stderrTail: "", retryTimer: null } : null;
+  const record = { main, sub, startedAt, stopping: false, interruptions: 0 };
+  const proc = spawnSegmenter(camera.id, "main", authenticatedStreamUri(camera), main);
   active.set(camera.id, record);
+
+  // The sub-stream's own startup/reconnect handling is deliberately
+  // simpler than main's below: it never fails or blocks the overall
+  // recording-start, since main is what everything downstream (pipeline
+  // upload, the pipeline's own detection input) actually depends on today.
+  // A camera that can't get its sub-stream going just records main-only,
+  // same as a camera with no sub-profile at all -- a missing future
+  // high-res re-upload is a degraded outcome, not a failed recording.
+  if (hasSubStream) {
+    const subUrl = authenticatedSubStreamUri(camera);
+    const subProc = spawnSegmenter(camera.id, "sub", subUrl, sub);
+    subProc.on("exit", (code) => {
+      if (sub.proc !== subProc || record.stopping) return;
+      reconnect(camera.id, "sub", subUrl, sub, record, camera.label, lastError(sub, code));
+    });
+  }
 
   return new Promise((resolve, reject) => {
     let started = false;
@@ -491,16 +557,16 @@ export function startRecording(camera, { resumeInto = null } = {}) {
     }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
       clearTimeout(timer);
-      if (record.proc !== proc || record.stopping) return; // stopRecording's own SIGINT, or already replaced
+      if (main.proc !== proc || record.stopping) return; // stopRecording's own SIGINT, or already replaced
       if (started) {
         // Dropped mid-recording: reconnect, same folder, same session.
-        reconnect(camera, record, lastError(record, code));
+        reconnect(camera.id, "main", authenticatedStreamUri(camera), main, record, camera.label, lastError(main, code));
         return;
       }
       // Died before the grace period: a real start failure (bad address,
       // wrong password, camera offline) -- say so rather than retry.
       if (active.get(camera.id) === record) active.delete(camera.id);
-      const reason = lastError(record, code);
+      const reason = lastError(main, code);
       logEvent("recording_failed", `${camera.label} recording failed to start`, reason);
       reject(new Error(reason));
     });
@@ -525,34 +591,49 @@ export function stopRecording(cameraId) {
   return rec.stopPromise;
 }
 
+// Stops both slots of a dual-stream camera together -- one Start/Stop
+// control for the whole camera, not two independent ones. The sub-stream
+// stopping cleanly or not doesn't change the public result below: main's
+// outDir/measureFrom is the only thing any caller (pipeline.js, the UI)
+// has ever depended on, unchanged by Stage 2.
 function stopActiveRecording(cameraId, rec) {
   rec.stopping = true;
-  if (rec.retryTimer) clearTimeout(rec.retryTimer);
-  const finish = () => {
+  if (rec.main.retryTimer) clearTimeout(rec.main.retryTimer);
+  if (rec.sub?.retryTimer) clearTimeout(rec.sub.retryTimer);
+
+  const stopSlot = (slot) => {
+    const proc = slot.proc;
+    if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
+    return new Promise((resolve) => {
+      proc.once("exit", resolve);
+      proc.kill("SIGINT");
+    });
+  };
+
+  return Promise.all([stopSlot(rec.main), rec.sub ? stopSlot(rec.sub) : Promise.resolve()]).then(() => {
     if (active.get(cameraId) === rec) active.delete(cameraId);
-    logEvent("recording_stopped", "Stopped recording", rec.outDir);
+    logEvent("recording_stopped", "Stopped recording", rec.main.outDir);
     // Free, and better evidence than probing the live stream: this is
     // exactly what got captured and what the pipeline will be given. Also
     // how an RTSP camera's rate stays current after someone changes it in
     // the camera's own settings -- nothing else would ever notice.
-    return { stopped: true, outDir: rec.outDir, measureFrom: newestSegment(rec.outDir) };
-  };
-  const proc = rec.proc;
-  if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve(finish());
-  return new Promise((resolve) => {
-    proc.once("exit", () => resolve(finish()));
-    proc.kill("SIGINT");
+    return { stopped: true, outDir: rec.main.outDir, measureFrom: newestSegment(rec.main.outDir) };
   });
 }
 
 /** Every folder being recorded into right now -- never to be cleaned up. */
 export function activeRecordingDirs() {
-  return new Set([...active.values()].map((r) => r.outDir));
+  const dirs = [];
+  for (const rec of active.values()) {
+    dirs.push(rec.main.outDir);
+    if (rec.sub) dirs.push(rec.sub.outDir);
+  }
+  return new Set(dirs);
 }
 
 /** Where a camera is recording right now, or null. */
 export function activeOutDir(cameraId) {
-  return active.get(cameraId)?.outDir ?? null;
+  return active.get(cameraId)?.main.outDir ?? null;
 }
 
 // Is `pid` still one of OUR recordings? Checked against its command line,
@@ -594,17 +675,22 @@ async function waitForExit(pid, timeoutMs) {
 export async function cleanUpOrphanedRecordings({ graceMs = 15_000, entries = leftFromLastRun } = {}) {
   const stopped = [];
   for (const [cameraId, entry] of Object.entries(entries)) {
-    if (!entry?.pid || !entry.outDir) continue;
-    if (active.get(cameraId)?.proc?.pid === entry.pid) continue; // can't be: a new run's ffmpeg has a new pid
-    if (!isOurRecordingProcess(entry.pid, entry.outDir)) continue;
-    try {
-      process.kill(entry.pid, "SIGINT");
-      if (!(await waitForExit(entry.pid, graceMs))) process.kill(entry.pid, "SIGKILL");
-    } catch {
-      // Exited between the check and the signal: nothing left to stop.
+    // "main" and "sub" -- a dual-stream camera (Stage 2) left behind two
+    // independent ffmpeg processes, not one; both need finding and stopping.
+    for (const slotName of ["main", "sub"]) {
+      const slot = entry?.[slotName];
+      if (!slot?.pid || !slot.outDir) continue;
+      if (active.get(cameraId)?.[slotName]?.proc?.pid === slot.pid) continue; // can't be: a new run's ffmpeg has a new pid
+      if (!isOurRecordingProcess(slot.pid, slot.outDir)) continue;
+      try {
+        process.kill(slot.pid, "SIGINT");
+        if (!(await waitForExit(slot.pid, graceMs))) process.kill(slot.pid, "SIGKILL");
+      } catch {
+        // Exited between the check and the signal: nothing left to stop.
+      }
+      logEvent("recording_orphan_stopped", "Stopped a recording left running when the app closed unexpectedly", slot.outDir);
+      stopped.push({ cameraId, outDir: slot.outDir });
     }
-    logEvent("recording_orphan_stopped", "Stopped a recording left running when the app closed unexpectedly", entry.outDir);
-    stopped.push({ cameraId, outDir: entry.outDir });
   }
   for (const key of Object.keys(entries)) delete entries[key];
   return stopped;
