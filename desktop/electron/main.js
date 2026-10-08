@@ -28,7 +28,7 @@ import { probeSsdp, describeSsdpHosts, declaresCamera } from "./cameras/ssdp.js"
 import { identitiesForIps } from "./cameras/vendorLookup.js";
 import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
-import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording } from "./capture.js";
+import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording, uploadDirFor } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
 import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, calibrationKnown, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
 import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
@@ -388,8 +388,14 @@ function registerPipelineHandlers() {
     // is passed straight through instead of looking for session-*.mkv
     // files that were never written for this camera.
     const videoPath = camera.connectionType === "sampleClip" ? camera.sampleClipPath : undefined;
+    // uploadDirFor: a manual send on a dual-stream camera's recording must
+    // read from its sub-stream sibling too (Stage 2), same as the
+    // automatic paths (autoSplit, booking end) -- sessionId above stays
+    // keyed off the ORIGINAL folder name so it doesn't pick up a stray
+    // "-sub" suffix. Harmless no-op for a part dir or a single-stream
+    // camera, neither of which has a "-sub" sibling to redirect to.
     return runCloudJob({
-      recordingDir, videoPath, targetSec, sessionId,
+      recordingDir: uploadDirFor(recordingDir), videoPath, targetSec, sessionId,
       cameraId: camera.id, cameraLabel: camera.label,
     });
   });

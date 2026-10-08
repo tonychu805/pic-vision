@@ -636,6 +636,22 @@ export function activeOutDir(cameraId) {
   return active.get(cameraId)?.main.outDir ?? null;
 }
 
+// Which directory actually gets uploaded for a recording folder. Stage 2's
+// whole reason for recording a sub-stream is so IT reaches the cloud --
+// main stays local-only, full-res, for a later selective re-upload once
+// rally timestamps are known (Stage 5) -- so every upload path (autoSplit's
+// chunking, and a whole-recording send) must read from here, never
+// straight from a main outDir. Derived purely from the path (does
+// `${outDir}-sub` exist on disk), not from the in-memory `active` map, so
+// it works identically for a live recording and a finished, stopped one --
+// everything upload-related already only ever has a main outDir in hand
+// (started.outDir, note.outDir, activeOutDir()), by long-standing
+// convention this keeps rather than changes.
+export function uploadDirFor(outDir) {
+  const subDir = `${outDir}-sub`;
+  return existsSync(subDir) ? subDir : outDir;
+}
+
 // Is `pid` still one of OUR recordings? Checked against its command line,
 // not just "is something running with that number": the OS reuses process
 // numbers, and after a reboot this one could belong to anything.
@@ -734,16 +750,28 @@ export function listRecordings(camera) {
 
   const cameraDir = cameraRecordingsDir(camera);
   if (!existsSync(cameraDir)) return [];
-  const activeOutDir = active.get(camera.id)?.outDir;
+  // .main.outDir, not .outDir -- Stage 2 nested `active`'s per-camera value
+  // under main/sub, and this had been left reading the old flat shape,
+  // which made it always undefined: a dual-stream OR single-stream
+  // camera's recordings list would never mark anything as `recording: true`.
+  const activeOutDir = active.get(camera.id)?.main.outDir;
   return readdirSync(cameraDir)
-    .filter((name) => statSync(path.join(cameraDir, name)).isDirectory())
+    // A dual-stream camera's sub-stream sibling (<recording>-sub, Stage 2)
+    // lives right next to its main folder here, not nested inside it --
+    // without this it would show up as its own extra, fake "recording",
+    // one row where there should be one.
+    .filter((name) => statSync(path.join(cameraDir, name)).isDirectory() && !name.endsWith("-sub"))
     .map((name) => {
       const dir = path.join(cameraDir, name);
       const segments = readdirSync(dir).filter((f) => /^session-\d+\.mkv$/.test(f));
       // Parts auto-split has already sent (autoSplit.js): each is its own
       // cloud job, so the screen shows one row per part instead of the
-      // whole recording's single Send button.
-      const parts = listParts(dir).map((p) => ({ name: p.name, dir: p.dir, segments: p.segments.length, recording: false }));
+      // whole recording's single Send button. uploadDirFor, not dir
+      // directly: a dual-stream camera's parts live under its sub-stream
+      // sibling (Stage 2, uploadDirFor's own doc comment) -- reading `dir`
+      // itself here would show this recording as having no parts at all,
+      // even while auto-split is actively sending them from next door.
+      const parts = listParts(uploadDirFor(dir)).map((p) => ({ name: p.name, dir: p.dir, segments: p.segments.length, recording: false }));
       return { name, dir, segments: segments.length, recording: dir === activeOutDir, parts };
     })
     .sort((a, b) => b.name.localeCompare(a.name));

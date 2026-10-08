@@ -7,7 +7,7 @@ import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
 import { createServer } from "node:net";
 import { spawn } from "node:child_process";
-import { mkdtempSync, rmSync, existsSync } from "node:fs";
+import { mkdtempSync, rmSync, existsSync, mkdirSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -15,7 +15,7 @@ import path from "node:path";
 // real one. Set before capture.js loads, since it reads HOME once.
 const home = mkdtempSync(path.join(tmpdir(), "capture-lifecycle-"));
 process.env.HOME = home;
-const { startRecording, stopRecording, isRecording, activeRecordingDirs, cleanUpOrphanedRecordings } = await import("./capture.js");
+const { startRecording, stopRecording, isRecording, activeRecordingDirs, cleanUpOrphanedRecordings, uploadDirFor, listRecordings } = await import("./capture.js");
 
 // Two independent silent "cameras" -- a dual-stream camera's main and sub
 // profiles are two different RTSP URLs, which in reality means two
@@ -151,5 +151,64 @@ test("a single-stream camera is unaffected: no sibling folder, no second process
   const { outDir } = await startRecording(cam);
   assert.ok(!existsSync(`${outDir}-sub`));
   assert.deepEqual([...activeRecordingDirs()], [outDir]);
+  await stopRecording(cam.id);
+});
+
+// uploadDirFor: which directory every upload path (autoSplit, a whole-
+// recording send) actually reads from. Real bug this was built to fix --
+// Stage 2 recorded the sub-stream but left every upload path still
+// reading main, defeating the whole point (less bandwidth to the cloud).
+test("uploadDirFor points at the sub-stream sibling when one was recorded", () => {
+  const outDir = path.join(home, "upload-dir-dual");
+  mkdirSync(`${outDir}-sub`, { recursive: true });
+  assert.equal(uploadDirFor(outDir), `${outDir}-sub`);
+});
+
+test("uploadDirFor falls back to the recording's own folder with no sub-stream", () => {
+  const outDir = path.join(home, "upload-dir-single");
+  mkdirSync(outDir, { recursive: true });
+  assert.equal(uploadDirFor(outDir), outDir);
+});
+
+// listRecordings: a dual-stream camera's sub-stream sibling must never
+// show up as its own, separate fake recording -- it lives right next to
+// the main folder it belongs to, not nested inside it.
+test("listRecordings shows one row for a dual-stream recording, not two", () => {
+  const cam = { id: "list-dual", label: "List Dual", connectionType: "rtsp" };
+  const outDir = path.join(home, "pic-vision-recordings", cam.id, "2026-10-09T00-00-00-000Z");
+  mkdirSync(outDir, { recursive: true });
+  mkdirSync(`${outDir}-sub`, { recursive: true });
+  writeFileSync(path.join(outDir, "session-000.mkv"), "");
+  writeFileSync(path.join(`${outDir}-sub`, "session-000.mkv"), "");
+  const recordings = listRecordings(cam);
+  assert.equal(recordings.length, 1);
+  assert.ok(!recordings[0].name.endsWith("-sub"));
+});
+
+// Paired: the parts auto-split has actually sent live under the sub-stream
+// sibling (uploadDirFor's doc comment), not under main -- the UI must
+// still show them against the recording they belong to, not as empty.
+test("listRecordings finds a dual-stream recording's auto-split parts under its sub-stream sibling", () => {
+  const cam = { id: "list-dual-parts", label: "List Dual Parts", connectionType: "rtsp" };
+  const outDir = path.join(home, "pic-vision-recordings", cam.id, "2026-10-09T01-00-00-000Z");
+  mkdirSync(outDir, { recursive: true });
+  const partDir = path.join(`${outDir}-sub`, "parts", "part-01");
+  mkdirSync(partDir, { recursive: true });
+  writeFileSync(path.join(partDir, "session-000.mkv"), "");
+  const [recording] = listRecordings(cam);
+  assert.equal(recording.parts.length, 1);
+  assert.equal(recording.parts[0].dir, partDir);
+});
+
+// Paired with the main.outDir fix above: a dual-stream camera's currently
+// recording folder must still be marked `recording: true`, not silently
+// always false (the Stage 2 regression this test guards against -- it
+// read the old flat `active` shape, which no longer exists).
+test("listRecordings marks the currently-recording folder as recording, dual-stream included", async () => {
+  const cam = dualStreamCamera("list-dual-active");
+  const { outDir } = await startRecording(cam);
+  const [recording] = listRecordings(cam);
+  assert.equal(recording.dir, outDir);
+  assert.equal(recording.recording, true);
   await stopRecording(cam.id);
 });
