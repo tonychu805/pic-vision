@@ -14,7 +14,7 @@ import path from "node:path";
 import { spawn } from "node:child_process";
 import { FFMPEG } from "./binaries.js";
 import { logEvent } from "./activityLog.js";
-import { listParts, SEGMENT_RE, SEGMENT_MINUTES } from "./autoSplit.js";
+import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
 import { listCameras } from "./cameras/store.js";
@@ -28,11 +28,6 @@ import { listCameras } from "./cameras/store.js";
 // time, same as any other presigned upload here), so there's nothing a
 // crash could leave half-done that a plain retry doesn't fix on its own.
 const inFlight = new Set();
-
-function segmentIndex(name) {
-  const m = /^session-(\d+)\.mkv$/.exec(name);
-  return m ? Number(m[1]) : null;
-}
 
 // Which main-profile recording folder has the auto-split part this fetch
 // names, and that part's own segment list -- parts live under the
@@ -52,39 +47,60 @@ export function findRecordingForPart(camera, partIndex) {
   return null;
 }
 
-// The part's own elapsed-time range, read from the sub-stream's segment
-// indices (whichever one of its segments ended up in this part) -- not
-// assumed to be contiguous-from-zero, since a part can start partway
-// through a recording.
-//
-// Translating this into main's matching segments by elapsed time, not by
-// reusing these exact index numbers, matters only if main and sub have
-// drifted apart -- each slot reconnects independently (Stage 2), and a
-// reconnect renumbers only the slot it happened to. In the common case
-// (no reconnect on either side) the numbers are identical anyway, since
-// both started in the same synchronous call at the same segment length;
-// this is the plan file's documented, accepted limitation, not something
-// this function tries to fully correct.
-export function partElapsedRange(part) {
-  const indices = part.segments.map(segmentIndex).filter((n) => n != null).sort((a, b) => a - b);
-  const firstIndex = indices[0];
-  const lastIndex = indices[indices.length - 1];
-  return { startSec: firstIndex * SEGMENT_MINUTES * 60, endSec: (lastIndex + 1) * SEGMENT_MINUTES * 60 };
+// Exactly the shape startRecording's outDir names itself in
+// (`new Date().toISOString().replace(/[:.]/g, "-")`), optionally with a
+// "-sub" suffix for the sibling -- reversed to get the exact instant this
+// recording started. Filesystem-independent, unlike birthtime, which some
+// filesystems don't populate reliably; falls back to it anyway for
+// anything not in this exact shape (there shouldn't be any folder that
+// isn't, but a wrong guess here only ever affects segment 0's start
+// boundary, nothing else, and birthtime is at least directionally right).
+const DIR_NAME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z(?:-sub)?$/;
+function recordingStartedAt(dir) {
+  const m = DIR_NAME_RE.exec(path.basename(dir));
+  if (!m) return statSync(dir).birthtime;
+  const [, date, HH, mm, ss, sss] = m;
+  return new Date(`${date}T${HH}:${mm}:${ss}.${sss}Z`);
 }
 
-// Main's own segments whose elapsed-time index falls in [firstIndex, lastIndex].
-export function mainSegmentsForRange(mainDir, startSec, endSec) {
+// Every segment's own real wall-clock [start, end) in `dir`. A segment's
+// mtime is roughly when ffmpeg closed it and opened the next one -- so the
+// PREVIOUS segment's mtime is THIS one's start, and the recording's own
+// start time is segment 0's.
+//
+// Derived entirely from this one directory's own files: deliberately NOT
+// index arithmetic (segIndex * 600s), because main and sub reconnect
+// independently (Stage 2) -- a reconnect renumbers only the slot it
+// happened to, desyncing "sub's segment N" from "main's segment N" in
+// wall-clock terms by however long that stream was actually down. Real
+// mtimes don't have that problem: each stream tells its own true story
+// regardless of what the other one's reconnect history did.
+function segmentWindows(dir) {
+  const names = readdirSync(dir).filter((f) => SEGMENT_RE.test(f)).sort();
+  let start = recordingStartedAt(dir);
+  const windows = [];
+  for (const name of names) {
+    const end = statSync(path.join(dir, name)).mtime;
+    windows.push({ name, start, end });
+    start = end;
+  }
+  return windows;
+}
+
+// The real wall-clock window a part covers, read from its own (sub-stream)
+// segments' windows -- not assumed contiguous-from-zero, since a part can
+// start partway through a recording.
+export function partWindow(subDir, part) {
+  const byName = new Map(segmentWindows(subDir).map((w) => [w.name, w]));
+  const matched = part.segments.map((n) => byName.get(n)).filter(Boolean);
+  if (matched.length === 0) return null;
+  return { start: matched[0].start, end: matched[matched.length - 1].end };
+}
+
+// Main's own segments whose real window overlaps the part's.
+export function mainWindowsOverlapping(mainDir, window) {
   if (!existsSync(mainDir)) return [];
-  const span = SEGMENT_MINUTES * 60;
-  const firstIndex = Math.floor(startSec / span);
-  const lastIndex = Math.ceil(endSec / span) - 1;
-  return readdirSync(mainDir)
-    .filter((f) => SEGMENT_RE.test(f))
-    .filter((f) => {
-      const i = segmentIndex(f);
-      return i != null && i >= firstIndex && i <= lastIndex;
-    })
-    .sort();
+  return segmentWindows(mainDir).filter((w) => w.end > window.start && w.start < window.end);
 }
 
 function run(args) {
@@ -139,17 +155,23 @@ async function processOne(camera, fetchReq) {
     return;
   }
   const { mainDir, part } = located;
-  const { startSec, endSec } = partElapsedRange(part);
-  const segmentNames = mainSegmentsForRange(mainDir, startSec, endSec);
-  if (segmentNames.length === 0) return;
+  const window = partWindow(uploadDirFor(mainDir), part);
+  if (!window) return;
+  const mainWindows = mainWindowsOverlapping(mainDir, window);
+  if (mainWindows.length === 0) return;
 
   const outPath = path.join(mkdtempSync(path.join(tmpdir(), "pic-vision-highres-out-")), "clip.mp4");
   try {
     // partStartSec/partEndSec are relative to the PART's own concatenation
-    // (what the pod actually fed to inference), which starts at startSec
-    // into main's segments too -- so the cut below is relative to the
-    // concatenation trimHighRes just built, not to startSec a second time.
-    await trimHighRes(segmentNames.map((n) => path.join(mainDir, n)), partStartSec, partEndSec, outPath);
+    // start (what the pod actually fed to inference, i.e. window.start) --
+    // not necessarily to the first MAIN segment's own start, since segment
+    // boundaries between the two streams don't have to line up. leadSec is
+    // how much earlier main's concatenation begins than the part's real
+    // window; added to both offsets so the cut still lands on the same
+    // real content regardless of that gap.
+    const leadSec = Math.max(0, (window.start.getTime() - mainWindows[0].start.getTime()) / 1000);
+    const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
+    await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
     await uploadHighRes(reelId, outPath);
     logEvent("high_res_reel_synced", `${camera.label}: sent a sharper version of a rally clip`, reelId);
   } finally {
