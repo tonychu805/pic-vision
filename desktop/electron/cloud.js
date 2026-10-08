@@ -14,6 +14,7 @@ import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from 
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
 import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE } from "./autoSplit.js";
+import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
@@ -648,6 +649,14 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
           calibratedAt: c.calibratedAt ?? null,
         });
       }
+    }
+    // Dual-stream plan Stage 5: not awaited -- a trim+encode+upload can run
+    // well past this heartbeat's own cycle, and the heartbeat's liveness
+    // must not wait on it. Each one logs its own failure; one bad fetch
+    // must not look like the heartbeat itself failed.
+    if (Array.isArray(body.pendingHighResFetches)) {
+      processPendingHighResFetches(body.pendingHighResFetches).catch((err) =>
+        console.error(`[cloud] high-res fetch pass failed: ${err.message}`));
     }
   } catch (err) {
     // Console unreachable (offline venue, DNS hiccup, console down) --
