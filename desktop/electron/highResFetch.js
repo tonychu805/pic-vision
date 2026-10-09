@@ -103,6 +103,21 @@ export function mainWindowsOverlapping(mainDir, window) {
   return segmentWindows(mainDir).filter((w) => w.end > window.start && w.start < window.end);
 }
 
+// How much earlier main's concatenation (mainWindows, in order) begins
+// than the part's own real window -- added to partStartSec/partEndSec
+// since segment boundaries between the two streams don't have to line up.
+// Null (not clamped to 0) means main cannot produce a correct cut here:
+// either no overlap at all, or main's earliest overlapping segment starts
+// AFTER the window does -- a coverage gap at the exact moment needed (main
+// dropped out right as the rally began, or hadn't started yet). Clamping
+// a negative gap to 0 would silently shift the cut by the missing amount
+// instead of admitting main can't do this one.
+export function leadSecFor(mainWindows, window) {
+  if (mainWindows.length === 0) return null;
+  const lead = (window.start.getTime() - mainWindows[0].start.getTime()) / 1000;
+  return lead < 0 ? null : lead;
+}
+
 function run(args) {
   return new Promise((resolve, reject) => {
     const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -158,18 +173,17 @@ async function processOne(camera, fetchReq) {
   const window = partWindow(uploadDirFor(mainDir), part);
   if (!window) return;
   const mainWindows = mainWindowsOverlapping(mainDir, window);
-  if (mainWindows.length === 0) return;
+  // partStartSec/partEndSec are relative to the PART's own concatenation
+  // start (what the pod actually fed to inference, i.e. window.start), so
+  // leadSec corrects for main's concatenation starting at a different real
+  // moment -- see leadSecFor's own comment for when that's unrecoverable
+  // (no overlap, or a coverage gap right at the start) rather than just a
+  // boundary mismatch to adjust for.
+  const leadSec = leadSecFor(mainWindows, window);
+  if (leadSec === null) return;
 
   const outPath = path.join(mkdtempSync(path.join(tmpdir(), "pic-vision-highres-out-")), "clip.mp4");
   try {
-    // partStartSec/partEndSec are relative to the PART's own concatenation
-    // start (what the pod actually fed to inference, i.e. window.start) --
-    // not necessarily to the first MAIN segment's own start, since segment
-    // boundaries between the two streams don't have to line up. leadSec is
-    // how much earlier main's concatenation begins than the part's real
-    // window; added to both offsets so the cut still lands on the same
-    // real content regardless of that gap.
-    const leadSec = Math.max(0, (window.start.getTime() - mainWindows[0].start.getTime()) / 1000);
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
     await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
     await uploadHighRes(reelId, outPath);
