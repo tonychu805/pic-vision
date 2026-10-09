@@ -41,7 +41,7 @@ function describeRange(input) {
 }
 
 export default function SettingsPage() {
-  const [primaryCidr, setPrimaryCidr] = useState(null);
+  const [localNetworks, setLocalNetworks] = useState([]);
   const [extraRanges, setExtraRanges] = useState([]);
   const [newRange, setNewRange] = useState("");
   const [rangeError, setRangeError] = useState("");
@@ -59,7 +59,12 @@ export default function SettingsPage() {
   const [timeoutSaved, setTimeoutSaved] = useState(false);
 
   useEffect(() => {
-    window.systemAPI?.getNetworkInfo().then((info) => setPrimaryCidr(info?.cidr ?? null));
+    window.systemAPI?.getNetworkInfo().then((info) => {
+      const networks = info?.networks?.length
+        ? info.networks
+        : info?.cidr ? [{ cidr: info.cidr, interfaceNames: [info.interfaceName], addresses: [info.address] }] : [];
+      setLocalNetworks(networks);
+    });
     window.scanSettingsAPI?.get().then(({ extraRanges, timeoutMs }) => {
       setExtraRanges(extraRanges);
       setTimeoutMsField(String(timeoutMs));
@@ -121,18 +126,25 @@ export default function SettingsPage() {
         <div>
           <div className="page-title" style={{ fontSize: "var(--fs-strong)", margin: "10px 0 2px" }}>Finding cameras</div>
           <p className="page-sub" style={{ margin: 0 }}>
-            "Scan" on the Cameras page already checks your whole network. These settings extend it when the
-            default doesn't cover your setup.
+            "Scan" checks every directly attached network on this computer. Add a range only when cameras live on a
+            separate routed VLAN.
           </p>
         </div>
 
         <div className="card">
           <div className="section-label">Where to look</div>
-          <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
-            <i className="ph ph-wifi-high" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
-            <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{primaryCidr || "detecting…"}</span>
-            <span className="text-4" style={{ fontSize: "var(--fs-fine)" }}>this machine — always scanned</span>
-          </div>
+          {localNetworks.length === 0 ? (
+            <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
+              <i className="ph ph-wifi-high" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>detecting…</span>
+            </div>
+          ) : localNetworks.map((network) => (
+            <div key={network.cidr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
+              <i className="ph ph-network" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{network.cidr}</span>
+              <span className="text-4" style={{ fontSize: "var(--fs-fine)" }}>{network.interfaceNames?.join(", ") || "this machine"} — always scanned</span>
+            </div>
+          ))}
           {extraRanges.map((cidr) => (
             <div key={cidr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
               <i className="ph ph-network" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />

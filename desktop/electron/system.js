@@ -4,7 +4,7 @@
 import { dialog, shell } from "electron";
 import os from "node:os";
 
-function guessCidr(ip, netmask) {
+export function guessCidr(ip, netmask) {
   // netmask -> prefix length (only handles the common contiguous-mask case,
   // which covers every real home/venue subnet this is meant to show).
   const bits = netmask.split(".").reduce((acc, octet) => acc + Number(octet).toString(2).split("1").length - 1, 0);
@@ -15,16 +15,52 @@ function guessCidr(ip, netmask) {
   return `${networkOctets.join(".")}/${bits}`;
 }
 
-export function getNetworkInfo() {
-  const interfaces = os.networkInterfaces();
+// VPNs, containers and hypervisors expose perfectly ordinary IPv4
+// interfaces to Node, but they are not a venue LAN. Scanning them wastes
+// time and, worse, leaves a real second Ethernet/Wi-Fi venue network out
+// simply because Docker happened to be returned first. Keep this deliberately
+// name-based and conservative: unfamiliar adapters are scanned; only common
+// virtual-adapter names are excluded.
+function isVirtualInterface(name) {
+  return /^(lo|docker\d*|br-|veth|virbr|zt|tailscale|utun|tun\d*|tap\d*|wg\d*|vmnet|vboxnet|vEthernet)/i.test(name);
+}
+
+/**
+ * Distinct directly-attached IPv4 LANs, with every local address that lives
+ * on each one. Exported separately so the selection rule is testable without
+ * substituting the operating system's real network interfaces.
+ */
+export function localNetworks(interfaces) {
+  const byCidr = new Map();
   for (const [name, addrs] of Object.entries(interfaces)) {
+    if (isVirtualInterface(name)) continue;
     for (const addr of addrs ?? []) {
-      if (addr.family === "IPv4" && !addr.internal) {
-        return { cidr: guessCidr(addr.address, addr.netmask), interfaceName: name, address: addr.address };
+      if (addr.family !== "IPv4" || addr.internal || !addr.address || !addr.netmask) continue;
+      const cidr = guessCidr(addr.address, addr.netmask);
+      const existing = byCidr.get(cidr);
+      if (existing) {
+        existing.interfaceNames.push(name);
+        existing.addresses.push(addr.address);
+      } else {
+        byCidr.set(cidr, { cidr, interfaceNames: [name], addresses: [addr.address] });
       }
     }
   }
-  return { cidr: null, interfaceName: null, address: null };
+  return [...byCidr.values()];
+}
+
+export function getNetworkInfo() {
+  const networks = localNetworks(os.networkInterfaces());
+  // cidr/interfaceName/address remain for the sidebar and older renderer
+  // code. New callers must use `networks`: a venue can have Wi-Fi and wired
+  // camera LANs at once, and neither deserves to be silently ignored.
+  const primary = networks[0] ?? null;
+  return {
+    cidr: primary?.cidr ?? null,
+    interfaceName: primary?.interfaceNames[0] ?? null,
+    address: primary?.addresses[0] ?? null,
+    networks,
+  };
 }
 
 

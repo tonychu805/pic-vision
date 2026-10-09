@@ -156,6 +156,7 @@ export async function sweepNetwork({
   handshakeTimeoutMs = RTSP_HANDSHAKE_TIMEOUT_MS,
   concurrency = DEFAULT_CONCURRENCY,
   excludeHost = null,
+  excludeHosts = [],
 } = {}) {
   if (!cidr) throw new Error("sweepNetwork requires a cidr (e.g. from system:networkInfo)");
   // Counted before anything is built -- see hostCount().
@@ -164,7 +165,8 @@ export async function sweepNetwork({
     throw new Error(`Refusing to sweep ${total} addresses (cap is ${MAX_HOSTS}) -- ${cidr} is bigger than a normal venue LAN`);
   }
   let hosts = hostsInCidr(cidr);
-  if (excludeHost) hosts = hosts.filter((h) => h !== excludeHost);
+  const excluded = new Set([excludeHost, ...excludeHosts].filter(Boolean));
+  if (excluded.size > 0) hosts = hosts.filter((h) => !excluded.has(h));
 
   const hits = await runPool(hosts, concurrency, async (host) => {
     for (const port of ports) {
