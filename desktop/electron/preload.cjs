@@ -88,6 +88,7 @@ contextBridge.exposeInMainWorld("systemAPI", {
 contextBridge.exposeInMainWorld("captureAPI", {
   status: (cameraId) => ipcRenderer.invoke("capture:status", cameraId),
   listRecordings: (cameraId) => ipcRenderer.invoke("capture:listRecordings", cameraId),
+  retentionSummary: (cameraId) => ipcRenderer.invoke("capture:retentionSummary", cameraId),
 });
 
 contextBridge.exposeInMainWorld("pipelineAPI", {

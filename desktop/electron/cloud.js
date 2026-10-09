@@ -25,6 +25,7 @@ import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
 import { withDeadline } from "./deadline.js";
 import { rememberedResult, rememberResult } from "./commandMemory.js";
+import { retentionSummary } from "./recordingRetention.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -457,6 +458,9 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
     agentId: body.agentId,
     apiToken: body.apiToken,
     brandName: body.brandName,
+    // Retention is a venue policy. Persist the timezone the console owns so
+    // the agent can apply end-of-day deletion even while the console is down.
+    brandTimezone: typeof body.brandTimezone === "string" ? body.brandTimezone : null,
     // Which account this device is registered AS. Without it, signing out
     // and signing in as a different account left the old account's agent
     // id, token and brand in place -- the app said "Connected as <the
@@ -536,6 +540,7 @@ function parseRecordingStartedAt(name) {
 // path itself.
 async function cameraStatuses() {
   const cameras = listCameras();
+  const localRetention = retentionSummary({ timezone: getCloudConnection()?.brandTimezone ?? null });
   const results = await Promise.allSettled(cameras.map((c) => withDeadline(testConnection(c), PROBE_DEADLINE_MS, `Checking ${c.label}`)));
   return cameras.map((c, i) => {
     const recordings = listRecordings(c);
@@ -593,6 +598,10 @@ async function cameraStatuses() {
       streamBitrateKbps: profile?.bitrateKbps ?? c.profile?.bitrateKbps ?? null,
       recordingCount: recordings.length,
       lastRecordingAt: parseRecordingStartedAt(recordings[0]?.name),
+      localRetention: localRetention[c.id] ?? {
+        recording: 0, waitingForReel: 0, waitingAfterEndOfDay: 0,
+        deletesAt: null, readyToDelete: 0,
+      },
     };
   });
 }
@@ -633,8 +642,13 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
     // paired agent within one heartbeat cycle, instead of only ever
     // reflecting whatever the brand was named at pairing time.
     const body = await res.json().catch(() => ({}));
-    if (typeof body.brandName === "string" && body.brandName !== connection.brandName) {
-      saveConnection({ ...connection, brandName: body.brandName });
+    if ((typeof body.brandName === "string" && body.brandName !== connection.brandName)
+      || (typeof body.brandTimezone === "string" && body.brandTimezone !== connection.brandTimezone)) {
+      saveConnection({
+        ...connection,
+        ...(typeof body.brandName === "string" ? { brandName: body.brandName } : {}),
+        ...(typeof body.brandTimezone === "string" ? { brandTimezone: body.brandTimezone } : {}),
+      });
     }
     if (Array.isArray(body.otherAgentNames)) {
       otherAgentNames = body.otherAgentNames.filter((n) => typeof n === "string");

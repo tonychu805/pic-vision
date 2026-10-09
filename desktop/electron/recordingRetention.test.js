@@ -1,40 +1,56 @@
 // The venue computer's recording cleanup (recordingRetention.js).
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
-import { mkdirSync, mkdtempSync, writeFileSync, existsSync, rmSync, linkSync } from "node:fs";
+import { mkdirSync, mkdtempSync, writeFileSync, existsSync, rmSync, linkSync, utimesSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
 // Recordings live under $HOME/pic-vision-recordings, read once at load.
 const home = mkdtempSync(path.join(tmpdir(), "retention-"));
 process.env.HOME = home;
-const { retentionDecision, retentionSweep, reelDoneAt, recordingStartedAt } = await import("./recordingRetention.js");
+const { retentionDecision, retentionSweep, retentionSummary, reelDoneAt, recordingStartedAt, endOfVenueDay } = await import("./recordingRetention.js");
 after(() => rmSync(home, { recursive: true, force: true }));
 
 const DAY = 86_400_000;
 const NOW = Date.parse("2026-09-29T12:00:00.000Z");
 const ago = (days) => NOW - days * DAY;
+const TIMEZONE = "Asia/Taipei";
 
-test("a reel finished over 7 days ago: the recording goes", () => {
-  assert.equal(retentionDecision({ startedAt: ago(9), doneAt: ago(8), busy: false }, NOW).action, "delete");
+test("a reel ready before the venue-local day ends is deleted at midnight", () => {
+  const endedAt = Date.parse("2026-09-29T10:00:00.000Z"); // 18:00 Taipei
+  const deleteAt = endOfVenueDay(endedAt, TIMEZONE);
+  assert.equal(new Date(deleteAt).toISOString(), "2026-09-29T16:00:00.000Z");
+  assert.equal(retentionDecision({ endedAt, doneAt: endedAt, busy: false, timezone: TIMEZONE }, deleteAt - 1).action, "keep");
+  assert.equal(retentionDecision({ endedAt, doneAt: endedAt, busy: false, timezone: TIMEZONE }, deleteAt).action, "delete");
 });
 
-// Paired: 7 days is counted from the reel, not from the recording.
-test("a reel finished under 7 days ago keeps it, however old the recording is", () => {
-  assert.equal(retentionDecision({ startedAt: ago(25), doneAt: ago(6), busy: false }, NOW).action, "keep");
+test("a reel that succeeds after its local day ends deletes promptly", () => {
+  const endedAt = Date.parse("2026-09-28T10:00:00.000Z");
+  assert.equal(retentionDecision({ endedAt, doneAt: NOW, busy: false, timezone: TIMEZONE }, NOW).action, "delete");
 });
 
-test("no reel: kept up to 30 days, warned once the day before, then removed", () => {
-  assert.equal(retentionDecision({ startedAt: ago(10), doneAt: null, busy: false }, NOW).action, "keep");
-  assert.equal(retentionDecision({ startedAt: ago(29.5), doneAt: null, busy: false, warned: false }, NOW).action, "warn");
-  assert.equal(retentionDecision({ startedAt: ago(29.5), doneAt: null, busy: false, warned: true }, NOW).action, "keep");
-  assert.equal(retentionDecision({ startedAt: ago(31), doneAt: null, busy: false }, NOW).action, "delete");
+test("a failed or unsent recording stays past midnight until its reel succeeds", () => {
+  const result = retentionDecision({ endedAt: ago(2), doneAt: null, busy: false, timezone: TIMEZONE }, NOW);
+  assert.equal(result.action, "keep");
+  assert.equal(result.reason, "waiting for reel after end of day");
 });
 
 // Paired with every delete above: nothing in use is ever removed.
 test("a recording in progress, or uploading, is never removed", () => {
-  assert.equal(retentionDecision({ startedAt: ago(60), doneAt: ago(50), busy: true }, NOW).action, "keep");
-  assert.equal(retentionDecision({ startedAt: ago(60), doneAt: null, busy: true }, NOW).action, "keep");
+  assert.equal(retentionDecision({ endedAt: ago(60), doneAt: ago(50), busy: true, timezone: TIMEZONE }, NOW).action, "keep");
+  assert.equal(retentionDecision({ endedAt: ago(60), doneAt: null, busy: true, timezone: TIMEZONE }, NOW).action, "keep");
+});
+
+test("an invalid or missing venue timezone keeps footage rather than guessing", () => {
+  assert.equal(retentionDecision({ endedAt: ago(1), doneAt: ago(1), busy: false, timezone: null }, NOW).action, "keep");
+  assert.equal(retentionDecision({ endedAt: ago(1), doneAt: ago(1), busy: false, timezone: "not/a-timezone" }, NOW).reason, "venue timezone unavailable");
+});
+
+test("the end day follows the last captured segment, not a before-midnight start", () => {
+  const startedAt = Date.parse("2026-09-29T15:50:00.000Z"); // 23:50 Taipei
+  const endedAt = Date.parse("2026-09-29T16:10:00.000Z"); // 00:10 next day
+  assert.equal(new Date(endOfVenueDay(endedAt, TIMEZONE)).toISOString(), "2026-09-30T16:00:00.000Z");
+  assert.ok(endOfVenueDay(endedAt, TIMEZONE) > endOfVenueDay(startedAt, TIMEZONE));
 });
 
 test("only capture.js's timestamp folder names count as recordings", () => {
@@ -49,7 +65,11 @@ const folderName = (ms) => new Date(ms).toISOString().replace(/[:.]/g, "-");
 function recording(camera, startedDaysAgo, { doneDaysAgo = null, parts = null } = {}) {
   const dir = path.join(root, camera, folderName(ago(startedDaysAgo)));
   mkdirSync(dir, { recursive: true });
-  for (let i = 0; i < 3; i++) writeFileSync(path.join(dir, `session-00${i}.mkv`), "x");
+  for (let i = 0; i < 3; i++) {
+    const file = path.join(dir, `session-00${i}.mkv`);
+    writeFileSync(file, "x");
+    utimesSync(file, ago(startedDaysAgo) / 1000, ago(startedDaysAgo) / 1000);
+  }
   if (doneDaysAgo !== null && !parts) {
     mkdirSync(path.join(dir, "cloud_job"));
     writeFileSync(path.join(dir, "cloud_job", "status.json"), JSON.stringify({ stage: "done", done: true, doneAt: new Date(ago(doneDaysAgo)).toISOString() }));
@@ -72,8 +92,12 @@ function dualStreamRecording(camera, startedDaysAgo, { doneDaysAgo = null, parts
   mkdirSync(dir, { recursive: true });
   mkdirSync(subDir, { recursive: true });
   for (let i = 0; i < 3; i++) {
-    writeFileSync(path.join(dir, `session-00${i}.mkv`), "x");
-    writeFileSync(path.join(subDir, `session-00${i}.mkv`), "x");
+    const main = path.join(dir, `session-00${i}.mkv`);
+    const sub = path.join(subDir, `session-00${i}.mkv`);
+    writeFileSync(main, "x");
+    writeFileSync(sub, "x");
+    utimesSync(main, ago(startedDaysAgo) / 1000, ago(startedDaysAgo) / 1000);
+    utimesSync(sub, ago(startedDaysAgo) / 1000, ago(startedDaysAgo) / 1000);
   }
   if (doneDaysAgo !== null && !parts) {
     mkdirSync(path.join(subDir, "cloud_job"));
@@ -109,7 +133,7 @@ test("reelDoneAt also finds a dual-stream camera's per-part completion under the
 
 test("a sweep removes a dual-stream recording's sub-stream sibling together with main, not main alone", () => {
   const { dir, subDir } = dualStreamRecording("cam-dual-old", 12, { doneDaysAgo: 8 });
-  retentionSweep(NOW);
+  retentionSweep({ now: NOW, timezone: TIMEZONE });
   assert.equal(existsSync(dir), false, "main should be removed");
   assert.equal(existsSync(subDir), false, "its sub-stream sibling should go with it, not be left behind");
 });
@@ -117,16 +141,27 @@ test("a sweep removes a dual-stream recording's sub-stream sibling together with
 // Paired: a dual-stream recording still waiting on its reel (or too young
 // to be due) keeps BOTH folders -- the sub sibling is never independently
 // evaluated on its own schedule, since RECORDING_DIR_RE never matches it.
-test("a dual-stream recording not yet due keeps both folders, not just main", () => {
+test("a dual-stream recording waiting for its reel keeps both folders", () => {
   const { dir, subDir } = dualStreamRecording("cam-dual-young", 5);
-  retentionSweep(NOW);
+  retentionSweep({ now: NOW, timezone: TIMEZONE });
   assert.equal(existsSync(dir), true);
   assert.equal(existsSync(subDir), true);
 });
 
+test("the heartbeat summary distinguishes delete-tonight from footage held for a reel without deleting either", () => {
+  const deletesTonight = recording("cam-summary", 0, { doneDaysAgo: 0 });
+  const heldForReel = recording("cam-summary", 4);
+  const summary = retentionSummary({ now: NOW, timezone: TIMEZONE })["cam-summary"];
+  assert.equal(summary.waitingAfterEndOfDay, 1);
+  assert.equal(summary.waitingForReel, 0);
+  assert.equal(typeof summary.deletesAt, "number");
+  assert.equal(existsSync(deletesTonight), true);
+  assert.equal(existsSync(heldForReel), true);
+});
+
 test("a sweep removes exactly the recordings the rules say, and nothing else", () => {
   const oldReel = recording("cam-1", 12, { doneDaysAgo: 8 });
-  const recentReel = recording("cam-1", 11, { doneDaysAgo: 2 });
+  const recentReel = recording("cam-1", 0, { doneDaysAgo: 0 });
   const neverSent = recording("cam-2", 40);
   const young = recording("cam-2", 5);
   const allPartsDone = recording("cam-3", 20, { parts: [{ segments: ["session-000.mkv", "session-001.mkv"], doneDaysAgo: 10 }, { segments: ["session-002.mkv"], doneDaysAgo: 9 }] });
@@ -141,7 +176,7 @@ test("a sweep removes exactly the recordings the rules say, and nothing else", (
   assert.equal(reelDoneAt(partMissing), null); // a piece was never sent
   assert.equal(reelDoneAt(partFailed), null);
 
-  retentionSweep(NOW);
-  for (const gone of [oldReel, neverSent, allPartsDone]) assert.equal(existsSync(gone), false, `${gone} should be removed`);
-  for (const kept of [recentReel, young, partMissing, partFailed, notARecording, outside]) assert.equal(existsSync(kept), true, `${kept} should be kept`);
+  retentionSweep({ now: NOW, timezone: TIMEZONE });
+  for (const gone of [oldReel, allPartsDone]) assert.equal(existsSync(gone), false, `${gone} should be removed`);
+  for (const kept of [recentReel, neverSent, young, partMissing, partFailed, notARecording, outside]) assert.equal(existsSync(kept), true, `${kept} should be kept`);
 });

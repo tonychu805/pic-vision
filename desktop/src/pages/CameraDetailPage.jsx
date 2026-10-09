@@ -414,6 +414,7 @@ function PartedRecording({ camera, recording, onChanged }) {
 // new recording starts while this page is open.
 function CloudPipelineControl({ camera, onCameraUpdated }) {
   const [recordings, setRecordings] = useState([]);
+  const [retention, setRetention] = useState(null);
 
   // Calibration state isn't local: it arrives from the console on the
   // agent's heartbeat (cloud.js's calibrationByCameraId), and cameras:list
@@ -437,7 +438,10 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
     // Refresh sits directly above the calibration line, so it has to mean
     // "re-read everything in this card", not just the recordings list.
     syncCalibration();
-    return window.captureAPI.listRecordings(camera.id).then(setRecordings);
+    return Promise.all([
+      window.captureAPI.listRecordings(camera.id).then(setRecordings),
+      window.captureAPI.retentionSummary(camera.id).then(setRetention),
+    ]);
   };
   useEffect(() => { refresh(); }, [camera.id]);
 
@@ -447,7 +451,10 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
   const anyRecording = recordings.some((r) => r.recording);
   useEffect(() => {
     if (!anyRecording) return undefined;
-    const interval = setInterval(() => { window.captureAPI.listRecordings(camera.id).then(setRecordings); }, 15000);
+    const interval = setInterval(() => {
+      window.captureAPI.listRecordings(camera.id).then(setRecordings);
+      window.captureAPI.retentionSummary(camera.id).then(setRetention);
+    }, 15000);
     return () => clearInterval(interval);
   }, [camera.id, anyRecording]);
 
@@ -468,6 +475,17 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
       </div>
       <FrameRateWarning camera={camera} />
       <CalibrationControl camera={camera} />
+      {retention && (retention.waitingAfterEndOfDay || retention.waitingForReel || retention.deletesAt || retention.recording) && (
+        <p className="text-3" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0" }}>
+          {retention.waitingAfterEndOfDay
+            ? `${retention.waitingAfterEndOfDay} local recording${retention.waitingAfterEndOfDay === 1 ? " is" : "s are"} kept until its reel succeeds.`
+            : retention.waitingForReel
+              ? `${retention.waitingForReel} local recording${retention.waitingForReel === 1 ? " is" : "s are"} waiting for a reel, then delete at the venue's end of day.`
+              : retention.deletesAt
+                ? "Completed local source footage deletes at the venue's end of day."
+                : "A recording is in use and will not be deleted."}
+        </p>
+      )}
       <div style={{ marginTop: 10 }}>
         {recordings.length === 0 ? (
           <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>
