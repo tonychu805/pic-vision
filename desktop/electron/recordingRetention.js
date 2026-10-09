@@ -24,7 +24,7 @@
 import { existsSync, readdirSync, readFileSync, rmSync, statSync } from "node:fs";
 import path from "node:path";
 import Store from "electron-store";
-import { RECORDINGS_ROOT, activeRecordingDirs } from "./capture.js";
+import { RECORDINGS_ROOT, activeRecordingDirs, uploadDirFor } from "./capture.js";
 import { isPipelineRunning } from "./pipeline.js";
 import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { listCameras } from "./cameras/store.js";
@@ -81,14 +81,24 @@ function readStatus(jobDir) {
   }
 }
 
-/** When this recording's reel was finished -- whole, or every part -- or null. */
+/**
+ * When this recording's reel was finished -- whole, or every part -- or
+ * null. Reads from uploadDirFor(recordingDir), not recordingDir itself: a
+ * dual-stream camera's cloud_job/ and parts/ live under its sub-stream
+ * sibling (Stage 2's upload-direction fix), never under main. Reading
+ * `recordingDir` directly for such a camera would never find them -- every
+ * dual-stream recording would read as "no reel ever made" forever, no
+ * matter how many reels it actually produced. A no-op for a single-stream
+ * camera, where uploadDirFor returns recordingDir unchanged.
+ */
 export function reelDoneAt(recordingDir) {
-  const whole = readStatus(path.join(recordingDir, "cloud_job"));
+  const uploadDir = uploadDirFor(recordingDir);
+  const whole = readStatus(path.join(uploadDir, "cloud_job"));
   if (whole?.done) return whole.doneAt;
-  const parts = listParts(recordingDir);
+  const parts = listParts(uploadDir);
   if (parts.length === 0) return null;
   const inParts = new Set(parts.flatMap((p) => p.segments));
-  const segments = readdirSync(recordingDir).filter((f) => SEGMENT_RE.test(f));
+  const segments = readdirSync(uploadDir).filter((f) => SEGMENT_RE.test(f));
   if (!segments.every((f) => inParts.has(f))) return null; // some of it was never sent
   let latest = 0;
   for (const part of parts) {
@@ -99,9 +109,16 @@ export function reelDoneAt(recordingDir) {
   return latest;
 }
 
+// activeDirs.has(recordingDir) alone still covers "is this camera recording
+// right now": activeRecordingDirs() always includes a dual-stream camera's
+// main outDir (capture.js), so this check doesn't need uploadDirFor. The
+// pipeline checks do, for the same reason reelDoneAt's do above -- a job
+// actually runs under the sub-stream sibling, not main.
 function isBusy(recordingDir, activeDirs) {
-  if (activeDirs.has(recordingDir) || isPipelineRunning(recordingDir)) return true;
-  return listParts(recordingDir).some((p) => isPipelineRunning(p.dir));
+  if (activeDirs.has(recordingDir)) return true;
+  const uploadDir = uploadDirFor(recordingDir);
+  if (isPipelineRunning(uploadDir)) return true;
+  return listParts(uploadDir).some((p) => isPipelineRunning(p.dir));
 }
 
 /**
@@ -129,6 +146,13 @@ export function retentionSweep(now = Date.now()) {
       const label = labels.get(cameraId) ?? "a camera that has been removed";
       if (decision.action === "delete") {
         rmSync(dir, { recursive: true, force: true });
+        // A dual-stream camera's sub-stream sibling (Stage 2) is never its
+        // own entry in this loop (RECORDING_DIR_RE doesn't match "-sub"),
+        // so without this it would survive main's deletion forever --
+        // exactly the disk leak this fix closes. Deleted as a unit with
+        // main, not on its own schedule.
+        const subDir = `${dir}-sub`;
+        if (existsSync(subDir)) rmSync(subDir, { recursive: true, force: true });
         delete warned[dir];
         logEvent("recording_deleted", `Removed a recording of ${label} from this computer`,
           decision.reason === "reel done 7+ days ago"
