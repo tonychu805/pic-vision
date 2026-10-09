@@ -49,11 +49,12 @@ async function withServer(handler, run) {
 test("a real successful registration still returns the connection unchanged", async () => {
   await withServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
-    res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+    res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue", brandTimezone: "Asia/Taipei" }));
   }, async (url) => {
     const connection = await registerAgentOnce("access-token", "user-1", url);
     assert.equal(connection.agentId, "agent-1");
     assert.equal(connection.brandName, "Test Venue");
+    assert.equal(connection.brandTimezone, "Asia/Taipei");
   });
   // A successful call starts the heartbeat loop (unrelated to what this
   // test is about) -- without stopping it, its interval keeps firing

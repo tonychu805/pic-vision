@@ -3369,6 +3369,20 @@ Deliberate UX trade-off, decided with the operator: `disable_auto_login=true` me
 
 ---
 
+## ADR-152 — Venue-machine source footage leaves at the venue-local end of day, unless a reel still needs it
+
+**Date:** 2026-10-09 · **Status:** built on branches; not deployed · **Project:** pic-vision / pic-vision-cloud-console
+
+**Context.** ADR-141's 7-day-after-reel / 30-day-without-reel policy leaves raw player footage on a venue machine for substantially longer than its operational purpose. The source must survive a failed upload or processing run so the venue can retry, but it is not an archive. Dual-stream recording makes the deletion rule a paired operation: the main local stream and its sub-stream sibling are one recording, and deleting only one either leaks footage or removes the source required for high-resolution retrieval.
+
+**Decision.** The deadline is the end of the venue-local calendar day in which the recording *ends* (last segment timestamp, not its start). If the reel is complete by that deadline, delete the main and sub-stream folders together. If not, retain them only until the reel completes, then delete on the next minute sweep. Never delete an active recording, upload, or pipeline run. An absent or invalid venue timezone fails safe by retaining footage.
+
+The desktop reports an aggregate per-camera local-source state over its existing heartbeat: recording/in-use count, waiting-for-reel count, overdue waiting count, and the nearest end-of-day deletion timestamp. No paths, filenames, player identity, booking identity, or raw-job state leaves the venue machine. The console stores this summary on the camera row and presents it in the camera detail sheet.
+
+**Verification.** Focused desktop retention tests cover local midnight, post-midnight reel success, failed processing, active work, unknown timezones, a recording spanning midnight, dual-stream paired deletion, and non-destructive heartbeat summary (13 retention tests; 41 targeted desktop tests including cloud/IPC/store guards, all passing). Desktop lint and production renderer build pass; console TypeScript check passes. Still required before release: migration review/application, a complete desktop suite, an installed-artifact test, and a live dual-stream recording through reel completion and deletion.
+
+---
+
 ## ADR-153 — Camera discovery scans every directly attached venue LAN, not the first adapter returned by the OS
 
 **Date:** 2026-10-09 · **Status:** built on branch; not deployed · **Project:** pic-vision

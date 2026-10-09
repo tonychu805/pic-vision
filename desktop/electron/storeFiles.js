@@ -118,7 +118,7 @@ function reencryptFile(file, name) {
 // would otherwise be skipped silently -- getting neither the repair chmod
 // nor the plaintext migration. The list previously named a schedules.json
 // that nothing has ever created, which is what prompted the test.
-export const STORE_FILES = ["auth.json", "cloud.json", "cameras.json", "activityLog.json", "scanSettings.json", "autoSplit.json", "power.json", "bookingRecordings.json", "recordingProcesses.json", "commandResults.json", "recordingRetention.json"];
+export const STORE_FILES = ["auth.json", "cloud.json", "cameras.json", "activityLog.json", "scanSettings.json", "autoSplit.json", "power.json", "bookingRecordings.json", "recordingProcesses.json", "commandResults.json"];
 
 // Files an OLDER build created and nothing writes any more. They're still
 // sitting in userData on every machine that ran that build -- schedules.json
@@ -127,7 +127,7 @@ export const STORE_FILES = ["auth.json", "cloud.json", "cameras.json", "activity
 // from STORE_FILES so the two claims stay distinct: one is "these exist
 // now", the other is "these are leftovers". Removing a store from the app
 // means moving its filename down here, not deleting it.
-export const LEGACY_STORE_FILES = ["schedules.json"];
+export const LEGACY_STORE_FILES = ["schedules.json", "recordingRetention.json"];
 
 export function secureStoreFiles() {
   const dir = app.getPath("userData");

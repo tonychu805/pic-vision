@@ -35,7 +35,7 @@ import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoS
 import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
 import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
-import { retentionSweep } from "./recordingRetention.js";
+import { retentionSweep, retentionSummary } from "./recordingRetention.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
 import { getEvents, clearEvents, logEvent } from "./activityLog.js";
@@ -378,6 +378,12 @@ function registerCaptureHandlers() {
     const camera = listCameras().find((c) => c.id === cameraId);
     if (!camera) throw new Error("Camera not found");
     return listRecordings(camera);
+  });
+  ipcMain.handle("capture:retentionSummary", async (_event, cameraId) => {
+    return retentionSummary({ timezone: getCloudConnection()?.brandTimezone ?? null })[cameraId] ?? {
+      recording: 0, waitingForReel: 0, waitingAfterEndOfDay: 0,
+      deletesAt: null, readyToDelete: 0,
+    };
   });
 }
 
@@ -725,12 +731,19 @@ app.whenReady().then(() => {
       syncCommandChannel().catch(() => {}); // instant commands where possible; the poll is the floor
       // A booking's recording stops on this machine's clock, internet or not.
       setInterval(() => { bookingEndTick().catch((err) => console.error(`[recordings] booking end: ${err.message}`)); }, BOOKING_END_TICK_MS);
-      // Recordings leave this computer 7 days after their reel (30 if none
-      // was ever made) -- after recovery, so nothing it resumes is judged
-      // mid-restart. Hourly: the rules are in days.
-      const sweep = () => { try { retentionSweep(); } catch (err) { console.error(`[recordings] retention: ${err.message}`); } };
+      // A completed reel lets its source leave at the venue-local end of
+      // recording day; a failed one stays only until retry succeeds. After
+      // recovery, so nothing it resumes is judged mid-restart. The saved
+      // console timezone is deliberately required: if it is unavailable we
+      // keep safely rather than deleting against this Mac's clock. Run each
+      // minute rather than hourly: this is a local directory scan, and an
+      // end-of-day promise cannot be fulfilled up to 59 minutes late.
+      const sweep = () => {
+        try { retentionSweep({ timezone: getCloudConnection()?.brandTimezone ?? null }); }
+        catch (err) { console.error(`[recordings] retention: ${err.message}`); }
+      };
       sweep();
-      setInterval(sweep, 60 * 60 * 1000);
+      setInterval(sweep, 60 * 1000);
     });
   setInterval(() => { autoSplitTick().catch((err) => console.error(`[autosplit] ${err.message}`)); }, AUTO_SPLIT_TICK_MS);
   // Catches two cases where sign-in's own registration didn't happen or
