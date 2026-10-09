@@ -43,8 +43,14 @@ def test_concat_clips_returns_none_for_empty(tmp_path):
 def test_cut_clips_applies_padding(monkeypatch, tmp_path):
     calls = []
 
-    def fake_run(cmd, check):
+    class FakeResult:
+        stdout = "11.0"
+
+    def fake_run(cmd, **kwargs):
+        if cmd[0] == "ffprobe":
+            return FakeResult()
         calls.append(cmd)
+        return None
 
     monkeypatch.setattr(render.subprocess, "run", fake_run)
     segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
@@ -65,13 +71,39 @@ def test_cut_clips_applies_padding(monkeypatch, tmp_path):
 # -- otherwise a reader of manifest.json (now including pic-vision's
 # pod_driver.py, persisted as a rally's part_start_sec/part_end_sec) thinks
 # the clip is 2*pad_sec shorter than it really is.
+def _fake_run_with_probed_duration(seconds):
+    """clip_command's own subprocess.run call is a no-op (cmd[0] == 'ffmpeg');
+    probe_duration's is answered with `seconds`, as real ffprobe output."""
+    class FakeResult:
+        stdout = str(seconds)
+
+    def fake_run(cmd, **kwargs):
+        return FakeResult() if cmd[0] == "ffprobe" else None
+    return fake_run
+
+
 def test_cut_clips_manifest_reports_the_padded_range_not_the_raw_one(monkeypatch, tmp_path):
-    monkeypatch.setattr(render.subprocess, "run", lambda cmd, check: None)
+    monkeypatch.setattr(render.subprocess, "run", _fake_run_with_probed_duration(11.0))
     segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
     manifest = cut_clips("game.mp4", segs, str(tmp_path), pad_sec=3.0)
     assert manifest[0]["start"] == 57.0
     assert manifest[0]["end"] == 68.0
     assert manifest[0]["duration"] == 11.0
+
+
+# The actual bug this closes: a rally ending within pad_sec of the source
+# video's own end asks ffmpeg to cut past where the video stops, and ffmpeg
+# just ends the file early there instead of failing. manifest.json must
+# say what's REALLY in the file (9s here), not the inflated 11s that was
+# asked for -- a desktop later trimming its own high-res recording to this
+# value needs the truth, not the request.
+def test_cut_clips_manifest_reports_the_real_shorter_duration_when_the_source_runs_out(monkeypatch, tmp_path):
+    monkeypatch.setattr(render.subprocess, "run", _fake_run_with_probed_duration(9.0))
+    segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
+    manifest = cut_clips("game.mp4", segs, str(tmp_path), pad_sec=3.0)
+    assert manifest[0]["start"] == 57.0
+    assert manifest[0]["end"] == 66.0  # 57 + 9.0 real duration, not 68.0 requested
+    assert manifest[0]["duration"] == 9.0
 
 
 def test_manifest_entry_carries_court_time_score():
