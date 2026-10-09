@@ -65,6 +65,65 @@ function recording(camera, startedDaysAgo, { doneDaysAgo = null, parts = null } 
   return dir;
 }
 
+// ---- dual-stream: cloud_job/parts live under the sub-stream sibling, not main (Stage 2) ----
+function dualStreamRecording(camera, startedDaysAgo, { doneDaysAgo = null, parts = null } = {}) {
+  const dir = path.join(root, camera, folderName(ago(startedDaysAgo)));
+  const subDir = `${dir}-sub`;
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(subDir, { recursive: true });
+  for (let i = 0; i < 3; i++) {
+    writeFileSync(path.join(dir, `session-00${i}.mkv`), "x");
+    writeFileSync(path.join(subDir, `session-00${i}.mkv`), "x");
+  }
+  if (doneDaysAgo !== null && !parts) {
+    mkdirSync(path.join(subDir, "cloud_job"));
+    writeFileSync(path.join(subDir, "cloud_job", "status.json"), JSON.stringify({ stage: "done", done: true, doneAt: new Date(ago(doneDaysAgo)).toISOString() }));
+  }
+  if (parts) {
+    parts.forEach(({ segments, doneDaysAgo: d }, n) => {
+      const partDir = path.join(subDir, "parts", `part-0${n + 1}`);
+      mkdirSync(path.join(partDir, "cloud_job"), { recursive: true });
+      for (const s of segments) linkSync(path.join(subDir, s), path.join(partDir, s));
+      writeFileSync(path.join(partDir, "cloud_job", "status.json"), JSON.stringify(d === null ? { stage: "error", done: false } : { stage: "done", done: true, doneAt: new Date(ago(d)).toISOString() }));
+    });
+  }
+  return { dir, subDir };
+}
+
+// The bug this guards against: reelDoneAt(dir) used to read cloud_job/
+// and parts/ from `dir` itself. For a dual-stream camera those live under
+// `${dir}-sub` (the Stage 2 upload-direction fix routes every real upload
+// there), so main never has them -- every dual-stream recording read as
+// "no reel ever made", forever, however many reels it actually produced.
+test("reelDoneAt reads a dual-stream camera's completion from its sub-stream sibling, not main", () => {
+  const { dir } = dualStreamRecording("cam-dual-whole", 12, { doneDaysAgo: 8 });
+  assert.equal(reelDoneAt(dir), ago(8));
+});
+
+test("reelDoneAt also finds a dual-stream camera's per-part completion under the sub sibling", () => {
+  const { dir } = dualStreamRecording("cam-dual-parts", 20, {
+    parts: [{ segments: ["session-000.mkv", "session-001.mkv"], doneDaysAgo: 10 }, { segments: ["session-002.mkv"], doneDaysAgo: 9 }],
+  });
+  assert.equal(reelDoneAt(dir), ago(9));
+});
+
+test("a sweep removes a dual-stream recording's sub-stream sibling together with main, not main alone", () => {
+  const { dir, subDir } = dualStreamRecording("cam-dual-old", 12, { doneDaysAgo: 8 });
+  retentionSweep(NOW);
+  assert.equal(existsSync(dir), false, "main should be removed");
+  assert.equal(existsSync(subDir), false, "its sub-stream sibling should go with it, not be left behind");
+});
+
+// Paired: a dual-stream recording still waiting on its reel (or too young
+// to be due) keeps BOTH folders -- the sub sibling is never independently
+// evaluated on its own schedule, since RECORDING_DIR_RE never matches it.
+test("a dual-stream recording not yet due keeps both folders, not just main", () => {
+  const { dir, subDir } = dualStreamRecording("cam-dual-young", 5);
+  retentionSweep(NOW);
+  assert.equal(existsSync(dir), true);
+  assert.equal(existsSync(subDir), true);
+});
+
 test("a sweep removes exactly the recordings the rules say, and nothing else", () => {
   const oldReel = recording("cam-1", 12, { doneDaysAgo: 8 });
   const recentReel = recording("cam-1", 11, { doneDaysAgo: 2 });
