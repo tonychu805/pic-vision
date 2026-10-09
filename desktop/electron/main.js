@@ -190,25 +190,41 @@ function registerCameraHandlers() {
   ipcMain.handle("system:networkInfo", async () => {
     return getNetworkInfo();
   });
-  // Sweeps the auto-detected primary subnet (unchanged, real-error-on-
-  // failure behavior kept exactly as before) plus any operator-added
-  // extra ranges (scanSettings.js) -- those are best-effort: a bad or
-  // oversized extra range (sweepNetwork's own MAX_HOSTS guard) is logged
-  // and skipped rather than failing the whole scan, since the primary
-  // range may have found real cameras already.
+  // Sweeps every directly attached, non-virtual IPv4 subnet -- never just
+  // whichever adapter the OS happened to list first -- plus any operator-
+  // added camera VLANs. Extra ranges are best-effort: a bad or oversized
+  // one is logged and skipped rather than hiding cameras found elsewhere.
   ipcMain.handle("cameras:sweep", async () => {
-    const { cidr, address } = getNetworkInfo();
+    const info = getNetworkInfo();
+    const automaticRanges = info.networks?.length
+      ? info.networks
+      : info.cidr ? [{ cidr: info.cidr, addresses: [info.address] }] : [];
+    if (automaticRanges.length === 0) throw new Error("No active IPv4 network found to scan");
     const timeoutMs = getTimeoutMs();
     // Started now, awaited after the sweep: SSDP is a fixed listening
     // window, so running it alongside the port scan costs nothing, and
     // the descriptions can only be fetched once we know which hosts the
     // scan actually found (2026-09-09).
     const ssdpResponders = probeSsdp();
-    const primaryHits = await sweepNetwork({ cidr, timeoutMs, excludeHost: address });
+    const automaticResults = await Promise.allSettled(
+      automaticRanges.map(({ cidr, addresses }) => sweepNetwork({ cidr, timeoutMs, excludeHosts: addresses })),
+    );
+    const primaryHits = [];
+    let automaticError = null;
+    automaticResults.forEach((result, i) => {
+      if (result.status === "fulfilled") primaryHits.push(...result.value);
+      else {
+        automaticError ??= result.reason;
+        console.error(`[scan] local network ${automaticRanges[i].cidr} failed: ${result.reason?.message}`);
+      }
+    });
+    if (automaticResults.every((result) => result.status === "rejected")) throw automaticError;
 
-    const extraRanges = getExtraRanges().filter((r) => r !== cidr);
+    const automaticCidrs = new Set(automaticRanges.map((range) => range.cidr));
+    const allLocalAddresses = automaticRanges.flatMap((range) => range.addresses);
+    const extraRanges = getExtraRanges().filter((r) => !automaticCidrs.has(r));
     const extraResults = await Promise.allSettled(
-      extraRanges.map((r) => sweepNetwork({ cidr: r, timeoutMs, excludeHost: address })),
+      extraRanges.map((r) => sweepNetwork({ cidr: r, timeoutMs, excludeHosts: allLocalAddresses })),
     );
 
     const seen = new Set(primaryHits.map((h) => h.hostname));
