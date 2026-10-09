@@ -110,6 +110,15 @@ def probe_width(video):
     return int(out.strip())
 
 
+def probe_duration(video):
+    """A file's real duration in seconds, read back rather than assumed."""
+    out = subprocess.run(
+        ["ffprobe", "-v", "error", "-show_entries", "format=duration",
+         "-of", "default=noprint_wrappers=1:nokey=1", video],
+        capture_output=True, text=True, check=True).stdout
+    return float(out.strip())
+
+
 def manifest_entry(seg, rally_id, file, court_id=None, session_id=None):
     """One browse-ready record for a cut clip: court + session + time + score."""
     return {
@@ -161,17 +170,25 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
         end = seg["end"] + pad_sec
         log.info("[%d/%d] %.1f–%.1fs  (%.1fs, %d crossings)",
                  i, n, start, end, end - start, seg.get("crossings", 0))
-        subprocess.run(clip_command(video, start, end, os.path.join(out_dir, fname),
+        out_path = os.path.join(out_dir, fname)
+        subprocess.run(clip_command(video, start, end, out_path,
                                     logo_path=logo_path, video_width=video_width), check=True)
-        # The padded start/end actually cut into the file, not seg's raw
-        # detection bounds -- manifest_entry's own docstring calls this "a
-        # browse-ready record... for a cut clip", and the pad is exactly
-        # what distinguishes the two. Nothing read this distinction before
-        # Stage 3 (pic-vision's pod_driver.py) started persisting it as a
-        # rally's part_start_sec/part_end_sec; a desktop later trimming its
-        # own local high-res recording to those seconds would otherwise cut
-        # 2*pad_sec short of what the existing (lower-res) clip already shows.
-        manifest.append(manifest_entry({**seg, "start": start, "end": end}, i, fname, court_id, session_id))
+        # The padded start/end actually requested, EXCEPT end is corrected
+        # to the file's own real duration rather than trusted as cut --
+        # a rally within pad_sec of the source video's own end asks ffmpeg
+        # to cut past where the video actually stops, and ffmpeg just ends
+        # the file early there rather than failing. Reading the real
+        # duration back (same idea as probe_width above) catches that and
+        # any other reason the real file might be shorter than requested,
+        # instead of assuming the request is what landed. Needed because
+        # manifest_entry's own docstring calls this "a browse-ready record
+        # ... for a cut clip" -- it must describe the file, not the ask.
+        # Nothing read this distinction closely before Stage 3 (pic-vision's
+        # pod_driver.py) started persisting it as a rally's
+        # part_start_sec/part_end_sec, which a desktop now trims its own
+        # local high-res recording to.
+        real_end = start + probe_duration(out_path)
+        manifest.append(manifest_entry({**seg, "start": start, "end": real_end}, i, fname, court_id, session_id))
     with open(os.path.join(out_dir, "manifest.json"), "w") as f:
         json.dump({"video": video, "court_id": court_id, "session_id": session_id,
                    "clips": manifest}, f, indent=2)
