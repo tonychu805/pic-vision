@@ -14,7 +14,7 @@ import { FFMPEG, FFPROBE } from "./binaries.js";
 const home = mkdtempSync(path.join(tmpdir(), "high-res-fetch-"));
 process.env.HOME = home;
 const { RECORDINGS_ROOT } = await import("./capture.js");
-const { findRecordingForPart, partWindow, mainWindowsOverlapping, trimHighRes } = await import("./highResFetch.js");
+const { findRecordingForPart, partWindow, mainWindowsOverlapping, leadSecFor, trimHighRes } = await import("./highResFetch.js");
 
 // startRecording's own folder-naming convention -- recordingStartedAt
 // parses exactly this shape back into the instant it names.
@@ -122,13 +122,35 @@ test("a stream that reconnected and drifted still finds the right main segments,
   const mainWindows = mainWindowsOverlapping(mainDir, window);
   assert.deepEqual(mainWindows.map((w) => w.name), ["session-002.mkv", "session-003.mkv"]);
 
-  // leadSec (the same arithmetic processOne uses): main's segment 2 starts
-  // 45s before the part's real window -- exactly the drift that accrued.
-  const leadSec = (window.start.getTime() - mainWindows[0].start.getTime()) / 1000;
-  assert.equal(leadSec, DRIFT_SEC);
+  // leadSecFor: main's segment 2 starts 45s before the part's real window
+  // -- exactly the drift that accrued.
+  assert.equal(leadSecFor(mainWindows, window), DRIFT_SEC);
 
   rmSync(mainDir, { recursive: true, force: true });
   rmSync(subDir, { recursive: true, force: true });
+});
+
+// ---------- leadSecFor: when main can't produce a correct cut ----------
+
+test("leadSecFor is null with no overlapping main segments, not a thrown or wrong number", () => {
+  assert.equal(leadSecFor([], { start: new Date(0), end: new Date(600_000) }), null);
+});
+
+// Found in code review: a NEGATIVE gap (main's earliest overlapping
+// segment starts AFTER the part's window does -- main dropped out right
+// as the rally began, or hadn't started recording yet) used to be clamped
+// to 0 and silently fed into the cut, shifting it by the missing amount.
+// Treated the same as no overlap at all: null, not a guess.
+test("leadSecFor is null, not clamped to 0, when main starts after the part's window begins", () => {
+  const window = { start: new Date(1200_000), end: new Date(1800_000) };
+  const mainWindows = [{ name: "session-003.mkv", start: new Date(1800_000), end: new Date(2400_000) }];
+  assert.equal(leadSecFor(mainWindows, window), null);
+});
+
+test("leadSecFor is a real positive number when main's segment starts exactly on the window", () => {
+  const window = { start: new Date(1200_000), end: new Date(1800_000) };
+  const mainWindows = [{ name: "session-002.mkv", start: new Date(1200_000), end: new Date(1800_000) }];
+  assert.equal(leadSecFor(mainWindows, window), 0);
 });
 
 // ---------- trimHighRes: real ffmpeg, synthetic data ----------
