@@ -12,8 +12,9 @@ import { hostname } from "node:os";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
-import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
+import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
 import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE } from "./autoSplit.js";
+import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
@@ -649,6 +650,14 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
         });
       }
     }
+    // Dual-stream plan Stage 5: not awaited -- a trim+encode+upload can run
+    // well past this heartbeat's own cycle, and the heartbeat's liveness
+    // must not wait on it. Each one logs its own failure; one bad fetch
+    // must not look like the heartbeat itself failed.
+    if (Array.isArray(body.pendingHighResFetches)) {
+      processPendingHighResFetches(body.pendingHighResFetches).catch((err) =>
+        console.error(`[cloud] high-res fetch pass failed: ${err.message}`));
+    }
   } catch (err) {
     // Console unreachable (offline venue, DNS hiccup, console down) --
     // logged, not thrown; the loop just tries again next interval rather
@@ -933,11 +942,15 @@ function sendRecordingToCloud(camera, recordingDir, sessionIdOverride) {
 // recordings sent in parts; awaited only as far as creating the part.
 // Otherwise the whole recording goes when `send` says so (a booking).
 async function finishRecording(camera, outDir, { send }) {
+  // outDir is always main's -- everything upload-related routes it through
+  // uploadDirFor so a dual-stream camera's sub-stream (Stage 2), not its
+  // full-res main, is what actually gets chunked/uploaded.
+  const uploadDir = uploadDirFor(outDir);
   if (getAutoSplitMinutes() > 0) {
-    await sendDueParts(camera, outDir, { stillRecording: false, flush: true });
+    await sendDueParts(camera, uploadDir, { stillRecording: false, flush: true });
     return;
   }
-  if (send) sendRecordingToCloud(camera, outDir);
+  if (send) sendRecordingToCloud(camera, uploadDir);
 }
 
 // ---------- bookings end on this machine's clock (bookingRecordings.js) ----------
@@ -992,11 +1005,17 @@ export async function bookingEndTick(now = Date.now()) {
         forgetBookingRecording(note);
         continue;
       }
-      if (reachedConsole(note.outDir)) {
+      // note.outDir is always main's. uploadDirFor resolves the directory
+      // that's actually chunked/uploaded for it (a dual-stream camera's
+      // sub-stream, Stage 2) -- every check below reads tracking state
+      // (cloud_job/, pipeline.js's own active map) that only ever lives
+      // under that directory, never under main's.
+      const uploadDir = uploadDirFor(note.outDir);
+      if (reachedConsole(uploadDir)) {
         forgetBookingRecording(note);
         continue;
       }
-      if (bookingSendsInFlight.has(note.outDir) || isPipelineRunning(note.outDir)) continue;
+      if (bookingSendsInFlight.has(note.outDir) || isPipelineRunning(uploadDir)) continue;
       if (!sendDue(note, now)) continue;
       if (note.lastSendAt) logEvent("pipeline_started", `Trying again to send ${camera.label}'s booking`, note.outDir);
       updateBookingRecording(note, { stopped: true, lastSendAt: now });
@@ -1004,8 +1023,8 @@ export async function bookingEndTick(now = Date.now()) {
       // Not awaited: an upload takes as long as the uplink needs. Whether it
       // reached the console is re-checked on a later tick, from disk.
       Promise.resolve(getAutoSplitMinutes() > 0
-        ? sendDueParts(camera, note.outDir, { stillRecording: false, flush: true })
-        : sendRecordingToCloud(camera, note.outDir))
+        ? sendDueParts(camera, uploadDir, { stillRecording: false, flush: true })
+        : sendRecordingToCloud(camera, uploadDir))
         .catch((err) => console.error(`[recordings] sending ${camera.label}: ${err.message}`))
         .finally(() => bookingSendsInFlight.delete(note.outDir));
     }
@@ -1077,7 +1096,9 @@ export async function autoSplitTick() {
   for (const camera of listCameras()) {
     if (camera.connectionType === "sampleClip") continue;
     const dir = activeOutDir(camera.id);
-    if (dir) await sendDueParts(camera, dir, { stillRecording: true, flush: false }).catch((err) => console.error(`[autosplit] ${camera.label}: ${err.message}`));
+    // uploadDirFor: a dual-stream camera (Stage 2) auto-splits its
+    // sub-stream, not its full-res main -- main stays local-only.
+    if (dir) await sendDueParts(camera, uploadDirFor(dir), { stillRecording: true, flush: false }).catch((err) => console.error(`[autosplit] ${camera.label}: ${err.message}`));
   }
 }
 
@@ -1088,7 +1109,7 @@ export async function autoSplitSendNow(cameraId) {
   const dir = activeOutDir(cameraId);
   if (!dir) throw new Error(`${camera.label} isn't recording`);
   if (!getAutoSplitMinutes()) throw new Error("Turn on sending in parts in Settings first");
-  const sent = await sendDueParts(camera, dir, { stillRecording: true, flush: true });
+  const sent = await sendDueParts(camera, uploadDirFor(dir), { stillRecording: true, flush: true });
   return { sent };
 }
 
