@@ -36,6 +36,16 @@ See `.gitignore` for the full list. In short: commit `eval/labels/*.jsonl` (hand
 
 `python3 -m pytest -q` or `make test`. Tests live in `tests/`.
 
+## Reporting repo state
+
+PRs are merged on GitHub, which moves `origin/main` but not the local `main`, so
+the local `main` is routinely stale. Before saying whether a branch is merged,
+ahead/behind, or unpushed, run `make repo-status` — it fetches first, then
+compares against `origin/main`. Never judge merge state from the local `main`
+or from an old fetch (on 2026-10-11 that called five merged branches
+"unmerged"). A squash-merged branch still reads "NOT merged" there; confirm
+those on GitHub.
+
 ## Delivery and release gates
 
 `main` is the integration branch, not a scratchpad. Put a code, configuration,
