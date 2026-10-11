@@ -1,10 +1,15 @@
-.PHONY: eval test process runner
+.PHONY: eval test process runner repo-status
 
 eval:
 	python3 -m eval.harness --pred rallies.json --labels eval/labels/IMG_7652.jsonl
 
 test:
 	python3 -m pytest -q
+
+# Fetch, then report branch/merge/unpushed/worktree state against origin/main.
+# Run before saying whether anything is merged or behind (see CLAUDE.md).
+repo-status:
+	@bash scripts/repo_status.sh
 
 # Operator-side job runner (ADR-084): claims jobs the venue desktop apps
 # enqueue on the cloud console and runs the pipeline here. Needs
