@@ -2558,3 +2558,21 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 | Encode time (clip 1) | 1.29s | 3.52s |
 
 **Conclusion: a real difference exists on paper (bitrate roughly 2.3x higher) but read as marginal on actual phone playback across both test pairs.** Operator's verdict after watching both pairs on a real device: "difference is marginal." More than doubling output size and encode time for a marginal visual gain isn't worth it. **Not changing `render.py`'s encode settings, and not pursuing the original resolution-increase idea either** -- between no detection-accuracy case (already established) and no clearly-visible quality win from the cheaper encode-quality lever (this entry), neither route to "better-looking clips" earns its cost right now.
+
+## 2026-10-11 — Can a ball trace / top-down court map be drawn from one behind-baseline camera? Partly; not worth shipping as a feature
+
+**Why.** PIC-193 (Court Moments) proposed ball overlays and a calibrated top-down trajectory as its first, "independently shippable" step. Tried it on `brickwall_30fps` (pilot set of 9 labelled rallies; deep-dived on r24, 12:43–12:51) before building anything on top of it. Not a scored run: no IoU or precision/recall number; checked by playback and by label-free physical checks.
+
+**Setup.** `scripts/ball_trail_overlay.py` (trail on the video frame), `scripts/ball_court_map.py` (floor projection through the calibration homography), `scripts/ball_court_map_3d.py` (camera pose recovered from the homography alone, then a ballistic arc per flight segment under known gravity; constraints: above the floor, inside a plausible volume; a weak "balls are usually hit low" prior at 8 px/ft; net contact as an event).
+
+**Findings.**
+- **Naive floor projection is wrong for airborne balls.** Only 34% of gated detections land on the court, 61% within 6 ft; median projected depth 45 ft on a 44 ft court.
+- **Camera pose is recoverable from the calibration** (f≈673 px, camera ≈(9.8, −11.1, 8.4) ft, principal point assumed at image centre, no distortion). Independent check: the net-tape points, not used in the solve, reconstruct at x=−1.1/21.1 ft and z=3.03 ft (net posts are 36 in). The orthogonality-based focal estimate (1164 px) put the posts 9 ft up and was rejected.
+- **A non-orthonormal rotation silently broke the arc fit** (~7 px of error on noise-free synthetic data) until snapped to a true rotation by SVD.
+- **Arcs fit long flights (0.6–1.2 s, 17–33 detections) well; short arcs are ambiguous** — the image can't tell depth, and pixel error stays small while 3D is wrong. 5–6 of 10–11 arcs pass the physical checks on r24.
+- **Far-end depth is near-degenerate from this camera.** A ball 6 ft up at the net (image row 243) and one 3 ft up at the far baseline (row 260) are ~17 px apart; half of all detections sit in rows 240–300. Without the height prior only 2.5% of fitted positions were beyond 33 ft; at 8 px/ft it is ~22%, but that is an assumption, not a measurement.
+- **Occlusion produces confident wrong geometry.** At 12:46.5 the white player covers the ball near the kitchen and the fit bridged the gap as a "net crossing" at 1.0 ft. Fixed symptomatically (a crossing below 2 ft is not accepted as contact); the real fix needs player boxes (PIC-197).
+- **Net contact at ~12:48.6–12:48.7 on r24** is found by an "arc ends at the net near net height" rule. 1 of 3 candidates was right before tightening, 1 of 1 after. Tuned on one rally; not validated on the other eight.
+- **Forcing arcs over the net backfired**: it bent real net hits upward. Net clearance is now an event, not a constraint.
+
+**Conclusion.** A trustworthy top-down ball path is feasible only for long, unoccluded flights; far end and net contacts are the least reliable, and those are exactly the interesting moments. Ball traces are not a deliverable (operator decision, 2026-10-11). The scripts stay as internal diagnostics. Ball-derived *signals* (bounces, net contact, speed) are still candidates if a highlight type needs them. Tickets: PIC-195/204/205/206 parked; PIC-196 (fast exchange, ball-only) is the next step.
