@@ -11,7 +11,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { readdirSync, statSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 
 const ROOT = path.dirname(fileURLToPath(import.meta.url));
 
@@ -26,7 +26,7 @@ function modules(dir = ROOT) {
 test("every main-process module imports cleanly", async () => {
   for (const file of modules()) {
     await assert.doesNotReject(
-      () => import(file),
+      () => import(pathToFileURL(file).href), // a bare D:\\ path is not a valid ESM specifier on Windows
       `${path.relative(ROOT, file)} failed to import`,
     );
   }

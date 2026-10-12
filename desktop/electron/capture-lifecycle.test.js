@@ -95,7 +95,14 @@ test("a recording left running by a crash is stopped at the next launch", async 
   const stopped = await cleanUpOrphanedRecordings({ graceMs: 5000, entries: { cam: { main: { pid: orphan.pid, outDir } } } });
   await exited(orphan);
   assert.deepEqual(stopped, [{ cameraId: "cam", outDir }]);
-  assert.equal(orphan.signalCode ?? orphan.exitCode, 0); // clean SIGINT exit, not a hard kill
+  if (process.platform === "win32") {
+    // No clean channel for an orphan on Windows (its stdin pipe died with
+    // the app that owned it): this is a hard stop there, by design. What
+    // must still hold is that it is actually gone.
+    assert.notEqual(orphan.exitCode, null);
+  } else {
+    assert.equal(orphan.signalCode ?? orphan.exitCode, 0); // clean SIGINT exit, not a hard kill
+  }
 });
 
 // Paired: process numbers get reused. A live process that ISN'T our
