@@ -2885,3 +2885,32 @@ A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a
 **Why every filter failed.** Scenery is present during real play too (208: a real rally with glare), which is why dropping detections (mask, dwell, confidence) cost real rallies.
 
 **Conclusion.** Scenery is the largest false-alarm class that is a TRACKING problem (practice is context). The remaining untested form is choosing the ball AMONG several candidates per frame instead of dropping points: write the top few blobs per frame from the heatmap (GPU re-inference), then choose by expected motion plus a dwell penalty (Test B). Needs a pre-registered bar before running.
+
+## 2026-10-12 (session context) — Practice is re-hit within seconds; real points are followed by a pause. A gap rule removes about half the practice at almost no cost: PASS
+
+**Why.** PIC-226. An external discussion on separating warm-up from match play (written mostly for badminton) suggested temporal structure instead of ball statistics: a real point is followed by a stoppage (players walk back, fetch the ball, reset); warm-up / drills re-hit immediately. Two ideas were testable offline: post-rally gaps, and speed variance. `scripts/validate_session_context.py`, GPU-free, production segments from `base.detect`.
+
+**Direction and bar fixed before running.** Gap before / gap after: practice SHORTER. Rallies within 60 s: practice HIGHER. Speed variability (std/mean of tracked-ball speed): practice LOWER. Bar per feature: AUC practice-vs-real >= 0.75 in the expected direction on the judged field clips AND, at the practice median, flags <= 15% of the 90 hand-graded dev rallies. IMG_7743 not read.
+
+| Feature (medians) | Real field (60) | Practice (15) | Very short (10) | Graded dev (90) | AUC | Flags dev at practice median | |
+|---|---|---|---|---|---|---|---|
+| Gap before the rally (s) | 18.6 | **4.1** | 23.7 | 14.9 | **0.86** | 3% | **PASS** |
+| Gap after the rally (s) | 23.7 | **3.9** | 8.8 | 15.0 | **0.87** | 2% | **PASS** |
+| Rallies within +/-60 s | 2 | 4 | 2 | 3 | 0.82 | 36% | fail |
+| Speed variability | 0.85 | **1.07** | 1.05 | 0.87 | 0.40 | 78% | fail (reversed) |
+
+**A rule from it (grid not pre-registered): flag as practice-like if the gap before AND the gap after are both <= T s.**
+
+| T | Practice caught (of 15) | Real field lost (of 60) | Graded dev lost (of 90) | Very short caught (of 10) | Other not-a-rally caught (of 10) |
+|---|---|---|---|---|---|
+| 4 s | 3 | 0 | 0 | 0 | 0 |
+| 5-6 s | **8 (53%)** | **1 (2%)** | **0 (0%)** | 0 | 0 |
+| 8 s | 8 | 3 (5%) | 0 | 0 | 0 |
+| 10 s | 8 | 5 (8%) | 4 (4%) | 0 | 0 |
+| 12 s | 8 | 7 (12%) | 8 (9%) | 2 | 1 |
+
+**Reading.** This is the first rally-level rule in this investigation that costs almost nothing: at T = 5-6 s it flags 8 of 15 practice clips, loses 1 of 60 real field clips and 0 of 90 graded dev rallies. It does NOT touch the other classes (very short 0 of 10; scenery / other not-a-rally 0 of 10), and it cannot judge a rally with no neighbour on one side (3 of 15 practice, 10 of 60 real). Speed variability is reversed again, consistent with the rhythm test: practice here is MORE variable, not less, so the suggested "low variance = warm-up" rule does not hold for this footage.
+
+**Caveats.** n = 15 practice clips, one venue, two days, in-sample; the T grid was read off the curve after the AUC bar was passed. Gaps are between DETECTED rallies, so detection misses (about 20% of frames seen) and false detections both move them. Not shipped. Needs a fresh session and an ADR before it touches ranking.
+
+**Conclusion.** Temporal context between rallies separates much of the practice that no ball-path statistic could. It is the strongest lead so far for the 11-of-24 practice class. Untested from the same discussion: serve-position stillness before a rally (needs person tracks), and score-calling by voice (pickleball-specific; audio is recorded; consent-gated).
