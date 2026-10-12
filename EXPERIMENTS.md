@@ -2662,3 +2662,19 @@ By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) b
 **Why, honestly: not established.** Two readings fit and the data here cannot choose: (1) the strip is the net itself, and real rallies in that video were being counted partly *because of* detections on it; (2) real ball detections cross the same net squares often enough to trip the 20x rule. Either way the crossing line is exactly where a per-video square count cannot tell scenery from ball. Close-ups at three times (stills) cannot show a ball that passes through occasionally.
 
 **Conclusion.** A global per-video detection mask is **not safe** and is not to be built as specified. The failed-serve problem is real; this fix is the wrong shape. The rally-level alternative (flag a rally when one tiny square holds a large share of *its own* tracked points) flagged 0 of 89 graded real rallies and 0 of 31 unlabelled dev detections, and O at 48% (6 of 187 field rallies); it does not alter tracking. That is the next thing to verify, by watching the other 5 flagged field rallies, before any threshold is trusted (30% was chosen after seeing O).
+
+## 2026-10-12 (last) — Two alternatives to the failed mask: high-confidence-only and a trajectory check. Neither works
+
+**Why.** PIC-226. After the scenery mask failed, the operator asked what happens if we trust only high-confidence detections and add trajectory estimation. `scripts/validate_conf_and_trajectory.py`; same pass rule as the mask test, fixed before running: (a) zero graded rallies lost, (b) clip O gone, (c) the six real field clips kept, (d) pooled chance q1>q2 not >0.03 below unfiltered. IMG_7743 not read.
+
+| Variant | Graded rallies (90) | O | Real field clips kept | Pooled chance | Verdict |
+|---|---|---|---|---|---|
+| confidence >= 0.60 | **25 lost** | gone | **1 of 6** | 0.650 -> 0.601 | FAIL |
+| confidence >= 0.65 | **48 lost** | gone | **1 of 6** | 0.650 -> 0.462 | FAIL |
+| trajectory check (no jump-away-and-back-to-the-same-spot within 6 px / 1 s) | 0 lost | **still there** | 6 of 6 | 0.650 -> 0.657 | FAIL (b) |
+
+**Confidence.** There is a weak separation across a whole session: at >= 0.60, 30% of the sunlight detections survive vs 56-61% of the other detections, but the **real ball's confidence is low too** (only 56% of a real rally session's detections reach 0.60, 34% reach 0.65). Any cut-off that removes the sunlight removes most real detections and most real rallies. (This corrects an earlier statement that confidence "does not separate": it separates slightly, uselessly.)
+
+**Trajectory.** Harmless (0 graded lost, 6/6 real field clips kept, score marginally up) but **does not touch O**. Post-hoc sensitivity, labelled as such: tolerance 6 / 12 / 18 / 24 px; O is still there at every setting and a graded rally is lost from 18 px up. So O's crossings are not the simple "A, B, A" return this check assumes (the hops in O are spaced 5-29 frames apart and may not return within 1 s).
+
+**Conclusion.** Neither is the answer. A trajectory estimator in the sense PIC-3 intends (fit a ballistic arc and reject points off it) is not what was tested here and remains untried; the ball-trace experiment (2026-10-11) found arcs fit only long, clean flights. Next candidate: the rally-level flag (one tiny square holding a large share of a rally's own tracked points), verified by watching the 5 other flagged field rallies.
