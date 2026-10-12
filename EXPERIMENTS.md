@@ -2723,3 +2723,30 @@ By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) b
 **Caveats.** n = 40 and one venue on two days: the interval is about +/-15 points. The top-3 group looking better than random (65% vs 45%) is inside that noise. The sample excludes the 16 clips already judged (which included known false alarms), so this is, if anything, a less pessimistic sample than the full pool. Recall (missed rallies) is not measured.
 
 **Conclusion.** Detection precision on real venue footage is a first-order problem. A large share of it is not tracker error but **context**: real hitting that is practice, not a game (machine drills, warm-up). A better ball detector would not fix those; context signals (session/booking info, number and arrangement of players, machine-regular serve timing) might. Needs the reasons for the 8 unexplained clips before choosing where to spend effort.
+
+## 2026-10-12 (precision, corrected) — Reasons for the unexplained clips change three verdicts; precision is about 60%, and two thirds of the false alarms are practice, not tracking
+
+**Correction to the entry above.** After the operator explained the eight clips left unexplained, three verdicts changed: **20** and **31** are real rallies (single players on a side: >= 3 contacts, so a rally under LABELING v5), and **35** is "can't tell" (the video cut out before the serve was returned). Nothing else was re-judged. The earlier entry is left as written; this supersedes its numbers.
+
+| Group | n | Real | Very short | Not a rally | Can't tell | Real % of decided (95%) |
+|---|---|---|---|---|---|---|
+| All | 40 | **24** | 4 | **11** | 1 | **62%** (46-77%) |
+| Random | 20 | 10 | 3 | 6 | 1 | 53% (30-75%) |
+| Top 3 per session | 20 | 14 | 1 | 5 | 0 | 70% (50-90%) |
+
+If "very short" is counted as real: 72% (58-86%) overall.
+
+**Decision rule (more than 10 false in 40):** not-real = 15 (strict "not a rally" only = 11). **Crossed under both readings, but only by one clip under the strict one.** The honest statement is "likely below the 75% bar, not firmly": under the lenient reading the interval straddles it.
+
+**What the 15 not-real clips were (operator):**
+- warm-up: **5** (18, 24, 26, 37, 39)
+- ball-machine drill: **4** (03, 21, 30, 36)
+- serve + return only: **4** (07, 14, 15, 40)
+- serve out of bounds (a fault): **1** (09)
+- feeding (far-side player hitting the ball back for the near side to serve): **1** (29)
+
+**10 of 15 are practice, not game play.** None of the 40 was a sunlight / reflection false alarm, as far as the operator's notes say. The earlier failed-serve cases (O, M) were excluded from the sample by design, so this does not mean they are rare in the pool, only that none turned up in 40 fresh clips.
+
+**Ranking.** 6 of the 15 not-real clips were top 3 in their session, scoring 82-98: **37 (warm-up, 98/100, 73 s, rank 1)**, 24 (warm-up, 89), 21 (machine, 86), 29 (feeding, 84), 30 (machine, 84), 14 (serve + return only, 82). The top-3 group is cleaner than random (70% vs 53%), but that gap is inside the noise.
+
+**Conclusion.** Detector precision on real venue footage is roughly 60%, probably under the 75% bar. The dominant cause is **practice activity that looks like play** (warm-up, ball-machine drills, feeding), not ball-tracking error. That is a context problem: the ball is real and the crossings are real. Candidate context signals (untested): session / booking information, player count and arrangement, machine-regular serve timing, the same people hitting before the session start. A second class is serve-and-return-only points the detector wrongly extends (4) and a serve fault (1). Needs: a LABELING row for ball-machine drills and feeding, and a decision on whether practice should be excluded from reels or merely ranked lower.
