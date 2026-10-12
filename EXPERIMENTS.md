@@ -2849,3 +2849,23 @@ A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a
 **"Cut off".** The operator flagged 7 real review clips as cut off. The source video had 3 to 9 minutes after each rally's end, so it was not the recording; the review clips used a 1 s tail while the reel pipeline pads 3 s each side (`PAD_SEC = 3.0`). Re-cut with 3 s: only clip 139 was reported as still cut off. Read as: mostly my review clips' padding, with at least one residual case (139) where the detector's end is early.
 
 **Conclusion.** Precision at the head of the ranking is about 2 in 3 and about 4 in 5 at rank 1. The largest single false class is very short points (a detector firing on 6 crossings where there were two shots), which is more mechanical than practice and is the next thing to look at. Reel quality for "great rallies only" is not available from the shipped score alone.
+
+## 2026-10-12 (very short) — Can duration or pace remove the "very short" false rallies? No: they are not short and have the same crossing pattern as real rallies
+
+**Why.** PIC-226. 9-10 of the not-real clips in the top-5 sample were "very short" points (serve + return only, which LABELING v5 does not count as a rally) that the detector reported because it counted >= 6 crossings. Hypothesis: they are short, so a minimum-duration or pace rule would remove most of them. `scripts/validate_short_rule.py`.
+
+**Bar, written before running (all three):** removes >= 60% of the very short field clips; loses <= 10% of judged real field clips; loses <= 5% of the 90 hand-graded dev rallies. Grid fixed up front: duration cut-offs 4-9 s, crossings/s cut-offs 2.0-3.5. In-sample, so a pass would only be a candidate for a fresh sample. IMG_7743 not read.
+
+**Result: hypothesis wrong, no rule passes.** Medians over the judged field clips matched to a detected rally:
+
+| | n | Duration (s) | Crossings | Crossings / s |
+|---|---|---|---|---|
+| Real | 60 | 10.1 | 10 | 1.05 |
+| Very short | 10 | **9.0** | **10** | 1.11 |
+| Not a rally | 25 | 14.1 | 14 | 1.15 |
+
+"Very short" refers to the PLAY, not the clip: these detected segments are as long as real rallies and carry the same number of crossings. Best duration rule (< 8 s) removes 4 of 10 very short but also 22 of 60 real field clips (37%) and 31 of 90 graded dev rallies (34%). Pace rules remove 0-1 of 10.
+
+**Follow-up (exploratory, formed after the failure, not pre-registered).** If the detector had counted an early burst, a pause, then unrelated activity, "<= 3-5 crossings, a pause >= 1.5-2 s, then >= 3 more" would flag the very short clips. It does not: the very short clips have a median of 8 crossings before their biggest pause (real: 4), and the rule flags 23 of 60 real field clips against 2 of 10 very short.
+
+**Conclusion.** No duration, pace or pause-structure rule on crossing times separates the operator's "very short" points from real rallies. The detector found about 10 crossings in about 9 s where the operator saw a serve and a return, so what produced the other crossings is unknown. Possibilities, untested: ball handling or courtesy returns after the point, another ball, or the ball bouncing over the net line in the picture. Next: look at what the detector actually followed in 2-3 of these clips (ball-path overlay) before choosing a fix.
