@@ -164,9 +164,11 @@ jobs:
         run: |
           ASAR=$(find release -path "*win-unpacked/resources/app.asar" -print -quit)
           echo "checking $ASAR"
-          npx --yes @electron/asar list "$ASAR" > asar.txt
+          # `asar list` prints native separators, i.e. backslashes on Windows.
+          npx --yes @electron/asar list "$ASAR" | tr '\\' '/' > asar.txt
           for pkg in electron-store onvif oui-data posthog-node; do
-            grep -q "node_modules/$pkg/" asar.txt || { echo "MISSING $pkg in asar"; exit 1; }
+            grep -q "node_modules/$pkg/" asar.txt || {
+              echo "MISSING $pkg in asar; first entries were:"; head -20 asar.txt; exit 1; }
           done
           UNPACKED="$(dirname "$ASAR")/app.asar.unpacked/node_modules"
           test -f "$UNPACKED/ffmpeg-static/ffmpeg.exe" || { echo "ffmpeg.exe not unpacked"; exit 1; }
