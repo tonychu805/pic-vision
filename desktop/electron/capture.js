@@ -594,6 +594,37 @@ function requestCleanStop(proc) {
   }
 }
 
+// On Windows ffmpeg reads "q" only between blocking calls, so a stop that
+// arrives while it is still trying to connect waits out that attempt (~15 s
+// to a camera that isn't answering) -- and a wedged one would wait forever,
+// which on a signal-capable platform can't happen. Past this the process is
+// terminated: a damaged last segment is the lesser evil next to a recording
+// that can never be stopped. 0 disables the fallback (POSIX, where SIGINT
+// always lands).
+const STOP_GRACE_MS = IS_WINDOWS ? 20_000 : 0;
+
+// Stop one ffmpeg the clean way and resolve when it has actually exited.
+// `clean` and `graceMs` are parameters only so the fallback is testable on
+// any platform.
+export function stopProcess(proc, { clean = requestCleanStop, graceMs = STOP_GRACE_MS } = {}) {
+  return new Promise((resolve) => {
+    let timer = null;
+    proc.once("exit", () => {
+      if (timer) clearTimeout(timer);
+      resolve();
+    });
+    clean(proc);
+    if (graceMs > 0) {
+      timer = setTimeout(() => {
+        if (proc.exitCode === null && proc.signalCode === null) {
+          logEvent("recording_stop_forced", `ffmpeg ignored a clean stop for ${graceMs / 1000}s; terminated it`);
+          proc.kill();
+        }
+      }, graceMs);
+    }
+  });
+}
+
 // Clean stop only -- SIGINT (stdin "q" on Windows), never SIGKILL (ADR-031: a hard kill was
 // observed to corrupt the output container). ffmpeg finalizes the
 // current segment on SIGINT and exits on its own; this resolves once
@@ -625,10 +656,7 @@ function stopActiveRecording(cameraId, rec) {
   const stopSlot = (slot) => {
     const proc = slot.proc;
     if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
-    return new Promise((resolve) => {
-      proc.once("exit", resolve);
-      requestCleanStop(proc);
-    });
+    return stopProcess(proc);
   };
 
   return Promise.all([stopSlot(rec.main), rec.sub ? stopSlot(rec.sub) : Promise.resolve()]).then(() => {

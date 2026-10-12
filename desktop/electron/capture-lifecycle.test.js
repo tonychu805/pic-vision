@@ -16,7 +16,7 @@ import path from "node:path";
 const home = mkdtempSync(path.join(tmpdir(), "capture-lifecycle-"));
 process.env.HOME = home;
 process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
-const { startRecording, stopRecording, isRecording, activeRecordingDirs, cleanUpOrphanedRecordings, uploadDirFor, listRecordings } = await import("./capture.js");
+const { stopProcess, startRecording, stopRecording, isRecording, activeRecordingDirs, cleanUpOrphanedRecordings, uploadDirFor, listRecordings } = await import("./capture.js");
 
 // Two independent silent "cameras" -- a dual-stream camera's main and sub
 // profiles are two different RTSP URLs, which in reality means two
@@ -219,4 +219,28 @@ test("listRecordings marks the currently-recording folder as recording, dual-str
   assert.equal(recording.dir, outDir);
   assert.equal(recording.recording, true);
   await stopRecording(cam.id);
+});
+
+// The bounded stop (Windows: ffmpeg reads "q" only between blocking calls, so
+// a wedged one could never be stopped). Platform-independent: the clean-stop
+// action and the grace period are parameters.
+const wedgedChild = () =>
+  spawn(process.execPath, ["-e", "process.on('SIGINT', () => {}); setInterval(() => {}, 1000)"], { stdio: ["pipe", "ignore", "ignore"] });
+
+test("a process that ignores the clean stop is terminated after the grace period", async () => {
+  const proc = wedgedChild();
+  await new Promise((r) => setTimeout(r, 200));
+  const t0 = Date.now();
+  await stopProcess(proc, { clean: () => {}, graceMs: 400 });
+  assert.notEqual(proc.exitCode ?? proc.signalCode, null);
+  assert.ok(Date.now() - t0 < 5000, "must not wait indefinitely");
+});
+
+// Paired: the fallback must not fire on a process that DOES stop cleanly --
+// a hard kill is the corruption case (ADR-031), only a last resort.
+test("a process that stops on the clean request is not terminated by the fallback", async () => {
+  const proc = spawn(process.execPath, ["-e", "process.stdin.on('data', () => process.exit(0)); setInterval(() => {}, 1000)"], { stdio: ["pipe", "ignore", "ignore"] });
+  await new Promise((r) => setTimeout(r, 200));
+  await stopProcess(proc, { clean: (p) => p.stdin.write("q"), graceMs: 5000 });
+  assert.equal(proc.exitCode, 0); // its own clean exit, not killed
 });

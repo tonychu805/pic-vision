@@ -42,6 +42,9 @@ on:
 jobs:
   build:
     runs-on: macos-latest
+    # A normal run is ~2-4 min. Without this a hung test holds a runner for
+    # GitHub's 6-hour default (one did, 2026-10-12, until cancelled by hand).
+    timeout-minutes: 20
     strategy:
       fail-fast: false
       matrix:
@@ -123,6 +126,7 @@ jobs:
 
   build-windows:
     runs-on: windows-latest
+    timeout-minutes: 20
     defaults:
       run:
         shell: bash
@@ -185,6 +189,7 @@ jobs:
     needs: [build, build-windows]
     if: startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     permissions:
       contents: write
     steps:
