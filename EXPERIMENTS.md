@@ -2803,3 +2803,20 @@ Practice is **less** regular than real rallies, not more.
 Machine drills look different (everyone far from the net, spread across nearly the full 20 ft width); warm-ups look like games by position. Two clips each; a lead, not a result.
 
 **Conclusion.** Person detection sees the players at our geometry (no false boxes; far side boxed always or mostly in 9 of 10), so tracks and player count are worth building for their own sake (kitchen presence, chase, funny moments). It will not, by count, tell practice from play; arrangement may catch machine drills but probably not warm-ups. Next: define "mostly" with the operator, then pre-register an arrangement test on the 34 judged field clips (24 real, 10 practice) before concluding anything.
+
+## 2026-10-12 (dwell) — Test A: dropping detections that keep reappearing in the same pixels. Costs real rallies about as fast as it removes false ones: FAIL
+
+**Why.** PIC-226. Idea from the operator: penalise a candidate that sits in the same pixels for many frames (a ball in flight does not; scenery does). Test A applies it to the single-candidate stream already cached, no GPU. `scripts/validate_dwell.py`. For each in-court detection, count earlier detections within R = 6 px in the previous 30 frames; drop it if the count is >= K, before tracking.
+
+**Fixed before running** (physics, not from clips O or M): R = 6 px, window 30 frames, K = 4 (primary) and K = 8 (conservative). **Pass rule:** (a) zero of the 90 graded dev rallies lost, (b) zero of the operator-judged real field clips lost, (c) clip O gone, (d) pooled chance q1>q2 not >0.03 worse. Judged field set: 55 clips (33 real, 22 not a rally; "very short" counted as not a rally per LABELING v5; clip 35 excluded as undecided). IMG_7743 not read.
+
+| K | Graded dev lost | Real field clips lost | Not-a-rally clips removed (of 22) | O gone | Verdict |
+|---|---|---|---|---|---|
+| 4 | 1 of 90 | **3** (T, X, 32) | 4 (O, U, V, 21) | yes | FAIL (a)(b) |
+| 8 | 0 of 90 | 0 | 1 (W) | **no** | FAIL (c) |
+
+**Exploratory sweep, not pre-registered:** K = 5: lose 2 real, remove 3 not-rally, O stays. K = 6: lose 1 real, remove 1. K = 7: nothing lost, nothing removed, O stays. No setting removes more false rallies than it loses real ones by any useful margin; the results are not even monotonic in K (removing detections changes how tracks and crossing clusters form), and the number of detected rallies in those sessions **rises** from 187 to 190-197, i.e. dropping detections also fragments some rallies.
+
+**Reading.** The rule is blunt in the same way as the scenery mask and the one-spot flag: real rallies can contain scenery (the real rally flagged T and the control X lose detections here and were also caught by the one-spot flag). A filter that drops detections can't distinguish "a real rally with a bright spot in the frame" from "a fake rally made of bright spots". Choosing the ball AMONG candidates in each frame (several blobs per frame plus motion consistency) is the idea this does not test.
+
+**Conclusion.** Not shipped. Test B (top 3 blobs per frame from the heatmap, GPU re-inference on the judged clips, candidate choice by expected motion plus a dwell penalty) is the remaining untested form of the idea. Before spending on it: the sunlight-type false alarm is a minority of the 22 not-a-rally clips (most are practice or very short points), so a perfect tracker fix would move precision by a few points, not to 90%.
