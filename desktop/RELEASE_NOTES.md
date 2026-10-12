@@ -1,5 +1,32 @@
 # Release notes
 
+## 1.9.0 — 2026-10-12
+
+**A small release: the console can now see which version of the app each
+machine is running.**
+
+- **New: this machine tells the console which version it is running.**
+  Each check-in now includes the app's version and whether it is a Mac or a
+  Windows machine. The console's Overview page shows both next to every
+  connected machine, and marks the ones that are behind the newest
+  release. Before this, there was no way to tell from the console which
+  venues were still on an old build. It changes nothing on this machine
+  and does not update anything: updating is still done by downloading the
+  new version from the console's Settings, Desktop app page.
+- **No other changes.** Recording, uploading, footage clearing and camera
+  search behave exactly as in 1.8.0.
+
+### Worth knowing
+
+- Machines still on 1.8.0 or older show as "Not reported" in the console
+  until they are updated to this version. That is expected, not a fault.
+- Windows and Mac builds are both unsigned, as before: Windows shows
+  "Windows protected your PC" (More info, then Run anyway), and macOS needs
+  System Settings, Privacy & Security, Open Anyway.
+- Not yet checked on a real machine: that a packaged build reports its own
+  version to the console. Look for it in the Overview page after the first
+  machine updates.
+
 ## 1.8.0 — 2026-10-12
 
 **This is the first release since 1.7.3 (2026-10-06) and it is a large one:
