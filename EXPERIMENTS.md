@@ -2869,3 +2869,19 @@ A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a
 **Follow-up (exploratory, formed after the failure, not pre-registered).** If the detector had counted an early burst, a pause, then unrelated activity, "<= 3-5 crossings, a pause >= 1.5-2 s, then >= 3 more" would flag the very short clips. It does not: the very short clips have a median of 8 crossings before their biggest pause (real: 4), and the rule flags 23 of 60 real field clips against 2 of 10 very short.
 
 **Conclusion.** No duration, pace or pause-structure rule on crossing times separates the operator's "very short" points from real rallies. The detector found about 10 crossings in about 9 s where the operator saw a serve and a return, so what produced the other crossings is unknown. Possibilities, untested: ball handling or courtesy returns after the point, another ball, or the ball bouncing over the net line in the picture. Next: look at what the detector actually followed in 2-3 of these clips (ball-path overlay) before choosing a fix.
+
+## 2026-10-12 (scenery verified) — Fixed bright spots are in 8 of 8 answered scenery-heavy clips, and they explain the mystery of some "very short" rallies
+
+**Why.** PIC-226. A fixed-spot measure (share of a rally's tracked points in squares re-detected >= 20x the median across the recording) flagged 9 judged not-real clips with >= 30% in such squares (3 "very short", 6 other not-a-rally), against 2 of 60 real rallies and 0 of 15 practice clips. The operator's own reasons had listed sunlight only once, so this needed checking by eye. `scripts/make_hotspot_check.py`: red rings on the fixed spots, green trail on the detector's path, 3 s padding as the reel, silent, 720p.
+
+**Operator's playback verdicts (9 clips, 201-209).**
+- What is inside the rings: **light, glare or bright dots in 8 of 8 answered** (206 not answered).
+- Real rally present: only a serve + return **3** (201, 202, 207); no rally at all **5** (203, 204, 205, 206, 209); a real rally **1** (208, glare also present).
+
+**What it explains.** The "very short" mystery (about 10 crossings in about 9 s where a person sees two shots, previous entry): for 3 of the 10 it is fixed bright spots hopping against the real serve and return. The other very short clips (and those below the 30% line) remain unexplained.
+
+**Scenery share of the false alarms.** Top-5 sample, 24 not-real slots: practice 11, **scenery verified 5**, serve + return only with no scenery found 6, other 2. Counting the earlier judged clips outside the top-5 slots (O, S, U, V, W, Z and others), scenery is at least 9 clips in total. The earlier "sunlight is 1 of 70" came from the operator's stated reasons and **understated it**.
+
+**Why every filter failed.** Scenery is present during real play too (208: a real rally with glare), which is why dropping detections (mask, dwell, confidence) cost real rallies.
+
+**Conclusion.** Scenery is the largest false-alarm class that is a TRACKING problem (practice is context). The remaining untested form is choosing the ball AMONG several candidates per frame instead of dropping points: write the top few blobs per frame from the heatmap (GPU re-inference), then choose by expected motion plus a dwell penalty (Test B). Needs a pre-registered bar before running.
