@@ -2607,3 +2607,35 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 **Conclusion.** Against the PIC-196 gate as written ("a feature that demonstrably tracks human grades is kept; otherwise record 'no signal' and stop ball-only work"): **no feature demonstrably beats the shipped score**. Whether to stop ball-only work, or to test it against category labels instead of the pooled grade, is the operator's decision (not made here). One analysis over four videos from three venues is not a go/no-go; a second session is still required.
 
 **Next, if ball-only work continues.** Label a small set of rallies by type on the pilot set (PIC-203/219), then test whether pace share / kitchen score / escalation separate *those* types, judged on playback (PIC-209).
+
+## 2026-10-12 (later) — Blind playback check of "fast exchange", and what it exposed: reflections and tosses scored as top rallies (PIC-226)
+
+**Why.** Follow-up to the entry above (ball-only features vs the grades). The grade is the wrong target for a *type* of highlight, so the operator watched 18 silent clips cut by pace share and judged each "fast exchange / not fast". Scripts: `scripts/make_blind_check.py` (4 graded dev videos, 10 clips) and `scripts/make_blind_check_field.py` (PGC field test 9/25-26, 8 clips); answer key in `cache/` (not committed). Clips contain third-party venue footage and are not committed.
+
+**Definition agreed (operator, PIC-203).** A *fast exchange* is a burst **inside** a rally of 3 or more quick hard hits in a row (not 1 or 2); "fast" = ball speed. A single fast ball is a *hard shot*. The first check measured the share of the **whole rally** with fast readings, the wrong shape for a burst.
+
+**Results.**
+- The operator called 2 of 18 clips fast (B, C). High-pace group 1 of 9, low-pace group 1 of 9: no separation. The four highest-pace clips (O, M, J, Q) were all "not fast".
+- **O and M were not rallies at all** (failed serves). O: most marked points were light reflections. M: a player tossed the ball across the net. Rescored on the 16 real rallies: high 1 of 7, low 1 of 9. A burst-shaped measure (most hard shots in any 3 s) puts B first of 16 (tied with I) and C near the middle; two examples, exploratory, not a result.
+- **The shipped scorer ranked O 87/100, 1st of 17 in its session and 6th of 187 field-test "rallies".** M 57/100, 7th of 13.
+
+**Why (all checked in code/data).**
+- `track_ball` rejects only jumps > 150 px; no trajectory check (PIC-3 open). TrackNet confidence is passed but unused and does **not** separate ball from reflection (median 0.58 on a real rally, 0.58 on O, 0.64 on M).
+- One detection per frame, so two balls are never marked at once, but the single pick can hop between objects.
+- Speed / hard shots use **every** in-court detection, not the tracked ball: O has 69 hard readings raw vs 9 tracked-only; median over 187 field rallies 12 vs 3.
+- On a real rally (Q) TrackNet detects the ball on ~20% of frames, 14% survive tracking; the court gate is not the cause (in-court share = detected share).
+- The detector is the production one: `src/rallies.detect_candidates` unchanged since 9/23, weights `weights_k14_epoch19`; harness and production give identical segments on both sessions.
+
+**Tracked-only speed vs the grades** (`scripts/validate_tracked_speed.py`, rule fixed before running; 90 graded rallies, four dev videos, IMG_7743 not read):
+
+| Variant | Pooled chance q1>q2 | q1 mean higher on |
+|---|---|---|
+| raw (as shipped) | 0.649 | 2 of 4 videos |
+| tracked-only, half-point 12 | 0.660 | 3 of 4 |
+| tracked-only, half-point 6 (re-scaled) | 0.660 | 3 of 4 |
+
+By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) both tracked variants are "not acceptable" on criterion (b). **That rule was set too high: the shipped raw score itself meets only 2 of 4**, so it cannot be what decides. The fair reading: tracked-only is no worse and slightly better (0.660 vs 0.649, far inside noise at n=90), and partially fixes the symptom (O 87 -> 74, rank 1 -> 3 of 17). It is not a demonstrated improvement, and it does not remove O from the top three.
+
+**Conclusion.** Not shipped. Tracked-only speed is a low-risk, partial mitigation worth keeping on the list, but the failed-serve problem has three causes (reflections, tosses, low yield) and none is fixed by it alone. The earlier pace-share "no signal" used raw speeds and is unreliable; fast exchange is unresolved, not refuted. Needs: a second session, an ADR before any change to ADR-133's score, and contact information (players PIC-197 or audio PIC-225) for hit-vs-toss.
+
+**Next.** (1) Redo the fast-exchange check on tracked-only speeds; (2) decide whether to add a trajectory-smoothness constraint (PIC-3) and a minimum-segment filter (`track_ball`'s existing `min_seg_frames`/`min_seg_span`, off by default) and test them against O and M and the graded videos.
