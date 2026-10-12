@@ -2776,3 +2776,30 @@ Practice is **less** regular than real rallies, not more.
 - Reversed direction, **exploratory and not pre-registered**: AUC 0.78 (cv_gap) / 0.76 (max_gap_ratio), but at the practice median it flags 25% / 12% of real field rallies and **20% / 26% of graded dev game rallies**, over the 15% line. Not usable.
 
 **Conclusion.** Crossing rhythm cannot separate practice from real rallies at this sample size, and my hypothesis was wrong in direction. Untested reasons for the reversal: warm-ups and feeding include pick-ups, mishits and casual pauses; machine drills mix a regular serve with irregular returns. Next candidates need context rather than ball-path statistics: booking/session schedule, player count and arrangement (person boxes, PIC-197), time within a session.
+
+## 2026-10-12 (players) — Can an off-the-shelf person detector see the far-side players on real venue footage? Largely yes; count alone does not separate practice from play (PIC-197)
+
+**Why.** PIC-197 gate, agreed with the operator before any number: far-side players boxed on >= 80% of frames in >= 7 of 10 clips; false boxes in <= 10% of frames; judged on playback. `scripts/person_probe.py`: 10 clips from the 40-clip field sample, `yolov8x-pose.pt` (person class only, local weights, no download), imgsz 1280, 5 fps sampling, anonymous boxes, overlays drawn for the operator. Third-party venue footage; clips not committed.
+
+**A method error, caught before reporting.** The first automatic pass split near / far using the net-TAPE line in the image and reported far-side coverage in only 2 of 10 clips. The tape sits ~3 ft above the floor, so a far-side player near the kitchen has feet *below* the tape line and was filed as near. Rebuilt using each person's feet placed on the court through the calibration homography (0.17 ft RMSE): far-side person boxed on 100% of frames in 9 of 10 clips (85% and 32% in the two others). The first number was wrong because of the method, not the detector.
+
+**Operator's playback verdicts (10 clips):**
+- Far side boxed: always 5 (01, 20, 24, 31, 37), mostly 4 (02, 03, 04, 21), sometimes 1 (09, the out-of-bounds serve).
+- Boxes on non-people: none in 10 of 10.
+- People actually playing: 1-2 (20), 3 (31), 4 in the other eight.
+
+**Against the bars.** False boxes: **met** (10 of 10 none). Far side boxed: **depends on the word "mostly"**: strict (only "always" counts) 5 of 10, NOT met; lenient (mostly >= 80%) 9 of 10, met. Left to the operator to define.
+
+**People count.** The automatic median on court is within one person of the operator's count in all 10 clips (exactly equal in 6-7). Over-counts of one in 02 and 24, an under-count of one in 09 (the far side missed).
+
+**Count does not separate practice from play.** Games (01, 02, 04), machine drills (03, 21) and warm-ups (24, 37) all have 4 people. Descriptive arrangement numbers (n = 10 clips, **not a test**):
+
+| Kind | People far / near | Spread across court (ft) | Nearest person to net (ft) |
+|---|---|---|---|
+| Real doubles (3) | 2/2, 2/3, 2/2 | 10.5-11.6 | 8.1-11.1 |
+| Machine drill (2) | 2/2, 1/3 | **19.0-19.4** | **17.1-21.3** |
+| Warm-up (2) | 2/3, 2/2 | 12.6-14.4 | 7.6-7.7 |
+
+Machine drills look different (everyone far from the net, spread across nearly the full 20 ft width); warm-ups look like games by position. Two clips each; a lead, not a result.
+
+**Conclusion.** Person detection sees the players at our geometry (no false boxes; far side boxed always or mostly in 9 of 10), so tracks and player count are worth building for their own sake (kitchen presence, chase, funny moments). It will not, by count, tell practice from play; arrangement may catch machine drills but probably not warm-ups. Next: define "mostly" with the operator, then pre-register an arrangement test on the 34 judged field clips (24 real, 10 practice) before concluding anything.
