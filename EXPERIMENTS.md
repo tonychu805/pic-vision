@@ -2750,3 +2750,29 @@ If "very short" is counted as real: 72% (58-86%) overall.
 **Ranking.** 6 of the 15 not-real clips were top 3 in their session, scoring 82-98: **37 (warm-up, 98/100, 73 s, rank 1)**, 24 (warm-up, 89), 21 (machine, 86), 29 (feeding, 84), 30 (machine, 84), 14 (serve + return only, 82). The top-3 group is cleaner than random (70% vs 53%), but that gap is inside the noise.
 
 **Conclusion.** Detector precision on real venue footage is roughly 60%, probably under the 75% bar. The dominant cause is **practice activity that looks like play** (warm-up, ball-machine drills, feeding), not ball-tracking error. That is a context problem: the ball is real and the crossings are real. Candidate context signals (untested): session / booking information, player count and arrangement, machine-regular serve timing, the same people hitting before the session start. A second class is serve-and-return-only points the detector wrongly extends (4) and a serve fault (1). Needs: a LABELING row for ball-machine drills and feeding, and a decision on whether practice should be excluded from reels or merely ranked lower.
+
+## 2026-10-12 (rhythm) — Is practice more metronomic than a real rally? No: the opposite, and not usably so
+
+**Why.** PIC-226. Practice (warm-up, ball-machine drills, feeding) out-scored real rallies under the shipped score (median 84 vs 65) because it is continuous and fast. Hypothesis: practice is also more *steady* in its hitting rhythm, which would let a score demote it without any context. `scripts/validate_rhythm.py`, offline, crossing times only.
+
+**Setup.** 10 practice clips and 24 real clips from the operator's 40-clip precision sample (reasons given by the operator), plus 90 hand-graded real game rallies from the four dev videos. IMG_7743 not read. Features from the gaps between consecutive net crossings: `cv_gap`, `mad_ratio`, `frac_steady`, `longest_run`, `max_gap_ratio`.
+
+**Pre-registered rule (written before looking):** a feature is useful only if (1) AUC practice-vs-real >= 0.75 in the expected direction (more steady), (2) >= 0.70 within a length-matched subset (8-25 s), (3) at the practice median it flags <= 15% of the 90 graded game rallies.
+
+**Result: no feature passes, and the direction is reversed.**
+
+| Feature | Practice median | Real median | Dev median | AUC (expected: steadier) |
+|---|---|---|---|---|
+| cv_gap | 0.77 | 0.63 | 0.66 | 0.22 |
+| mad_ratio | 0.79 | 0.48 | 0.45 | 0.15 |
+| frac_steady | 0.21 | 0.35 | 0.33 | 0.28 |
+| longest_run | 0.08 | 0.15 | 0.14 | 0.37 |
+| max_gap_ratio | 3.62 | 2.53 | 2.64 | 0.24 |
+
+Practice is **less** regular than real rallies, not more.
+
+**Checks on why.**
+- Not a detection-dropout artefact: the ball is seen on **more** of a practice rally's frames (median 0.57 vs 0.44), and gap irregularity is uncorrelated with how often the ball was seen (rank correlation +0.06).
+- Reversed direction, **exploratory and not pre-registered**: AUC 0.78 (cv_gap) / 0.76 (max_gap_ratio), but at the practice median it flags 25% / 12% of real field rallies and **20% / 26% of graded dev game rallies**, over the 15% line. Not usable.
+
+**Conclusion.** Crossing rhythm cannot separate practice from real rallies at this sample size, and my hypothesis was wrong in direction. Untested reasons for the reversal: warm-ups and feeding include pick-ups, mishits and casual pauses; machine drills mix a regular serve with irregular returns. Next candidates need context rather than ball-path statistics: booking/session schedule, player count and arrangement (person boxes, PIC-197), time within a session.
