@@ -46,6 +46,10 @@ or from an old fetch (on 2026-10-11 that called five merged branches
 "unmerged"). A squash-merged branch still reads "NOT merged" there; confirm
 those on GitHub.
 
+After a PR you opened merges, run `make sync-main`: it fast-forwards local
+`main` and deletes provably-merged local branches, refusing on a dirty tree.
+Never commit on `main` itself.
+
 ## Delivery and release gates
 
 `main` is the integration branch, not a scratchpad. Put a code, configuration,
