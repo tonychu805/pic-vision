@@ -2695,3 +2695,31 @@ By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) b
 - One flagged clip was **1.9 s long** (6+ crossings in under 2 s, over 3 crossings/s), a cue the flag did not need: real graded rallies' fastest 3 s windows are around 2-3 crossings/s. Not tested.
 
 **Conclusion.** Not enough to build on. As an automatic drop it would cost a real rally for every ~4 false alarms removed; as a "review this" marker it is reasonable. The bigger finding is that **we do not know the false-alarm rate on real venue footage**: no field-test rallies are labelled. Next: label a random sample of field-test rallies (real / not a rally) to get a precision estimate before choosing any filter.
+
+## 2026-10-12 (precision) — What fraction of detected "rallies" on real venue footage are rallies? About 55%
+
+**Why / objective (fixed before cutting; PIC-226).** Detector precision on the PGC field test (9/25-9/26): of the rallies the production detector reports, what fraction are actually rallies. Only "is it a rally", never "is it a good one"; not recall. "Real rally" per LABELING v5 (PR #37): live ball, at least 3 contacts, until dead. "Very short" (serve + return only) is ticked separately and counted as NOT a rally.
+
+**Sample.** `scripts/make_precision_sample.py`: 40 clips, seeded, silent, 14 sessions; 20 random + 20 from the top 3 by shipped score in each session; the 16 clips already judged excluded. Pool 171 of the 187 detected rallies. Key `cache/precision_sample_key.csv` (not committed). Clips 33-40 failed to play on the operator's first attempt (files valid at my end; resent separately).
+
+**Decision rule, written before looking:** more than 10 false in 40 = first-order problem; 5-10 moderate; 4 or fewer fine.
+
+| Group | n | Real | Very short | Not a rally | Real % (95% interval) |
+|---|---|---|---|---|---|
+| All | 40 | 22 | 4 | 14 | **55%** (40-70%) |
+| Random | 20 | 9 | 3 | 8 | 45% (23-67%) |
+| Top 3 per session | 20 | 13 | 1 | 6 | 65% (44-86%) |
+
+**Rule: 18 not-real (14 under the strict reading), well past 10: first-order problem.** Under either reading the real rate is below 75%.
+
+**What the false alarms were (operator):**
+- **Ball-machine drills: 4** (clips 03, 21, 30, 36): a serving machine on one side, people returning. Real ball, real hitting, not a game rally.
+- **Warm-up: 2** (18, 24): two groups hitting back and forth. LABELING already excludes warm-up.
+- **Reason not yet given: 8** (09, 20, 26, 29, 31, 35, 37, 39).
+- **Very short (serve + return only): 4** (07, 14, 15, 40). The detector requires >= 6 net crossings, so these have spurious crossings.
+
+**Ranking does not hide them.** 6 of the 14 "not a rally" clips were top 3 in their session; the highest-scoring clip in the whole sample (clip 37, 98/100, 73 s, rank 1 in its session) was judged not a rally; clip 03 (a ball-machine drill) scored 92, rank 1.
+
+**Caveats.** n = 40 and one venue on two days: the interval is about +/-15 points. The top-3 group looking better than random (65% vs 45%) is inside that noise. The sample excludes the 16 clips already judged (which included known false alarms), so this is, if anything, a less pessimistic sample than the full pool. Recall (missed rallies) is not measured.
+
+**Conclusion.** Detection precision on real venue footage is a first-order problem. A large share of it is not tracker error but **context**: real hitting that is practice, not a game (machine drills, warm-up). A better ball detector would not fix those; context signals (session/booking info, number and arrangement of players, machine-regular serve timing) might. Needs the reasons for the 8 unexplained clips before choosing where to spend effort.
