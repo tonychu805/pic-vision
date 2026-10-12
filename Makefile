@@ -1,4 +1,4 @@
-.PHONY: eval test process runner repo-status
+.PHONY: eval test process runner repo-status sync-main
 
 eval:
 	python3 -m eval.harness --pred rallies.json --labels eval/labels/IMG_7652.jsonl
@@ -10,6 +10,11 @@ test:
 # Run before saying whether anything is merged or behind (see CLAUDE.md).
 repo-status:
 	@bash scripts/repo_status.sh
+
+# After a PR merges: fast-forward local main to origin/main and delete merged
+# local branches. Refuses on a dirty tree; never merges, never touches remotes.
+sync-main:
+	@bash scripts/sync_main.sh
 
 # Operator-side job runner (ADR-084): claims jobs the venue desktop apps
 # enqueue on the cloud console and runs the pipeline here. Needs
