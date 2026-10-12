@@ -65,3 +65,20 @@ export function updateState(currentVersion, release) {
     notes: release.notes ?? null,
   };
 }
+
+/**
+ * What a heartbeat tells the console about this build, so the console can show
+ * which venues are behind the newest release (PIC-222). Pure: the caller
+ * passes in what Electron reports, which keeps this testable without Electron.
+ *
+ * A field that is not trustworthy is OMITTED, not sent empty: the console
+ * treats an absent version as "not reported" and keeps what it has, whereas an
+ * empty or garbage value would overwrite a good one.
+ */
+export function agentBuildInfo(version, platform) {
+  const parsed = parse(version);
+  return {
+    ...(parsed ? { appVersion: String(version).trim().replace(/^v/, "") } : {}),
+    ...(typeof platform === "string" && platform.length > 0 ? { platform } : {}),
+  };
+}
