@@ -9,6 +9,7 @@
 // convention as cameras/store.js.
 import { randomUUID } from "node:crypto";
 import { hostname } from "node:os";
+import { app } from "electron";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
@@ -24,6 +25,7 @@ import { logEvent } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
 import { withDeadline } from "./deadline.js";
+import { agentBuildInfo } from "./version.js";
 import { rememberedResult, rememberResult } from "./commandMemory.js";
 import { retentionSummary } from "./recordingRetention.js";
 
@@ -616,7 +618,15 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
       signal: AbortSignal.timeout(timeoutMs),
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
-      body: JSON.stringify({ cameraCount: cameras.length, cameras, agentName: getAgentName() }),
+      // appVersion/platform: so the console can show which venues are behind
+      // (PIC-222). `app.getVersion` guarded because the test harness's
+      // Electron stub has none -- there it is simply not reported.
+      body: JSON.stringify({
+        cameraCount: cameras.length,
+        cameras,
+        agentName: getAgentName(),
+        ...agentBuildInfo(typeof app.getVersion === "function" ? app.getVersion() : null, process.platform),
+      }),
     });
     if (!res.ok) {
       // A rejected token (e.g. the agent row was deleted server-side)

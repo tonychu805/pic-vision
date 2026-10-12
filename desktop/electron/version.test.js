@@ -4,7 +4,7 @@
 // build for months. So the comparison is pinned rather than trusted.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { compareVersions, updateState } from "./version.js";
+import { agentBuildInfo, compareVersions, updateState } from "./version.js";
 
 test("compares the normal cases", () => {
   assert.equal(compareVersions("1.0.0", "1.0.1"), -1);
@@ -56,4 +56,18 @@ test("nothing published, or nothing reachable, is 'unknown' -- never 'current'",
   assert.equal(updateState("1.0.0", { version: "1.1.0", url: null }).status, "unknown");
   // A version we can't parse is also unknown, not current.
   assert.equal(updateState("1.0.0", { version: "garbage", url: "https://example.test/r" }).status, "unknown");
+});
+
+test("the heartbeat reports this build's version and platform", () => {
+  assert.deepEqual(agentBuildInfo("1.9.0", "win32"), { appVersion: "1.9.0", platform: "win32" });
+  assert.deepEqual(agentBuildInfo(" v1.9.0-beta.1 ", "darwin"), { appVersion: "1.9.0-beta.1", platform: "darwin" });
+});
+
+// Paired: a version that isn't one is left out entirely. Sending it, or an
+// empty string, would overwrite a good value the console already holds.
+test("an unreadable version or missing platform is omitted, never sent empty", () => {
+  assert.deepEqual(agentBuildInfo(undefined, "win32"), { platform: "win32" });
+  assert.deepEqual(agentBuildInfo("garbage", "darwin"), { platform: "darwin" });
+  assert.deepEqual(agentBuildInfo("1.9.0", ""), { appVersion: "1.9.0" });
+  assert.deepEqual(agentBuildInfo(null, null), {});
 });

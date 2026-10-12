@@ -198,6 +198,38 @@ test("a successful heartbeat records both that it worked and when", async () => 
   });
 });
 
+// PIC-222: the console shows which venues are behind, so the heartbeat has to
+// say what this build is -- without disturbing anything it already carried.
+test("the heartbeat body names this machine's platform and keeps the fields it always had", async () => {
+  const bodies = [];
+  await withServer((req, res, raw) => {
+    if (req.url.includes("register")) {
+      res.writeHead(200, { "content-type": "application/json" });
+      res.end(JSON.stringify({ agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" }));
+      return;
+    }
+    // Only the heartbeat: the loop also polls other routes with no body.
+    if (req.url.includes("/api/agents/heartbeat") && raw) bodies.push(JSON.parse(raw));
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify({ brandName: "Test Venue" }));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    bodies.length = 0;
+    await sendHeartbeat();
+    assert.equal(bodies.length, 1);
+    const body = bodies[0];
+    assert.equal(body.platform, process.platform);
+    // The harness's Electron stub has no app.getVersion, so the version is
+    // simply not reported here -- and absent, never an empty string.
+    assert.equal("appVersion" in body, false);
+    // Unchanged: the fields every console already depends on.
+    assert.equal(typeof body.cameraCount, "number");
+    assert.ok(Array.isArray(body.cameras));
+    assert.equal(typeof body.agentName, "string");
+  });
+});
+
 test("a rejected heartbeat (the revoke case) flips the state to failing", async () => {
   await withServer((req, res) => {
     if (req.url.includes("register")) {
