@@ -2678,3 +2678,20 @@ By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) b
 **Trajectory.** Harmless (0 graded lost, 6/6 real field clips kept, score marginally up) but **does not touch O**. Post-hoc sensitivity, labelled as such: tolerance 6 / 12 / 18 / 24 px; O is still there at every setting and a graded rally is lost from 18 px up. So O's crossings are not the simple "A, B, A" return this check assumes (the hops in O are spaced 5-29 frames apart and may not return within 1 s).
 
 **Conclusion.** Neither is the answer. A trajectory estimator in the sense PIC-3 intends (fit a ballistic arc and reject points off it) is not what was tested here and remains untried; the ball-trace experiment (2026-10-11) found arcs fit only long, clean flights. Next candidate: the rally-level flag (one tiny square holding a large share of a rally's own tracked points), verified by watching the 5 other flagged field rallies.
+
+## 2026-10-12 (final) — Blind playback of the rally-level "one tiny spot" flag: catches 4 of 5, wrongly flags 1 real rally, misses a false alarm
+
+**Why.** PIC-226. After the mask, confidence cut-off and simple trajectory check all failed, the rally-level flag (>= 30% of a rally's tracked points in one 12x12 px square; threshold chosen after seeing O at 48%) was the remaining low-risk idea. `scripts/make_flag_check.py`: the 5 other flagged field rallies plus 3 unflagged controls of similar length from the same sessions, shuffled, silent; the operator answered real rally / not a rally per clip. Key `cache/flag_check_key.csv` (not committed).
+
+| Group | n | Judged NOT a rally | Judged real |
+|---|---|---|---|
+| Flagged (30-39%) | 5 | **4** (shares 30, 32, 32, 39%) | **1** (31%, 18.8 s) |
+| Controls (5-10%) | 3 | **1** (10%, 9.5 s) | 2 |
+| Plus O (48%, failed serve), known | 1 | 1 | 0 |
+
+**Reading.**
+- The flag is right 5 of 6 times counting O, but **wrongly catches one real rally**, at 31%, one point above the line. The false alarms and the real rally overlap in the 30-32% zone, so no clean threshold exists.
+- It **misses a false alarm** (control V, 10%): false alarms are not only the sunlight kind, and one of three unflagged "rallies" was not a rally. n = 3 cannot give a rate, but it does say the unflagged pool is not clean.
+- One flagged clip was **1.9 s long** (6+ crossings in under 2 s, over 3 crossings/s), a cue the flag did not need: real graded rallies' fastest 3 s windows are around 2-3 crossings/s. Not tested.
+
+**Conclusion.** Not enough to build on. As an automatic drop it would cost a real rally for every ~4 false alarms removed; as a "review this" marker it is reasonable. The bigger finding is that **we do not know the false-alarm rate on real venue footage**: no field-test rallies are labelled. Next: label a random sample of field-test rallies (real / not a rally) to get a precision estimate before choosing any filter.
