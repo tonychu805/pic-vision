@@ -13,12 +13,12 @@
 // jsdom, no new dependency, and nothing written into the repo.
 import assert from "node:assert/strict";
 import { test, before } from "node:test";
-import { spawnSync } from "node:child_process";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
+import { bundleForTest } from "./bundleForTest.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -30,14 +30,7 @@ let ConnectionStatus;
 before(async () => {
   mkdirSync(OUT_DIR, { recursive: true });
   rmSync(BUNDLE, { force: true });
-  const result = spawnSync(
-    path.join(ROOT, "node_modules", ".bin", "esbuild"),
-    [path.join(ROOT, "src", "components", "ConnectionStatus.jsx"), "--bundle", "--format=esm",
-     "--jsx=automatic", "--external:react", "--external:react-dom",
-     `--outfile=${BUNDLE}`, "--log-level=error"],
-    { encoding: "utf8" },
-  );
-  assert.equal(result.status, 0, `could not bundle ConnectionStatus.jsx: ${result.stderr}`);
+  bundleForTest(path.join(ROOT, "src", "components", "ConnectionStatus.jsx"), BUNDLE);
   ({ default: ConnectionStatus } = await import(BUNDLE));
 });
 

@@ -108,7 +108,10 @@ test("every store asks for owner-only permissions", () => {
 // and forwards its options verbatim), so this tests the mechanism that
 // matters. Checked once by hand against the real electron-store outside the
 // harness, 2026-09-07: default 664, with the option 600 after three writes.
-test("owner-only permissions survive repeated writes", () => {
+// POSIX modes don't exist on Windows (files report 0o666 whatever is asked):
+// there the per-user profile folder's ACL is what keeps a file owner-only,
+// and secrets are sealed separately by safeStorage (DPAPI) -- secureField.js.
+test("owner-only permissions survive repeated writes", { skip: process.platform === "win32" && "POSIX file modes don't apply on Windows" }, () => {
   const dir = mkdtempSync(path.join(tmpdir(), "picvision-store-"));
   try {
     const store = new Conf({ cwd: dir, configName: "modes", projectName: "pic-vision", configFileMode: 0o600 });
