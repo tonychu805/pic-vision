@@ -2914,3 +2914,28 @@ A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a
 **Caveats.** n = 15 practice clips, one venue, two days, in-sample; the T grid was read off the curve after the AUC bar was passed. Gaps are between DETECTED rallies, so detection misses (about 20% of frames seen) and false detections both move them. Not shipped. Needs a fresh session and an ADR before it touches ranking.
 
 **Conclusion.** Temporal context between rallies separates much of the practice that no ball-path statistic could. It is the strongest lead so far for the 11-of-24 practice class. Untested from the same discussion: serve-position stillness before a rally (needs person tracks), and score-calling by voice (pickleball-specific; audio is recorded; consent-gated).
+
+## 2026-10-13 (Test B) — Choosing the ball among the top 3 heatmap blobs per frame does not remove the scenery fakes: FAIL
+
+**Why.** PIC-226. Scenery (fixed bright spots) is the largest false-alarm class that is a tracking problem, and every filter that drops detections cost real rallies because real rallies contain scenery too (clip 208). The remaining form: give the tracker up to 3 blobs per frame and let it choose. Bar, variants and parameters were posted on PIC-226 before inference ran.
+
+**Setup.** Same model (`weights_k14_epoch19`), court mask, 0.5 threshold and 3-frame trios as production; only the post-processing writes the top 3 blobs per frame (`scripts/infer_topk.py`, run by `scripts/run_topk_windows.py`). Gate: rank 1 reproduces production predictions on the same frames: **100%** (600 of 600). 18 videos, 136 windows (8 s before, 3 s after every judged field clip and graded dev rally), 4140 s of video, about 33 fps. Evaluation `scripts/validate_topk.py`; tracker `scripts/track_choose.py` (6 tests). IMG_7743 not read.
+
+**Candidates are not scarce:** 12.1% of frames with any blob have two or more (5364 of 44158).
+
+**Result, all variants FAIL the pre-registered rule:**
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 |
+|---|---|---|---|---|---|
+| V0 production (top-1) | 0 | 0 | 0 | 0 | 0.615 |
+| V1 existing tracker, 3 candidates | 1 | 3 | 0 | 7 | 0.619 |
+| V2 choose (free 5, reject 15) | 1 | 3 | **1** (203) | 8 | 0.625 |
+| V2b choose (free 1, reject 4; density-adjusted, decided before results) | 1 | **5** | 1 (203) | 9 | 0.633 |
+
+Rule: zero graded lost, zero real field lost, >= 4 of 8 scenery fakes removed, score not worse, fragmentation <= 10%. V1/V2/V2b lose real rallies and remove 0-1 of the 8 scenery fakes.
+
+**Reproduction check.** V0 on the windows matches 83 of the 90 graded dev rallies that production matches over whole videos. All comparisons are made against V0 on the same windows (n = 83), but this is below clean reproduction: window boundaries (a cold tracker at each window start) account for the 7 differences, not the model, which agreed on every frame tested.
+
+**Why it did not work (untested reading).** Scenery fakes are made of the bright spots alone; the real ball is often not among the candidates at all (detected on about 20% of frames). With no ball among the candidates there is nothing to choose; a better chooser only picks a different spot. V2b's extra real losses come from the more aggressive dwell penalty also hitting real play with scenery in frame.
+
+**Conclusion.** Nine ball-path ideas have now failed against pre-registered bars (tracked-only speed, scenery mask, confidence, simple trajectory, one-spot flag, rhythm, dwell, minimum crossings/duration, and this). None is shipped. Practice, the larger class, was separated by temporal context instead (gaps between rallies, previous entry), not by anything in the ball path.
