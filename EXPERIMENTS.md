@@ -2639,3 +2639,26 @@ By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) b
 **Conclusion.** Not shipped. Tracked-only speed is a low-risk, partial mitigation worth keeping on the list, but the failed-serve problem has three causes (reflections, tosses, low yield) and none is fixed by it alone. The earlier pace-share "no signal" used raw speeds and is unreliable; fast exchange is unresolved, not refuted. Needs: a second session, an ADR before any change to ADR-133's score, and contact information (players PIC-197 or audio PIC-225) for hit-vs-toss.
 
 **Next.** (1) Redo the fast-exchange check on tracked-only speeds; (2) decide whether to add a trajectory-smoothness constraint (PIC-3) and a minimum-segment filter (`track_ball`'s existing `min_seg_frames`/`min_seg_span`, off by default) and test them against O and M and the graded videos.
+
+## 2026-10-12 (later still) — Does masking fixed "scenery" squares fix false rallies? It removes the sunlight rally but also destroys real ones: FAIL
+
+**Why.** PIC-226. Clip O (a failed serve) was a "rally" built from sunlit spots the detector kept marking; the operator verified from close-ups that every one of the six busiest spots is sunlight or a bright dot, none the ball. A per-video scenery mask was the natural fix. `scripts/validate_scenery_mask.py`, offline only, nothing in the pipeline changes.
+
+**Mask.** Per video, from its own detections only (never the grades): 12x12 px squares; a square is scenery if it holds >= 20x the median count of touched squares; variant `ring1` also masks the 8 neighbours. Masked detections are dropped before tracking, crossing counting and speed. IMG_7743 not read.
+
+**Pass rule, written before running (all four required):** (a) zero of the hand-graded rallies lost; (b) clip O no longer detected as a rally; (c) the six field clips the operator watched and called real (K, L, N, P, Q, R) all still detected; (d) pooled chance quality:1 outscores quality:2 not more than 0.03 below the unmasked run.
+
+| | plain | ring1 |
+|---|---|---|
+| (a) graded rallies matched 90 -> | **74 (17 lost)** | **58 (34 lost)** |
+| (b) O removed | yes | yes |
+| (c) 6 real field clips kept | yes | yes |
+| (d) pooled chance q1>q2 0.650 -> | 0.603 | 0.606 |
+| field test, all detected rallies 187 -> | 167 | 167 |
+| **Verdict** | **FAIL** | **FAIL** |
+
+**What it did.** It does what it was built for (O disappears, the six real field clips survive) and it is **destructive on the graded set**: nearly all losses are in `brickwall_30fps`, where 53 squares (34% of all detections, a strip at the net) are "scenery" and masking removes 34% (plain) / 48% (ring1) of that video's in-court detections. `pb_draft_cup` also loses candidates (22 -> 15 segments). `IMG_7744` is untouched.
+
+**Why, honestly: not established.** Two readings fit and the data here cannot choose: (1) the strip is the net itself, and real rallies in that video were being counted partly *because of* detections on it; (2) real ball detections cross the same net squares often enough to trip the 20x rule. Either way the crossing line is exactly where a per-video square count cannot tell scenery from ball. Close-ups at three times (stills) cannot show a ball that passes through occasionally.
+
+**Conclusion.** A global per-video detection mask is **not safe** and is not to be built as specified. The failed-serve problem is real; this fix is the wrong shape. The rally-level alternative (flag a rally when one tiny square holds a large share of *its own* tracked points) flagged 0 of 89 graded real rallies and 0 of 31 unlabelled dev detections, and O at 48% (6 of 187 field rallies); it does not alter tracking. That is the next thing to verify, by watching the other 5 flagged field rallies, before any threshold is trusted (30% was chosen after seeing O).
