@@ -2820,3 +2820,32 @@ Machine drills look different (everyone far from the net, spread across nearly t
 **Reading.** The rule is blunt in the same way as the scenery mask and the one-spot flag: real rallies can contain scenery (the real rally flagged T and the control X lose detections here and were also caught by the one-spot flag). A filter that drops detections can't distinguish "a real rally with a bright spot in the frame" from "a fake rally made of bright spots". Choosing the ball AMONG candidates in each frame (several blobs per frame plus motion consistency) is the idea this does not test.
 
 **Conclusion.** Not shipped. Test B (top 3 blobs per frame from the heatmap, GPU re-inference on the judged clips, candidate choice by expected motion plus a dwell penalty) is the remaining untested form of the idea. Before spending on it: the sunlight-type false alarm is a minority of the 22 not-a-rally clips (most are practice or very short points), so a perfect tracker fix would move precision by a few points, not to 90%.
+
+## 2026-10-12 (top of each session) — Precision where a reel is built from: 66% real, bar was 80%
+
+**Why.** PIC-226. The reel takes each session's top rallies by the shipped score (`build_top_rallies`, n=10), so the head of each session's ranking is what a player sees first. Question and bar fixed before cutting: of the top 5 clips per session, what share are real rallies (LABELING v5)? Bar: >= 80% real. `scripts/make_top_sample.py` (40 new clips, silent, shuffled, numbered 101-140; the 30 slots already judged in earlier samples were excluded), `scripts/summarise_top_sample.py`. 14 field sessions x 5 = 70 slots, all 70 judged by the operator.
+
+| | Count | Share |
+|---|---|---|
+| Real rally | 46 | **66%** (95% 55-77%) |
+| Very short (serve + return only) | 9 | 13% |
+| Not a rally | 15 | 21% |
+
+**Bar not met** (79% if very short were counted real).
+
+| Rank in session | Real |
+|---|---|
+| 1 | 11 of 14 (79%) |
+| 2 | 9 of 14 (64%) |
+| 3 | 10 of 14 (71%) |
+| 4 | 8 of 14 (57%) |
+| 5 | 8 of 14 (57%) |
+| ranks 1-3 | 30 of 42 (71%) |
+
+A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a measurement.
+
+**What the 24 not-real clips were:** serve + return only 9, ball-machine drill 5, warm-up/practice 5, feeding 1, sunlight 1, reason not given 3. **Practice-type 11 of 24**; the sunlight failure that took most of the detector work is **1 of 70**.
+
+**"Cut off".** The operator flagged 7 real review clips as cut off. The source video had 3 to 9 minutes after each rally's end, so it was not the recording; the review clips used a 1 s tail while the reel pipeline pads 3 s each side (`PAD_SEC = 3.0`). Re-cut with 3 s: only clip 139 was reported as still cut off. Read as: mostly my review clips' padding, with at least one residual case (139) where the detector's end is early.
+
+**Conclusion.** Precision at the head of the ranking is about 2 in 3 and about 4 in 5 at rank 1. The largest single false class is very short points (a detector firing on 6 crossings where there were two shots), which is more mechanical than practice and is the next thing to look at. Reel quality for "great rallies only" is not available from the shipped score alone.
