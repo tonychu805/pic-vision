@@ -596,7 +596,9 @@ pic-vision/
 ├── .github/workflows/        # CI. desktop-mac.yml: builds the venue-facing
 │                              # desktop agent as an unsigned macOS DMG on a
 │                              # `desktop-v*` tag (ADR-084/PIC-84), one leg per
-│                              # arch since ffmpeg-static is arch-specific
+│                              # arch since ffmpeg-static is arch-specific.
+│                              # Also a `build-windows` job: unsigned x64 NSIS
+│                              # installer, same gates, same release
 ├── requirements.txt          # Python dependencies
 ├── config.yaml               # thresholds and weights
 ├── Makefile                  # `make test` / `make eval` / `make process`

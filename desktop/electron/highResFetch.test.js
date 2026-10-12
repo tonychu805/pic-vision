@@ -13,6 +13,7 @@ import { FFMPEG, FFPROBE } from "./binaries.js";
 
 const home = mkdtempSync(path.join(tmpdir(), "high-res-fetch-"));
 process.env.HOME = home;
+process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
 const { RECORDINGS_ROOT } = await import("./capture.js");
 const { findRecordingForPart, partWindow, mainWindowsOverlapping, leadSecFor, trimHighRes } = await import("./highResFetch.js");
 

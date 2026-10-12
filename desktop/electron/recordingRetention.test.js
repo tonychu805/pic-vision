@@ -8,6 +8,7 @@ import path from "node:path";
 // Recordings live under $HOME/pic-vision-recordings, read once at load.
 const home = mkdtempSync(path.join(tmpdir(), "retention-"));
 process.env.HOME = home;
+process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
 const { retentionDecision, retentionSweep, retentionSummary, reelDoneAt, recordingStartedAt, endOfVenueDay } = await import("./recordingRetention.js");
 after(() => rmSync(home, { recursive: true, force: true }));
 

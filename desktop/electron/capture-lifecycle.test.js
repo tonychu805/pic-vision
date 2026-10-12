@@ -15,6 +15,7 @@ import path from "node:path";
 // real one. Set before capture.js loads, since it reads HOME once.
 const home = mkdtempSync(path.join(tmpdir(), "capture-lifecycle-"));
 process.env.HOME = home;
+process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
 const { startRecording, stopRecording, isRecording, activeRecordingDirs, cleanUpOrphanedRecordings, uploadDirFor, listRecordings } = await import("./capture.js");
 
 // Two independent silent "cameras" -- a dual-stream camera's main and sub

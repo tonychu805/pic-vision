@@ -24,6 +24,8 @@ import { FFMPEG, FFPROBE } from "./binaries.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
 import Store from "electron-store";
 
+const IS_WINDOWS = process.platform === "win32";
+
 export const RECORDINGS_ROOT = path.join(os.homedir(), "pic-vision-recordings");
 
 // cameraId -> { proc, outDir, startedAt }. Module-level, not per-window --
@@ -441,7 +443,9 @@ function spawnSegmenter(cameraId, slotName, url, slot) {
     "-reset_timestamps", "1",
     path.join(slot.outDir, "session-%03d.mkv"),
   ];
-  const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
+  const proc = spawn(FFMPEG, args, { stdio: [IS_WINDOWS ? "pipe" : "ignore", "ignore", "pipe"] });
+  // An EPIPE here means ffmpeg already exited; nothing is left to stop.
+  proc.stdin?.on("error", () => {});
   slot.proc = proc;
   if (proc.pid) {
     rememberProcess(cameraId, slotName, proc.pid, slot.outDir);
@@ -573,7 +577,24 @@ export function startRecording(camera, { resumeInto = null } = {}) {
   });
 }
 
-// Clean stop only -- SIGINT, never SIGKILL (ADR-031: a hard kill was
+// Ask a recording ffmpeg we spawned to finish its segment and exit.
+// SIGINT where signals exist. On Windows `kill("SIGINT")` is a hard
+// TerminateProcess -- exactly the stop ADR-031 forbids -- so ffmpeg's own
+// "q" on stdin is the clean channel there (stdin is piped for that reason).
+function requestCleanStop(proc) {
+  if (!IS_WINDOWS) {
+    proc.kill("SIGINT");
+    return;
+  }
+  try {
+    proc.stdin.write("q");
+    proc.stdin.end();
+  } catch {
+    proc.kill();
+  }
+}
+
+// Clean stop only -- SIGINT (stdin "q" on Windows), never SIGKILL (ADR-031: a hard kill was
 // observed to corrupt the output container). ffmpeg finalizes the
 // current segment on SIGINT and exits on its own; this resolves once
 // that actually happens rather than assuming it did. A recording that is
@@ -606,7 +627,7 @@ function stopActiveRecording(cameraId, rec) {
     if (!proc || proc.exitCode !== null || proc.signalCode !== null) return Promise.resolve();
     return new Promise((resolve) => {
       proc.once("exit", resolve);
-      proc.kill("SIGINT");
+      requestCleanStop(proc);
     });
   };
 
@@ -661,8 +682,18 @@ function isOurRecordingProcess(pid, outDir) {
   } catch {
     return false; // not running (or not ours to signal)
   }
-  const ps = spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
-  return ps.status === 0 && ps.stdout.includes(outDir);
+  return commandLineOf(pid).includes(outDir);
+}
+
+// The full command line of `pid`, or "" when it can't be read.
+function commandLineOf(pid) {
+  const cmd = IS_WINDOWS
+    ? spawnSync("powershell.exe", [
+        "-NoProfile", "-NonInteractive", "-Command",
+        `(Get-CimInstance Win32_Process -Filter "ProcessId=${Number(pid)}").CommandLine`,
+      ], { encoding: "utf8", windowsHide: true, timeout: 10_000 })
+    : spawnSync("ps", ["-o", "command=", "-p", String(pid)], { encoding: "utf8" });
+  return cmd.status === 0 ? cmd.stdout : "";
 }
 
 async function waitForExit(pid, timeoutMs) {
@@ -699,6 +730,9 @@ export async function cleanUpOrphanedRecordings({ graceMs = 15_000, entries = le
       if (active.get(cameraId)?.[slotName]?.proc?.pid === slot.pid) continue; // can't be: a new run's ffmpeg has a new pid
       if (!isOurRecordingProcess(slot.pid, slot.outDir)) continue;
       try {
+        // An orphan's stdin pipe died with the app that owned it, so on
+        // Windows there is no clean channel left: this is a hard stop
+        // there. Matroska segments tolerate it far better than MP4 did.
         process.kill(slot.pid, "SIGINT");
         if (!(await waitForExit(slot.pid, graceMs))) process.kill(slot.pid, "SIGKILL");
       } catch {
