@@ -67,6 +67,46 @@ Nothing else needs installing: ffmpeg is bundled, and the app runs no
 Python and holds no cloud credentials (ADR-084 -- see "What this app does
 not do" below).
 
+## Install it (Windows)
+
+**Windows 10 or 11, 64-bit (x64).** Download
+`PicVision-CameraManager-<version>-x64.exe` from the release page and run
+it. It installs for the current user only -- no administrator prompt -- and
+adds a Start-menu entry.
+
+**The build is not code-signed**, so SmartScreen shows *"Windows protected
+your PC"* on first run. Click **More info → Run anyway**. (Signing needs a
+code-signing certificate; not a technical blocker, same status as the Mac
+build.) Windows Firewall may also ask whether the app can reach the local
+network the first time it scans for cameras -- allow it on **Private**
+networks, or discovery finds nothing.
+
+ffmpeg is bundled, as on macOS. One behavioural difference: if the app is
+killed outright (crash, Task Manager), a recording it left running is
+stopped hard on the next launch rather than finished cleanly, because
+Windows has no signal to ask ffmpeg to wrap up from a different process.
+A normal Stop, or quitting the app, is a clean stop.
+
+## Install it (Windows)
+
+**Windows 10 or newer, 64-bit (x64).** Download
+`PicVision-CameraManager-<version>-x64.exe` from the release page and run
+it. It installs per-user, so no administrator rights are needed.
+
+**The build is not code-signed**, so SmartScreen shows *"Windows protected
+your PC"* on first run. Click **More info → Run anyway**. Windows Firewall
+may also ask once to allow the app on private networks; allow it, or camera
+discovery will find nothing.
+
+Differences from the macOS build worth knowing:
+
+- Recordings stop cleanly by sending ffmpeg `q` on its stdin (Windows has
+  no real SIGINT). A recording orphaned by an app crash can only be
+  hard-stopped on the next launch, since its stdin pipe died with the app.
+- Hardware encoding tries QSV, NVENC, then AMF before falling back to
+  libx264 (`electron/encoderCapability.js`).
+- ARM64 Windows is not built.
+
 ## Build a release
 
 ```

@@ -23,7 +23,12 @@
 # build.mac.identity is null in package.json) until an Apple Developer
 # membership exists -- see desktop/README.md's install section for what
 # that costs the person installing it.
-name: Desktop CI and release (macOS)
+#
+# Windows (x64, unsigned) is the `build-windows` job below. It gates the same
+# way and publishes its installer to the same release. Unsigned means
+# SmartScreen warns on first run ("More info" -> "Run anyway"); see
+# desktop/README.md.
+name: Desktop CI and release (macOS + Windows)
 
 on:
   pull_request:
@@ -116,8 +121,66 @@ jobs:
           name: dmg-${{ matrix.arch }}
           path: desktop/release/*.dmg
 
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Tag must match package.json
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        working-directory: desktop
+        run: |
+          TAG_VERSION="${GITHUB_REF_NAME#desktop-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+          echo "tag=$TAG_VERSION package.json=$PKG_VERSION"
+          if [ "$TAG_VERSION" != "$PKG_VERSION" ]; then
+            echo "::error::Tag desktop-v$TAG_VERSION does not match package.json $PKG_VERSION."
+            exit 1
+          fi
+
+      - name: Install dependencies
+        working-directory: desktop
+        run: npm ci
+
+      - name: Run desktop tests
+        working-directory: desktop
+        run: npm test
+
+      - name: Build x64 installer
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: "false"
+        run: npm run build -- --win --x64
+
+      - name: Check the bundle carries its runtime dependencies
+        working-directory: desktop
+        run: |
+          ASAR=$(find release -path "*win-unpacked/resources/app.asar" -print -quit)
+          echo "checking $ASAR"
+          npx --yes @electron/asar list "$ASAR" > asar.txt
+          for pkg in electron-store onvif oui-data posthog-node; do
+            grep -q "node_modules/$pkg/" asar.txt || { echo "MISSING $pkg in asar"; exit 1; }
+          done
+          UNPACKED="$(dirname "$ASAR")/app.asar.unpacked/node_modules"
+          test -f "$UNPACKED/ffmpeg-static/ffmpeg.exe" || { echo "ffmpeg.exe not unpacked"; exit 1; }
+          find "$UNPACKED/ffprobe-static" -name ffprobe.exe | grep -q . || { echo "ffprobe.exe not unpacked"; exit 1; }
+          echo "bundle checks passed"
+
+      - uses: actions/upload-artifact@v4
+        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        with:
+          name: exe-x64
+          path: desktop/release/*.exe
+
   release:
-    needs: build
+    needs: [build, build-windows]
     if: startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: ubuntu-latest
     permissions:
@@ -128,8 +191,12 @@ jobs:
           path: artifacts
       - uses: softprops/action-gh-release@v2
         with:
-          files: artifacts/**/*.dmg
+          files: |
+            artifacts/**/*.dmg
+            artifacts/**/*.exe
           body: |
-            Unsigned macOS build. On first launch macOS will refuse to open it:
+            Unsigned builds.
+            **macOS** (Apple silicon): macOS will refuse to open it at first —
             open it once, then System Settings → Privacy & Security → **Open Anyway**.
+            **Windows** (x64): SmartScreen will warn — **More info → Run anyway**.
             See `desktop/README.md` for details.

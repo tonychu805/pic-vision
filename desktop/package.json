@@ -48,7 +48,13 @@
       "artifactName": "PicVision-CameraManager-${version}-${arch}.${ext}"
     },
     "win": {
-      "target": "nsis"
+      "target": [
+        {
+          "target": "nsis"
+        }
+      ],
+      "signAndEditExecutable": false,
+      "artifactName": "PicVision-CameraManager-${version}-${arch}.${ext}"
     },
     "linux": {
       "target": "AppImage",
