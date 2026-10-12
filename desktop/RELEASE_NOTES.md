@@ -1,5 +1,73 @@
 # Release notes
 
+## 1.8.0 — 2026-10-12
+
+**This is the first release since 1.7.3 (2026-10-06) and it is a large one:
+ten changes that were already finished but never shipped, plus Windows.**
+Please read the first two items — they change what the app does with
+footage on this machine.
+
+- **New: Windows version.** The app now installs on Windows 10 or newer
+  (64-bit), as `PicVision-CameraManager-<version>-x64.exe`. It is unsigned,
+  so Windows shows "Windows protected your PC": click **More info → Run
+  anyway**. Allow it through the firewall on private networks when asked,
+  or camera discovery finds nothing. One difference: if the app crashes in
+  the middle of a recording, the next launch can only hard-stop the
+  leftover recording rather than let it finish its file cleanly.
+- **Changed: raw recordings now clear at the end of the venue's day.**
+  Previously a recording was kept 7 days after its reel was made, or 30
+  days if no reel ever came. Now it is deleted at the end of the *venue's
+  local day* the recording ended — as soon as its reel exists. A recording
+  whose reel hasn't succeeded yet is kept until it does, then removed on
+  the next hourly check; one still being made or uploaded is never touched.
+  The camera's page shows whether footage will go tonight or is being held
+  for a reel. The end of the day is worked out from the venue's own
+  timezone, not this computer's clock; if the venue has no valid timezone,
+  nothing is deleted. **If you rely on keeping raw footage for several
+  days, this is the change to know about.**
+- **New: two-quality recording for cameras that offer it.** If the camera
+  has a second, lower-resolution stream (most do), the app now records both
+  at once: the full-quality stream stays on this machine, and the smaller
+  one is what gets sent to the cloud, so uploads are lighter. Cameras with
+  only one stream behave exactly as before. After a reel is made, the cloud
+  can ask this machine for the full-quality version of a single rally: the
+  app finds it, cuts it to size and sends only that clip.
+- **Fixed: camera search now covers every network the computer is on.**
+  It used to scan only whichever network the operating system listed
+  first, so a venue with both Wi-Fi and a wired network could scan the
+  wrong one and find no cameras. It now scans every directly connected
+  network (ignoring Docker, VPN and virtual adapters), and Settings lists
+  the ranges it used. Ranges you added by hand still work, for cameras on
+  a separate network.
+- **Fixed: cameras that report the wrong port during ONVIF setup.** Some
+  cameras (confirmed on three Synology units) tell the app a media port
+  they don't actually serve on, which made adding them fail. The app now
+  keeps the port that worked.
+- **Fixed: recordings of two-quality cameras were not being cleaned up.**
+  The lower-quality copy was never deleted, and its recording was dated as
+  "no reel yet", so it used the long 30-day window. Both now follow the
+  rules above.
+- **Fixed: two bugs in how the two-quality recording was handled.** The
+  recordings list could show a camera's lower-quality copy as an extra,
+  separate recording, and the recording being made right now was never
+  marked as recording. A rally's full-quality clip is also now matched by
+  real timestamps rather than file numbers, so a brief camera reconnect no
+  longer shifts the cut, and if the full-quality stream was down when a
+  rally began the app reports it as unavailable instead of sending a
+  wrongly-timed clip.
+
+### Before you rely on it
+
+- The two-quality upload and the per-rally full-quality send have been
+  tested on this machine against synthetic data, not yet end-to-end on a
+  live camera with the deployed console. Check one real recording through
+  to a reel before depending on it.
+- The Windows installer builds and passes the full test suite on a Windows
+  build server, but has not yet been run against a real camera on a real
+  Windows PC.
+- The new end-of-day deletion has not yet run against a live venue's
+  recordings. Watch the first day.
+
 ## 1.7.3 — 2026-10-06
 
 - **The cloud processing status is simpler.** A recording's status used to
