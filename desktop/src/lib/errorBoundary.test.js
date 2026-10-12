@@ -17,7 +17,7 @@ import assert from "node:assert/strict";
 import { test, before } from "node:test";
 import { mkdirSync, rmSync } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { bundleForTest } from "./bundleForTest.js";
@@ -39,7 +39,7 @@ before(async () => {
   mkdirSync(OUT_DIR, { recursive: true });
   rmSync(BUNDLE, { force: true });
   bundleForTest(path.join(ROOT, "src", "ErrorBoundary.jsx"), BUNDLE);
-  ({ default: ErrorBoundary } = await import(BUNDLE));
+  ({ default: ErrorBoundary } = await import(pathToFileURL(BUNDLE).href));
 });
 
 function renderCrashed(error) {
