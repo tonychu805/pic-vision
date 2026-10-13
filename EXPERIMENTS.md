@@ -2985,3 +2985,35 @@ Rule: zero graded lost, zero real field lost, >= 4 of 8 scenery fakes removed, s
 - Reasons for the 12 unexplained not-real clips (especially 301, 304, 306, 311, 316 and the others from court 1).
 - Fixed-spot share for the 13 not-real vs the 17 other clips (GPU-free, existing script) — a check that scenery explains court 1; then verify by eye.
 - Nothing shipped. IMG_7743 not read. Clips are third-party: delete `clips/fresh_sample*` after the reasons are in.
+
+## 2026-10-13 (fresh sessions, reasons) — The false alarms are failed serves, and a single failed serve produces 5-12 "crossings"
+
+**Why.** The operator gave a reason for each not-real clip in the fresh sample (entry above). One verdict changed: 304 is serve + return only (the return touched the net), not "not a rally". Totals now: real 15, very short 3 (304, 305, 312), not a rally 12.
+
+**Reasons (operator, playback).**
+
+| Reason | Clips | n |
+|---|---|---|
+| Failed serve: net, wrong box, landed in the kitchen, out | 301, 302, 306, 308, 316 | 5 |
+| Ball hit the net (328 also: ball tossed back) | 324, 328 | 2 |
+| Only the serve was recorded, cut off | 320, 322 | 2 |
+| Not play: no serving action at all; ball tossed into the court | 311, 314 | 2 |
+| Practice | 319 | 1 |
+
+So 9 of the 12 not-real clips (and 304 of the short ones) are the first shot of a point failing: the serve, or a ball touching the net.
+
+**What the detector saw (GPU-free, `base.detect` crossings inside each clip, 27 clips).** A serve can cross the net at most once, yet these clips carry 5-12 crossings: 301 has 12 (a failed serve into the net), 306 has 7 in 2.8 s, 322 has 10 in 5.8 s. In several the closest two crossings are one frame apart (0.03 s), which no real ball can do. Medians: real 6 crossings (closest pair 0.27 s), not-real 8 (0.15 s), very short 8 (0.10 s). The counted "crossings" are the tracked point wobbling across the net line (ball dying at the net; scenery hops are not excluded), not the ball crossing the net. This is a reading of the numbers; the mechanism (net contact vs. fixed bright spots vs. both) is not verified.
+
+**Exploratory, not a result (not pre-registered, in-sample):** merging crossings closer than G seconds and requiring >= 6 left.
+
+| G | Fresh real kept (of 15) | Very short kept (of 3) | Not-real kept (of 12) |
+|---|---|---|---|
+| 0 | 13 | 3 | 11 |
+| 0.25 s | 10 | 3 | 8 |
+| 0.5 s | 8 | 2 | 7 |
+
+It removes real rallies and false alarms at the same rate (-3 and -3 at 0.25 s), so a simple spacing debounce is not a fix. Not pursued.
+
+**Short gaps fit serve retries.** Of the sampled rallies <= 6 s apart: real -> failed serve (303 -> 320, 309 -> 308), failed serve -> failed serve (301 -> 328), failed serve -> real (324 -> 327). A short gap is what a fault followed by a re-serve looks like, which is why gap context could not separate these.
+
+**Open / next.** Operator proposal: use ball landing placement and pickleball rules (service box, kitchen, net) as context. Earlier (2026-10-11) net-contact and bounce detection were weak from a behind-baseline camera, so a serve-landing test has to be narrow and pre-registered first; unprocessed fresh segments remain (64 in `cache/fresh_segments.json`) for a held-out check. Rule details (e.g. serve touching the net) need checking against the rulebook before anything is encoded. Nothing shipped.
