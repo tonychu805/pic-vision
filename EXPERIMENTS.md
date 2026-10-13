@@ -3017,3 +3017,26 @@ It removes real rallies and false alarms at the same rate (-3 and -3 at 0.25 s),
 **Short gaps fit serve retries.** Of the sampled rallies <= 6 s apart: real -> failed serve (303 -> 320, 309 -> 308), failed serve -> failed serve (301 -> 328), failed serve -> real (324 -> 327). A short gap is what a fault followed by a re-serve looks like, which is why gap context could not separate these.
 
 **Open / next.** Operator proposal: use ball landing placement and pickleball rules (service box, kitchen, net) as context. Earlier (2026-10-11) net-contact and bounce detection were weak from a behind-baseline camera, so a serve-landing test has to be narrow and pre-registered first; unprocessed fresh segments remain (64 in `cache/fresh_segments.json`) for a held-out check. Rule details (e.g. serve touching the net) need checking against the rulebook before anything is encoded. Nothing shipped.
+
+## 2026-10-13 (rules probe) — Can we detect net contact and serve faults (net / out / kitchen / wrong box) from the ball track? Not yet, and three of the four cannot be validated with the data we have
+
+**Why.** Operator proposal: encode pickleball rules and detect four dead-ball events: ball hits the net, serve out of bounds, serve into the kitchen, serve into the wrong (adjacent) box. Two GPU-free probes on the 30 judged fresh clips (all in-sample, exploratory, nothing pre-registered, nothing shipped).
+
+**Ground truth we have (operator reasons, playback).** net 4 (301, 306, 324, 328; 304 is a return), serve out 1 (316), kitchen 1 (308), wrong box 1 (302). Rules 2-4 have one example each.
+
+**Probe 1 — can the ball be seen during the serve, and is a landing recoverable?** Window = 1 s before to 3 s after the detected start; raw detections (not court-gated); image-to-court homography; bounce candidate = local maximum of image-y with >= 8 px prominence.
+- Ball seen in a median 49% of frames (real), 38% (not real), 18% (very short). Longest blind stretches 10-50 frames (0.3-1.7 s).
+- >= 1 bounce candidate: real 12 of 15, not real 9 of 12, very short 2 of 3. Not selective.
+- Several candidate "landings" project far outside the court (e.g. y = 49 ft, 67 ft in real clips), so the candidates include non-bounces. The one kitchen clip (308) has 12% coverage and no candidate; the other serve-only clips 320 and 328 have none either.
+- This crude detector is not a test of what is possible, but it is not close to calling a service box.
+
+**Probe 2 — is a burst of crossings at the net a net-contact signature?** Burst = 3 crossings within 0.5 s.
+- Fresh: not real 4 of 12, very short 1 of 3, real 2 of 15.
+- Graded dev rallies (quality 1-2, >= 3 crossings): **49 of 172 (28%)** have one.
+- A rule on it would cost more than a quarter of good rallies. Not selective. Rejected as a rule.
+
+**Ceiling.** Of the 12 not-real clips, 7 are covered by rules 1-4 (301, 302, 306, 308, 316, 324, 328). The other 5 (311 no serve, 314 tossed ball, 320 / 322 serve only cut off, 319 practice) are not. Even perfect detection takes this sample from 15 of 30 real (50%) to 15 of 23 (65%).
+
+**What blocks it.** (1) Ground truth: one example each for rules 2-4. (2) A calibration error of 0.17-0.39 ft (this camera's file: 0.39 ft) is larger than a pickleball (about 0.24 ft) when a serve lands near a line. (3) The "wrong box" rule needs to know which side the server stood on, which needs player positions at the serve (the person probe suggests this is possible, untested for this). (4) Bounce detection from a behind-baseline camera was already weak (2026-10-11).
+
+**Next, if pursued.** Collect labelled faults deliberately (own players, own court, calibrated camera, ~10 per fault type, intended outcome noted at the time), then pre-register the bar and fit. Not started.
