@@ -3169,3 +3169,25 @@ Decision rule (>= 60% with both wrists AND >= 2 persons in >= 70% of frames): ne
 **What this does not show.** These are the model's own confidence numbers, not correctness. A wrist reported at 0.9 on a 134 px person is a few pixels wide and may be in the wrong place. The CLAUDE.md rule (playback, not numbers) applies: nothing here has been watched yet. The near-side feet positions are unreliable for the 36% that are cut off, so the near/far split by feet is itself approximate for those. Also not measured: whether swings can be detected from these points, and whether the person on the far side is a player (spectators within 6 ft of the court are counted).
 
 **Next.** Overlay of body points on a few clips for the operator to judge in playback (swing visible? points on the right body parts?), before any swing logic is written.
+
+## 2026-10-13 (swing count) — Counting arm swings from body points flags most non-rallies as rallies: FAIL
+
+**Why.** Operator proposal: use player position and pose around the serve. Gate first: the operator judged 7 body-point overlays in playback (`scripts/make_pose_review.py`): points on the right body parts near side 7 of 7, far side 7 of 7; swings clearly visible in 5 of 7 (all 4 real rallies; 1 of the 3 faults: 316 out and 306 net showed none, 301 net showed swings). Then `scripts/swing_count_probe.py`: count arm swings by side instead of ball crossings (a rally = at least 3 contacts, LABELING v5). Rules and bar committed (`39c404c`) before the run.
+
+**Rules (fixed before running).** Pose at 30 fps over the clip as the operator saw it (start - 1 s to end + 1 s); players inside x -2..22 ft, y -6..50 ft; a swing = wrist moving >= 4.0 torso lengths per second relative to the mid-shoulder for >= 3 consecutive frames; same-side swings within 0.5 s merged; RALLY = >= 3 swings with >= 2 changes of side.
+
+**Result (30 judged fresh clips).**
+
+| Verdict | n | RALLY | EXCHANGE | ONE_SIDE | NONE |
+|---|---|---|---|---|---|
+| Real | 15 | 12 | 2 | 1 | 0 |
+| Serve + return only | 3 | 2 | 1 | 0 | 0 |
+| Not a rally | 12 | 8 | 1 | 2 | 1 |
+
+Bar: RALLY on >= 60% of real (80%, 12 of 15: met) AND on <= 20% of the 15 non-rally clips (67%, 10 of 15: **not met**). **FAIL.** Of the failed serves with a stated cause, 301 was EXCHANGE, 302, 308, 316, 320, 322, 324 and 328 were RALLY and only 306 was NONE.
+
+**Why (post hoc, descriptive; the bar was already scored).** Players move their arms constantly, and a speed threshold cannot tell a hit from other arm movement (picking up balls, walking, adjusting): at 4.0 the median is 7 swings per real clip and 5 per non-rally clip, in clips of 3-16 s. The count separates weakly (AUC 0.64; swings per second 0.73). Raising the threshold removes real clips faster than non-real ones (at 8.0 the real median is 0 swings). Not tuned further: the 30 clips are the test set.
+
+**Reading.** Body points are good enough to draw (7 of 7), and a swing is visible to a person looking at the dots, but swing counting by speed alone is not a contact counter. To tell a hit from other arm movement the check needs to know whether the ball was there, which brings back the ball-visibility problem (tracked on about 24% of frames around a serve). A pose-only route to "was there a return" is not shown to work.
+
+**Stop rule applied.** Not building a pose-based rally or serve detector on this. Open: crop-to-court test for ball visibility; delivery-format change; mining faults for labelled examples.
