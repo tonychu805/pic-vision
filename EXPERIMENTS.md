@@ -3260,3 +3260,38 @@ Against the control: tracked -6 points, precision +1, recall +3 (24 vs 23 matche
 **Reading.** On this recording and with k14, doubling the frame rate did not make the ball more visible; the tracked share fell slightly and the blind stretches (about 1.5 s) are unchanged. Rally-level results are within noise (one more rally matched). So the missed-ball problem is not simply "too few frames per second" for this model. Caveats: the weights were trained for about 30 fps, so a 3-frame window at 60 fps spans half the time and may be worse for the model than the frame rate is good for the ball; one recording, 30 labels, 720p tournament footage; a model trained at 60 fps was not tested; the cached 30 fps run and the control differ by 3 matched rallies, which is the size of the noise here.
 
 **Consequence.** Do not require 60 fps at venues on this evidence. PIC-22's open half is answered for k14. Frame rate stays a question only for a differently trained model.
+
+## 2026-10-13 (modern YOLO vs k14) — yolo11x zero-shot is cleaner but finds fewer rallies; it does not clear the bar, and it complements k14
+
+**Why.** PIC-228. ADR-046 retired YOLO in August on one rally window and a zero-shot yolov8x. No current YOLO had been compared with k14 on the labelled videos. `scripts/infer_yolo_ball.py` (rule committed `6c35209` before the run), scored with `scripts/eval_detector_arms.py` on the same two 600 s excerpts and the same downstream pipeline as the tile arm.
+
+**Rule.** `yolo11x.pt` (Ultralytics release, downloaded by the operator; this machine has no outbound network), zero-shot, class 'sports ball', imgsz 1280, conf >= 0.10, the highest-confidence box per frame, the same court mask as k14, calibration-resolution coordinates. 18 fps on 1080p was not reached: about 7-8 fps (32 min per excerpt).
+
+**Result.**
+
+| Arm | Video | Seen | Tracked | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| base k14 | pb_draft_cup | 43% | 37% | 22 | 19 | 86% | 59% |
+| base k14 | brickwall-SEMI | 46% | 41% | 21 | 18 | 86% | 78% |
+| yolo11x | pb_draft_cup | 45% | 41% | 14 | 13 | 93% | 41% |
+| yolo11x | brickwall-SEMI | 51% | 50% | 21 | 19 | 90% | 83% |
+| **base pooled** | | **45%** | **39%** | 43 | 37 | **86%** | **67%** |
+| **yolo pooled** | | **48% (+4)** | **46% (+7)** | 35 | 32 | **91% (+5)** | **58% (-9)** |
+
+Bar (seen +10 points, precision and recall each within 3, one up 5): **does not help**. Seen rose only 4 points and recall fell 9.
+
+**Reading.**
+- The detections are cleaner: 96% of YOLO's seen frames were tracker-confirmed vs 87% for k14 and 84% for the tile arm, and precision is higher in both videos (93% and 90%).
+- It is video dependent: on brickwall-SEMI it beat k14 on precision and recall (90% / 83% vs 86% / 78%); on pb_draft_cup it lost most of the rallies (recall 41% vs 59%).
+- Zero-shot, single frame, one box per frame, untuned confidence: not a ceiling. No fine-tuning, no multi-candidate input.
+
+**Post hoc, descriptive (not part of the bar): do the two find the ball on the same frames?** Inside labelled rallies, share of frames where:
+
+| Video | k14 only | yolo only | both, positions agree (<= 25 px) | both, disagree | neither | either |
+|---|---|---|---|---|---|---|
+| pb_draft_cup | 16% | 18% | 25% | 3% | 39% | 61% |
+| brickwall-SEMI | 8% | 14% | 36% | 2% | 40% | 60% |
+
+When both detect, they agree 89-95% of the time. They find different frames (complementary), and a union reaches 60-61%. About 40% of in-rally frames get no detection from either, with different architectures and input sizes: that part may be truly hard or hidden (occlusion, blur, out of frame), which is not shown here.
+
+**Next.** A multi-candidate arm (both detectors' blobs offered to the tracker per frame) is a cheap test with no GPU: the tracker already accepts a candidate list. Not run. Fine-tuning either model needs frame-level ball labels (PIC-228).
