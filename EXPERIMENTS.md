@@ -3337,3 +3337,32 @@ Two thirds or more of the misses are rallies with fewer than 6 net crossings in 
 - The premise "static bright reflections that preprocessing can erase" is not supported by what the detector fires on, and the NVIDIA-library question does not arise (they would only run the preprocessing faster).
 - The existing lever is in `track_ball`: `min_seg_frames` / `min_seg_span` drop a confirmed run that is too short or does not move (its docstring names "a ball resting on the floor" and a sparsely visible adjacent-court ball). Off by default, never tested (mentioned as a next step in the 2026-10-12 diagnosis). A segment-level filter differs from the dwell test that failed (that dropped individual detections at re-fired pixels).
 - Not run. A candidate test: the nine hotspot-check clips plus the judged real clips in those two sessions, and the four graded videos for the cost side, with a bar fixed first.
+
+## 2026-10-13 (missed rallies, playback) — The rallies k14 misses are mostly ordinary short rallies, not dinks, and the tracked dot follows the ball: the "6 crossings" rule is cutting real rallies
+
+**Why.** The union arm showed rally recall does not follow ball visibility; 12 of the 18 labelled rallies k14 misses had fewer than 6 net crossings. Operator judged all 18 on playback (`scripts/make_missed_rallies_review.py`, clips 501-518, yellow net row, green tracked dot, crossing counter drawn on; categories hidden).
+
+**What they are (operator).** Normal rally 14, fast exchange 2, slow dinks 1, serve and return only 1. **The tracked dot follows the ball: yes 12, partly 6, no 0.** The hypothesis "the misses are dink / kitchen rallies where the ball hovers at the net" is not supported: 1 of 18.
+
+| Category (hidden) | Clips | Normal | Fast | Dink | Serve + return | Dot yes / partly |
+|---|---|---|---|---|---|---|
+| Fewer than 6 crossings in the window | 12 | 9 | 1 | 1 | 1 | 7 / 5 |
+| A segment overlaps, IoU < 0.5 | 6 | 5 | 1 | 0 | 0 | 5 / 1 |
+
+**Descriptive (from the tracked path, same clips vs the 37 rallies k14 does find):**
+
+| | Duration | Tracked share | Longest blind stretch | Switches of side of the net row |
+|---|---|---|---|---|
+| Found (37) | 10.0 s | 40% | 1.1 s | 9 |
+| Missed (18) | 7.1 s | 36% | 1.2 s | 4 |
+
+The missed rallies are about as visible as the found ones (tracked 36% vs 40%, blind stretch 1.2 vs 1.1 s). What differs is length: 7 s against 10 s, and half as many net-row switches. Typical missed clip: 4-8 s, 2-4 crossings, labelled a normal rally, dot following the ball.
+
+**Reading.**
+- Ball visibility is not why these are missed. A 4-8 s rally with 4 crossings has at least the 3 contacts that LABELING v5 requires, but the pipeline demands 6 crossings.
+- Crossing count is not a measure of how much real play happened: the same entries show a failed serve (no exchange at all) producing 5-12 crossings from a ball bouncing at the net, while real 4-contact rallies produce 3-4. At this range the count does not rank real above fake; raising or lowering min_crossings trades one for the other.
+- 6 clips are fragmentation or boundary problems (IoU < 0.5), the known ADR-072 / PIC-55 class.
+
+**Caveats.** Two excerpts of public tournament footage, 18 clips, all judged by one person, in-sample; the dot being "partly" on 6 means tracking is not always clean. The counted crossings are the image-row crossings the pipeline uses, which is what is under test.
+
+**Next.** A different rally-evidence signal than image-row crossing count, with a bar fixed first, scored on these excerpts plus the failed-serve clips (false-alarm side) and the graded dev videos (cost side).
