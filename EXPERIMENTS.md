@@ -2957,3 +2957,31 @@ Rule: zero graded lost, zero real field lost, >= 4 of 8 scenery fakes removed, s
 **Next.** 30-clip review sample cut (`scripts/cut_fresh_sample.py`): 10 rallies with one gap <= 6 s (exploratory, not part of the bar) + 20 random of the other unflagged rallies. If the 20 random contain few practice clips, (a) holds and the rule is inert for a boring reason; if they contain many, (b) holds and the rule does not generalise. Awaiting operator verdicts. IMG_7743 not read.
 
 **Caveats.** n = 68 rallies, one venue, one weekend. Rallies are detected ones, so detection misses move the gaps. Footage is third-party: clips are for internal review and are to be deleted afterwards.
+
+## 2026-10-13 (fresh sessions, verdicts) — The unflagged rallies are half not-real, and almost all of that is one camera. The pause rule is inert here, and the cause is not practice
+
+**Why.** Follow-up to the entry above (the frozen rule flagged 0 of 68). The 30-clip sample (`scripts/cut_fresh_sample.py`, playback, silent) was judged by the operator: 10 rallies with one gap <= 6 s (exploratory) and 20 random of the other unflagged rallies.
+
+**Result (operator verdicts, playback).**
+
+| Group | Clips | Real | Very short (serve + return) | Not a rally |
+|---|---|---|---|---|
+| one gap <= 6 s | 10 | 5 | 0 | 5 |
+| random unflagged | 20 | 10 | 2 | 8 |
+| All | 30 | 15 (50%) | 2 | 13 |
+
+- Pooled over the 68 detected rallies (random group weighted up) the real share is about 50%, with very wide error (n = 20 random; a 95% interval is roughly 28-72%). Treat it as "about half", not a measured precision. It is lower than the top-5-per-session figure (66%) because this pool is every detected rally, not the head of the ranking.
+- **The near-gap group is no different from the random group** (50% not real vs 50% not real or very short). A short gap on one side does not mark a false alarm here.
+- **Only 1 of the 13 not-real clips was named practice (319).** The operator gave no reason for the other 12, so what they were is unknown. Their gaps are long (typically 25-130 s on at least one side), which is isolated events, not drills. That is an inference from timing, not a verdict.
+- **12 of the 13 not-real clips are from one camera (court 1, `de3d1953`; 3 segments: 5 of 8, 1 of 2, 6 of 10).** The other courts: 1 of 9. n is small and a single day, so this shows concentration, not a cause.
+- Two real rallies (310, 327) are cut off at the clip end: the detected end is earlier than the real end.
+
+**Reading.**
+- Explanation (a) from the entry above ("these sessions contain little practice") is the closer one, but it is not the whole story: the sessions contain plenty of false alarms (about half of rallies), they are just not practice-shaped. The rule is aimed at practice and had nothing to catch.
+- The false alarms at court 1 are the open problem. Candidates, all UNVERIFIED: scenery / glare at that camera, failed serves and feeding (long gaps fit this), a different framing. The operator's reasons are what is missing.
+- The earlier claim that gap context is "the strongest lead for the practice class" stays true only as an in-sample lead. It did not transfer, because the fresh sessions' errors are a different class.
+
+**Not done / next.**
+- Reasons for the 12 unexplained not-real clips (especially 301, 304, 306, 311, 316 and the others from court 1).
+- Fixed-spot share for the 13 not-real vs the 17 other clips (GPU-free, existing script) — a check that scenery explains court 1; then verify by eye.
+- Nothing shipped. IMG_7743 not read. Clips are third-party: delete `clips/fresh_sample*` after the reasons are in.
