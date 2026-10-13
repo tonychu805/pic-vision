@@ -3295,3 +3295,32 @@ Bar (seen +10 points, precision and recall each within 3, one up 5): **does not 
 When both detect, they agree 89-95% of the time. They find different frames (complementary), and a union reaches 60-61%. About 40% of in-rally frames get no detection from either, with different architectures and input sizes: that part may be truly hard or hidden (occlusion, blur, out of frame), which is not shown here.
 
 **Next.** A multi-candidate arm (both detectors' blobs offered to the tracker per frame) is a cheap test with no GPU: the tracker already accepts a candidate list. Not run. Fine-tuning either model needs frame-level ball labels (PIC-228).
+
+## 2026-10-13 (union arm) — Offering both detectors' blobs to the tracker raises tracked frames from 39% to 54% but not rally recall: does not clear the bar, and it shows visibility is not the recall bottleneck
+
+**Why.** PIC-228. After the YOLO arm, k14 and yolo11x were found to see different frames inside real rallies (k14 only 8-16%, yolo only 14-18%, both agreeing 25-36%, neither about 40%). Does offering both to the tracker (it already accepts a candidate list) turn that into better rallies? `scripts/eval_union_arm.py`; rule and bar committed (`8364950`) before the run; no GPU.
+
+**Rule.** Per frame: the court-gated k14 blob and the court-gated yolo11x blob; if both exist within 25 px, only k14's is offered. Downstream unchanged (track_ball 150 px / 15 frames, crossings, gap 3.0 s, min 6, IoU >= 0.5). Same two 600 s excerpts, 55 labels. Bar: recall +5 points AND precision no worse than -3.
+
+**Result (pooled).**
+
+| Arm | Tracked in real rallies | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|
+| k14 (base) | 39% | 43 | 37 | 86% | 67% |
+| yolo11x | 46% | 35 | 32 | 91% | 58% |
+| union | **54%** | 40 | 35 | 88% | 64% |
+
+Union vs k14: recall -4 points, precision +1: **does not help**. By video: pb_draft_cup precision 84% / recall 50% (k14 86% / 59%); brickwall-SEMI 90% / 83% (k14 86% / 78%).
+
+**Post hoc, descriptive (not part of the bar): why more tracked frames did not give more rallies.** For the labelled rallies each arm misses:
+
+| Arm | Missed | A segment overlaps but IoU < 0.5 | Fewer than 6 net crossings in the window | >= 6 crossings but no segment |
+|---|---|---|---|---|
+| k14 | 18 | 6 | 12 | 0 |
+| union | 20 | 5 | 14 | 1 |
+
+Two thirds or more of the misses are rallies with fewer than 6 net crossings in them, so the min_crossings = 6 rule cannot form a segment however many ball frames are tracked. Across every arm so far, tracked share ranged from 39% to 54% (k14, yolo, tile, union) while pooled recall stayed between 58% and 67%, with no relationship between the two.
+
+**Reading.** On these two excerpts, rally-level recall is limited by the crossing-count rule (most plausibly dink and kitchen rallies, where the ball hovers near the net line and image-row crossings are few; compare PIC-48 and the 2026-08-21 entry), not by how often the ball is seen. More detections change which rallies are found only at the margin and cost precision or GPU time. Caveat: two excerpts, 55 labels, in-sample; "few crossings" may include rallies that are not obvious on playback, and this was not watched.
+
+**Consequence.** Detector comparison (PIC-228) has not produced a win on rally-level metrics; the better lever for recall is how a rally is formed from the tracked ball (a different rally-evidence signal than image-row crossings), not more detections.
