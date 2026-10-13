@@ -111,7 +111,7 @@ def serve_motion(track):
     for fi in frames:
         d = info[fi]
         ok = len(d) == 2 and all(v["speed"] is not None and v["speed"] < STILL_SPEED for v in d.values())
-        y = d[WR[0]]["court"][1] if d else 50.0
+        y = next(iter(d.values()))["court"][1] if d else 50.0
         at_base = y <= BASE_NEAR or y >= BASE_FAR
         if ok and at_base and (not cur or fi - cur[-1] == 1):
             cur.append(fi)

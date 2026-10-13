@@ -3191,3 +3191,27 @@ Bar: RALLY on >= 60% of real (80%, 12 of 15: met) AND on <= 20% of the 15 non-ra
 **Reading.** Body points are good enough to draw (7 of 7), and a swing is visible to a person looking at the dots, but swing counting by speed alone is not a contact counter. To tell a hit from other arm movement the check needs to know whether the ball was there, which brings back the ball-visibility problem (tracked on about 24% of frames around a serve). A pose-only route to "was there a return" is not shown to work.
 
 **Stop rule applied.** Not building a pose-based rally or serve detector on this. Open: crop-to-court test for ball visibility; delivery-format change; mining faults for labelled examples.
+
+## 2026-10-13 (serve motion) — A "still at the baseline, then strike below the waist" serve template is found in only 8% of real rally starts: FAIL
+
+**Why.** Operator pasted a description of detecting the mechanical sequence of a serve with pose (stationary at the baseline, paddle drawn back, forward strike below the waist) as an anchor for rally starts and a way to drop no-serve clips. Not a rally detector: failed serves have a perfect serve motion. `scripts/serve_motion_probe.py`; rules and bar committed (`7625d12`) before the run. One crash (a frame where only one wrist was valid) was fixed without touching the rules.
+
+**Set.** Positives 88 (fresh: real 15 + serve-and-return only 3; earlier judged sessions: real + very short 70). Negatives 18 (fresh 311, 314, 319; earlier practice / machine / feeding / warm-up 15). 9 fresh fault or cut-off clips reported, not scored. Window rally start - 4 s to + 0.5 s, pose at 30 fps.
+
+**Rule (fixed before running).** Set phase: >= 0.5 s with both wrists slow (< 1.5 torso lengths/s), feet still (< 1.5 ft) and within 4 ft of a baseline; strike: within 1.5 s a wrist at >= 4.0 torso lengths/s for >= 3 frames with the wrist at or below the hip line.
+
+**Result.**
+
+| | Found | Bar |
+|---|---|---|
+| Positives (88) | 7 (8%) | >= 70% |
+| Negatives (18) | 0 (0%) | <= 25% |
+| Fresh faults and cut-off (9, not scored) | 1 (11%) | |
+
+**FAIL.** The negatives passing is not evidence: the rule almost never fires on anything. Where found: near 5, far 2.
+
+**Why (post hoc, descriptive; the bar was already scored).** Stage by stage on the 88 positives: a player at a baseline 92%; and still >= 0.5 s with both wrists valid 52%; a fast arm burst by a baseline player at some point 67%; the full sequence in order (still, then a strike within 1.5 s, below the hip line, feet still) 8%. The individual pieces exist about half the time; requiring them in sequence together almost never holds. Not tuned further: these clips are the test set. The cheapest explanations (unverified): wrists are not confidently seen for half a second in a row, servers are cut off at the near edge, and the sequence is not as regular as the template.
+
+**Reading.** A serve-motion anchor is not available from this pose output with a template this strict, and loosening it by hand on the same clips would not be a fair test. It would not remove failed serves in any case.
+
+**Stop rule applied.** Not building a serve-motion anchor. Open: crop-to-court test for ball visibility; delivery-format change.
