@@ -3215,3 +3215,28 @@ Bar: RALLY on >= 60% of real (80%, 12 of 15: met) AND on <= 20% of the 15 non-ra
 **Reading.** A serve-motion anchor is not available from this pose output with a template this strict, and loosening it by hand on the same clips would not be a fair test. It would not remove failed serves in any case.
 
 **Stop rule applied.** Not building a serve-motion anchor. Open: crop-to-court test for ball visibility; delivery-format change.
+
+## 2026-10-13 (zoom / tile test) — Giving k14 a 1.7x larger ball makes it see the ball far more often, but rally precision falls: does not clear the bar
+
+**Why.** PIC-226. Nothing based on the ball's position around a serve worked because the ball is tracked on only about a quarter of the frames there. The detector sees every frame resized to 512 x 288, so the ball is 4-5 px wide at its input (blob widths are multiples of the resize factor). Does a larger ball help? `scripts/infer_tile_k14.py`, `scripts/eval_detector_arms.py`; rule and bar committed before the run (`215fe03`).
+
+**A first arm was dropped.** The registered arm was a crop to the court. Its own log showed the crop was 99% of the frame width on pb_draft_cup (the court corners span 82-85% of the width on both test videos, 55% on brickwall_30fps), so it zoomed nothing. It was stopped before finishing and not scored; replaced by two overlapping tiles (each 60% of the width, 16:9 over the court band plus airspace, resized to 512 x 288, about 1.7x more pixels on the ball). The bar did not change. One scoring run printed numbers from a still-being-written tile file; they were an artifact and discarded, and the scorer now skips incomplete files. A 'tracked' column (tracker-confirmed positions) was added before any complete result was read; reported, not gated.
+
+**Set.** First 600 s of `pb_draft_cup_30fps` (32 labels) and `brickwall-SEMI` (23 labels), 1080p. Same weights (k14), same court mask, same blob picking, same downstream pipeline; the best blob across the two tiles per frame.
+
+**Result.**
+
+| Arm | Video | Ball seen in real rallies | Tracker-confirmed | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| base | pb_draft_cup | 43% | 37% | 22 | 19 | 86% | 59% |
+| base | brickwall-SEMI | 46% | 41% | 21 | 18 | 86% | 78% |
+| tile | pb_draft_cup | 68% | 54% | 26 | 17 | 65% | 53% |
+| tile | brickwall-SEMI | 59% | 52% | 24 | 20 | 83% | 87% |
+| **base pooled** | | **45%** | **39%** | 43 | 37 | **86%** | **67%** |
+| **tile pooled** | | **63% (+19)** | **53% (+13)** | 50 | 37 | **74% (-12)** | **67% (+0)** |
+
+Bar (seen +10 points AND precision and recall each within 3 points AND one up 5): the first part is met, **precision fell 12 points, so the arm does not help.** Speed 22 fps vs 58, about 2.6x the GPU time.
+
+**Reading.** The ball is seen on far more frames (45% to 63%, tracker-confirmed 39% to 53%), so the ball being small at the network input is a real part of the problem. The extra visibility did not turn into better rallies: on pb_draft_cup the tile arm added false rallies (26 predicted, 17 matched; precision 86% to 65%, recall 59% to 53%), while on brickwall-SEMI recall rose (78% to 87%) at a small precision cost (86% to 83%). One video each way; two excerpts of one footage style. Not verified: whether the extra detections are the ball (no per-frame ball truth exists; playback check not done). A ball seen more often may also mean more hallucinations at the larger scale.
+
+**Next.** The modern-YOLO arm (`scripts/infer_yolo_ball.py`, rule committed `6c35209`) is running on the same excerpts. If a tile-like view is pursued, the question becomes tuning the downstream filters for the extra detections, not seeing the ball.
