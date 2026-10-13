@@ -2576,3 +2576,34 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 - **Forcing arcs over the net backfired**: it bent real net hits upward. Net clearance is now an event, not a constraint.
 
 **Conclusion.** A trustworthy top-down ball path is feasible only for long, unoccluded flights; far end and net contacts are the least reliable, and those are exactly the interesting moments. Ball traces are not a deliverable (operator decision, 2026-10-11). The scripts stay as internal diagnostics. Ball-derived *signals* (bounces, net contact, speed) are still candidates if a highlight type needs them. Tickets: PIC-195/204/205/206 parked; PIC-196 (fast exchange, ball-only) is the next step.
+
+## 2026-10-12 — Do ball-only tempo features (pace, kitchen, escalation, finish) separate highlight-worthy rallies from ordinary ones? No clear signal beyond the shipped score
+
+**Why.** PIC-207/208 under PIC-196 (mechanic M1 of the 2026-10-12 detection-mechanics concept plan): before building "fast exchange" / "kitchen battle" detection from ball data alone, check whether simple ball-only features track the human `quality` grades at all. `scripts/ball_tempo_features.py`; table in `cache/ball_tempo_features.csv` (not committed).
+
+**Setup.** Four graded dev videos (`brickwall_30fps`, `pb_draft_cup`, `IMG_7744`, `brickwall-SEMI`); IMG_7743 (the locked eval set) not read. Detection and IoU >= 0.5 matching reused from `scripts/validate_absolute_ranking.py`; speeds in court widths/s; fast-ball cut-off 1.80 (pooled p90). **90 graded rallies matched: quality:1 = 33, quality:2 = 57** (per video q1/q2: brickwall_30fps 12/19, brickwall-SEMI 12/12, pb_draft_cup 7/12, IMG_7744 2/14). Statistic: chance a random quality:1 rally exceeds a random quality:2 one (0.5 = coin flip). **Bar fixed before looking:** pooled >= 0.65 (or <= 0.35) and the same side of 0.5 in at least 3 of 4 videos; redundant if |rank corr with the shipped score| > 0.8.
+
+**Results (pooled chance q1>q2; 95% interval is about +/- 0.12 for every row).**
+
+| Feature | Pooled | Note |
+|---|---|---|
+| shipped absolute score (ADR-133) | 0.650 | sits exactly on the bar |
+| duration | 0.651 | rank corr +0.86 with shipped score: redundant |
+| longest exchange | 0.644 | rank corr +0.85: redundant |
+| near-net share, band 0.10 | 0.654 | passes the bar, but bands 0.05 / 0.20 give 0.636 / 0.631: band-fragile |
+| kitchen score (near-net x low speed) | 0.621 | below bar |
+| escalation (peak / mean crossing rate) | 0.544 | no signal |
+| pace share (share of readings above cut-off) | 0.505 | coin flip |
+| finish speed (last 1 s) | 0.506 | coin flip |
+| speed median / p90 / spread | 0.60 / 0.47 / 0.44 | per-video signs disagree |
+| visibility fraction | 0.58 | no signal |
+
+**What this does and does not say.**
+- **No new feature clearly beats the shipped score**, and none can be separated from another: all the plausible ones sit within one confidence interval of each other. The honest reading is "no measurable gain on the grades with this much data", not "these features are useless".
+- **The bar is strict.** The shipped score itself lands exactly on it (0.650), so failing the bar is not the same as being worse than what is deployed. ADR-063's check ("quality:1 scores higher on all four videos") used means, a looser test.
+- **IMG_7744 has only 2 quality:1 rallies**; its per-video numbers (e.g. speed spread 0.93, speed median 0.11) are noise.
+- **Wrong target for categories.** `quality:1` pools several different kinds of highlight (long rally, sustained kitchen tension, skill display, clean finish; `LABELING.md`). A feature that picks out *fast exchanges* or *kitchen battles* specifically can legitimately fail to predict the pooled grade while still being a good detector of its type. This experiment cannot validate or refute a category; that needs rallies labelled by type (PIC-203 definitions, PIC-219 label-and-detect, PIC-209 playback review).
+
+**Conclusion.** Against the PIC-196 gate as written ("a feature that demonstrably tracks human grades is kept; otherwise record 'no signal' and stop ball-only work"): **no feature demonstrably beats the shipped score**. Whether to stop ball-only work, or to test it against category labels instead of the pooled grade, is the operator's decision (not made here). One analysis over four videos from three venues is not a go/no-go; a second session is still required.
+
+**Next, if ball-only work continues.** Label a small set of rallies by type on the pilot set (PIC-203/219), then test whether pace share / kitchen score / escalation separate *those* types, judged on playback (PIC-209).
