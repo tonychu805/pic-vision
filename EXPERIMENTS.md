@@ -3064,3 +3064,33 @@ It removes good rallies faster than false ones. Same shape as the time debounce,
 **4. Players are detected; they are just unused.** From the 2026-10-12 person probe (10 clips, earlier footage): far-side players boxed on 100% of frames in 9 of 10 clips, no boxes on non-people in 10 of 10, count within one of the operator's in 10 of 10. Not re-run on fresh court 1. The 2026-08-22 "only 2 of 4" was a single-frame pose check that was superseded. Nothing in the rally detector reads player positions. Count alone does not separate practice from play (4 people in games, drills and warm-ups).
 
 **Conclusion.** The false alarms are not mainly noise and not a player-detector failure. The detector's unit is "N crossings of a pixel row within a gap", and failed serves, ball-machine drills and fault-then-re-serve all produce that pattern with a real ball. Twelve filters on the dot have now failed against pre-registered or exploratory bars with the same trade-off. The information that separates the classes (a serve happened from behind the baseline, a return, at least 3 contacts, who is where) is not in the dot. Candidate sources: player positions at the serve (available, untested for this), the rules, and scene-level facts from a vision model.
+
+## 2026-10-13 (Gemini head-to-head) — Gemini alone on brickwall: unstable timeline, fails both the replacement and the veto bar
+
+**Why.** PIC-226. Operator question: would going straight to Gemini (no TrackNet, no RunPod) with the right system prompt find rallies as well? The 2026-08-16 verifier (ADR-085) was never scored. `scripts/gemini_head_to_head.py`, bar and prompt frozen in its docstring before the first call (commit `ec7a320`).
+
+**Setup.** `gemini-3.8-flash` (pinned id), temperature 0, JSON output. First 900 s of `brickwall_30fps` (30 labels) and `brickwall-SEMI` (36 labels), LABELING v5 rules in the system prompt. Conditions: A original encode 1 fps; B re-encoded (crf 30) 1 fps; C original 5 fps. Scored at IoU >= 0.5, greedy one-to-one (`eval.harness.match_intervals`), against the shipped pipeline on the same excerpts. Raw responses in `cache/gemini/`. 6 calls: 59,681 prompt tokens per 1 fps call, 297,281 per 5 fps call.
+
+**Result (pooled over both excerpts).**
+
+| | Precision | Recall |
+|---|---|---|
+| Shipped pipeline | 73.3% (44/60) | 66.7% (44/66) |
+| Gemini A, 1 fps | 58.6% (34/58) | 51.5% (34/66) |
+| Gemini B, re-encoded, 1 fps | 47.5% (29/61) | 43.9% (29/66) |
+| Gemini C, 5 fps | 20.8% (11/53) | 16.7% (11/66) |
+
+| Excerpt | Pipeline P / R | A | B | C |
+|---|---|---|---|---|
+| brickwall_30fps | 69% / 67% | 19% / 17% | 75% / 70% | 26% / 17% |
+| brickwall-SEMI | 77% / 67% | 91% / 81% | 24% / 22% | 18% / 17% |
+
+**Bar.** Replacement: FAIL (A precision 58.6% < 73.3%; recall 51.5% < 61.7%; agreement A vs B 0.15 < 0.85). Veto: FAIL (removes 14 of 16 pipeline false positives, 88%, but loses 21 of 44 true positives, 48%, limit 10%). Condition C was reported, not gated.
+
+**What happened.** The same video with the same prompt gives completely different timelines under a different encode, which is ADR-085's failure reproduced and now scored. In the poor runs the reported times run past the end of the clip (last reported rally at 1438 s on a 900 s file; 1449 s and 1489 s on the 1298 s original) so the model lost the time axis. When the timeline held, the judgement was good: 91% / 81% on SEMI A (better than the pipeline) and 75% / 70% on 30fps B. A constant shift or scale does not rescue the poor runs (post hoc check: at most 9 of 30 matched). Sampling at 5 fps was worse, not better.
+
+**Reading, and what it does not show.** Gemini alone is not a replacement and not a safe veto in this form. The semantic judgement may be adequate; the time axis is not trustworthy. That second sentence is a hypothesis from two good runs. Two excerpts, one tournament stream, one model, one prompt, temperature 0; results may differ for other models, shorter chunks or timestamps visible in the picture.
+
+**Untested follow-up (needs its own bar).** Burn a readable clock into the frames and split into about 3-minute chunks so the model reads time instead of counting it.
+
+**Note.** The API key used was pasted into the session by the operator; revoke it after the work.
