@@ -3366,3 +3366,18 @@ The missed rallies are about as visible as the found ones (tracked 36% vs 40%, b
 **Caveats.** Two excerpts of public tournament footage, 18 clips, all judged by one person, in-sample; the dot being "partly" on 6 means tracking is not always clean. The counted crossings are the image-row crossings the pipeline uses, which is what is under test.
 
 **Next.** A different rally-evidence signal than image-row crossing count, with a bar fixed first, scored on these excerpts plus the failed-serve clips (false-alarm side) and the graded dev videos (cost side).
+
+## 2026-10-13 (why yolo11x loses rallies) — It sees them as often as k14 does, but almost only on the near-camera side of the net row, so its crossings do not accumulate
+
+**Why.** Operator asked why yolo11x lost rallies (pb_draft_cup recall 41% vs k14 59%). Descriptive analysis of the labelled rallies in the two 600 s excerpts, by which arm finds them (both 29, k14 only 8, yolo only 3, neither 15). All 8 "k14 only" rallies are in pb_draft_cup.
+
+| Group | n | Median length | Ball seen: k14 / yolo | Tracked: k14 / yolo | Net crossings: k14 / yolo | Tracked points above the net row: k14 / yolo |
+|---|---|---|---|---|---|---|
+| Both find | 29 | 11.1 s | 45% / 50% | 40% / 48% | 10 / 10 | 66% / 49% |
+| k14 only (yolo loses) | 8 | 7.2 s | 42% / 50% | 39% / 47% | 5 / 3 | 68% / 31% |
+| yolo only | 3 | 7.7 s | 49% / 46% | 37% / 39% | 6 / 6 | 84% / 69% |
+| Neither | 15 | 7.0 s | 41% / 37% | 33% / 36% | 4 / 4 | 78% / 52% |
+
+**Reading.** YOLO does not lose these rallies by seeing the ball less: on the 8 it loses it sees and tracks the ball more often than k14 (50% vs 42% seen, 47% vs 39% tracked). It loses them because its tracked positions sit mostly below the net row (31% above vs 68% for k14), so there are fewer switches of side and the crossing count stays at 3 against k14's 5. "Above the net row" in the image is the far court plus high balls. The likely mechanism, not verified: a small far-court or high ball at 1280 input is the part a single-frame detector misses, and YOLO does well on the larger, near-camera ball. Caveats: 8 rallies, one video; the effect also shows in the "both" group (49% vs 66%), so it is a general lean, not just these eight.
+
+**Consequence.** YOLO's cleaner detections are not a drop-in for k14 under a crossing-count rule; its blind half is the half the rule needs. Tiled or higher-resolution YOLO, or YOLO's detections used only where it is strong, are untested.
