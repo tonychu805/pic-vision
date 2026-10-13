@@ -3094,3 +3094,15 @@ It removes good rallies faster than false ones. Same shape as the time debounce,
 **Untested follow-up (needs its own bar).** Burn a readable clock into the frames and split into about 3-minute chunks so the model reads time instead of counting it.
 
 **Note.** The API key used was pasted into the session by the operator; revoke it after the work.
+
+## 2026-10-13 (corrections) — Numbers I stated earlier today that were wrong or overstated
+
+Found by re-checking against the files after the operator asked for a double-check. The entries above are left as written (append-only); read them with these corrections.
+
+1. **Court 1 vs the other courts (fresh sample).** After 304 was re-judged very short, the 30 clips split as: court 1 (`de3d1953`) 20 clips, 11 not a rally (55%), 2 serve + return only; other courts 10 clips, 1 not a rally (10%), 1 serve + return only. Earlier text said "12 of 13 from one camera" (before the 304 change) and "other courts 1 of 9" (should be 1 of 10). The concentration is real; court 1 is also two thirds of the sample (20 of 30).
+2. **"Players are detected on every frame in 9 of 10 clips"** (diagnosis entry, point 4) quoted the automatic measure only. The operator's playback verdicts in the 2026-10-12 (players) entry are: far side boxed always 5, mostly 4, sometimes 1 of 10. The PIC-197 bar depends on what "mostly" means and was never defined. The person count within one of the operator's in 10 of 10 stands. The detector is not in the rally pipeline and was only run on 10 clips.
+3. **Calibration error.** All 14 PGC calibration files report a reprojection RMSE of 0.38-0.49 ft (median 0.44). The 0.17 ft quoted in the person probe entry does not match any of them and is not reconciled; do not rely on it.
+4. **The 3D arc tool (`scripts/ball_court_map_3d.py`) is a diagnostic, not a pipeline component.** It was run on one rally (brickwall r24) and tuned there; 5-6 of 10-11 arcs passed its physical checks. Far-end depth (where a serve to the far side lands) is the part it reported as least reliable, so "a serve is its best case" was not supported.
+5. **Ball size at the network.** The detection blob width is a multiple of the resize factor (3.75 px for 1920-wide, 2.5 px for 1280-wide) and is 4 or 5 network pixels in the three files checked. This is the blob the detector reports, not a measured ball size. Prior art cited in ADR-006 (about 60% at 640 vs about 100% at 1280) is from the retired YOLO design, not TrackNet at 512 x 288.
+6. **Gemini token rate.** The docs say about 100 tokens per second of video at 1 fps; this model used 59,681 tokens for 900 s (about 66 per second) at 1 fps and 297,281 at 5 fps.
+7. **Brickwall baseline.** The pooled 73.3% / 66.7% (two excerpts) was compared in prose with the earlier brickwall-SEMI-only held-out figure (74% / 64%). Similar, not the same measurement.
