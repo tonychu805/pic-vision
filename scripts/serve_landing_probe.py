@@ -140,7 +140,8 @@ def main():
         if seg_name not in cams:
             meta = json.load(open(f"cache/fresh/{seg_name}.meta.json"))
             calib = json.load(open(meta["calib"]))
-            cams[seg_name] = (calib,) + camera_for(calib, 1920, 1080)
+            res = camera_for(calib, 1920, 1080)
+            cams[seg_name] = (calib, None, res[1]) if res[0] is None else (calib, res, "")
         calib, cam, why = cams[seg_name]
         truth = "fault" if clip in FAULTS else "in"
         if cam is None:

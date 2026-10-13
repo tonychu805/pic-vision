@@ -3106,3 +3106,24 @@ Found by re-checking against the files after the operator asked for a double-che
 5. **Ball size at the network.** The detection blob width is a multiple of the resize factor (3.75 px for 1920-wide, 2.5 px for 1280-wide) and is 4 or 5 network pixels in the three files checked. This is the blob the detector reports, not a measured ball size. Prior art cited in ADR-006 (about 60% at 640 vs about 100% at 1280) is from the retired YOLO design, not TrackNet at 512 x 288.
 6. **Gemini token rate.** The docs say about 100 tokens per second of video at 1 fps; this model used 59,681 tokens for 900 s (about 66 per second) at 1 fps and 297,281 at 5 fps.
 7. **Brickwall baseline.** The pooled 73.3% / 66.7% (two excerpts) was compared in prose with the earlier brickwall-SEMI-only held-out figure (74% / 64%). Similar, not the same measurement.
+
+## 2026-10-13 (serve landing probe) — The 3D flight fit cannot tell a failed serve from a good one on these clips: FAIL
+
+**Why.** PIC-226. Operator's definition of a failed serve: out of bounds, net, or the adjacent box (plus the kitchen). Before building a serve detector, can the existing flight-fitting tool (`scripts/ball_court_map_3d.py`: camera pose from the calibration, a ballistic arc per flight segment) recover a serve's landing? It had only been tried on one brickwall rally. `scripts/serve_landing_probe.py`; rules and bar fixed in its docstring and committed (`ae572c1`) before the run. One glue-code bug (return-shape mismatch) was fixed after the first crash without touching the rules.
+
+**Set.** 25 eligible of the 30 judged fresh clips: 18 good serves (real 15, serve + return only 3), 7 faults with a stated cause (301 net, 302 adjacent, 306 net, 308 kitchen, 316 out, 324 net, 328 net). Excluded: 311, 314, 319, 320, 322. All 8 calibrations recovered a camera pose (cameras 15-18 ft behind the baseline, 9-13 ft up, f 1090-1529 px) and passed the net-post check.
+
+**Result against the bar.**
+
+| | Result | Bar |
+|---|---|---|
+| (1) Estimate produced | 7 of 25 (28%) | >= 60% |
+| (2) True faults called a fault | 0 of 1 | >= 50% |
+| (2) Good serves called a fault | 5 of 6 (83%) | <= 25% |
+| **Overall** | **FAIL** | |
+
+**Where the 25 went.** No valid flight segment in the window at all: 5 (304, 308, 309, 312, 316). Segments, but none a serve flight (>= 10 ft of travel): 7 (302, 305, 307, 317, 325, 328, 330). Server side unknown (fitted start in the middle of the court): 4 (306, 310, 321, 326). Landing within 2 ft of a boundary: 2 (301, 327). Estimates: 7: 303 OUT (x=24, y=20), 313 OUT (y=-14), 315 OUT (y=79), 329 OUT (y=85), 323 NET, 318 IN, 324 IN (a net hit called in).
+
+**Reading.** Of the 7 estimates, 4 land 10-40 ft outside any plausible serve position (y = 79 and 85 ft on a 44 ft court): the fit is extrapolating a poorly determined arc, not recovering physics. The one estimate on a true fault (324, net) is wrong. On these clips the tool cannot tell a failed serve from a good one. It does not show the idea is impossible: windows are tied to the detected rally start, which can fall after the serve; the fit was built for one rally; and the far end (where half of all serves land) is the part its own entry reported as near-degenerate. It does show that this tool, as built, is not a base for a serve-fault detector.
+
+**Stop rule applied.** Not building a serve detector or a landing-based rule engine on this. Next candidates (not started): crop-to-court detection test, players at the serve, mining faults for labelled examples, delivery-format changes.
