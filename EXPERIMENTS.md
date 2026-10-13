@@ -3381,3 +3381,32 @@ The missed rallies are about as visible as the found ones (tracked 36% vs 40%, b
 **Reading.** YOLO does not lose these rallies by seeing the ball less: on the 8 it loses it sees and tracks the ball more often than k14 (50% vs 42% seen, 47% vs 39% tracked). It loses them because its tracked positions sit mostly below the net row (31% above vs 68% for k14), so there are fewer switches of side and the crossing count stays at 3 against k14's 5. "Above the net row" in the image is the far court plus high balls. The likely mechanism, not verified: a small far-court or high ball at 1280 input is the part a single-frame detector misses, and YOLO does well on the larger, near-camera ball. Caveats: 8 rallies, one video; the effect also shows in the "both" group (49% vs 66%), so it is a general lean, not just these eight.
 
 **Consequence.** YOLO's cleaner detections are not a drop-in for k14 under a crossing-count rule; its blind half is the half the rule needs. Tiled or higher-resolution YOLO, or YOLO's detections used only where it is strong, are untested.
+
+## 2026-10-14 (rally formation) — Lowering the crossing threshold or adding a band recovers 5 of 18 missed rallies but costs 17 points of precision; the segment filters were mis-specified for sparse tracks
+
+**Why.** PIC-228 / PIC-48. The missed rallies are ordinary 4-8 s rallies with 2-4 image-row crossings that the "at least 6 crossings" rule cuts, and a failed serve gets 5-12 jitter crossings from a bouncing ball (2026-10-13 entries). Is there a better rule for forming a rally from the same tracked ball? `scripts/eval_rally_formation.py`; arms, sets and bar committed (`d9ae1d0`) before the run; CPU only.
+
+**Arms (fixed before running).** R0 current (band 0, min 6); E1 band 30 px, min 4; E2 band 15 px, min 4; S1 R0 + the tracker's `min_seg_frames` 8 / `min_seg_span` 60 px; S2 E1 + the same filters; A1 k14-and-yolo11x agreement-only frames, min 4 (brickwall excerpts only, not gated).
+
+**Sets.** MISSED: the 18 labelled rallies R0 misses (two 600 s excerpts). PGC: the 30 judged fresh clips (15 real, 12 not a rally, 3 serve-and-return). DEV: the four graded videos pooled (precision and recall at IoU >= 0.5).
+
+**Bar.** HELPS only if: recovers >= 6 of 18; loses at most 1 of the 15 real PGC clips; DEV recall >= R0 - 0.02 and precision >= R0 - 0.03.
+
+| Arm | Missed recovered (of 18) | PGC real kept (of 15) | PGC non-rally removed (of 15) | DEV precision | DEV recall |
+|---|---|---|---|---|---|
+| R0 | 0 | 15 | 0 | 74.2% | 45.9% |
+| E1 (band 30, min 4) | 5 | 11 | 1 | 41.3% | 25.8% |
+| E2 (band 15, min 4) | 5 | 15 | 0 | 57.4% | 47.9% |
+| S1 (R0 + segment filters) | 0 | 2 | 13 | 31.4% | 5.7% |
+| S2 (E1 + filters) | 2 | 3 | 14 | 24.4% | 5.2% |
+| A1 (agreement only) | 0 | | | | |
+
+**Result: no arm helps.** E2 comes closest and shows the trade: it recovers 5 of 18 and keeps every real PGC clip, but pooled DEV precision falls 74.2% to 57.4% (bar: not below 71.2%) and it removes none of the non-rally clips. E1's band costs real rallies (4 of 15 lost, DEV recall 26%).
+
+**S1 and S2 were mis-specified, so they say nothing about resting balls.** `track_ball`'s segment filters act on maximal runs of consecutive accepted frames. With the ball accepted on about 40% of frames, runs are short: on brickwall-SEMI's first 600 s the median run is 3 frames and only 21% of the 1044 runs reach 8 frames, so `min_seg_frames` 8 deletes most of the track. A usable "ball at rest" filter would need to bridge gaps, which the existing code does not. Not re-run with other values: these sets are the test.
+
+**A1** recovered nothing: agreement frames are sparse (25-36% of in-rally frames).
+
+**Reading.** On these sets, forming rallies from image-row crossings has a fixed trade: every variant that recovers more of the short rallies adds false rallies in proportion. That matches the earlier finding that the count is not informative at the 3-6 range. Whatever evidence of a rally replaces it must carry information the net-row crossings do not (real travel between the ends of the court in court coordinates, or contacts), not a different threshold on the same counter.
+
+**Caveats.** DEV baseline here is the four graded videos pooled over their whole length (R0 recall 45.9%), not the 600 s excerpts used elsewhere (67%); comparisons are within this table. PGC clips are by construction all detected by R0.
