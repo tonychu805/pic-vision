@@ -3240,3 +3240,23 @@ Bar (seen +10 points AND precision and recall each within 3 points AND one up 5)
 **Reading.** The ball is seen on far more frames (45% to 63%, tracker-confirmed 39% to 53%), so the ball being small at the network input is a real part of the problem. The extra visibility did not turn into better rallies: on pb_draft_cup the tile arm added false rallies (26 predicted, 17 matched; precision 86% to 65%, recall 59% to 53%), while on brickwall-SEMI recall rose (78% to 87%) at a small precision cost (86% to 83%). One video each way; two excerpts of one footage style. Not verified: whether the extra detections are the ball (no per-frame ball truth exists; playback check not done). A ball seen more often may also mean more hallucinations at the larger scale.
 
 **Next.** The modern-YOLO arm (`scripts/infer_yolo_ball.py`, rule committed `6c35209`) is running on the same excerpts. If a tile-like view is pursued, the question becomes tuning the downstream filters for the extra detections, not seeing the ball.
+
+## 2026-10-13 (60 fps vs 30 fps) — Running k14 at the recording's native 60 fps does not make the ball more visible or the rallies better: does not clear the bar
+
+**Why.** PIC-22 ("is the missed-ball problem a camera problem?") had one half untested: does inference at native 60 fps help, since the ball moves half as far between frames. SwingVision's founder says the bounce is not visible without 60 fps (vendor interview). Our venue cameras and all our footage are 30 fps. `scripts/infer_k14_stride.py`, `scripts/eval_fps_arms.py`; rule and bar committed (`3bb7c27`) before the run.
+
+**Set.** One recording (brickwall, 1280x720): `brickwall_pro_series_finals.mp4` at 59.94 fps, same content as `brickwall_30fps.mp4` (same duration, pixel difference 0.6-2.5). First 900 s, 30 labels (end <= 900 s) of 49. Control = every second frame of the same 60 fps file (exactly 30 fps from the same encode). Same weights, mask, blob picking; downstream frame-rate aware (max_jump = 4500 px/s / fps, reset 0.5 s, gap 3.0 s, min 6 crossings), IoU >= 0.5.
+
+**Result.**
+
+| Arm | fps | Ball tracked in real rallies | Median longest blind stretch | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| 30fps_shipped (cached, 30 fps file) | 30 | 40% | 1.42 s | 29 | 20 | 69% | 67% |
+| 30fps_src (control) | 30 | 40% | 1.47 s | 30 | 23 | 77% | 77% |
+| 60fps | 59.9 | 33% | 1.48 s | 31 | 24 | 77% | 80% |
+
+Against the control: tracked -6 points, precision +1, recall +3 (24 vs 23 matched of 30), blind +0.02 s. **Does not help** (bar needed tracked +10 and a 5-point gain in precision or recall).
+
+**Reading.** On this recording and with k14, doubling the frame rate did not make the ball more visible; the tracked share fell slightly and the blind stretches (about 1.5 s) are unchanged. Rally-level results are within noise (one more rally matched). So the missed-ball problem is not simply "too few frames per second" for this model. Caveats: the weights were trained for about 30 fps, so a 3-frame window at 60 fps spans half the time and may be worse for the model than the frame rate is good for the ball; one recording, 30 labels, 720p tournament footage; a model trained at 60 fps was not tested; the cached 30 fps run and the control differ by 3 matched rallies, which is the size of the noise here.
+
+**Consequence.** Do not require 60 fps at venues on this evidence. PIC-22's open half is answered for k14. Frame rate stays a question only for a differently trained model.
