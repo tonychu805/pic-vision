@@ -3127,3 +3127,24 @@ Found by re-checking against the files after the operator asked for a double-che
 **Reading.** Of the 7 estimates, 4 land 10-40 ft outside any plausible serve position (y = 79 and 85 ft on a 44 ft court): the fit is extrapolating a poorly determined arc, not recovering physics. The one estimate on a true fault (324, net) is wrong. On these clips the tool cannot tell a failed serve from a good one. It does not show the idea is impossible: windows are tied to the detected rally start, which can fall after the serve; the fit was built for one rally; and the far end (where half of all serves land) is the part its own entry reported as near-degenerate. It does show that this tool, as built, is not a base for a serve-fault detector.
 
 **Stop rule applied.** Not building a serve detector or a landing-based rule engine on this. Next candidates (not started): crop-to-court detection test, players at the serve, mining faults for labelled examples, delivery-format changes.
+
+## 2026-10-13 (serve bounce probe) — Finding the serve's first ground contact directly with the calibration also fails, mainly because the ball is not tracked at the moment it lands: FAIL
+
+**Why.** After the 3D arc fit failed, the operator pointed out the goal is simply where the ball lands at the serve. The calibration homography is exact for a ball on the floor, so the direct route is: find the first bounce after the serve in the image and project it. `scripts/serve_bounce_probe.py`; rules and bar fixed in its docstring and committed (`65dd16b`) before the run. Same 25 eligible clips and verdicts, same bar as the arc probe.
+
+**Result.**
+
+| | Result | Bar |
+|---|---|---|
+| (1) Estimate produced | 9 of 25 (36%) | >= 60% |
+| (2) True faults called a fault | 1 of 1 | >= 50% |
+| (2) Good serves called a fault | 5 of 8 (62%) | <= 25% |
+| **Overall** | **FAIL** | |
+
+13 of the 25 clips had no bounce candidate at all; 1 had the server side unknown; 2 landed near the centre line. The one fault with an estimate (301, net) was called correctly; the other six had none. Four of the five good serves "called a fault" are "lands on the server's half" with the landing at y = 30-34 ft, which most likely means the first tracked point in the window was not the serve (the serve itself was not tracked), so the server's side was assigned wrongly. That is an inference, not checked clip by clip.
+
+**Why there are so few candidates (descriptive, not part of the bar).** In the 4.5 s serve window the tracker confirmed the ball on a median of 32 of 135 frames (24%); 3 of 25 clips had fewer than 10 tracked frames. A bounce candidate needs tracked points on both sides within 0.2 s. Post hoc, with a much looser rule (span 8 frames, 4 px, 1 point per side) 19 of 25 clips have at least one bounce-like point, but a looser rule also admits more non-bounces and was not tested for accuracy; it is not a result.
+
+**Reading.** Two different routes to the landing (a fitted arc, and a direct bounce) fail for the same reason on these clips: the ball is not tracked densely enough around the serve and its landing. Whether the ball can be seen more often at the network is the question that gates any landing work.
+
+**Stop rule applied.** No serve detector or landing rule engine from this camera at 30 fps on current detections. Next, if pursued, is the crop-to-court test, with ball visibility inside serve windows as its first measure.
