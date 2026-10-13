@@ -13,8 +13,11 @@ cluster_crossings (gap 3.0, min_crossings 6), IoU >= 0.5 matching.
 Measures: (a) ball seen = share of frames inside labelled rallies with a detection
 inside the court wedge; (b) rally precision and recall, pooled.
 
-Added before any arm result was read: a 'tracked' column (frames inside labelled
-rallies with a tracker-confirmed position), reported, not gated.
+Added before any complete arm result was read: a 'tracked' column (frames inside
+labelled rallies with a tracker-confirmed position), reported, not gated. (When this
+was tested, an incomplete tile file that was still being written was scored once;
+its numbers were an artifact and were discarded. The scorer now skips files with
+fewer than 98% of the expected rows.)
 
 BAR, fixed before running: an arm HELPS only if, pooled over both excerpts,
  ball seen rises by >= 10 points over base AND precision >= base - 0.03 AND recall
@@ -60,6 +63,10 @@ def main():
             if not os.path.exists(p):
                 continue
             calib = json.load(open(calib_p))
+            n_rows = sum(1 for _ in open(p)) - 1
+            if n_rows < 0.98 * WIN * 30:
+                print(f"{arm:6s} {name:16s} SKIPPED: {n_rows} rows of {int(WIN * 30)} (file incomplete)")
+                continue
             labels = [r for r in load_labels(lab_p) if r["end"] <= WIN]
             segs = [s for s in base.detect(p, calib)[0] if s["end"] <= WIN]
             preds = [{"start": s["start"], "end": s["end"]} for s in segs]
