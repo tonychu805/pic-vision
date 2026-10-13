@@ -2939,3 +2939,21 @@ Rule: zero graded lost, zero real field lost, >= 4 of 8 scenery fakes removed, s
 **Why it did not work (untested reading).** Scenery fakes are made of the bright spots alone; the real ball is often not among the candidates at all (detected on about 20% of frames). With no ball among the candidates there is nothing to choose; a better chooser only picks a different spot. V2b's extra real losses come from the more aggressive dwell penalty also hitting real play with scenery in frame.
 
 **Conclusion.** Nine ball-path ideas have now failed against pre-registered bars (tracked-only speed, scenery mask, confidence, simple trajectory, one-spot flag, rhythm, dwell, minimum crossings/duration, and this). None is shipped. Practice, the larger class, was separated by temporal context instead (gaps between rallies, previous entry), not by anything in the ball path.
+
+## 2026-10-13 (fresh sessions) — The frozen pause rule flags 0 of 68 rallies on sessions it never saw: not scorable, and not evidence it works
+
+**Why.** PIC-226. The gap rule (flag a rally when the gap before AND the gap after are both <= 6.0 s) passed in-sample on 15 practice clips and was written down as needing a fresh session before it touches ranking (entry 2026-10-12 "session context"). T = 6.0 s and the both-neighbours requirement were frozen before these sessions were processed. Pre-registered check: of the clips the rule flags, at least 70% are not real play.
+
+**Setup.** 8 PGC segments from 2026-09-25/26 that were never read during the investigation (3 courts, 7 x 10-minute segments + one 173 s), production inference run locally (`scripts/run_fresh_inference.py`, k14 weights, court mask, about 67 fps), production detector (`base.detect`, gap_sec 3.0, min_crossings 6). `scripts/apply_pause_rule_fresh.py`. Segment lengths checked: 600 s each at 30 fps, matching 18000 frames.
+
+**Result.**
+- 68 detected rallies, 52 of them with a neighbour on both sides. **0 flagged.** The check has no flagged clips to score, so it is neither a pass nor a fail.
+- The gap code is not the reason: on the sessions the rule was fitted on it flags 15 of 159 interior rallies (about 9%).
+- Gaps are long here: median gap before/after 27.7 s (field clips in the fit: real 18.6 / 23.7 s). The shortest gaps are 3.2, 4.1, 4.1, 4.1, 4.9, then 6.1 s. 9 interior rallies have ONE side <= 6 s, but never both.
+- Looser T, read afterwards and NOT a result: both <= 8 s: 1; <= 10 s: 1; <= 12 s: 6; <= 15 s: 7 (of 52).
+
+**Reading.** Two explanations fit and this data cannot tell them apart: (a) these sessions contain little practice, so there was nothing to flag; (b) the rule has low recall out of sample (it caught 8 of 15 practice clips in-sample, and the threshold was read off the curve). Without the operator's judgement of what is in these 68 rallies, neither can be claimed. The earlier "strongest lead" wording stays accurate only as an in-sample lead.
+
+**Next.** 30-clip review sample cut (`scripts/cut_fresh_sample.py`): 10 rallies with one gap <= 6 s (exploratory, not part of the bar) + 20 random of the other unflagged rallies. If the 20 random contain few practice clips, (a) holds and the rule is inert for a boring reason; if they contain many, (b) holds and the rule does not generalise. Awaiting operator verdicts. IMG_7743 not read.
+
+**Caveats.** n = 68 rallies, one venue, one weekend. Rallies are detected ones, so detection misses move the gaps. Footage is third-party: clips are for internal review and are to be deleted afterwards.
