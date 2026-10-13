@@ -4,7 +4,7 @@ The union arm showed rally-level recall does not follow ball visibility: of 18 m
 rallies, 12 have fewer than 6 net crossings inside them and 6 have a segment that
 overlaps with IoU < 0.5. This cuts all 18 (public tournament footage, 720p, silent,
 shuffled, numbered 501..) with the pipeline's own view drawn on: the net row the
-crossing counter uses (thin line), the tracked ball (green dot and trail), and a
+crossing counter uses (yellow line), the tracked ball (green dot and trail), and a
 running count of net crossings. Key (with the reason category) in cache/missed_review_key.csv.
 Internal review.
 """
@@ -56,13 +56,14 @@ def main():
             ok, img = cap.read()
             if not ok: break
             h, wd = img.shape[:2]
-            cv2.line(img, (0, int(it["ny"])), (wd, int(it["ny"])), (200, 200, 200), 1, cv2.LINE_AA)
+            cv2.line(img, (0, int(it["ny"])), (wd, int(it["ny"])), (0, 215, 255), 2, cv2.LINE_AA)
             trail = [(it["xs"][g], it["ys"][g]) for g in range(max(f0, f - 15), f + 1) if g < len(it["ys"]) and it["ys"][g] is not None]
             for k, (x, y) in enumerate(trail):
                 cv2.circle(img, (int(x), int(y)), 3 if k < len(trail) - 1 else 7, (60, 220, 60), -1, cv2.LINE_AA)
             so_far = sum(1 for c in crs if f0 <= c <= f)
             if any(0 <= f - c <= 6 for c in crs if f0 <= c):
                 cv2.circle(img, (60, 130), 28, (0, 0, 255), 4, cv2.LINE_AA)
+            cv2.rectangle(img, (0, 0), (760, 86), (0, 0, 0), -1)
             cv2.putText(img, f"{clip}   net crossings so far: {so_far}", (24, 60), cv2.FONT_HERSHEY_SIMPLEX, 1.1, (255, 255, 255), 3, cv2.LINE_AA)
             if vw is None:
                 vw = cv2.VideoWriter(raw, cv2.VideoWriter_fourcc(*"mp4v"), 30, (wd, h))
@@ -90,7 +91,7 @@ def main():
 .opts{{display:flex;gap:12px;flex-wrap:wrap;margin-top:10px;font-size:15px;align-items:center}}.why{{width:100%;box-sizing:border-box;margin-top:8px;background:#111;color:#eee;border:1px solid #333;border-radius:6px;padding:6px}}
 footer{{position:sticky;bottom:0;background:#000;padding:12px 16px;border-top:1px solid #333}}button{{font:inherit;padding:8px 14px;border-radius:6px;border:0;background:#2f6feb;color:#fff;cursor:pointer}}
 textarea{{width:100%;box-sizing:border-box;margin-top:8px;background:#111;color:#eee;border:1px solid #333;border-radius:6px;padding:8px}}</style></head><body>
-<header><h1>Rallies the detector missed</h1><p>These are hand-labelled rallies that our current pipeline did not find. On each clip: the thin grey line is the net row the counter uses, the green dot is the ball position the tracker accepted, and the red ring flashes when a net crossing is counted. Judge from playback: what kind of rally is it, and does the green dot follow the ball? Internal review of public tournament footage.</p></header>
+<header><h1>Rallies the detector missed</h1><p>These are hand-labelled rallies that our current pipeline did not find. On each clip: the yellow line is the net row the counter uses, the green dot is the ball position the tracker accepted, and the red ring flashes when a net crossing is counted. Judge from playback: what kind of rally is it, and does the green dot follow the ball? Internal review of public tournament footage.</p></header>
 <div class="grid">{cards}</div>
 <footer><span id="count">0 answered</span> <button id="copy">Copy my answers</button><textarea id="out" rows="3" readonly placeholder="Paste this to Claude."></textarea></footer>
 <script>const out=document.getElementById('out'),count=document.getElementById('count');
