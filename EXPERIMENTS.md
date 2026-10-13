@@ -3148,3 +3148,24 @@ Found by re-checking against the files after the operator asked for a double-che
 **Reading.** Two different routes to the landing (a fitted arc, and a direct bounce) fail for the same reason on these clips: the ball is not tracked densely enough around the serve and its landing. Whether the ball can be seen more often at the network is the question that gates any landing work.
 
 **Stop rule applied.** No serve detector or landing rule engine from this camera at 30 fps on current detections. Next, if pursued, is the crop-to-court test, with ball visibility inside serve windows as its first measure.
+
+## 2026-10-13 (pose coverage) — Body points on the venue clips: the far side is far better than the near side, because near players are cut off by the frame edge
+
+**Why.** Operator proposal (2026-10-13): start using player position and pose around the serve; a failed serve has no return, and a return shows up as a swing even when the ball is not tracked. Before building that, measure what the pose model (`yolov8x-pose`, on disk) gives on this footage. `scripts/pose_coverage_probe.py`; decision rule fixed in its docstring and committed (`2aebb11`) before the run. Descriptive; no pass/fail bar on rallies.
+
+**Set.** The 30 judged fresh clips, window rally start - 3 s to + 2 s, 10 fps (50 frames per clip, 1500 frames), imgsz 1280, person class, conf >= 0.25. Persons placed on the court by the box bottom-centre through the calibration homography; on-court = within 6 ft of the court. Keypoint counted as usable at confidence >= 0.5. Raw body points saved in `cache/pose/` (local, not committed).
+
+**Result (30 clips pooled; one row per person detection).**
+
+| Side | Person detections | Median usable body points (of 17) | Both wrists usable | Shoulders + hips usable | Frames with >= 2 persons |
+|---|---|---|---|---|---|
+| Near the camera (court y < 22) | 3258 | 13 | 53% | 96% | 96% |
+| Far side (y >= 22) | 2936 | 16 | 91% | 100% | 72% |
+
+Decision rule (>= 60% with both wrists AND >= 2 persons in >= 70% of frames): near NOT usable (wrists 53%), far usable. The opposite of what I had assumed.
+
+**Why the near side is worse (post hoc, from the saved points).** Near-side players stand at or behind the near baseline (court y median -1 ft) and are large in the frame (median box 334 px tall); **36% of their boxes touch the bottom edge of the frame**, so their feet, and often wrists, are partly out of view. Far-side players are 134 px tall, never cut. Mean wrist confidence: near 0.71-0.73, far 0.90-0.91.
+
+**What this does not show.** These are the model's own confidence numbers, not correctness. A wrist reported at 0.9 on a 134 px person is a few pixels wide and may be in the wrong place. The CLAUDE.md rule (playback, not numbers) applies: nothing here has been watched yet. The near-side feet positions are unreliable for the 36% that are cut off, so the near/far split by feet is itself approximate for those. Also not measured: whether swings can be detected from these points, and whether the person on the far side is a player (spectators within 6 ft of the court are counted).
+
+**Next.** Overlay of body points on a few clips for the operator to judge in playback (swing visible? points on the right body parts?), before any swing logic is written.
