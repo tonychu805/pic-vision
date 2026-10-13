@@ -3040,3 +3040,27 @@ It removes real rallies and false alarms at the same rate (-3 and -3 at 0.25 s),
 **What blocks it.** (1) Ground truth: one example each for rules 2-4. (2) A calibration error of 0.17-0.39 ft (this camera's file: 0.39 ft) is larger than a pickleball (about 0.24 ft) when a serve lands near a line. (3) The "wrong box" rule needs to know which side the server stood on, which needs player positions at the serve (the person probe suggests this is possible, untested for this). (4) Bounce detection from a behind-baseline camera was already weak (2026-10-11).
 
 **Next, if pursued.** Collect labelled faults deliberately (own players, own court, calibrated camera, ~10 per fault type, intended outcome noted at the time), then pre-register the bar and fit. Not started.
+
+## 2026-10-13 (diagnosis) — Why the detector is worse than expected: it counts a dot crossing a pixel row, and nothing in it knows what a point is
+
+**Why.** Operator asked for a diagnosis: too much noise, or players / poses not detected? Four GPU-free checks on the 30 judged fresh clips plus the graded dev rallies. All in-sample, exploratory, nothing pre-registered, nothing shipped.
+
+**1. Scenery is not the cause on these sessions.** Same measure as 2026-10-12 (share of tracked points in squares re-detected >= 20x the recording median): 0 of 30 clips reach 30%; 0 hot squares in 7 of 8 recordings (1 in the eighth). The measure was built on 2-hour sessions; on 10-minute segments it only catches persistent spots, so brief glare is not excluded. Scenery is specific to a venue / day, not the general explanation (earlier sample: 5+ of 24 not-real).
+
+**2. The "crossings" in a failed serve are a real ball, counted wrongly.** `crossing_times` counts the tracked point passing the image ROW of the net line (`band=0`). Clip 306 (serve into the net, 2.8 s, 6 crossings by the clip's end): a smooth track with x almost constant (1081 to 960 px over 2 s) and y oscillating around the net row: one ball dropping and bouncing at the net, crossing the pixel row about every 0.3-0.6 s. Clip 301 (12 crossings): 4 come from smooth arcs, the others from isolated off-track points (a jump from x=1318 to 1194, a point 481 px below the net row). So: part real ball motion with the wrong meaning, part stray points.
+
+**3. The designed hysteresis (ADR-042 `band`) does not fix it.** Production and every validation script run `band=0.0`; ADR-042 said to tune 15-30 px per camera and no entry records that. Tested now, rallies kept with >= 6 crossings left:
+
+| Band (px) | Fresh real (of 15) | Very short (of 3) | Not-real (of 12) | Graded dev (of 104) |
+|---|---|---|---|---|
+| 0 | 13 | 3 | 11 | 104 |
+| 10 | 10 | 3 | 10 | 96 |
+| 20 | 10 | 3 | 10 | 81 |
+| 30 | 6 | 2 | 9 | 66 |
+| 45 | 5 | 2 | 6 | 44 |
+
+It removes good rallies faster than false ones. Same shape as the time debounce, the mask, dwell and confidence: both classes carry the same dot signature.
+
+**4. Players are detected; they are just unused.** From the 2026-10-12 person probe (10 clips, earlier footage): far-side players boxed on 100% of frames in 9 of 10 clips, no boxes on non-people in 10 of 10, count within one of the operator's in 10 of 10. Not re-run on fresh court 1. The 2026-08-22 "only 2 of 4" was a single-frame pose check that was superseded. Nothing in the rally detector reads player positions. Count alone does not separate practice from play (4 people in games, drills and warm-ups).
+
+**Conclusion.** The false alarms are not mainly noise and not a player-detector failure. The detector's unit is "N crossings of a pixel row within a gap", and failed serves, ball-machine drills and fault-then-re-serve all produce that pattern with a real ball. Twelve filters on the dot have now failed against pre-registered or exploratory bars with the same trade-off. The information that separates the classes (a serve happened from behind the baseline, a return, at least 3 contacts, who is where) is not in the dot. Candidate sources: player positions at the serve (available, untested for this), the rules, and scene-level facts from a vision model.
