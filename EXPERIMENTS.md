@@ -3438,3 +3438,23 @@ The missed rallies are about as visible as the found ones (tracked 36% vs 40%, b
 **Consequence.** A score cut-off or top-N is not a guardrail for field footage. What is left before a learned model exists: human review of each clip before delivery, which also produces the labels. A "9 in 10" bar is not supported by anything measured.
 
 **Caveats.** 30 judged clips, one venue, a sample ("near" and "rand" groups) of the 68 detected rallies, so every percentage above has a wide interval (one clip is 3 points). Verdicts are one operator's; agreement on what counts as a rally was about one in three in earlier labelling (project_labeling_noise_floor).
+
+## 2026-10-14 (ship-only-the-best, public footage) — The same score cut-off and top-N reach 92-95% precision on the four graded public videos, against about 50% on PGC field footage
+
+**Why.** Companion to the PGC run directly above: is the score a usable filter on the footage it was validated on?
+
+**Method.** `scripts/eval_topn_precision_public.py`: the four graded videos (brickwall_30fps, pb_draft_cup, IMG_7744, brickwall-SEMI first 900 s), shipped detection, fixed 0-100 score, a detection counts as real when it matches a hand label at IoU >= 0.5. Pooled: 120 detections, 89 real (74%), 194 labelled rallies.
+
+| Score >= | Kept | Precision | Recall (of 194 labelled) |
+|---|---|---|---|
+| 0 | 120 | 74% | 46% |
+| 50 | 96 | 81% | 40% |
+| 55 | 78 | 82% | 33% |
+| 60 | 65 | 86% | 29% |
+| 65 | 53 | 89% | 24% |
+
+Top-N per video: top 3 = 92% (12 clips), top 5 = 95% (20), top 8 = 94% (32), top 12 = 94% (48).
+
+**Reading.** Here the score does work as a filter: cutting low scorers raises precision steadily, and the top few per video are almost all real. On PGC the same rule left precision at 38-57% (previous entry). The difference is the footage: stronger players, long rallies, and failed serves are rarer, so the long-fast-bouncing look is mostly real rallies.
+
+**Caveats.** Videos are 20-40 detections each; PGC sessions are 2-17, so per-video top-N is not the same quantity as per-session top-N. Public videos are also where the score's constants were tuned (ADR-133), so the margin is optimistic. Recall on IMG_7744 is low by construction (75 labelled, 23 detected).
