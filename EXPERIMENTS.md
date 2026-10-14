@@ -3458,3 +3458,18 @@ Top-N per video: top 3 = 92% (12 clips), top 5 = 95% (20), top 8 = 94% (32), top
 **Reading.** Here the score does work as a filter: cutting low scorers raises precision steadily, and the top few per video are almost all real. On PGC the same rule left precision at 38-57% (previous entry). The difference is the footage: stronger players, long rallies, and failed serves are rarer, so the long-fast-bouncing look is mostly real rallies.
 
 **Caveats.** Videos are 20-40 detections each; PGC sessions are 2-17, so per-video top-N is not the same quantity as per-session top-N. Public videos are also where the score's constants were tuned (ADR-133), so the margin is optimistic. Recall on IMG_7744 is low by construction (75 labelled, 23 detected).
+
+## 2026-10-14 (bounce check, no labels) — On the 38 pilot clips the bounce finder yields about 0.26 candidates per net crossing on both PGC and public footage; the ball is tracked on about 43% of frames
+
+**Why.** Before spending an hour hand-labelling bounces, look at what the system produces on the clips that would be labelled. Proxy only: with no ground truth this cannot give recall or precision.
+
+**Method.** `scripts/check_bounce_candidates.py` on `eval/labels/bounces/sample.json` (18 PGC, 20 public). Per clip: tracked share of frames, longest blind stretch, bounce candidates from `serve_bounce_probe.candidates` (rules unchanged), candidates inside the court +-3 ft, and net crossings.
+
+| Set | Clips | Mean tracked share | Mean longest blind | Candidates (on court) | Crossings | Candidates per crossing |
+|---|---|---|---|---|---|---|
+| PGC | 18 | 43% | 1.0 s | 35 (35) | 135 | 0.26 |
+| Public | 20 | 42% | 1.2 s | 57 (48) | 209 | 0.27 |
+
+**Reading.** A rally that crosses the net N times has about N flights, and most end in a bounce, though volleys (common at the kitchen) end in none and crossings include jitter. Even allowing for that, 0.26 per crossing says the finder sees only a fraction of the bounces; the 1-1.2 s longest blind stretch is as long as a typical flight, so a bounce can sit entirely inside a gap. PGC is no worse than public on these proxies, which fits the earlier finding that it is the ball not being tracked, not the player level, that limits this. Every PGC candidate is on court; 9 of 57 public candidates are not, so the finder also produces some noise on public footage.
+
+**Does not show.** How many real bounces exist, how many candidates are real, or the court error. Those need the hand labels (`label_bounce_web.py`).
