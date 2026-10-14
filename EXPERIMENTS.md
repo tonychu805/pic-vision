@@ -3516,3 +3516,24 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 **Caveats.** 42 bounces, 18 clips, one venue, default rules, single labeller. Labels not independently re-marked, so the "unmatched candidates" may include unmarked bounces. Paddle contacts also reverse the ball in image y; whether the unmatched candidates are mostly hits was not checked. Court errors for 6 matches are not an estimate of anything.
 
 **Does not show.** Whether a better tracker (denser detections) would clear the bar, how many unmatched candidates are real bounces, or line-call accuracy.
+
+## 2026-10-15 (bounce pilot, tile arm) — Running k14 on two zoomed tiles finds 19 of 42 hand-labelled PGC bounces (45%) against 8 (19%) for the whole frame: clears the 40% bar, driven by the far half of the court
+
+**Why.** The entry above found the loss was mostly thin tracking around the bounce, not the finder's rule. `infer_tile_k14.py` (2026-10-13) made k14 see the ball more often on public excerpts but hurt rally precision there; nobody had tried it on bounces. Rule and bar were committed before the run (`ff40b10`): clears the bar at >= 17 of 42 found, informative gain at >= 12, no help below.
+
+**Method.** Both arms run on the 18 cut clips in `clips/bounce_pilot/` (so like for like, not the cached full-session detections): `base` = `scripts/pod_infer.py`, whole frame, court mask; `tile` = `scripts/infer_tile_k14.py`, two 60%-width overlapping tiles, rule unchanged. Same k14 weights, same per-clip calibration, same tracker and finder rules. Same 42 labels, +-3 frames and 15 px. `scripts/eval_bounce_tile.py`.
+
+| Arm | Frames with a detection | Seen | Tracked | Found | Candidates in clips | Matching a label | Median court error (found) |
+|---|---|---|---|---|---|---|---|
+| base | 36% | 86% | 64% | **8 (19%)** | 17 | 10 | 1.12 ft |
+| tile | 37% | 86% | 83% | **19 (45%)** | 28 | 20 | 0.71 ft |
+
+**VERDICT: clears the bar** (>= 40%).
+
+**How robust.** Of the 42 bounces: found by both 5, tile only 14, base only 3, neither 20 (the discordant 14 vs 3 is unlikely to be chance, sign test p about 0.01). By half of the court: far 7 -> 16 of 27, near 1 -> 3 of 15. By clip: tile finds more in 7, fewer in 3, the same in 8.
+
+**Reading.** The raw detection rate barely moves (36% -> 37%, "seen" 86% in both), but the detections the tile arm makes are the ones the tracker accepts: tracked at the bounce rises 64% -> 83%, and the far half of the court, where the ball is smallest, gains most. So more consecutive usable points around a bounce, not more detections overall, is what the finder needed. Zooming is the cheapest lever found so far; a longer frame stack (retraining) was not tested.
+
+**Caveats.** Same 42 labels and 18 clips that motivated the hypothesis, one venue, one labeller (completeness is the operator's word); the arm itself was not tuned on them. The base arm here (19% found, 17 candidates) is not the same run as the cached full-session detections in the entry above (14% found, 35 candidates), because the clips are re-encoded and the tracker starts fresh at each clip; the two arms here are comparable with each other, not with that number. The tile arm costs two network passes per frame, and on public footage it raised false rallies (2026-10-13), so it is a candidate for a bounce pass over already-detected rallies only, not a drop-in replacement for the shipped detector. Near-half evidence is 15 bounces. Court error is measured only on the found ones (8 and 19).
+
+**Does not show.** Whether it holds on unselected stretches or a second camera, whether the unmatched candidates (8 of 28) are real bounces or paddle contacts, line-call accuracy, or the cost and latency in production.
