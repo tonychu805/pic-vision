@@ -3605,3 +3605,26 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 **Caveats.** One chunk, one camera, 19 events; audio/video sync from the container (start times 0) not independently verified, though the lag scan above found nothing at any lag. A better microphone, or per-frequency-band noise reduction, was not tried.
 
 **Does not show.** That audio could never work, only that this recording does not carry it.
+
+## 2026-10-15 (motion check, bounce vs paddle hit) — Speed after the event divided by speed before separates 23 bounces from 13 hits (AUC 0.88, leave-one-out accuracy 83%); passes the registered bar, with no held-out data
+
+**Why.** The tile arm's candidates are a mix of bounces and hits that the ball track alone cannot tell apart (and the audio could not: entry above). The operator tagged all 37 candidates in CVAT: 23 bounce (17 matched to labels, 6 unmarked), 13 paddle_hit, 1 not_ball. A bounce loses energy; a paddle usually adds it.
+
+**Method.** `scripts/eval_motion_hit_vs_bounce.py`, features and bar committed before the run (`2f40f7b`). Tile-arm tracked points of the unselected chunk (eda301d9 2026-09-25 08:21 session-000); at each candidate, a line fitted to the 8 frames before and after gives (vx, vy) per side; four features. Bar: features computable for >= 80%, best feature AUC >= 0.85 or <= 0.15, label-shuffle p < 0.01 (the shuffle covers picking the best of four).
+
+| Feature | Bounce median | Hit median | AUC (bounce > hit) |
+|---|---|---|---|
+| speed_ratio (speed out / speed in) | 0.72 | 1.13 | **0.12** |
+| side_change | 0.12 | 0.33 | 0.29 |
+| speed_out | 6.34 | 7.54 | 0.48 |
+| turn_deg | 133 | 151 | 0.45 |
+
+Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three parts of the bar pass.**
+
+**What it looks like as a classifier** (exploratory; threshold not part of the bar). Leave-one-out accuracy 30 of 36 (83%; always saying "bounce" scores 64%). A single threshold at 0.95 catches 11 of 13 hits and keeps 20 of 23 bounces. The bounces above the line are 0.97, 1.39 and 2.46; the hits below it 0.75 and 0.84.
+
+**Reading.** A hit makes the ball leave faster than it arrived (median ratio 1.13, up to 6.9); a bounce loses a quarter to a half of its speed (median 0.72). The ratio is a within-event quantity, which cancels most of the perspective effect on pixel speed. With it, the tile arm's 37 candidates would be pruned to roughly 20 bounces plus 2 hits plus 1 not-a-ball.
+
+**Caveats.** All 36 events come from one 3-minute chunk of one camera and one court, tagged by one operator who also watched the clips knowing the box was the finder's guess. n is 23 vs 13, and the threshold and the "best of four" are chosen on the same events (the leave-one-out and the shuffle test reduce but do not remove that). Speeds come from the same tracked points whose gaps limited the finder, so events with thin tracking around them are underrepresented by construction (36 of 36 had at least 3 points each side only because candidates require them).
+
+**Does not show.** Whether it holds on a second chunk, camera or venue; how it behaves on hits by a ball near the net or volleys; what happens to bounces that the finder did not reach in the first place (14 of 33 found).
