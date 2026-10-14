@@ -3557,7 +3557,7 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 
 **Does not show.** A second camera or venue, unlabelled-bounce rate (completeness is the operator's word), runtime cost, or what the extra candidates are.
 
-## 2026-10-15 (bounce pilot, review of the tile arm's unmatched candidates) — Of the 20 tile candidates that matched no label, 6 were real bounces the operator had not marked and 12 were paddle hits; the finder cannot tell the two apart, and the labels were about 85% complete
+## 2026-10-15 (bounce pilot, review of the tile arm's unmatched candidates) — Of the 20 tile candidates that matched no label, 6 were real bounces the operator had not marked and 13 were paddle hits; the finder cannot tell the two apart, and the labels were about 85% complete
 
 **Why.** The tile arm on the unselected chunk (entry above) had 37 candidates and 20 matched no label. Unmatched could mean unmarked bounces, hits, or noise, which changes both precision and the labels' completeness.
 
@@ -3566,17 +3566,16 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 | Operator's tag | Candidates | Which |
 |---|---|---|
 | bounce | 6 | 9, 12, 13, 14, 18, 20 |
-| paddle_hit | 12 | 1-6 (all the first 300 frames, before any labelled bounce), 8, 10, 11, 16, 17, 19 |
+| paddle_hit | 13 | 1-6 (all the first 300 frames, before any labelled bounce), 7, 8, 10, 11, 16, 17, 19 |
 | not_ball | 1 | 15 |
-| untagged | 1 | 7 (no tag was attached; not asked about) |
 
 **What it changes.**
 - **Labels were incomplete by at least 6**: 33 marked + 6 found = 39, so the operator marked about 85% of what was there (a floor: only tile candidates were reviewed).
-- **The tile arm's precision is higher than 17 of 37**: counting the 17 matched ones as bounces, 23 of 37 candidates (62%) are real bounces. 12 of 37 (32%) are paddle hits, which reverse the ball in image y like a bounce does. Whether any of the 17 matched ones are hits was not reviewed.
+- **The tile arm's precision is higher than 17 of 37**: counting the 17 matched ones as bounces, 23 of 37 candidates (62%) are real bounces. 13 of 37 (35%) are paddle hits, which reverse the ball in image y like a bounce does. Whether any of the 17 matched ones are hits was not reviewed.
 - **Recall on the augmented set**: tile 20 of 39 (51%), whole frame 6 of 39 (15%; it also had candidate 20). This is biased toward the tile arm by construction (the 6 were added because the tile arm produced them), so the pre-registered result stays 14 of 33 on the original labels.
 
-**Reading.** The finder's main precision problem is hits, not noise: only 1 of 20 was not the ball. A bounce needs a different cue from "ball lowest in the window" (a paddle in contact, or the ball's speed change, or a player nearby) to be told from a hit.
+**Reading.** The finder's main precision problem is hits, not noise: only 1 of 20 was not the ball (clip 7 was tagged after the first tally: paddle_hit). A bounce needs a different cue from "ball lowest in the window" (a paddle in contact, or the ball's speed change, or a player nearby) to be told from a hit.
 
-**Caveats.** One operator, one chunk, judged by playback at the box; the "bounce" calls were not repeated or second-checked. Clip 7 has no tag.
+**Caveats.** One operator, one chunk, judged by playback at the box; the "bounce" calls were not repeated or second-checked.
 
 **Does not show.** How many of the 17 matched candidates are hits, whether a hit/bounce separator is feasible, or the labelled-bounce completeness on the 18 pilot clips (not reviewed).
