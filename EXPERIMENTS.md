@@ -3473,3 +3473,46 @@ Top-N per video: top 3 = 92% (12 clips), top 5 = 95% (20), top 8 = 94% (32), top
 **Reading.** A rally that crosses the net N times has about N flights, and most end in a bounce, though volleys (common at the kitchen) end in none and crossings include jitter. Even allowing for that, 0.26 per crossing says the finder sees only a fraction of the bounces; the 1-1.2 s longest blind stretch is as long as a typical flight, so a bounce can sit entirely inside a gap. PGC is no worse than public on these proxies, which fits the earlier finding that it is the ball not being tracked, not the player level, that limits this. Every PGC candidate is on court; 9 of 57 public candidates are not, so the finder also produces some noise on public footage.
 
 **Does not show.** How many real bounces exist, how many candidates are real, or the court error. Those need the hand labels (`label_bounce_web.py`).
+
+## 2026-10-15 (bounce pilot, PGC, hand labels) — The bounce finder recovers 14% of 42 hand-labelled bounces on 18 PGC clips against a 40% bar; the ball is tracked at 74% of them, so the loss is in the finder, mostly because too few tracked points surround the bounce
+
+**Why.** The pilot's question: is a zone-level landing map a near-term feature? The pass bar was fixed in `scripts/eval_bounce_recovery.py` before any label existed: tracked >= 50%, found >= 40%, near-half median court error <= 1.5 ft.
+
+**Method.** The 18 PGC clips of `eval/labels/bounces/sample.json`, cut to `clips/bounce_pilot/` (re-encoded, 30 fps) and labelled blind in a local CVAT (points, one per bounce; replaces `label_bounce_web.py` for this run). 42 bounces, 2.3 per clip. Completeness is the operator's word: no clip was re-checked by a second pass, and a spot-check of the two sparsest clips (pgc-303, pgc-327) added nothing. Labels read straight from CVAT's database (`scripts/cvat_to_bounce_labels.py`), clip frame -> source frame = ceil(start x 30) + i. Scored with `eval_bounce_recovery.py` (+-3 frames, 15 px; IoU is not involved). Detections: the k14 `cache/fresh/*.csv` of the PGC sample, default finder rules.
+
+| Group | n | seen | tracked | found | median court error (found) |
+|---|---|---|---|---|---|
+| PGC all | 42 | 81% | 74% | **14%** (6) | 0.28 ft |
+| near half | 15 | 73% | 67% | 7% (1) | n=1, not meaningful |
+| far half | 27 | 85% | 78% | 19% (5) | 0.93 ft |
+
+**BAR (PGC): tracked 74% (pass), found 14% (FAIL), near-half error not assessable (1 found).** The finder also emitted 35 candidates inside these clips; 6 match a label.
+
+**Why the 36 misses.** For each, the first rule that rejected it (`serve_bounce_probe.candidates`: needs >= 2 tracked points in each of the 6 frames before and after, the point to be the lowest in that window, and an 8 px dip):
+
+| Reason | Bounces |
+|---|---|
+| Ball not tracked within 3 frames of the bounce | 11 |
+| Tracked, but fewer than 2 tracked points before or after within 6 frames | 16 |
+| Tracked, but not the lowest point in +-6 frames (track keeps going down) | 8 |
+| Dip under 8 px | 1 |
+
+The reading is not "the finder is bad on tracked bounces": tracked-at-the-bounce is 74%, but the rule also needs a short run of tracked points on both sides, and the ball is tracked on only about 43% of frames, so gaps around the bounce kill 16 more. Detection density, not the rule's shape, is the main cause.
+
+**Exploratory: loosening the rule (tuned on the same labels, not shipped).**
+
+| span (frames) | min points each side | min dip (px) | found / 42 | candidates | matching a label |
+|---|---|---|---|---|---|
+| 6 | 2 | 8 | 6 (14%) | 35 | 6 (17%) |
+| 6 | 1 | 8 | 8 (19%) | 46 | 8 (17%) |
+| 10 | 1 | 8 | 9 (21%) | 44 | 9 (20%) |
+| 10 | 1 | 4 | 10 (24%) | 47 | 10 (21%) |
+| 15 | 1 | 4 | 9 (21%) | 50 | 9 (18%) |
+
+No setting gets near 40%, and about four in five candidates match no label, so loosening trades a little recall for no precision. This is optimistic by construction (parameters chosen against the scoring labels).
+
+**Unselected cross-check (one 3-minute PGC chunk, eda301d9 2026-09-25 08:21 session-000, 33 bounces, not a pilot clip).** Camera calibration borrowed from the same camera's 10:01 recording (`365c798c`), so court-error figures there are weak. Seen 55%, tracked 48%, found 15%; 7 of 18 candidates match a label. Tracked coverage at bounces is 74% in the curated pilot clips versus 48% here: the selection effect, since the pilot clips are rallies the system had already flagged and a person judged real.
+
+**Caveats.** 42 bounces, 18 clips, one venue, default rules, single labeller. Labels not independently re-marked, so the "unmatched candidates" may include unmarked bounces. Paddle contacts also reverse the ball in image y; whether the unmatched candidates are mostly hits was not checked. Court errors for 6 matches are not an estimate of anything.
+
+**Does not show.** Whether a better tracker (denser detections) would clear the bar, how many unmatched candidates are real bounces, or line-call accuracy.
