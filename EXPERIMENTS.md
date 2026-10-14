@@ -3410,3 +3410,31 @@ The missed rallies are about as visible as the found ones (tracked 36% vs 40%, b
 **Reading.** On these sets, forming rallies from image-row crossings has a fixed trade: every variant that recovers more of the short rallies adds false rallies in proportion. That matches the earlier finding that the count is not informative at the 3-6 range. Whatever evidence of a rally replaces it must carry information the net-row crossings do not (real travel between the ends of the court in court coordinates, or contacts), not a different threshold on the same counter.
 
 **Caveats.** DEV baseline here is the four graded videos pooled over their whole length (R0 recall 45.9%), not the 600 s excerpts used elsewhere (67%); comparisons are within this table. PGC clips are by construction all detected by R0.
+
+## 2026-10-14 (ship-only-the-best guardrail) — On PGC field footage the shipped 0-100 score and per-session top-N do not separate real rallies from false ones; precision stays near 50% at every cut-off
+
+**Why.** The operator wants a reliable guardrail against false positives before the data exists for a learned model, and asked whether "9 in 10 shipped clips are real" is realistic. That number had no evidence behind it; this run measures what score-based selection actually delivers on field footage. Public footage (brickwall etc.) is stronger play and flatters the 73% / 67% figures.
+
+**Method.** `scripts/eval_topn_precision.py`. The 30 judged PGC clips (15 real, 3 serve-and-return only, 12 not a rally; verdicts from playback). Every rally detected in the 8 fresh segments (68 total) is scored with the shipped fixed 0-100 score (`score_segments`); detection is the shipped rule (gap 3.0 s, min 6 crossings). Precision of what is kept at each score cut-off and at each per-session top-N. Descriptive, no pass/fail bar (the point was to learn what bar is realistic).
+
+| Score >= | Kept of 30 | Real kept (of 15) | Precision (real only) | Precision (serve+return counted) |
+|---|---|---|---|---|
+| 0 | 30 | 15 | 50% | 60% |
+| 40 | 29 | 14 | 48% | 59% |
+| 50 | 21 | 9 | 43% | 57% |
+| 55 | 16 | 6 | 38% | 56% |
+| 60 | 8 | 4 | 50% | 50% |
+
+| Per-session top-N | Kept | Real kept (of 15) | Precision (real only) |
+|---|---|---|---|
+| 1 | 2 | 1 | 50% |
+| 2 | 7 | 4 | 57% |
+| 3 | 9 | 5 | 56% |
+| 5 | 15 | 6 | 40% |
+| 8 | 22 | 10 | 45% |
+
+**Result.** Raising the cut-off throws away real clips about as fast as false ones. Precision does not climb above roughly 50-57% at any setting, and 4 of the top 8 judged clips by score are not rallies (failed serves score high: long, fast bouncing crossings). The score ranks highlights among real rallies (ADR-063/133, validated on graded public footage); it is not a rally-vs-not-rally filter on this footage.
+
+**Consequence.** A score cut-off or top-N is not a guardrail for field footage. What is left before a learned model exists: human review of each clip before delivery, which also produces the labels. A "9 in 10" bar is not supported by anything measured.
+
+**Caveats.** 30 judged clips, one venue, a sample ("near" and "rand" groups) of the 68 detected rallies, so every percentage above has a wide interval (one clip is 3 points). Verdicts are one operator's; agreement on what counts as a rally was about one in three in earlier labelling (project_labeling_noise_floor).
