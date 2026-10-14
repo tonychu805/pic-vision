@@ -3579,3 +3579,29 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 **Caveats.** One operator, one chunk, judged by playback at the box; the "bounce" calls were not repeated or second-checked.
 
 **Does not show.** How many of the 17 matched candidates are hits, whether a hit/bounce separator is feasible, or the labelled-bounce completeness on the 18 pilot clips (not reviewed).
+
+## 2026-10-15 (audio check, bounce vs paddle hit) — The recording's audio does not separate a bounce from a paddle hit: only 32% of the 19 tagged events show a sound above the hall noise (random times: 24%), and no feature separates the classes
+
+**Why.** The ball track cannot tell a bounce from a paddle hit (candidate review above: 6 bounces, 13 hits). The PGC recording has a 16 kHz mono audio track (`pcm_mulaw`), and impact sounds need no ball track.
+
+**Method.** `scripts/eval_audio_hit_vs_bounce.py`, rule and bar committed before the run (`21c5566`). For each of the 19 tagged candidate events (6 bounce, 13 paddle_hit; the not_ball excluded): audio high-passed at 300 Hz, 10 ms RMS envelope; R = peak envelope in +-0.15 s of the candidate time over the median envelope in +-1.5 s; "has a sound" if R >= 4. Spectral centroid and high-frequency share at the peak. The 17 matched candidates were held out and not read.
+
+| | Result | Bar |
+|---|---|---|
+| Events with a sound (R >= 4) | 32% | >= 80% |
+| Random times with R >= 4 | 24% | <= 40% (passes) |
+| Best single feature (centroid) AUC, bounce vs hit | 0.60 | >= 0.85 or <= 0.15 |
+| Median distance of the envelope peak from the candidate | 98 ms (about the window's edge) | n/a |
+
+**FAIL on (a) and (b).** The held-out confirmation (c) was not run.
+
+**Diagnostics after the fail (exploratory, not part of the bar).**
+- The audio is loud and not silent: RMS 0.16, 99th-percentile envelope 0.59. It is dominated by hall noise, not by impacts.
+- A lag scan from -0.6 to +0.8 s around the **33 original bounce labels** (independent of the 19 tags) shows no onset at any lag: R >= 4 for at most 27% of labels (13% at random times), and below random at +0.1 to +0.3 s. So a ball bouncing on the floor is not audible in this recording, and there is no constant audio/video offset that would rescue it.
+- On the 19 tagged events, a mild rise appears at +0.1 to +0.4 s (31% with R >= 4 for hits, 17-33% for bounces, against 12-16% at random), but it is the same for both classes and n is 13 and 6, so it does not separate them.
+
+**Reading.** Audio from this camera is not a usable cue for bounces, and not a bounce/hit separator. The microphone is far from the court and the hall is loud. Venue audio was not tested at any other distance or with a mic near the court.
+
+**Caveats.** One chunk, one camera, 19 events; audio/video sync from the container (start times 0) not independently verified, though the lag scan above found nothing at any lag. A better microphone, or per-frequency-band noise reduction, was not tried.
+
+**Does not show.** That audio could never work, only that this recording does not carry it.
