@@ -32,7 +32,7 @@ import cv2
 SAMPLE = "eval/labels/bounces/sample.json"
 LABELS = "eval/labels/bounces/labels.jsonl"
 PAD_SEC = 1.0
-MAX_W = 1280
+MAX_W = 1100
 LOCK = threading.Lock()
 CACHE = {}   # clip id -> {"fps", "first", "w", "h", "scale", "jpegs": [bytes]}
 
@@ -72,7 +72,7 @@ def decode_clip(clip):
         scale = min(1.0, MAX_W / w0)
         if scale < 1.0:
             img = cv2.resize(img, (int(w0 * scale), int(h0 * scale)), interpolation=cv2.INTER_AREA)
-        jpegs.append(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 85])[1].tobytes())
+        jpegs.append(cv2.imencode(".jpg", img, [cv2.IMWRITE_JPEG_QUALITY, 80])[1].tobytes())
     cap.release()
     return {"fps": fps, "first": first, "w": w0, "h": h0, "scale": min(1.0, MAX_W / w0) if w0 else 1.0,
             "jpegs": jpegs}
@@ -95,22 +95,34 @@ canvas{background:#000;border-radius:6px;max-width:100%;cursor:crosshair}
 <div id="top"></div><canvas id="c"></canvas><div id="bar" style="margin:8px 0"></div><div id="list"></div>
 <script>
 const CLIPS = __CLIPS__;
-let ci = 0, meta = null, imgs = [], cur = 0, marks = [], complete = false, playing = null, timer = null;
+let loadToken = 0, loaded = 0, ci = 0, meta = null, imgs = [], cur = 0, marks = [], complete = false, playing = null, timer = null;
 const c = document.getElementById('c'), g = c.getContext('2d');
 async function openClip(i) {
-  ci = i; const id = CLIPS[i].id; document.getElementById('top').innerHTML = 'loading ' + id + ' ...';
+  ci = i; const id = CLIPS[i].id; const token = ++loadToken; document.getElementById('top').innerHTML = 'loading ' + id + ' ...';
   meta = await (await fetch('/meta?clip=' + id)).json();
-  imgs = await Promise.all(Array.from({length: meta.n}, (_, k) => new Promise(r => { const im = new Image(); im.onload = () => r(im); im.src = '/frame?clip=' + id + '&i=' + k; })));
+  imgs = new Array(meta.n).fill(null); loaded = 0;
   const lab = meta.label || {bounces: [], complete: false};
-  marks = lab.bounces; complete = lab.complete; cur = 0; c.width = imgs[0].width; c.height = imgs[0].height; draw();
+  marks = lab.bounces; complete = lab.complete; cur = 0;
+  // Load progressively: frame 0 first so the page is usable at once, the rest six at a time
+  // in the background. A failed frame is retried, never left blocking the page.
+  const loadOne = k => new Promise(r => {
+    const im = new Image(); let tries = 0;
+    im.onload = () => { if (token !== loadToken) return r(); imgs[k] = im; loaded++; if (k === 0) { c.width = im.width; c.height = im.height; } if (k === cur || loaded % 20 === 0) draw(); r(); };
+    im.onerror = () => { if (token !== loadToken || ++tries > 3) return r(); setTimeout(() => { im.src = '/frame?clip=' + id + '&i=' + k + '&t=' + tries; }, 500); };
+    im.src = '/frame?clip=' + id + '&i=' + k;
+  });
+  await loadOne(0); draw();
+  let next = 1;
+  const worker = async () => { while (next < meta.n && token === loadToken) await loadOne(next++); };
+  await Promise.all(Array.from({length: 6}, worker)); if (token === loadToken) draw();
 }
 function draw() {
-  g.drawImage(imgs[cur], 0, 0);
+  if (imgs[cur]) g.drawImage(imgs[cur], 0, 0); else { g.fillStyle = '#000'; g.fillRect(0, 0, c.width, c.height); g.fillStyle = '#888'; g.fillText('loading frame ' + (cur + 1) + ' ...', 20, 30); }
   const here = marks.filter(m => m.frame === meta.first + cur);
   marks.forEach(m => { const d = m.frame - (meta.first + cur); if (Math.abs(d) > 0 && Math.abs(d) <= 6) { g.strokeStyle = 'rgba(255,200,0,.5)'; g.beginPath(); g.arc(m.x * meta.scale, m.y * meta.scale, 5, 0, 7); g.stroke(); } });
   here.forEach(m => { g.strokeStyle = m.visible ? '#0f0' : '#f0f'; g.lineWidth = 2; g.beginPath(); g.arc(m.x * meta.scale, m.y * meta.scale, 9, 0, 7); g.stroke(); });
   const id = CLIPS[ci].id;
-  document.getElementById('top').innerHTML = `<span class="pill">${ci + 1}/${CLIPS.length}</span><span class="pill">${id} (${CLIPS[ci].set})</span><span class="pill">frame ${meta.first + cur} (${cur + 1}/${meta.n})</span><span class="pill ${complete ? 'ok' : ''}">${marks.length} bounces ${complete ? '- complete' : ''}</span>`;
+  document.getElementById('top').innerHTML = `<span class="pill">${ci + 1}/${CLIPS.length}</span><span class="pill">${id} (${CLIPS[ci].set})</span><span class="pill">frame ${meta.first + cur} (${cur + 1}/${meta.n})</span><span class="pill">${loaded}/${meta.n} loaded</span><span class="pill ${complete ? 'ok' : ''}">${marks.length} bounces ${complete ? '- complete' : ''}</span>`;
   document.getElementById('list').textContent = 'marks: ' + marks.slice().sort((a, b) => a.frame - b.frame).map(m => m.frame + (m.visible ? '' : '*')).join(', ');
 }
 async function save() { await fetch('/save', {method: 'POST', body: JSON.stringify({clip: CLIPS[ci].id, bounces: marks, complete})}); }
