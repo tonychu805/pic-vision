@@ -3537,3 +3537,22 @@ No setting gets near 40%, and about four in five candidates match no label, so l
 **Caveats.** Same 42 labels and 18 clips that motivated the hypothesis, one venue, one labeller (completeness is the operator's word); the arm itself was not tuned on them. The base arm here (19% found, 17 candidates) is not the same run as the cached full-session detections in the entry above (14% found, 35 candidates), because the clips are re-encoded and the tracker starts fresh at each clip; the two arms here are comparable with each other, not with that number. The tile arm costs two network passes per frame, and on public footage it raised false rallies (2026-10-13), so it is a candidate for a bounce pass over already-detected rallies only, not a drop-in replacement for the shipped detector. Near-half evidence is 15 bounces. Court error is measured only on the found ones (8 and 19).
 
 **Does not show.** Whether it holds on unselected stretches or a second camera, whether the unmatched candidates (8 of 28) are real bounces or paddle contacts, line-call accuracy, or the cost and latency in production.
+
+## 2026-10-15 (bounce pilot, tile arm, unselected chunk) — On one continuous 3-minute PGC chunk the tile arm finds 14 of 33 hand-labelled bounces (42%) against 5 (15%) for the whole frame: the gain holds, at the bar's edge
+
+**Why.** The 18 pilot clips are rallies the system had already flagged and a person judged real, and they are where the tile hypothesis came from (entry above). One continuous stretch, with every bounce the operator saw marked, is not selected that way.
+
+**Method.** `eda301d9` 2026-09-25 08:21 `session-000.mkv`, 5,390 frames, 33 bounces labelled in CVAT (the first labelled video, `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json`). Base = the existing `pod_infer.py` detections of the same video; tile = `infer_tile_k14.py`, rule unchanged. Calibration borrowed from the same camera's 10:01 recording (`365c798c`), used for the court mask and gate in both arms. Rule and bar committed before the run (`da66c31`): holds at >= 14 of 33. `scripts/eval_bounce_tile_chunk.py`.
+
+| Arm | Seen | Tracked | Found | Candidates | Matching a label | Median court error (found) |
+|---|---|---|---|---|---|---|
+| base | 55% | 48% | **5 (15%)** | 18 | 7 | 0.20 ft |
+| tile | 88% | 85% | **14 (42%)** | 37 | 17 | 0.20 ft |
+
+**VERDICT: holds** (>= 40%), by one bounce: 14 is the bar's minimum.
+
+**How robust.** Found by both 5, tile only 9, base only 0. Across the video in thirds: 5 / 5 / 4 found by the tile arm against 4 / 1 / 0 for base, so it is not one stretch. Unlike the pilot clips, here the tile arm also lifts how often the ball is seen at all (55% -> 88%): this footage is harder for the whole-frame detector.
+
+**Caveats.** Single chunk, single camera, single labeller; the result sits exactly at the bar, so a count of 13 would have read "partly holds". The calibration is borrowed, so court error is weak and the mask could clip the ball if the camera moved between recordings (it affects both arms alike). 20 of 37 tile candidates match no label: unmarked bounces, paddle contacts or noise, not separated. The two bounce tests were designed by the person who saw the first.
+
+**Does not show.** A second camera or venue, unlabelled-bounce rate (completeness is the operator's word), runtime cost, or what the extra candidates are.
