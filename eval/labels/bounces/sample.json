@@ -1,0 +1,347 @@
+{
+ "seed": 0,
+ "clips": [
+  {
+   "id": "pgc-303",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T08-24-02-232Z/session-006.mkv",
+   "calib": "cache/pgc_fieldtest/499ed4b8-f8bd-4931-93a9-d7f7b8ae4c4f.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T08-24-02_session-006.csv",
+   "start": 234.8,
+   "end": 241.27
+  },
+  {
+   "id": "pgc-304",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T08-24-02-232Z/session-006.mkv",
+   "calib": "cache/pgc_fieldtest/499ed4b8-f8bd-4931-93a9-d7f7b8ae4c4f.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T08-24-02_session-006.csv",
+   "start": 547.8,
+   "end": 559.6
+  },
+  {
+   "id": "pgc-305",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T11-01-03-614Z/session-003.mkv",
+   "calib": "cache/pgc_fieldtest/72852da9-0663-4e5b-be27-7a6208ce5f12.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T11-01-03_session-003.csv",
+   "start": 300.0,
+   "end": 308.97
+  },
+  {
+   "id": "pgc-307",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/c199a97c-c51f-4620-8523-b2837f48c1a7/2026-09-25T13-11-01-817Z/session-000.mkv",
+   "calib": "cache/pgc_fieldtest/3e1caf84-4301-4c0c-9325-dc9d6beaec94.calib.json",
+   "csv": "cache/fresh/c199a97c_2026-09-25T13-11-01_session-000.csv",
+   "start": 112.03,
+   "end": 117.5
+  },
+  {
+   "id": "pgc-309",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T11-01-03-614Z/session-005.mkv",
+   "calib": "cache/pgc_fieldtest/72852da9-0663-4e5b-be27-7a6208ce5f12.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T11-01-03_session-005.csv",
+   "start": 463.2,
+   "end": 477.9
+  },
+  {
+   "id": "pgc-310",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T08-24-02-232Z/session-006.mkv",
+   "calib": "cache/pgc_fieldtest/499ed4b8-f8bd-4931-93a9-d7f7b8ae4c4f.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T08-24-02_session-006.csv",
+   "start": 92.13,
+   "end": 97.07
+  },
+  {
+   "id": "pgc-312",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/eda301d9-b093-478a-aec1-51a8e7a5c08c/2026-09-25T13-01-03-237Z/session-001.mkv",
+   "calib": "cache/pgc_fieldtest/81b38167-9066-4aef-ac39-42d9049bcb4f.calib.json",
+   "csv": "cache/fresh/eda301d9_2026-09-25T13-01-03_session-001.csv",
+   "start": 376.47,
+   "end": 382.47
+  },
+  {
+   "id": "pgc-313",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/c199a97c-c51f-4620-8523-b2837f48c1a7/2026-09-25T13-11-01-817Z/session-002.mkv",
+   "calib": "cache/pgc_fieldtest/3e1caf84-4301-4c0c-9325-dc9d6beaec94.calib.json",
+   "csv": "cache/fresh/c199a97c_2026-09-25T13-11-01_session-002.csv",
+   "start": 427.17,
+   "end": 433.47
+  },
+  {
+   "id": "pgc-315",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/c199a97c-c51f-4620-8523-b2837f48c1a7/2026-09-25T13-11-01-817Z/session-000.mkv",
+   "calib": "cache/pgc_fieldtest/3e1caf84-4301-4c0c-9325-dc9d6beaec94.calib.json",
+   "csv": "cache/fresh/c199a97c_2026-09-25T13-11-01_session-000.csv",
+   "start": 213.8,
+   "end": 223.13
+  },
+  {
+   "id": "pgc-317",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T11-01-03-614Z/session-005.mkv",
+   "calib": "cache/pgc_fieldtest/72852da9-0663-4e5b-be27-7a6208ce5f12.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T11-01-03_session-005.csv",
+   "start": 18.13,
+   "end": 28.13
+  },
+  {
+   "id": "pgc-318",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/eda301d9-b093-478a-aec1-51a8e7a5c08c/2026-09-25T13-01-03-237Z/session-001.mkv",
+   "calib": "cache/pgc_fieldtest/81b38167-9066-4aef-ac39-42d9049bcb4f.calib.json",
+   "csv": "cache/fresh/eda301d9_2026-09-25T13-01-03_session-001.csv",
+   "start": 392.5,
+   "end": 398.53
+  },
+  {
+   "id": "pgc-321",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T08-24-02-232Z/session-006.mkv",
+   "calib": "cache/pgc_fieldtest/499ed4b8-f8bd-4931-93a9-d7f7b8ae4c4f.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T08-24-02_session-006.csv",
+   "start": 114.3,
+   "end": 122.73
+  },
+  {
+   "id": "pgc-323",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/eda301d9-b093-478a-aec1-51a8e7a5c08c/2026-09-25T10-01-04-001Z/session-005.mkv",
+   "calib": "cache/pgc_fieldtest/365c798c-6554-42b1-b0e6-b2825e73d264.calib.json",
+   "csv": "cache/fresh/eda301d9_2026-09-25T10-01-04_session-005.csv",
+   "start": 520.7,
+   "end": 527.0
+  },
+  {
+   "id": "pgc-325",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T11-01-03-614Z/session-005.mkv",
+   "calib": "cache/pgc_fieldtest/72852da9-0663-4e5b-be27-7a6208ce5f12.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T11-01-03_session-005.csv",
+   "start": 10.2,
+   "end": 14.07
+  },
+  {
+   "id": "pgc-326",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/eda301d9-b093-478a-aec1-51a8e7a5c08c/2026-09-26T09-01-13-905Z/session-000.mkv",
+   "calib": "cache/pgc_fieldtest/85919543-db84-41d9-87e0-515996bc1e5b.calib.json",
+   "csv": "cache/fresh/eda301d9_2026-09-26T09-01-13_session-000.csv",
+   "start": 113.17,
+   "end": 119.93
+  },
+  {
+   "id": "pgc-327",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/de3d1953-6fbd-4633-8c34-d941a5613127/2026-09-25T11-01-03-614Z/session-005.mkv",
+   "calib": "cache/pgc_fieldtest/72852da9-0663-4e5b-be27-7a6208ce5f12.calib.json",
+   "csv": "cache/fresh/de3d1953_2026-09-25T11-01-03_session-005.csv",
+   "start": 47.83,
+   "end": 51.0
+  },
+  {
+   "id": "pgc-329",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/c199a97c-c51f-4620-8523-b2837f48c1a7/2026-09-25T13-11-01-817Z/session-000.mkv",
+   "calib": "cache/pgc_fieldtest/3e1caf84-4301-4c0c-9325-dc9d6beaec94.calib.json",
+   "csv": "cache/fresh/c199a97c_2026-09-25T13-11-01_session-000.csv",
+   "start": 316.03,
+   "end": 332.33
+  },
+  {
+   "id": "pgc-330",
+   "set": "pgc",
+   "video": "pgc-fieldtest-sept2026/c199a97c-c51f-4620-8523-b2837f48c1a7/2026-09-25T13-11-01-817Z/session-000.mkv",
+   "calib": "cache/pgc_fieldtest/3e1caf84-4301-4c0c-9325-dc9d6beaec94.calib.json",
+   "csv": "cache/fresh/c199a97c_2026-09-25T13-11-01_session-000.csv",
+   "start": 233.87,
+   "end": 239.03
+  },
+  {
+   "id": "brickwall_30fps-5",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 137.55,
+   "end": 157.22
+  },
+  {
+   "id": "brickwall_30fps-16",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 454.05,
+   "end": 464.83
+  },
+  {
+   "id": "brickwall_30fps-22",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 654.95,
+   "end": 662.13
+  },
+  {
+   "id": "brickwall_30fps-25",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 776.26,
+   "end": 795.02
+  },
+  {
+   "id": "brickwall_30fps-30",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 868.94,
+   "end": 889.47
+  },
+  {
+   "id": "brickwall_30fps-31",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 899.1,
+   "end": 922.13
+  },
+  {
+   "id": "brickwall_30fps-33",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 973.93,
+   "end": 983.93
+  },
+  {
+   "id": "brickwall_30fps-38",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 1124.71,
+   "end": 1137.42
+  },
+  {
+   "id": "brickwall_30fps-39",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 1149.5,
+   "end": 1156.81
+  },
+  {
+   "id": "brickwall_30fps-40",
+   "set": "public",
+   "video": "videos/brickwall_30fps.mp4",
+   "calib": "calib/brickwall_30fps_calib.json",
+   "csv": "cache/brickwall_30fps_predictions_k14.csv",
+   "start": 1215.28,
+   "end": 1223.96
+  },
+  {
+   "id": "pb_draft_cup-3",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 33.93,
+   "end": 40.67
+  },
+  {
+   "id": "pb_draft_cup-9",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 133.86,
+   "end": 144.03
+  },
+  {
+   "id": "pb_draft_cup-10",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 153.03,
+   "end": 159.44
+  },
+  {
+   "id": "pb_draft_cup-13",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 200.85,
+   "end": 213.28
+  },
+  {
+   "id": "pb_draft_cup-16",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 251.35,
+   "end": 260.54
+  },
+  {
+   "id": "pb_draft_cup-17",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 275.17,
+   "end": 283.1
+  },
+  {
+   "id": "pb_draft_cup-25",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 431.45,
+   "end": 439.35
+  },
+  {
+   "id": "pb_draft_cup-26",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 450.48,
+   "end": 458.19
+  },
+  {
+   "id": "pb_draft_cup-27",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 467.07,
+   "end": 473.43
+  },
+  {
+   "id": "pb_draft_cup-29",
+   "set": "public",
+   "video": "videos/pb_draft_cup_30fps.mp4",
+   "calib": "calib/pb_draft_cup_30fps_calib.json",
+   "csv": "cache/pb_draft_cup_predictions_k14.csv",
+   "start": 511.6,
+   "end": 522.73
+  }
+ ]
+}
