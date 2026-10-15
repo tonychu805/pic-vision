@@ -3666,3 +3666,25 @@ Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three p
 **Reading.** First filter in this series that separates the fakes: all 8 scenery clips and 28 of 35 not-real clips go, and the surviving rallies rank better (0.615 -> 0.707). But it also removes about 40% of real rallies. Not checked: why. A likely cause (unverified) is that the ball is accepted on only about 40% of frames, so real flights often lack 5 close points and fail the "flight piece" test; the rule then treats a sparse real ball like a fake.
 
 **Does not show.** Which of the five thresholds drives the real losses; whether looser pieces (more gap, fewer points) keep the real rallies and still drop the fakes; whether it holds out of sample. Changing the rules now would be tuning on the same windows, so any second version needs its own registered bar and a held-out set.
+
+## 2026-10-15 (Test D2/D3) — Tuned window track scoring, cross-validated by session: loses 12 of 60 real field clips (was 25), removes 7 of 8 scenery fakes and 18 of 35 not-real clips: FAIL on the real-clip bar
+
+**Why.** Test D1 separated the fakes but lost 40% of real rallies. Diagnosis of the dropped real rallies (points failing the flight test): poor quadratic fit 37%, fewer than 5 points in the piece 38%, short path 24%, speed 0% (never binds).
+
+**Method.** Grid, split, selection rule and bar committed before each run. D2 (`scripts/tune_window_scoring.py`): tune on the 4 dev videos + 2 field sessions, test on 13 held-out field sessions. D3 (`scripts/tune_window_scoring_cv.py`): 14 field sessions in 5 folds by session; config chosen on dev + the other folds, scored on the held fold. 72 configs: fit RMS {6, 8, 12, 16} px, minimum piece {3, 4, 5} points, minimum path {40, 60, 80} px, ball-like share {0.3, 0.5}.
+
+**D2 (flawed split).** The tune half held only 2 real field clips. Chosen (16, 4, 40, 0.3): dev losses 33 -> 3 of 83, but held-out field lost 12 of 58 real clips (D1: 25), fakes 2 of 2, not-real 11 of 27. Fail; the split let dev videos dominate the choice.
+
+**D3 (cross-validated).** The same config, (RMS 16 px, piece >= 4 points, path >= 40 px, share 0.3), was chosen in all 5 folds.
+
+| Held-out, summed over folds | Result | D3 bar |
+|---|---|---|
+| Real field clips lost | 12 of 60 | <= 3: FAIL |
+| Graded dev rallies lost | 3 of 83 | <= 5: pass |
+| Scenery fakes removed | 7 of 8 | >= 60%: pass |
+| Not-real clips removed | 18 of 35 (51%) | >= 50%: pass |
+| Segments | 98 -> 79 | |
+
+**Result: FAIL** on real field clips. Loosening the flight test cut real field losses from 25 to 12 and kept most of the separation, but one real field clip in five is still removed.
+
+**Does not show.** Which real clips are lost and whether they share a cause (not inspected); whether the config transfers to a second venue; whether any config can reach zero losses (the grid's best on tuning data still lost some). Fold sizes are small (0-5 fakes per fold), so the fakes figure is a count of 8, not a rate.
