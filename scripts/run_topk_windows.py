@@ -21,7 +21,8 @@ for name, csvp, calibp, labp, wend in base.SESSIONS:
 VIDEO = {"brickwall_30fps": "videos/brickwall_30fps.mp4", "brickwall-SEMI": "videos/brickwall_semi_30fps.mp4",
          "pb_draft_cup": "videos/pb_draft_cup_30fps.mp4", "IMG_7744": "videos/IMG_7744_fixed.mp4"}
 CALIB = {n: c for n, _, c, _, _ in base.SESSIONS}
-os.makedirs("cache/topk", exist_ok=True)
+OUT_DIR = os.environ.get("TOPK_DIR", "cache/topk"); TOPK_K = os.environ.get("TOPK_K", "3"); TOPK_THRESH = os.environ.get("TOPK_THRESH", "0.5")
+os.makedirs(OUT_DIR, exist_ok=True)
 total = 0
 plan = []
 for (kind, key), wins in sorted(jobs.items()):
@@ -32,7 +33,7 @@ for (kind, key), wins in sorted(jobs.items()):
     secs = sum(e - s for s, e in merged); total += secs
     video = f"cache/pgc_fieldtest/{key}.mp4" if kind == "field" else VIDEO[key]
     calib = f"cache/pgc_fieldtest/{key}.calib.json" if kind == "field" else CALIB[key]
-    out = f"cache/topk/{key[:8] if kind=='field' else key}.csv"
+    out = f"{OUT_DIR}/{key[:8] if kind=='field' else key}.csv"
     plan.append((video, calib, merged, out, secs))
 print(f"{len(plan)} videos, {sum(len(p[2]) for p in plan)} windows, {total:.0f} s of video = {total*30/60/60:.1f} k-min at 30 fps; ~{total*30/32/60:.0f} min at 32 fps", flush=True)
 env = dict(os.environ)
@@ -44,5 +45,5 @@ for i, (video, calib, merged, out, secs) in enumerate(plan, 1):
     w = ",".join(f"{s:.2f}:{e:.2f}" for s, e in merged)
     print(f"[{i}/{len(plan)}] {video}  {len(merged)} windows, {secs:.0f}s", flush=True)
     subprocess.run([TF, "scripts/infer_topk.py", "--video", video, "--calib", calib, "--model", WEIGHTS,
-                    "--windows", w, "--output", out], env=env, check=True)
+                    "--windows", w, "--output", out, "--k", TOPK_K, "--thresh", TOPK_THRESH], env=env, check=True)
 print("DONE", flush=True)

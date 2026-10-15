@@ -25,7 +25,7 @@ def main():
     ap.add_argument("--video", required=True); ap.add_argument("--calib", required=True)
     ap.add_argument("--model", required=True); ap.add_argument("--output", required=True)
     ap.add_argument("--windows", required=True, help="comma list of start:end seconds")
-    ap.add_argument("--k", type=int, default=3); ap.add_argument("--margin", type=float, default=80.0)
+    ap.add_argument("--k", type=int, default=3); ap.add_argument("--thresh", type=float, default=0.5); ap.add_argument("--margin", type=float, default=80.0)
     a = ap.parse_args()
     calib = json.load(open(a.calib))
     model = tf.keras.models.load_model(a.model, custom_objects={"custom_loss": P.custom_loss}, compile=False)
@@ -60,7 +60,7 @@ def main():
                     trio.append(im * mask[:, :, None])
                 if len(trio) < 3: break
                 raw = infer(tf.constant(P.prep3(trio))).numpy()
-                hp = ((raw[0] > 0.5).astype(np.float32) * 255).astype(np.uint8); probs = raw[0]
+                hp = ((raw[0] > a.thresh).astype(np.float32) * 255).astype(np.uint8); probs = raw[0]
                 for i in range(3):
                     if np.amax(hp[i]) > 0:
                         cnts, _ = cv2.findContours(hp[i].copy(), cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_SIMPLE)
