@@ -3628,3 +3628,24 @@ Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three p
 **Caveats.** All 36 events come from one 3-minute chunk of one camera and one court, tagged by one operator who also watched the clips knowing the box was the finder's guess. n is 23 vs 13, and the threshold and the "best of four" are chosen on the same events (the leave-one-out and the shuffle test reduce but do not remove that). Speeds come from the same tracked points whose gaps limited the finder, so events with thin tracking around them are underrepresented by construction (36 of 36 had at least 3 points each side only because candidates require them).
 
 **Does not show.** Whether it holds on a second chunk, camera or venue; how it behaves on hits by a ball near the net or volleys; what happens to bounces that the finder did not reach in the first place (14 of 33 found).
+
+## 2026-10-15 (Test C) — A lower-threshold candidate pool chosen by a confidence + physics score loses most real rallies: FAIL, and the choice rule is not what changed the result
+
+**Why.** PIC-226 / PIC-228. Test B gave the tracker 3 blobs cut at heatmap 0.5 and the real ball was often not among them. The operator's design: lower the cut so mid-confidence candidates exist, then choose by confidence x weight + proximity to the predicted path, imposter rejection, short coasting.
+
+**Method.** Same 136 windows / 18 videos as Test B, re-inferred at threshold 0.25, up to 5 blobs (`scripts/infer_topk.py --thresh`, `run_topk_windows.py`, `cache/topk_t25/`). Variants and the pass rule were committed before the run (`c664dfb`, `scripts/validate_topk_c.py`, `scripts/track_associate.py`): C0 production; C1 pool + existing `track_ball`; C2 pool + score 0.5 confidence + 0.5 proximity; C3 C2 + constant-velocity Kalman, coast 3 frames.
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 | Segments |
+|---|---|---|---|---|---|---|
+| C0 production | 0 | 0 | 0 | 0 | 0.615 | 184 |
+| C1 pool, existing tracker | 20 | 38 | 4 | 25 | 0.562 | 176 |
+| C2 + combined score | 19 | 39 | 4 | 25 | 0.563 | 176 |
+| C3 + Kalman, coast 3 | 21 | 40 | 4 | 25 | 0.579 | 177 |
+
+**Result: all FAIL** (rule: zero graded or real field clips lost, >= 4 of 8 scenery fakes removed, score not worse, fragmentation <= 10%). C0 reproduces Test B's V0 exactly (184 segments, 0 lost).
+
+**What the pool looks like.** At 0.25 there are blobs in 89,091 frames against 44,158 at 0.5: 45k extra frames hold only a weak blob. 50% of blob frames have 2+ blobs (12% at 0.5). Rank 1 is unchanged for 93% of the frames that had a 0.5 blob (median shift 2 px).
+
+**Reading (not verified clip by clip).** The three variants lose almost the same clips, so the choice rule (nearest, score, Kalman) is not what separates them from production; the pool is. Weak blobs on frames where the ball is absent give the tracker something to accept, and the extra accepted points change the crossing pattern enough that real rallies no longer match at IoU 0.5. It removes 4 of the 8 scenery fakes (202, 203, 207, 209) but at a cost of most real rallies.
+
+**Does not show.** Whether a pool between 0.5 and 0.25 (say 0.4), or the association with a minimum-confidence floor per frame, would keep the real rallies; whether the lost clips are merged, shortened or split (not inspected); anything about bounces (the 18 bounce clips were not run).
