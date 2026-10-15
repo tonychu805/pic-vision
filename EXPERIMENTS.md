@@ -3649,3 +3649,20 @@ Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three p
 **Reading (not verified clip by clip).** The three variants lose almost the same clips, so the choice rule (nearest, score, Kalman) is not what separates them from production; the pool is. Weak blobs on frames where the ball is absent give the tracker something to accept, and the extra accepted points change the crossing pattern enough that real rallies no longer match at IoU 0.5. It removes 4 of the 8 scenery fakes (202, 203, 207, 209) but at a cost of most real rallies.
 
 **Does not show.** Whether a pool between 0.5 and 0.25 (say 0.4), or the association with a minimum-confidence floor per frame, would keep the real rallies; whether the lost clips are merged, shortened or split (not inspected); anything about bounces (the 18 bounce clips were not run).
+
+## 2026-10-15 (Test D) — Whole-track scoring over 1.5 s windows removes all 8 scenery fakes and 28 of 35 not-real clips, but loses 25 of 60 real field clips and 33 of 83 graded rallies: FAIL
+
+**Why.** PIC-226. Operator's idea: judge the track, not the dot. Fakes are pixel-locked or crawl; a real ball flies. Windows of 45 frames (step 15), flight pieces (>= 5 points, quadratic fit RMS <= 6 px, >= 80 px path, median >= 4 px/frame), a window is ball-like when >= 50% of its points are in flight pieces; points are dropped when every scored window holding them is not ball-like. Rules and bar committed before the run (`scripts/track_score_windows.py`, `scripts/validate_topk_d.py`); nothing tuned.
+
+**Method.** Production top-1 at 0.5 tracked with `track_ball`, then window scoring; same 136 windows, 18 videos and pass rule as Tests B and C.
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 | Segments |
+|---|---|---|---|---|---|---|
+| C0 production | 0 | 0 | 0 | 0 | 0.615 | 184 |
+| D1 window scoring | 33 | 25 | **8** | **28** | **0.707** | 129 |
+
+**Result: FAIL** (rules 1 and 2). It passes (3) scenery fakes, (4) score quality, (5) fragmentation.
+
+**Reading.** First filter in this series that separates the fakes: all 8 scenery clips and 28 of 35 not-real clips go, and the surviving rallies rank better (0.615 -> 0.707). But it also removes about 40% of real rallies. Not checked: why. A likely cause (unverified) is that the ball is accepted on only about 40% of frames, so real flights often lack 5 close points and fail the "flight piece" test; the rule then treats a sparse real ball like a fake.
+
+**Does not show.** Which of the five thresholds drives the real losses; whether looser pieces (more gap, fewer points) keep the real rallies and still drop the fakes; whether it holds out of sample. Changing the rules now would be tuning on the same windows, so any second version needs its own registered bar and a held-out set.
