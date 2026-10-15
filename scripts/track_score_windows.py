@@ -18,6 +18,7 @@ import numpy as np
 W, STEP, MIN_PTS = 45, 15, 6
 GAP, TURN_DEG = 3, 90.0
 MIN_PIECE, RMS_PX, MIN_LEN, MIN_SPEED = 5, 6.0, 80.0, 4.0
+SHARE = 0.5
 
 
 def _pieces(pts):
@@ -60,7 +61,7 @@ def window_ball_like(pts):
     if len(pts) < MIN_PTS:
         return None
     flying = sum(len(p) for p in _pieces(pts) if _is_flight(p))
-    return flying / len(pts) >= 0.5
+    return flying / len(pts) >= SHARE
 
 
 def drop_non_flight(ys, xs):
