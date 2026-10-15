@@ -3688,3 +3688,25 @@ Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three p
 **Result: FAIL** on real field clips. Loosening the flight test cut real field losses from 25 to 12 and kept most of the separation, but one real field clip in five is still removed.
 
 **Does not show.** Which real clips are lost and whether they share a cause (not inspected); whether the config transfers to a second venue; whether any config can reach zero losses (the grid's best on tuning data still lost some). Fold sizes are small (0-5 fakes per fold), so the fakes figure is a count of 8, not a rate.
+
+## 2026-10-15 (Test D4) — Scoring whole rallies instead of deleting points loses 1 of 60 real field clips and 0 of 83 graded rallies while removing 5 of 8 scenery fakes; fails the registered bar only on not-real removal (5 of 35)
+
+**Why.** Point deletion (D1-D3) fragments real rallies: best cross-validated result lost 12 of 60 real field clips. D4 leaves tracking untouched and drops a detected rally whole when its flight score is low.
+
+**Method.** `scripts/tune_rally_scoring_cv.py`, grid (72 configs), 5 session folds, selection rule and bar committed before the run. Flight score: mean over windows of the share of tracked points in flight pieces; drop when below T.
+
+| Held-out, summed over 5 folds | Result | Bar |
+|---|---|---|
+| Real field clips lost | **1 of 60** | <= 3: pass |
+| Graded dev rallies lost | **0 of 83** | <= 5: pass |
+| Scenery fakes removed | **5 of 8** (62%) | >= 60%: pass |
+| Not-real clips removed | **5 of 35** (14%) | >= 50%: **FAIL** |
+| Rallies | 98 -> 92 | |
+
+Config (W 45, gap 3, RMS 8 px, min piece 3 points, T 0.15) chosen in 4 of 5 folds; fold 1 chose W 90, gap 6.
+
+**Result: FAIL on the registered bar** (not-real removal). Reading it honestly: the not-real criterion was inherited from D3 and counts failed serves, practice and serve-and-return clips, which contain a real ball in real flights; a dot filter was not built to remove them and does not. On the dot/light question (the 8 scenery fakes) with almost no real loss it is the best result in this series. That reading was made after seeing the result, so it is not a pass.
+
+**Selection note.** The rule "fewest real lost" drives T to its minimum (0.15), the most conservative drop; the data cannot say whether a higher T would remove more fakes at similar cost because the selection never preferred it.
+
+**Does not show.** Why the 3 unremoved scenery fakes survive; generalisation to a second venue (one venue, 14 sessions, 8 fakes, 3 of them in one fold); that it helps reels, since dots are a minority of the false rallies.
