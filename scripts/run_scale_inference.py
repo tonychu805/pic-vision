@@ -12,5 +12,9 @@ for i, c in enumerate(plan, 1):
     if os.path.exists(out) and os.path.getsize(out) > 1000:
         print(f"[{i}/{len(plan)}] skip {name}", flush=True); continue
     print(f"[{i}/{len(plan)}] {name}", flush=True)
-    subprocess.run([TF, "scripts/pod_infer.py", "--video", c["path"], "--calib", c["calib"], "--model", W, "--output", out], env=env, check=True)
+    r = subprocess.run([TF, "scripts/pod_infer.py", "--video", c["path"], "--calib", c["calib"], "--model", W, "--output", out], env=env)
+    if r.returncode != 0:
+        # pod_infer refuses a video that decodes < 98% of its frames (truncated decode): excluded, not guessed
+        open("cache/scale/FAILED.txt", "a").write(f"{name}\t{r.returncode}\n")
+        if os.path.exists(out): os.remove(out)
 print("DONE", flush=True)
