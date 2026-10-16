@@ -21,6 +21,12 @@ CHUNKS = {   # name -> (project, task, video)
     # from an 8x preview, judged on game vs practice only: 0925 08:24 session-004 (calib 499ed4b8), minutes 2:00-6:00
     "3b": ("bounce-chunk3b-pgc", "de3d1953 0925T0824 s004 120-360s",
            "clips/bounce_chunk3/de3d1953_0925T0824_s004_120-360.mp4"),
+    # chunk 3c: 3b came from de3d1953, which is the Tapo C200 and drops frames (that recording failed the decode
+    # guard), so it was dropped before labelling. Replaced by eda301d9 on 2026-09-26 (a different day from chunk 1,
+    # a camera never used to design the glare filter): the first 9/26 recording in time order that the operator
+    # judged a real game from an 8x preview, 05:38 session-000 (calib 7358ef3f), minutes 2:00-6:00
+    "3c": ("bounce-chunk3c-pgc", "eda301d9 0926T0538 s000 120-360s",
+           "clips/bounce_chunk3/eda301d9_0926T0538_s000_120-360.mp4"),
 }
 JOB_FRAMES = 900
 
