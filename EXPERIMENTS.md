@@ -3829,3 +3829,30 @@ None of the 36 labelled bounces lies in a static cell, so the removal cost no la
 **Rallies, read against D4** (reading after the result, so not a pass): D4 lost 1 of 60 real, removed 5 of 8 fakes and 5 of 35 not-real; Test E loses 4, removes 6 and 11. More removed, at a higher real cost, with only ~40% of the glare touched on the chunk inspected.
 
 **Does not show.** A version that judges stillness per point or splits tracklets at still sites (the obvious fix) has not been run; it would need its own pre-registration, and chunk 2 has now been used for diagnosis, so its bounce number would no longer be clean: a third camera (de3d1953) would be the honest test.
+
+## 2026-10-16 (Test E2) — Per-point still-site removal (v2): kills 87% of chunk-2 glare and all 8 scenery fakes, but costs 4 of 98 bounces on clean held-out footage (bar: at most 1) and 4 of 60 real field rallies (bar 3): FAIL
+
+**Why.** PIC-226, the fix named in Test E: judge stillness per point, with no tracklet exemption; a glare-site point survives only on a straight moving path between neighbours 1-3 frames either side (`drop_still_v2`, 7 unit tests). Pre-registered at `bb8cf50` with bars; chunk 3 amended twice before any label or score (`a5145e2`, `20bf9e3`: multi-ball practice, then the Tapo camera's frame drops). Final chunk 3 = eda301d9 2026-09-26 05:38 session-000, minutes 2:00-6:00, calib 7358ef3f, CVAT project `bounce-chunk3c-pgc` (task 146), labelled exhaustively by the operator.
+
+**Label export.** 99 point labels; one bounce was labelled twice across the 5-frame job overlap (frames 6268/6269, 2 px apart) and is kept once (rule added to the export after labelling, before scoring; any outcome of that pair moves the chunk-3 gap by at most 1 and cannot flip the verdict). 98 bounces, `eval/labels/bounces/cvat_eda301d9_0926T0538_s000_120-360.json`.
+
+| | Production | v2 | Fixed mask | Bar |
+|---|---|---|---|---|
+| Chunk 3 (tile, held out), found of 98 | 34 | **30** | 34 | v2 >= production - 1 = 33: **FAIL** |
+| Chunk 1 (tile), found of 33 | 14 | 13 | 14 | >= 13: pass |
+| Chunk 2 (tile, used for diagnosis), found of 36 | 4 | 6 | 10 | reported |
+| Real field clips lost (of 60) | - | **4** | | <= 3: **FAIL** |
+| Graded dev rallies lost (of 83) | - | 5 | | <= 5: pass (at the limit) |
+| Scenery fakes removed (of 8) | - | 8 | | reported |
+| Not-real clips removed (of 35) | - | 13 | | reported |
+| Rallies | 184 | 166 | | |
+
+Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 2 62% (v2 removes 87% of it, vs 41% for v1). As stated in advance, with no glare chunk 3 is only a no-harm check, and v2 fails it.
+
+**Result: FAIL** (chunk-3 no-harm and real field rallies).
+
+**Why it harms on clean footage (diagnosed after the result).** On chunk 3 v2 drops 182 of 2,648 in-wedge detections (7%) with no glare present. All 4 lost bounces are slow, small ones: two soft bounces 12 frames apart near the kitchen at about (935, 468), a ball at (784, 475) and a ball dribbling at (1725, 945). The ball stays within ~12 px often enough over +-90 frames to count as a still site, and its neighbours are too close (span <= 12 px) to qualify as a moving path. The still-site test cannot tell a slow ball from a glint with these constants.
+
+**Also seen.** Production finds 34 of 98 (35%) on this glare-free 9/26 stretch of eda301d9, against 14 of 33 (42%) on its 9/25 stretch and 4 of 36 on the glare-heavy c199a97c court: without glare, the existing finder is near the 40% finding bar.
+
+**Does not show.** Whether a site-level test (a glint holds one spot for minutes; a slow ball for a second) would separate them; that would need its own pre-registration, and chunks 1-3 have now all been looked at. Not switched on; no ADR.

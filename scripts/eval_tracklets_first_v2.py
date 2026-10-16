@@ -43,15 +43,20 @@ VIDEO3 = "clips/bounce_chunk3/eda301d9_0926T0538_s000_120-360.mp4"
 
 
 def export_c3():
-    q = """select l.frame, l.points from engine_labeledshape l join engine_job j on j.id=l.job_id
+    q = """select l.job_id, l.frame, l.points from engine_labeledshape l join engine_job j on j.id=l.job_id
            join engine_segment s on s.id=j.segment_id join engine_task t on t.id=s.task_id
            join engine_project p on p.id=t.project_id where p.name='bounce-chunk3c-pgc' and l.type='points' order by l.frame"""
     out = subprocess.run(["docker", "--context", "desktop-linux", "exec", "cvat_db", "psql", "-U", "root", "-d", "cvat",
                           "-tA", "-F", "|", "-c", q], capture_output=True, text=True, check=True).stdout
-    b = []
+    b, last = [], None
     for line in out.splitlines():
-        f, pts = line.split("|"); x, y = (float(v) for v in pts.split(",")[:2])
-        b.append({"frame": int(f), "t": round(int(f) / 30.0, 3), "x": round(x, 1), "y": round(y, 1)})
+        j, f, pts = line.split("|"); x, y = (float(v) for v in pts.split(",")[:2]); f = int(f)
+        # jobs overlap by 5 frames: the same bounce labelled in two adjacent jobs is kept once (added after
+        # labelling, before scoring; it hit one pair, frames 6268/6269)
+        if last and last[0] != j and f - last[1] <= 3 and abs(x - last[2]) + abs(y - last[3]) <= 15:
+            continue
+        last = (j, f, x, y)
+        b.append({"frame": f, "t": round(f / 30.0, 3), "x": round(x, 1), "y": round(y, 1)})
     json.dump({"source": "cvat project bounce-chunk3c-pgc", "video": VIDEO3, "source_frame_offset": 3600, "fps": 30.0,
                "n_frames_cvat": 7200, "complete": None, "bounces": b}, open(C3_LABELS, "w"), indent=1)
 
