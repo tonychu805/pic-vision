@@ -3754,3 +3754,18 @@ Drop rate **4%** (12 of 329): not aggressive.
 **Reading.** On chunk 1 the limiter was sparse detection; here it is scenery capture, the PIC-226 failure class (fixed bright spots) that no ball-path filter has fixed for rallies either. The chunk 1 pass was one camera's result and does not transfer to this one. The speed-ratio check (Part B) is not run yet: 20 candidates, a quarter of them glints, are unlikely to give the >= 8 hits it needs.
 
 **Does not show.** Whether removing fixed spots (a per-camera static-spot mask) would restore finding here; past scenery masks cost real rallies (the ball passes through masked areas), and for bounces the glint sits on the court, where bounces happen. Third camera (de3d1953) untested.
+
+## 2026-10-16 (discarded ball points) — On bounce chunk 2 the tracker throws away the ball near 9 of 36 bounces (25%): WEAK case for "tracklets before commitment"; the bigger loss is downstream of the tracker
+
+**Why.** Operator proposal: build short tracklets from all detections, drop stationary ones, judge ~1 s of trajectory, and only then commit (instead of `track_ball` committing frame by frame). That can only help where the detector saw the ball and the tracker discarded it. `scripts/check_discarded_ball_points.py`, definitions and bar committed before the run (`c3f36de`).
+
+| Arm | Raw detections | Held by static cells (>= 100 hits in one 20 px cell) | Ball visible near a bounce (>= 3 non-static raw points, +-8 frames, 100 px) | Visible but discarded by the tracker |
+|---|---|---|---|---|
+| tile | 4,607 | 2,870 in 4 cells (62%) | 27 of 36 (75%) | **9 of 36 (25%)** |
+| base | 2,825 | 1,731 in 6 cells (61%) | 16 of 36 (44%) | 4 of 36 (11%) |
+
+**Result: WEAK** (bar: >= 30% worth building, 15-30% weak, < 15% no).
+
+**Reading.** On this camera the zoomed detector does see the ball near three quarters of the bounces, and three fifths of everything it reports sits in four fixed spots. Tracklets-first could at most give back the 9 bounces the tracker discarded. For 18 bounces the tracker already held >= 3 ball points nearby, yet the finder found only 4 bounces in total: most of the loss is in the bounce finder working on that track, not in the tracker's choice. A plausible but unverified cause is the track interleaving glint points with ball points around the bounce, which breaks the local-low-point rule.
+
+**Does not show.** Whether the 18 "tracked but not found" bounces fail because of glint points mixed into the track or for the chunk-1 reasons (too few points at the bounce itself, no local low point); not inspected.
