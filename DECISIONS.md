@@ -3409,7 +3409,7 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **Decision.**
 - `drop_still_v2` is **not** switched on, and neither is the fixed static mask. Production detection is unchanged.
 - The glare finding is accepted as a main cause, and the slow-ball failure as the known weakness of a short-window still-site rule.
-- The next version, if pursued, must (a) apply only where glare is measured (static-cell share; 0% on 13 clean field courts vs 26-40% on glare courts), and (b) require a site to stay lit for minutes, not seconds, so a slow ball cannot qualify. It must be pre-registered and scored on footage not used in this work: all three labelled bounce stretches have now been used for diagnosis.
+- The next version (Linear PIC-231), if pursued, must (a) apply only where glare is measured (static-cell share; 0% on 13 clean field courts vs 26-40% on glare courts), and (b) require a site to stay lit for minutes, not seconds, so a slow ball cannot qualify. It must be pre-registered and scored on footage not used in this work: all three labelled bounce stretches have now been used for diagnosis.
 - Weak ball detection on court 34fab44c is a separate problem (detector yield), not something a glare filter can fix.
 
 **Data kept.** Hand labels: `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json` (33), `cvat_c199a97c_0926T0538_s002.json` (36), `cvat_eda301d9_0926T0538_s000_120-360.json` (98). Code: `scripts/tracklets_first.py` (+ tests), `scripts/eval_tracklets_first.py`, `scripts/eval_tracklets_first_v2.py`, `scripts/check_static_removed_bounces.py`.
