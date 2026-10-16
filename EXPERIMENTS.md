@@ -3735,3 +3735,22 @@ Drop rate **4%** (12 of 329): not aggressive.
 **Does not show.** How many fakes D4 keeps (kept rallies were not reviewed), so nothing about whether it removes enough junk to matter in a reel; a second venue (all PGC); a second reviewer (one operator, and `project_labeling_noise_floor` says agreement on "is this a rally" is low).
 
 **Conclusion.** On new sessions D4 is gentle (4% dropped) and what it drops is mostly junk, but it does drop real rallies at about the rate the bar allows (3 of 12, 3 of 329 detected, about 1%). Not enough on its own to switch on; no ADR.
+
+## 2026-10-16 (bounce chunk 2) — On a second camera the tile arm finds 4 of 36 hand-labelled bounces (11%): DOES NOT HOLD; the track is captured by fixed glints on the court
+
+**Why.** Chunk 1 (eda301d9, 3 min) cleared the 40% finding bar exactly (14 of 33) and gave the speed-ratio lead. A second camera/day was the registered next step before any ADR.
+
+**Method.** `scripts/eval_bounce_chunk2.py find`, bar committed before scoring (`0be1848`). Chunk: c199a97c 2026-09-26 05:38 `session-002.mkv`, whole file (7,438 frames, 4.1 min), not chosen for rallies (the choice looked at its detected rallies only to check it had play). 36 bounces labelled by the operator in CVAT project `bounce-chunk2-pgc` (9 jobs of 900 frames), all jobs gone through; `eval/labels/bounces/cvat_c199a97c_0926T0538_s002.json`. Calibration borrowed from the same camera's recording 34fab44c (image-match 0.020).
+
+| Arm | Seen | Tracked | Found | Candidates | Matching a label (frame) |
+|---|---|---|---|---|---|
+| base (whole frame) | 83% | 67% | 2 (6%) | 9 | 2 |
+| tile (two zoomed halves) | 100% | 94% | **4 (11%)** | 20 | 7 |
+
+**Result: DOES NOT HOLD** (bar: >= 40%; partly: 25-40% and more than base).
+
+**Why (diagnosed after the result; a lead from track statistics plus one still frame, not confirmed by playback).** The "tracked" figure is inflated: it counts any tracked point within +-3 frames, and the tracker spends most of its time on fixed spots. Tile arm: about 1,270 of 2,306 tracked points sit within ~20 px of (925, 652), a pale streak on the court surface (likely a ceiling-light reflection), and 132 more at (1067, 553), another glint; 5 of the 20 candidates are at those spots. Base arm: 850 of 1,899 tracked points at (1080, 280), a white object on the back shutter. At the labelled bounce frames themselves a tracked point exists for only 15 of 36, median 110 px from the label. Where a candidate does sit at a real bounce, it agrees with the label within 5-20 px, so this is not a label alignment error.
+
+**Reading.** On chunk 1 the limiter was sparse detection; here it is scenery capture, the PIC-226 failure class (fixed bright spots) that no ball-path filter has fixed for rallies either. The chunk 1 pass was one camera's result and does not transfer to this one. The speed-ratio check (Part B) is not run yet: 20 candidates, a quarter of them glints, are unlikely to give the >= 8 hits it needs.
+
+**Does not show.** Whether removing fixed spots (a per-camera static-spot mask) would restore finding here; past scenery masks cost real rallies (the ball passes through masked areas), and for bounces the glint sits on the court, where bounces happen. Third camera (de3d1953) untested.
