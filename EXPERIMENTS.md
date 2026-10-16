@@ -3909,3 +3909,27 @@ Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 
 **Descriptive only (in-sample, cut-offs read after the result, not a pass):** at 0.4 it flags 1 of 75 real and 13 of 37 not-real (35%); at 0.3, 1 and 8.
 
 **Does not show.** Whether a lower cut (e.g. 0.4) holds on clips it has not seen: needs fresh verdicts and its own pre-registration. Whether a ball-machine-only rule (scene shows a ball machine / basket) generalises beyond one session.
+
+## 2026-10-17 (Test L) — Jev guardrail (real < 0.4) on 40 fresh, never-judged top-2 rallies: loses 0 of 23 real but removes only 5 of 13 not-real (bar half): FAIL; safe, but catches about a third
+
+**Why.** PIC-226. Test K's in-sample curve suggested a 0.4 cut (1 of 75 real, 13 of 37 not-real); this is the held-out check, combined with the frozen pause rule. Pre-registered at `07ad81e` (`scripts/eval_guardrail_fresh.py`) after building the sample (key sha256 b00aad41...) and before any verdict or Jev call. The operator judged blind on the usual page; then ran Jev.
+
+**Sample.** The 36 D4-scale sessions (no prior verdicts; the 12 D4-dropped rallies excluded). Per recording, the top 2 rallies by the shipped score (what a reel opens with): pool 60, seed-fixed random 40. Cameras: de3d1953 (Tapo) 23, eda301d9 12, c199a97c 5. Verdicts (`eval/labels/guardrail_fresh_verdicts.jsonl`): real 23, not a rally 13, very short 4. Clip 411 is "real" with the note "warming up", scored as given.
+
+| | Real flagged (of 23) | Not-real flagged (of 13) | Very short flagged (of 4) |
+|---|---|---|---|
+| Jev < 0.4 | 0 | 5 | 1 |
+| Pause rule | 0 | 1 | 0 |
+| **Guardrail (either)** | **0** (limit 1: pass) | **5** (need 7: FAIL) | 1 |
+
+**Result: FAIL** on the not-real half.
+
+**By reason (flagged / total):** practice 2/2, coaching session 1/1, two failed serves 1/1, failed serve + ball toss 1/1; missed: warm-ups 0/5 (incl. "5 people on court, 3 talking", "random people on the court"), ball toss 0/1, failed serve + very short 0/1, only the serve 0/1.
+
+**Reading.**
+- Across Tests K and L the 0.4 cut is safe: 1 of 98 real clips flagged. It removes about a third of the junk (13 of 37 in-sample, 5 of 13 held out).
+- Warm-ups are the blind spot again (0 of 13 across both tests): in six stills a warm-up looks like a point.
+- Jev's scores are compressed: real 0.48-0.76, not-real 0.22-0.68 here. The classes overlap in 0.45-0.68, so no cut-off separates them well.
+- The pause rule flagged 1 of 40, as stated in advance; it was not usefully tested.
+
+**Does not show.** The effect on reels: if the top picks are ~34% junk (2026-10-12 top-5 check) and a third of it goes at ~1% real cost, the share of real clips would rise to roughly 74%. That is arithmetic, not a measurement.
