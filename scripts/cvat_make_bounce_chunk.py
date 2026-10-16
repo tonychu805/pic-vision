@@ -16,6 +16,11 @@ CHUNKS = {   # name -> (project, task, video)
     # rule without looking at detections; cut at CFR 30 so clip frame i = source frame 3600 + i
     "3": ("bounce-chunk3-pgc", "de3d1953 0925T0824 s001 120-360s",
           "clips/bounce_chunk3/de3d1953_0925T0824_s001_120-360.mp4"),
+    # chunk 3b: chunk 3 turned out to be casual hitting with several balls (operator, after 1 job). Replaced by the
+    # first of the next four de3d1953 recordings (in calibration-match order) that the operator judged a real game
+    # from an 8x preview, judged on game vs practice only: 0925 08:24 session-004 (calib 499ed4b8), minutes 2:00-6:00
+    "3b": ("bounce-chunk3b-pgc", "de3d1953 0925T0824 s004 120-360s",
+           "clips/bounce_chunk3/de3d1953_0925T0824_s004_120-360.mp4"),
 }
 JOB_FRAMES = 900
 

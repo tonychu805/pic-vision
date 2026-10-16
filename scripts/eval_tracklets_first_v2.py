@@ -6,6 +6,10 @@ kept only if it lies on a straight moving path between a detection just before a
 unchanged from v1. Chunk 2 was used to diagnose v1, so it is reported, not gated. Chunk 3 (de3d1953, the
 third camera, minutes 2-6 of 0925 08:24 session-001, chosen by rule without looking at detections) is the
 held-out bounce test; its calibration is borrowed (52f4de24, image-match 0.034).
+AMENDED before any label or score (same day): that stretch was casual multi-ball hitting, so chunk 3 is now
+chunk 3b = de3d1953 0925 08:24 session-004 minutes 2:00-6:00 (calib 499ed4b8, image-match 0.034), the first of
+the next four recordings in calibration-match order that the operator judged a real game from an 8x preview.
+Bars unchanged.
 
 GATED (all must hold):
   chunk 3 (tile)  v2 found >= production found - 1        (no harm on unseen footage)
@@ -27,23 +31,23 @@ import check_static_removed_bounces as M
 from tracklets_first import drop_still_v2
 
 E1.drop_still = drop_still_v2
-C3_LABELS = "eval/labels/bounces/cvat_de3d1953_0925T0824_s001_120-360.json"
-C3 = ("chunk 3", C3_LABELS, "cache/pgc_fieldtest/52f4de24-baec-4d5c-9478-13d16140eb19.calib.json",
-      "cache/bounce_pilot/chunk3_de3d1953_0824_s001.tile.csv")
-VIDEO3 = "clips/bounce_chunk3/de3d1953_0925T0824_s001_120-360.mp4"
+C3_LABELS = "eval/labels/bounces/cvat_de3d1953_0925T0824_s004_120-360.json"
+C3 = ("chunk 3", C3_LABELS, "cache/pgc_fieldtest/499ed4b8-f8bd-4931-93a9-d7f7b8ae4c4f.calib.json",
+      "cache/bounce_pilot/chunk3b_de3d1953_0824_s004.tile.csv")
+VIDEO3 = "clips/bounce_chunk3/de3d1953_0925T0824_s004_120-360.mp4"
 
 
 def export_c3():
     q = """select l.frame, l.points from engine_labeledshape l join engine_job j on j.id=l.job_id
            join engine_segment s on s.id=j.segment_id join engine_task t on t.id=s.task_id
-           join engine_project p on p.id=t.project_id where p.name='bounce-chunk3-pgc' and l.type='points' order by l.frame"""
+           join engine_project p on p.id=t.project_id where p.name='bounce-chunk3b-pgc' and l.type='points' order by l.frame"""
     out = subprocess.run(["docker", "--context", "desktop-linux", "exec", "cvat_db", "psql", "-U", "root", "-d", "cvat",
                           "-tA", "-F", "|", "-c", q], capture_output=True, text=True, check=True).stdout
     b = []
     for line in out.splitlines():
         f, pts = line.split("|"); x, y = (float(v) for v in pts.split(",")[:2])
         b.append({"frame": int(f), "t": round(int(f) / 30.0, 3), "x": round(x, 1), "y": round(y, 1)})
-    json.dump({"source": "cvat project bounce-chunk3-pgc", "video": VIDEO3, "source_frame_offset": 3600, "fps": 30.0,
+    json.dump({"source": "cvat project bounce-chunk3b-pgc", "video": VIDEO3, "source_frame_offset": 3600, "fps": 30.0,
                "n_frames_cvat": 7200, "complete": None, "bounces": b}, open(C3_LABELS, "w"), indent=1)
 
 
