@@ -3413,3 +3413,17 @@ The desktop reports an aggregate per-camera local-source state over its existing
 - Weak ball detection on court 34fab44c is a separate problem (detector yield), not something a glare filter can fix.
 
 **Data kept.** Hand labels: `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json` (33), `cvat_c199a97c_0926T0538_s002.json` (36), `cvat_eda301d9_0926T0538_s000_120-360.json` (98). Code: `scripts/tracklets_first.py` (+ tests), `scripts/eval_tracklets_first.py`, `scripts/eval_tracklets_first_v2.py`, `scripts/check_static_removed_bounces.py`.
+
+## ADR-155 — The Tapo C200 at PGC court 1 (camera de3d1953) is excluded from all new evaluation samples
+
+**Date:** 2026-10-17 · **Status:** decided (operator) · **Project:** pic-vision (PIC-226)
+
+**Context.** Across the two fresh, operator-judged samples (`EXPERIMENTS.md` 2026-10-13 fresh sessions, verdicts; 2026-10-17 Test L), 22 of 43 clips from de3d1953 were not rallies, against 3 of 27 on the other two cameras (eda301d9 1 of 17, c199a97c 2 of 10). de3d1953 has no fixed glare (0% static-cell share on all 22 scale sessions), so detector noise from glare does not explain it. The camera is also the one that drops frames (it failed the decode guard and had to be re-encoded, which duplicates frames and distorts speed; bounce chunk 3b was abandoned for this) and has no manual shutter control (ADR-002 context). The operator's reasons for its bad clips were mostly real play that is not a point: warm-ups, practice, failed serves.
+
+**Decision (operator).** No new test sample, labelling chunk or tuning pool uses footage from de3d1953. New sampling scripts filter sessions through `scripts/footage_rules.py` `usable()` (tests in `tests/test_footage_rules.py`).
+
+**What this does not change.**
+- Past experiments keep the footage they were registered with; their recorded numbers are not re-scored without it. Any "without the Tapo" re-reading of an old result is post-hoc and must say so.
+- Production is untouched: if PGC keeps recording court 1 on this camera, its sessions still get reels, and their quality is no longer measured by our tests.
+
+**Caveat.** Camera and day are confounded: every judged de3d1953 clip is from 2026-09-25 and every other judged clip from 2026-09-26. Part of the junk may be that day's play (more warm-ups and practice) rather than the camera. Removing the camera also removes most 09-25 footage from future samples, so warm-up and practice clips will be rarer in tests than they may be in real use.
