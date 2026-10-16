@@ -3858,3 +3858,26 @@ Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 
 **Does not show.** Whether a site-level test (a glint holds one spot for minutes; a slow ball for a second) would separate them; that would need its own pre-registration, and chunks 1-3 have now all been looked at. Not switched on; no ADR.
 
 **Follow-up (same day, after the result; diagnosis, not a re-score).** All 4 real field clips v2 loses are on one glare court, 34fab44c (36% static-cell detections; it lost all 4 of its real clips). Clean field courts (13 sessions, 0% static) lost none; the dev losses are brickwall_30fps 1 (40% static), pb_draft_cup 2 (12%), IMG_7744 2 (0%). Inside the 4 lost clips v2 drops 369 of 794 detections, ~80% of them on fixed glare cells (back-shutter object near (1070, 290), court reflection near (930, 670)). Per clip: 69-75 s survives shifted (filter segment 65.4-74.1 s, IoU at the 0.5 edge); 350-355 s vanishes although only 18% of today's path there is glare (unexplained); 451-470 s and 494-521 s vanish, and 44% of today's path in each is on glare cells, i.e. production found them partly by following glare. Operator playback of 451-470 s (overlay video `clips/lost_rallies/34fab44c_lost4.mp4`): "half of the time the ring focuses on the wrong object", consistent with the 44%. Reading: on this court the real ball is weakly detected, and two of production's real rallies were found for the wrong reason; removing glare exposes that rather than cutting the ball.
+
+## 2026-10-17 (Test J) — Jev (TypeSafe jev-1.14, image + Box) as a single-frame ball finder: matches k14 on the clean court (17 vs 18 of 33) but loses on the glare court (6 vs 13 of 36): FAIL
+
+**Why.** PIC-226. Operator's idea: Jev gained image input and a Box (where-is-it) question on 2026-10-14; can it find the ball, and does it avoid the glare that captures k14? Pre-registered at `94c09f7` (`scripts/eval_jev_ball.py`) before any call. Images and Box are labelled prototype-grade by TypeSafe. Frames were sent to TypeSafe by the operator's own run (Claude Code's safety check blocked the agent from sending footage; the operator approved and ran it).
+
+**Method.** Ground truth: the operator's hand-labelled bounce positions (ball visible at that frame). Chunk 2 (c199a97c 9/26 s002, heavy glare): all 36; chunk 3c (eda301d9 9/26 s000, no glare): every 3rd label, 33. Arms on the same frames: k14 tile-arm top-1; jev-A whole frame at 1568 px wide (Noul visible + Box); jev-B the frame in 4 full-resolution quarter tiles, a Choice picks the tile, then a Box on that tile. Hit = centre within 15 px of the label. Bar: the Jev arm with more total hits must reach k14 on chunk 2 and be within 10 points of k14 on chunk 3c.
+
+| | k14 | jev-A (whole frame) | jev-B (tile, then box) |
+|---|---|---|---|
+| Chunk 2 (glare), hits of 36 | **13** | 1 | 6 |
+| Chunk 3c (clean), hits of 33 | 18 | 4 | **17** |
+| Chunk 2: picks on the 4 glare cells | 13 | 1 | 1 |
+| Median miss distance, chunk 2 / 3c (px) | | 210 / 39 | 201 / 14 |
+
+**Result: FAIL** (jev-B, the better arm: chunk 2 6 < 13; chunk 3c 17 vs 18 passes its half).
+
+**What it shows.**
+- On a clean court, Jev on single still frames, with no motion, finds the ball about as often as k14 does with three frames (17 vs 18). The whole-frame arm is far worse (4): the ball is too small at 1568 px; cutting into tiles is what works.
+- Jev is not fooled by the court reflection that captures k14 (1 pick on glare cells vs 13), but it is fooled by other still, ball-like objects: 8 chunk-2 misses land on a lime-green disc lying near the near baseline and 8 on a sign/object on the back shutter (checked on a frame with all picks drawn). Same failure class as k14 (static look-alikes), different objects.
+- Its Box confidence does not separate hits from misses (misses at 0.76-0.91 confidence exist on both chunks); its "ball visible" answer is ~0.94 almost everywhere.
+- Cost and speed: jev-B ~8,400 input tokens and 0.6 s per frame (~$0.00035). A 2-hour session at 30 fps (216k frames) would be ~$76 and ~36 h sequential: not usable per frame, usable for sparse checks.
+
+**Does not show.** Jev as a checker of k14's candidates (crop around each k14 detection: "is this the ball?"): k14 and Jev fail on different objects, so a vote could remove both kinds of look-alike. Not tested; would need its own pre-registration and fresh frames.
