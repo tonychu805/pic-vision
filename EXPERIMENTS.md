@@ -3805,3 +3805,27 @@ None of the 36 labelled bounces lies in a static cell, so the removal cost no la
 **Reading.** On this camera the glints were hiding real ball points from the tracker and corrupting the track near the bounce; removing them gives back 6 bounces. 26 are still missed, and 15 of 27 candidates match no label (hits or noise, not reviewed): the finder itself is the next limit, and the speed-ratio check would be the tool for the extra candidates. For rallies a similar pixel mask failed (2026-10-12: real rallies pass through masked spots); for bounces on this chunk no labelled bounce sat on a glint, but a bounce landing on a reflection would be lost by construction, and the 100-hit cell rule needs a whole session to find the spots.
 
 **Does not show.** A second camera with glare; whether the same removal costs real rallies on this footage (the rally question is separate and has failed before in mask form); whether a dynamic version (drop a tracklet only while it is stationary, the operator's tracklets-first design) recovers as much without the by-construction loss.
+
+## 2026-10-16 (Test E) — Tracklets-first still-site removal: bounces chunk 2 4 -> 6 of 36 (bar 10), chunk 1 unchanged 14; rallies lose 4 of 60 real field clips (bar 3) while removing 6 of 8 scenery fakes: FAIL, narrowly, and the glare mostly survives
+
+**Why.** PIC-226. Operator's design: build short tracklets from all detections, drop stationary ones, then let the existing tracker choose. Unlike the fixed mask (entry above) it never drops points of a moving tracklet, so a ball flying over a reflection survives.
+
+**Method.** `scripts/tracklets_first.py` (`drop_still`, 4 unit tests), `scripts/eval_tracklets_first.py`; one config fixed a priori (link 40 px/frame capped at 150, gap <= 5 frames; moving = tracklet diagonal > 12 px; a non-moving point is dropped when >= 5 other non-moving points lie within 12 px within +-90 frames), committed with the bar before scoring (`1f748dd`).
+
+| | Production | Tracklets-first | Bar |
+|---|---|---|---|
+| Bounces chunk 2 (tile), found of 36 | 4 | **6** | >= 10: FAIL |
+| Bounces chunk 1 (tile), found of 33 | 14 | 14 | >= 13: pass |
+| Real field clips lost (of 60) | - | **4** | <= 3: FAIL |
+| Graded dev rallies lost (of 83) | - | 2 | <= 5: pass |
+| Scenery fakes removed (of 8) | - | 6 | reported |
+| Not-real clips removed (of 35) | - | 11 | reported |
+| Rallies | 184 | 176 | |
+
+**Result: FAIL** on both parts, each by a small margin.
+
+**Why it under-delivers on bounces (diagnosed after the result).** On chunk 2 the 4 static cells hold 2,870 detections before and 1,685 after: it removes only 41% of the glare. 1,599 of the 1,685 survivors sit in tracklets classed as moving: with glare on about half the frames, linking (nearest open tracklet within up to 150 px) chains glare points to ball and other points, the chain's extent exceeds 12 px, and the whole chain is exempt. The fixed mask removed all of it (4 -> 10). The flaw is in the per-tracklet "moving" exemption, not the idea of judging stillness dynamically.
+
+**Rallies, read against D4** (reading after the result, so not a pass): D4 lost 1 of 60 real, removed 5 of 8 fakes and 5 of 35 not-real; Test E loses 4, removes 6 and 11. More removed, at a higher real cost, with only ~40% of the glare touched on the chunk inspected.
+
+**Does not show.** A version that judges stillness per point or splits tracklets at still sites (the obvious fix) has not been run; it would need its own pre-registration, and chunk 2 has now been used for diagnosis, so its bounce number would no longer be clean: a third camera (de3d1953) would be the honest test.
