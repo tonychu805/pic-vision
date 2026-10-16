@@ -68,6 +68,19 @@ def sheet(c):
     os.makedirs(SHEETS, exist_ok=True); cv2.imwrite(p, canvas, [cv2.IMWRITE_JPEG_QUALITY, 90]); return p
 
 
+def questions():
+    from typesafe_sdk import Choice, Noul
+    return {
+        "real": Noul(instructions="`clip` shows six frames, numbered 1-6 in time order, from one fixed camera "
+                                  "overlooking pickleball courts. Is this a real point of a pickleball game (served, "
+                                  "returned and played out), rather than practice, a warm-up, a ball machine, a failed "
+                                  "serve or no play? Judge only the main court (the largest court in the picture)."),
+        "kind": Choice(instructions="`clip` shows six frames, numbered 1-6 in time order, from one fixed camera "
+                                    "overlooking pickleball courts. What is happening on the main court (the largest "
+                                    "court in the picture)?",
+                       criteria=KINDS)}
+
+
 def ask_all(cs):
     from typesafe_sdk import Choice, Image, Noul, TypeSafeClient
     from eval_jev_ball import key
@@ -76,15 +89,7 @@ def ask_all(cs):
     for c in cs:
         if c["id"] in done: continue
         img = Image(open(sheet(c), "rb").read()); t = time.time()
-        r = client.system_one(model=MODEL, extra_headers=HDR, state={"clip": img}, questions={
-            "real": Noul(instructions="`clip` shows six frames, numbered 1-6 in time order, from one fixed camera "
-                                      "overlooking pickleball courts. Is this a real point of a pickleball game (served, "
-                                      "returned and played out), rather than practice, a warm-up, a ball machine, a failed "
-                                      "serve or no play? Judge only the main court (the largest court in the picture)."),
-            "kind": Choice(instructions="`clip` shows six frames, numbered 1-6 in time order, from one fixed camera "
-                                        "overlooking pickleball courts. What is happening on the main court (the largest "
-                                        "court in the picture)?",
-                           criteria=KINDS)})
+        r = client.system_one(model=MODEL, extra_headers=HDR, state={"clip": img}, questions=questions())
         a = r.answers
         rec = {"id": c["id"], "verdict": c["verdict"], "why": c["why"], "real": a["real"].noul, "kind": a["kind"].choice,
                "kind_p": dict(a["kind"].probabilities), "sec": round(time.time() - t, 2), "tok": r.usage.input_tokens}
