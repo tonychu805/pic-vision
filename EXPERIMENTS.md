@@ -3769,3 +3769,22 @@ Drop rate **4%** (12 of 329): not aggressive.
 **Reading.** On this camera the zoomed detector does see the ball near three quarters of the bounces, and three fifths of everything it reports sits in four fixed spots. Tracklets-first could at most give back the 9 bounces the tracker discarded. For 18 bounces the tracker already held >= 3 ball points nearby, yet the finder found only 4 bounces in total: most of the loss is in the bounce finder working on that track, not in the tracker's choice. A plausible but unverified cause is the track interleaving glint points with ball points around the bounce, which breaks the local-low-point rule.
 
 **Does not show.** Whether the 18 "tracked but not found" bounces fail because of glint points mixed into the track or for the chunk-1 reasons (too few points at the bounce itself, no local low point); not inspected.
+
+## 2026-10-16 (overlay review) — Of 14 bounces the tracker held but the finder missed, glare sits in the track within +-10 frames of the bounce for 7, more than once for 2; the operator tagged 13 "glare_mixed" on a looser reading
+
+**Why.** Entry above: for most chunk-2 bounces the tracker held ball points nearby and the finder still missed. Question: is the track interleaving glint points with ball points around the bounce (would favour tracklets-first), or is it sparse at the bounce, or fine?
+
+**Method.** `scripts/make_bounce_overlay_review.py` (`96b7731`). The 14 chunk-2 bounces that were visible, not discarded and not found; 3-s clips with the tile-arm tracked point drawn per frame (green, red when in a static cell), a 6-frame trail and the labelled point. A mechanical call was locked before review (sha256 in the commit): glare_mixed >= 2 static tracked points within +-8 frames; sparse < 2 tracked points within +-3; else tracked_fine. Operator tagged each clip in CVAT project `bounce-chunk2-overlay`.
+
+| | glare_mixed | tracked_fine | sparse | wrong_object |
+|---|---|---|---|---|
+| Operator | 13 | 1 | 0 | 0 |
+| Mechanical (locked) | 2 | 11 | 1 | 0 |
+
+Agreement 3 of 14.
+
+**Why they disagree (counts from the same track).** Red (static) tracked frames within +-10 of the bounce: 0 in 7 clips, 1 in 4, 2-3 in 2 (b-01, b-10), plus b-13 with one at +9. Red anywhere in the 3-s clip: 13 of 14. The operator tagged on red anywhere in the clip; the instructions given during the review drifted ("any red" before "within +-10"), so the looser reading is the instructions' fault, not the reviewer's. The playback does confirm that the red spots are stationary floor dots and reflections, not the ball.
+
+**Reading.** Glare is in nearly every 3-s stretch around these bounces, but the tracker sits on it within +-10 frames of the bounce in only half of them, usually for a single frame among 5-15 ball frames. That can explain at most half of these misses (and only if one outlier point is enough to break the finder's low-point rule); the other 7 have no glare near the bounce and still failed, so a second cause is in the finder itself.
+
+**Does not show.** Whether one glint point near the bounce is in fact what breaks the finder; testable directly by removing static-cell points from the track and re-running the finder (not run).
