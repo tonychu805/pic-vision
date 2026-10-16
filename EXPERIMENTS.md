@@ -3788,3 +3788,20 @@ Agreement 3 of 14.
 **Reading.** Glare is in nearly every 3-s stretch around these bounces, but the tracker sits on it within +-10 frames of the bounce in only half of them, usually for a single frame among 5-15 ball frames. That can explain at most half of these misses (and only if one outlier point is enough to break the finder's low-point rule); the other 7 have no glare near the bounce and still failed, so a second cause is in the finder itself.
 
 **Does not show.** Whether one glint point near the bounce is in fact what breaks the finder; testable directly by removing static-cell points from the track and re-running the finder (not run).
+
+## 2026-10-16 (glare removed before tracking) — Dropping the 4 fixed glare cells before the tracker lifts chunk-2 bounces found from 4 to 10 of 36: glare is a main cause (exactly at the bar), and still short of the 40% finding bar
+
+**Method.** `scripts/check_static_removed_bounces.py`, bar committed before the run (`fd4b836`). Raw detections in static cells (20 px cells with >= 100 detections over the chunk; 4 cells on the tile arm) removed before `track_ball`; everything else unchanged. Bar on the tile arm: >= 10 found = main cause, 6-9 minor, <= 5 not the cause.
+
+| Arm | Glare in: found | Glare removed: found | Candidates (in -> removed) | Candidates matching a label |
+|---|---|---|---|---|
+| tile | 4 of 36 | **10 of 36 (28%)** | 20 -> 27 | 7 -> 12 |
+| base | 2 of 36 | 2 of 36 | 9 -> 8 | 2 -> 2 |
+
+None of the 36 labelled bounces lies in a static cell, so the removal cost no labelled bounce here. "Glare in" reproduces the earlier 4 of 36.
+
+**Result: MAIN CAUSE** (10, exactly at the line). The whole-frame arm does not move: it rarely sees the ball near these bounces (16 of 36), so there is little to unblock.
+
+**Reading.** On this camera the glints were hiding real ball points from the tracker and corrupting the track near the bounce; removing them gives back 6 bounces. 26 are still missed, and 15 of 27 candidates match no label (hits or noise, not reviewed): the finder itself is the next limit, and the speed-ratio check would be the tool for the extra candidates. For rallies a similar pixel mask failed (2026-10-12: real rallies pass through masked spots); for bounces on this chunk no labelled bounce sat on a glint, but a bounce landing on a reflection would be lost by construction, and the 100-hit cell rule needs a whole session to find the spots.
+
+**Does not show.** A second camera with glare; whether the same removal costs real rallies on this footage (the rally question is separate and has failed before in mask form); whether a dynamic version (drop a tracklet only while it is stationary, the operator's tracklets-first design) recovers as much without the by-construction loss.
