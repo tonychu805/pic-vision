@@ -3881,3 +3881,31 @@ Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 
 - Cost and speed: jev-B ~8,400 input tokens and 0.6 s per frame (~$0.00035). A 2-hour session at 30 fps (216k frames) would be ~$76 and ~36 h sequential: not usable per frame, usable for sparse checks.
 
 **Does not show.** Jev as a checker of k14's candidates (crop around each k14 detection: "is this the ball?"): k14 and Jev fail on different objects, so a vote could remove both kinds of look-alike. Not tested; would need its own pre-registration and fresh frames.
+
+## 2026-10-17 (Test K) — Jev as a rally guardrail on 125 operator-judged clips: flags 17 of 37 not-real (bar 19) at the cost of 6 of 75 real (bar 3): FAIL narrowly; catches every ball-machine clip, none of the warm-ups
+
+**Why.** PIC-226, operator's idea: use Jev (TypeSafe jev-1.14, image input) as a guardrail on detected rallies, "real point or practice?". Pre-registered at `1ac446f` (`scripts/eval_jev_rally.py`) before any call; Jev had never seen these clips. Run by the operator (frames go to TypeSafe).
+
+**Method.** 125 PGC clips with playback verdicts (75 real, 37 not real, 13 serve + return only; the one "unsure" excluded). One call per clip: a contact sheet of 6 frames evenly spaced over the detected rally (2 x 3, 784 x 441 each). Noul "is this a real point of a game ...?" plus a Choice of kind (real point / practice / ball machine / failed serve / not play). Rule fixed in advance: flag when the Noul < 0.5. Bar: real flagged <= 3 of 75 and not-real flagged >= 19 of 37.
+
+| | Flagged |
+|---|---|
+| Real (of 75) | **6** (bar <= 3) |
+| Not real (of 37) | **17** (bar >= 19) |
+| Serve + return only (of 13) | 0 (reported) |
+
+**Result: FAIL**, narrowly on both halves.
+
+**By reason (not-real flagged / total):** ball machine 6/6, not play 2/2, ball hit the net 2/2, feeding 1/1, serve out 1/1, serve only cut off 1/2, failed serve 1/5, not given 3/7, warm-up 0/5, warm-up/practice 0/3, practice 0/1, sunlight 0/1, tossed ball 0/1.
+
+**Reading.**
+- Strong where the scene itself shows it is not a game: all 6 ball-machine clips get 0.06-0.25 (basket and loose balls visible). Caveat: all 6 come from one session (c6a9136a).
+- Blind to warm-ups: all 8 score 0.53-0.68, "real point". From six stills a warm-up rally looks like a point.
+- Failed serves mostly missed (1 of 5), as expected: the difference is motion at the net, not visible in stills.
+- 4 of the 6 real clips flagged sit at 0.47-0.49: the Noul's answers are compressed into roughly 0.4-0.7, so the 0.5 cut sits in a crowded band.
+- Its Choice answer adds little: "not real point" flags real 4 / not-real 18, also short of the bar.
+- Cost: ~6,000 input tokens and 0.4 s per clip, about $0.00025; well under $0.10 per session.
+
+**Descriptive only (in-sample, cut-offs read after the result, not a pass):** at 0.4 it flags 1 of 75 real and 13 of 37 not-real (35%); at 0.3, 1 and 8.
+
+**Does not show.** Whether a lower cut (e.g. 0.4) holds on clips it has not seen: needs fresh verdicts and its own pre-registration. Whether a ball-machine-only rule (scene shows a ball machine / basket) generalises beyond one session.
