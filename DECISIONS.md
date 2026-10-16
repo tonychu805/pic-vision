@@ -3392,3 +3392,24 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **Decision.** Enumerate all non-internal IPv4 interfaces, exclude common virtual adapters, deduplicate identical CIDRs, and scan every remaining directly attached subnet automatically. Exclude every local address from its own sweep. The Settings page lists all automatic ranges and their adapter names so an installer can verify coverage. Operator-added ranges remain for routed camera VLANs; RTSP scanning can reach those networks, while ONVIF multicast discovery still cannot. A range larger than the existing 512-host safety limit is reported and skipped rather than allocating an unsafe address list.
 
 **Verification.** Desktop lint, renderer production build, and focused system/network-sweep tests pass (9 tests). Still required before release: an installed-artifact scan on a machine with both wired and Wi-Fi venue networks, including a camera on each subnet.
+
+## ADR-154 — Fixed glare is the main cause of lost ball tracking on glare courts; the still-site filter (v2) stays off until a glare-gated, longer-dwell version passes on fresh footage
+
+**Date:** 2026-10-17 · **Status:** decided; nothing switched on · **Project:** pic-vision (PIC-226)
+
+**Context.** Bounce finding passed on its first court (14 of 33 hand-labelled bounces, 42%) and collapsed on a second (c199a97c 9/26 s002: 4 of 36). On 2026-10-16 a chain of pre-registered tests asked why and whether a filter fixes it. All are in `EXPERIMENTS.md` 2026-10-16 (bounce chunk 2, discarded ball points, overlay review, glare removed before tracking, Test E, Test E2 and its follow-up).
+
+**What was learned.**
+1. **Fixed glare captures the tracker.** On the second court, four 20 px cells (a court reflection near (925, 652) and a white object on the back shutter near (1080, 280)) hold ~60% of all detections. Removing just those cells before tracking lifts bounces found from 4 to 10 of 36, with no labelled bounce on a removed cell.
+2. **Without glare the current finder is near the bar.** A third, exhaustively labelled stretch (eda301d9 9/26 s000 min 2-6, 98 bounces, 0% glare) gives 34 of 98 (35%) against the 40% bar. The second court's failure was mainly glare, not zoom or the bounce rule.
+3. **Glare can be removed dynamically, but slow balls look like glare.** Test E (tracklet-level stillness) removed only 41% of the glare because glare chained into "moving" tracklets. Test E2 (per-point stillness: >= 6 points within 12 px in +-90 frames, kept only on a straight moving path) removed 87% of it and all 8 known glare fake rallies, but also dropped 7% of detections on glare-free footage: soft bounces near the kitchen and a ball dribbling to rest. It failed its pre-registered bars: chunk 3 30 vs 34 (allowed 33), real field rallies lost 4 of 60 (allowed 3).
+4. **On the worst glare court, part of today's rally recall is luck.** All 4 lost real rallies are on glare court 34fab44c (it lost all 4 of its real clips). In two, 44% of today's tracked path is glare; operator playback agrees ("half of the time the ring focuses on the wrong object"). One survives shifted to the IoU edge; one is unexplained. Clean field courts lost none.
+5. **Method lessons.** Pre-register before labels exist and amend only before scoring (chunk 3 was amended twice: multi-ball practice, then the Tapo C200 camera de3d1953, which drops frames). Keep instructions to a reviewer fixed for the whole pass (the overlay review's 3-of-14 agreement came from wording drift). Labels across overlapping CVAT jobs can be duplicated; dedupe across job boundaries only.
+
+**Decision.**
+- `drop_still_v2` is **not** switched on, and neither is the fixed static mask. Production detection is unchanged.
+- The glare finding is accepted as a main cause, and the slow-ball failure as the known weakness of a short-window still-site rule.
+- The next version, if pursued, must (a) apply only where glare is measured (static-cell share; 0% on 13 clean field courts vs 26-40% on glare courts), and (b) require a site to stay lit for minutes, not seconds, so a slow ball cannot qualify. It must be pre-registered and scored on footage not used in this work: all three labelled bounce stretches have now been used for diagnosis.
+- Weak ball detection on court 34fab44c is a separate problem (detector yield), not something a glare filter can fix.
+
+**Data kept.** Hand labels: `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json` (33), `cvat_c199a97c_0926T0538_s002.json` (36), `cvat_eda301d9_0926T0538_s000_120-360.json` (98). Code: `scripts/tracklets_first.py` (+ tests), `scripts/eval_tracklets_first.py`, `scripts/eval_tracklets_first_v2.py`, `scripts/check_static_removed_bounces.py`.
