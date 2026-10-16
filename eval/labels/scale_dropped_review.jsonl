@@ -1,0 +1,12 @@
+{"clip": "d-01", "session": "c199a97c_2026-09-26T05-38-15_session-000", "start": 30.1, "end": 35.8, "flight_score": 0.0, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-02", "session": "c199a97c_2026-09-26T05-38-15_session-000", "start": 40.6, "end": 53.1, "flight_score": 0.023, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-03", "session": "c199a97c_2026-09-26T05-38-15_session-000", "start": 425.2, "end": 430.8, "flight_score": 0.0, "first_pass": "real_rally", "final": "real_rally"}
+{"clip": "d-04", "session": "c199a97c_2026-09-26T05-38-15_session-001", "start": 5.0, "end": 10.4, "flight_score": 0.0, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-05", "session": "c199a97c_2026-09-26T05-38-15_session-001", "start": 350.4, "end": 362.4, "flight_score": 0.087, "first_pass": "real_rally", "final": "real_rally"}
+{"clip": "d-06", "session": "c199a97c_2026-09-26T05-38-15_session-002", "start": 222.6, "end": 234.8, "flight_score": 0.0, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-07", "session": "de3d1953_2026-09-25T08-24-02_session-000", "start": 294.4, "end": 298.3, "flight_score": 0.1, "first_pass": "real_rally", "final": "not_a_rally"}
+{"clip": "d-08", "session": "de3d1953_2026-09-25T08-24-02_session-007", "start": 296.5, "end": 303.3, "flight_score": 0.0, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-09", "session": "de3d1953_2026-09-25T08-24-02_session-008", "start": 177.8, "end": 185.5, "flight_score": 0.064, "first_pass": "real_rally", "final": "real_rally"}
+{"clip": "d-10", "session": "de3d1953_2026-09-25T11-01-03_session-000", "start": 310.4, "end": 316.5, "flight_score": 0.111, "first_pass": "not_a_rally", "final": "not_a_rally"}
+{"clip": "d-11", "session": "de3d1953_2026-09-25T11-01-03_session-004", "start": 326.7, "end": 332.1, "flight_score": 0.12, "first_pass": "real_rally", "final": "not_a_rally"}
+{"clip": "d-12", "session": "eda301d9_2026-09-26T05-38-19_session-002", "start": 224.3, "end": 227.1, "flight_score": 0.0, "first_pass": "mixed", "final": "not_a_rally"}

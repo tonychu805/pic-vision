@@ -3710,3 +3710,28 @@ Config (W 45, gap 3, RMS 8 px, min piece 3 points, T 0.15) chosen in 4 of 5 fold
 **Selection note.** The rule "fewest real lost" drives T to its minimum (0.15), the most conservative drop; the data cannot say whether a higher T would remove more fakes at similar cost because the selection never preferred it.
 
 **Does not show.** Why the 3 unremoved scenery fakes survive; generalisation to a second venue (one venue, 14 sessions, 8 fakes, 3 of them in one fold); that it helps reels, since dots are a minority of the false rallies.
+
+## 2026-10-16 (D4 at scale) — The frozen D4 filter drops 12 of 329 rallies on 36 new PGC sessions; 3 of the 12 are real rallies on the operator's final verdict (pass, exactly at the limit), 5 on the first pass (fail)
+
+**Why.** PIC-226. D4 was tuned on 14 sessions with labelled fakes. Before turning it on, check on sessions it never saw that what it throws away is junk. Pre-registered in `scripts/scale_rally_scoring.py` (`8ee9cf8`) before inference ran.
+
+**Method.** Frozen D4 config (W 45, gap 3, RMS 8 px, min piece 3, T 0.15), production detection (gap 3.0 s, >= 6 crossings, court wedge, `track_ball`). 37 new PGC sessions planned (every 2026-09-26 session + every 2026-09-25 session of camera de3d1953, `scripts/scale_plan.py`), 36 with a calibration match; 15 failed the 98% decode guard and were re-encoded to CFR first (`scripts/reencode_scale.py`). Every dropped rally (12, under the sample-40 cap) was cut to a clip and tagged by the operator from playback in local CVAT (project `scale-dropped-review`, `scripts/cvat_make_scale_review.py`). Verdicts: `eval/labels/scale_dropped_review.jsonl`.
+
+**Bar.** Of the tagged dropped rallies (excluding unsure), >= 70% not_a_rally AND <= 3 real_rally (3 > 10% of 12). Drop rate > 25% = aggressive.
+
+| | First pass | Final verdict |
+|---|---|---|
+| Not a rally | 6 | **9** (75%) |
+| Real rally | 5 (d-03, 05, 07, 09, 11) | **3** (d-03, 05, 09) |
+| Mixed / unclear | 1 (d-12, both tags) | 0 |
+| Bar | **FAIL** (5 real; 55% junk) | **pass, at the limit** (3 real) |
+
+Drop rate **4%** (12 of 329): not aggressive.
+
+**The revision.** d-07, d-11 and d-12 were moved to not_a_rally on a second look, *after* the operator was told the first pass failed. The operator described them as "barely a rally" on the first pass too. The pass therefore rests on a post-result revision and sits exactly on the limit; it is not a comfortable pass.
+
+**Flight score does not separate the two.** Real: 0.0, 0.087, 0.064. Not-a-rally: seven at 0.0-0.023 plus 0.100, 0.111, 0.120. A lower threshold would not have saved the real ones (d-03 scored 0.0). A post-hoc "cut at 0.05" reading floated on the first-pass tags disappears on the final ones.
+
+**Does not show.** How many fakes D4 keeps (kept rallies were not reviewed), so nothing about whether it removes enough junk to matter in a reel; a second venue (all PGC); a second reviewer (one operator, and `project_labeling_noise_floor` says agreement on "is this a rally" is low).
+
+**Conclusion.** On new sessions D4 is gentle (4% dropped) and what it drops is mostly junk, but it does drop real rallies at about the rate the bar allows (3 of 12, 3 of 329 detected, about 1%). Not enough on its own to switch on; no ADR.
