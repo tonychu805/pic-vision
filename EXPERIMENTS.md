@@ -3973,3 +3973,22 @@ Candidate precision (a pick within +-3 frames of any mark): chunk 1 17/37, chunk
 - One operator, single frames, 76 players from 10 clips at one venue on two cameras. The hid counts differ between methods on the same crops (RTM near 7 hid, MP near 0), so "hid" was applied unevenly.
 
 **Reading.** Expectation partly disproved: RTM finds near-side hands reliably and lands on far-side hands too. MediaPipe Hands, a hand-only model expecting large hands, is not usable at this camera distance. Whether hand points tell us anything about the paddle (angle, contact) was not tested: that is the next question, and on the far side the answer is likely limited by pixel count, not by the model.
+
+## 2026-10-18 (hand-ball proximity) — A hand near the ball separates paddle hits from bounces on the 36 tagged events (AUC 0.95, p = 0.0001): PASS in-sample; the body model's wrist does as well (AUC 0.97), so hand points add nothing here
+
+**Why.** PIC-226, operator: can we detect paddle hits? After the hand keypoint probe passed, the simplest use of hand points: is a hand close to the ball when the ball changes direction? Pre-registered at `00bbfd2` (`scripts/eval_hand_hit_vs_bounce.py`) before any hand or wrist point was computed on these events.
+
+**Method.** The 36 operator-tagged finder candidates of chunk 1 (eda301d9 9/25 08:21 s000; 23 bounce, 13 paddle_hit), the same events as the speed-ratio check (whose result was known). Frames g-3..g+3; ball = tile-arm tracked point; on-court yolov8x-pose players; RTMPose whole-body hand points (all 42). hand_dist = min over frames and players of ball-to-nearest-hand distance / box height. wrist_dist (reported) = the same with yolov8x-pose wrists. Bar: coverage >= 80%, AUC(bounce > hit) >= 0.85, shuffle p < 0.01.
+
+| | coverage | bounce median | hit median | AUC (bounce > hit) |
+|---|---|---|---|---|
+| **hand_dist** | 36/36 | 0.35 | 0.09 | **0.95** (p = 0.0001): PASS |
+| wrist_dist (reported) | 36/36 | 0.35 | 0.15 | 0.97 |
+
+Overlap on hand_dist: hits 0.00-0.15; bounces 0.06-0.97, with 4 bounces at or below 0.15. The speed-ratio cut (0.95) is wrong on 5 of these events; a mid-class cut on hand_dist (0.22) gets 3 of those 5 right (descriptive).
+
+**Reading.** At a direction change, a hit has a player's hand within about a tenth of a body height of the ball; a bounce usually does not. The wrist point from the body model already gives this, so the hand model is not needed for hit detection at this level; the extra model only matters if paddle angle or contact detail is wanted later. Ball motion (speed ratio) and player proximity are separate cues and partly fix each other's errors.
+
+**Caveats.** In-sample: one 3-minute chunk, one camera, one operator, 23 vs 13. Bounces close to a hand in the image (a ball landing next to a player's feet on the far side, where a body is short) are the expected failure; 4 bounces sit inside the hit range. Covers only direction changes the finder already found: hits the tracker never sees are not counted, and hit recall was never measured.
+
+**Next.** Held-out confirmation for both cues: the 28 untagged events in CVAT project 5 (pre-registered transfer test `ce54d9a` for the speed ratio; the same events serve this cue).
