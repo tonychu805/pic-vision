@@ -3992,3 +3992,24 @@ Overlap on hand_dist: hits 0.00-0.15; bounces 0.06-0.97, with 4 bounces at or be
 **Caveats.** In-sample: one 3-minute chunk, one camera, one operator, 23 vs 13. Bounces close to a hand in the image (a ball landing next to a player's feet on the far side, where a body is short) are the expected failure; 4 bounces sit inside the hit range. Covers only direction changes the finder already found: hits the tracker never sees are not counted, and hit recall was never measured.
 
 **Next.** Held-out confirmation for both cues: the 28 untagged events in CVAT project 5 (pre-registered transfer test `ce54d9a` for the speed ratio; the same events serve this cue).
+
+## 2026-10-18 (hit transfer tests) — On 25 new events neither cue holds: wrist proximity 72% correct, 3 of 7 hits caught (bar 75%, 60%): FAIL; speed ratio 64% correct, below always-"bounce" 72%, AUC 0.47: FAIL
+
+**Why.** PIC-226, can we detect paddle hits. Both cues passed in-sample on chunk 1's 36 events (speed ratio AUC 0.12 i.e. 0.88, 2026-10-15; wrist/hand proximity AUC 0.97/0.95, earlier today). Held-out check on the 28 tile-arm candidates of the 18 PGC pilot clips (CVAT project 5). Speed ratio: pre-registered 2026-10-15 at `ce54d9a` (`scripts/eval_motion_transfer.py`). Proximity: pre-registered at `87e767d` (`scripts/eval_proximity_transfer.py`, cut 0.25 fixed from chunk 1, wrist primary), predictions frozen before tagging (`9ef466a`, sha256 b14120af..., verified unchanged at scoring).
+
+**Tags (operator, after watching each clip):** bounce 18, paddle_hit 7, not_ball 3, unsure 0. All 3 not_ball are the 3 events from camera de3d1953, so the primary (no Tapo) and all-28 sets have the same 25 bounce/hit events.
+
+| | computable | correct | hits caught | bounces kept | AUC (bounce > hit) | verdict |
+|---|---|---|---|---|---|---|
+| **wrist < 0.25** (primary) | 25/25 | 72% (bar 75%) | 3/7 (bar 60%) | 15/18 | 0.83 (bar 0.75) | **FAIL** |
+| hand < 0.22 (reported) | 25/25 | 68% | 3/7 | 14/18 | 0.79 | - |
+| **speed ratio >= 0.95** | 22/25 | 64% (always "bounce": 77% of the 22) | 1/5 | 13/17 | **0.47** (bar <= 0.25 as bounce > hit... reversed scale: no signal) | **FAIL** |
+
+Cues together: they agree on 13 of 22 events, and are right on 10 of those 13.
+
+**Reading.**
+- The speed ratio does not transfer at all (AUC 0.47 = chance). The 2026-10-15 in-sample result (AUC 0.88 on one 3-minute chunk) was not a property of hits and bounces in general. Retire it as a hit cue.
+- Proximity keeps its direction (AUC 0.83: hits are still nearer a wrist than bounces) but the fixed cut misses 4 of 7 hits, all at wrist distance 0.36-0.39, and 3 bounces fall below it (0.11, 0.18, 0.23; two in clip pgc-329). A weaker, real signal; not usable as a rule at this cut, and moving the cut now would be fitting to this sample.
+- Why the 4 hits sit at 0.36-0.39 was not inspected (candidate frame offset from the contact, the hitting arm's wrist not the nearest point, or the paddle head being a body-height fraction from the wrist are possibilities, none checked).
+
+**Caveats.** 7 hits is small; n = 25 from 18 short clips on two cameras; one operator who saw the finder's box. The candidates are only direction changes the finder found; hit recall is still unmeasured.
