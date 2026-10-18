@@ -4003,7 +4003,7 @@ Overlap on hand_dist: hits 0.00-0.15; bounces 0.06-0.97, with 4 bounces at or be
 |---|---|---|---|---|---|---|
 | **wrist < 0.25** (primary) | 25/25 | 72% (bar 75%) | 3/7 (bar 60%) | 15/18 | 0.83 (bar 0.75) | **FAIL** |
 | hand < 0.22 (reported) | 25/25 | 68% | 3/7 | 14/18 | 0.79 | - |
-| **speed ratio >= 0.95** | 22/25 | 64% (always "bounce": 77% of the 22) | 1/5 | 13/17 | **0.47** (bar <= 0.25 as bounce > hit... reversed scale: no signal) | **FAIL** |
+| **speed ratio >= 0.95** | 22/25 | 64% (always "bounce": 77% of the 22) | 1/5 | 13/17 | **0.47** (bar <= 0.25; 0.5 = chance) | **FAIL** |
 
 Cues together: they agree on 13 of 22 events, and are right on 10 of those 13.
 
