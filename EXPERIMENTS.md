@@ -3933,3 +3933,23 @@ Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 
 - The pause rule flagged 1 of 40, as stated in advance; it was not usefully tested.
 
 **Does not show.** The effect on reels: if the top picks are ~34% junk (2026-10-12 top-5 check) and a third of it goes at ~1% real cost, the share of real clips would rise to roughly 74%. That is arithmetic, not a measurement.
+
+## 2026-10-18 (Zone test) — Coarse bounce court map: found bounces land in the right zone (kitchen or deep, per side) 23 of 23 near, 28 of 29 far: PASS; but only 52 of 167 bounces are found and ~43% of finder picks are not bounces
+
+**Why.** PIC-226, operator's question after the detection showcase page: can a 2D court map show bounce points? Ball flight is out of scope (a ball in the air cannot be placed on the floor from one camera). Coarse zones first, at the operator's choice. Pre-registered at `e2ca224` (`scripts/eval_bounce_zones.py`, 2 unit tests) before any zone result; finding counts and chunk-3c court errors were already known.
+
+**Method.** Zones per side: deep (y < 15 / >= 29 ft) or kitchen (15-22 / 22-29 ft), x ignored, out-of-bounds counts as deep. Data: the three exhaustively labelled non-Tapo CVAT chunks (chunk 1 eda301d9 9/25, chunk 2 c199a97c 9/26 glare court, chunk 3c eda301d9 9/26), 167 marked bounces; the tiled k14 detections already used for them (not production); matching unchanged (+-3 frames, 15 px). Bar per side, pooled: right zone >= 80% of found bounces, >= 10 found.
+
+| | marked | found | right zone |
+|---|---|---|---|
+| chunk 1 near | 33 | 14 | 14 |
+| chunk 2 near / far | 15 / 21 | 0 / 4 | - / 4 |
+| chunk 3c near / far | 51 / 47 | 9 / 25 | 9 / 24 |
+| **pooled near** | 99 | **23** | **23 (100%), usable** |
+| **pooled far** | 68 | **29** | **28 (97%), usable** |
+
+Candidate precision (a pick within +-3 frames of any mark): chunk 1 17/37, chunk 2 7/20, chunk 3c 45/65; pooled 69/122 (57%). The one wrong zone: far deep marked, placed in far kitchen. Marks within 1 ft of a kitchen line or the net: 15 of 167 (9%). No far-kitchen bounce was found (chunk 1 labels are all near-side).
+
+**Reading, and why the pass is weak.** "Found" already requires the pick to be within 15 px of the operator's mark, so a found bounce can only change zone when it sits within a few px of a line (on the far half 15 px is a few feet). With 9% of marks near a line, a high zone score was close to guaranteed by construction. The test confirms the court mapping adds no gross error; it says nothing new about the two real limits: (1) finding, 23% near and 43% far, below the 40% landing-map bar on the near half; (2) false picks, ~43% of finder candidates are not bounces, and those would appear on a map as dots with no real bounce behind them (their zones were not measured). Tiled detections, not production, two cameras, one venue.
+
+**Next, if pursued.** A demo map is honest only with those two limits shown. The test that matters for a product map is precision of the dots on the map (operator judges each mapped dot from playback), not zone accuracy.
