@@ -3953,3 +3953,23 @@ Candidate precision (a pick within +-3 frames of any mark): chunk 1 17/37, chunk
 **Reading, and why the pass is weak.** "Found" already requires the pick to be within 15 px of the operator's mark, so a found bounce can only change zone when it sits within a few px of a line (on the far half 15 px is a few feet). With 9% of marks near a line, a high zone score was close to guaranteed by construction. The test confirms the court mapping adds no gross error; it says nothing new about the two real limits: (1) finding, 23% near and 43% far, below the 40% landing-map bar on the near half; (2) false picks, ~43% of finder candidates are not bounces, and those would appear on a map as dots with no real bounce behind them (their zones were not measured). Tiled detections, not production, two cameras, one venue.
 
 **Next, if pursued.** A demo map is honest only with those two limits shown. The test that matters for a product map is precision of the dots on the map (operator judges each mapped dot from playback), not zone accuracy.
+
+## 2026-10-17/18 (hand keypoint probe) — RTMPose whole-body puts hand points on the hand on 31 of 33 near and 36 of 36 far crops: PASS as registered; MediaPipe Hands finds almost nothing (7 of 40 near, 0 of 36 far): FAIL. Blinding was broken by RTM drawing every point, and far "on" says where the hand is, not its shape
+
+**Why.** PIC-226, operator's idea: infer the paddle from hand keypoints (body is easy to find, the paddle is not). Pre-registered at `26be2b5` (`scripts/hand_keypoint_probe.py`) before any hand model ran. Expectation written in advance: far hands too small, near hands often cut off.
+
+**Method.** 20 frames (1/3 and 2/3 of 10 seed-picked Test L real clips, no Tapo), 76 on-court players (yolov8x-pose boxes; 40 near, 36 far; median box height 240 px near, 114 px far). Per player a zoomed crop, RTMPose whole-body (rtmw-dw-x-l, hand points 91-132, drawn at score >= 0.3) and MediaPipe Hand Landmarker side by side, A/B shuffled. Operator judged each panel on / off / none / hid on a click page (answers in `cache/hand_probe/verdicts.txt`). Bar: "on" >= 70% of judged (not hid) per method per side, >= 8 judged.
+
+| | judged | on | off | none | hid | verdict |
+|---|---|---|---|---|---|---|
+| RTM near | 33 | 31 (94%) | 2 | 0 | 7 | usable |
+| RTM far | 36 | **36 (100%)** | 0 | 0 | 0 | usable |
+| MP near | 40 | 7 (18%) | 0 | 33 | 0 | not usable |
+| MP far | 36 | 0 | 1 | 35 | 0 | not usable |
+
+**Caveats that limit the pass (stated before reading the result where marked).**
+- *Blinding broken (disclosed before the review):* RTM scores run ~3-6, not 0-1, so the 0.3 cut draws all 42 points on every crop. The operator could tell which panel was RTM, and RTM can never score "none".
+- *What "on" means on the far side:* far hands are about 8-10 px. 21 points on a hand that size form one blob at the hand; "on" there confirms the hand's location, not finger or wrist orientation. The body model already gives a wrist point, so the far-side pass may add little that is new.
+- One operator, single frames, 76 players from 10 clips at one venue on two cameras. The hid counts differ between methods on the same crops (RTM near 7 hid, MP near 0), so "hid" was applied unevenly.
+
+**Reading.** Expectation partly disproved: RTM finds near-side hands reliably and lands on far-side hands too. MediaPipe Hands, a hand-only model expecting large hands, is not usable at this camera distance. Whether hand points tell us anything about the paddle (angle, contact) was not tested: that is the next question, and on the far side the answer is likely limited by pixel count, not by the model.
