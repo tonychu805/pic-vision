@@ -4013,3 +4013,25 @@ Cues together: they agree on 13 of 22 events, and are right on 10 of those 13.
 - Why the 4 hits sit at 0.36-0.39 was not inspected (candidate frame offset from the contact, the hitting arm's wrist not the nearest point, or the paddle head being a body-height fraction from the wrist are possibilities, none checked).
 
 **Caveats.** 7 hits is small; n = 25 from 18 short clips on two cameras; one operator who saw the finder's box. The candidates are only direction changes the finder found; hit recall is still unmeasured.
+
+## 2026-10-18 (hit visibility, minute 1) — Of 22 paddle hits the operator marked in one minute, the detector sees the ball at 11, the tracker holds 9, and the bounce finder boxes 3; near-side hits are mostly invisible (4 of 11 seen)
+
+**Why.** PIC-226. The hit-sorting tests only ever saw hits the bounce finder happened to box. First exhaustive hit marks, to measure how much of the hit problem is visible at all. Descriptive measurement, no bar.
+
+**Method.** CVAT project 13 / task 147 (`scripts/cvat_make_hit_chunk.py`): chunk 3c (eda301d9 2026-09-26 05:38 s000), source 2:00-4:00, where every bounce is already marked. Operator marked every hit (serves included; ball clicked at contact, paddle if hidden). Minute 1 (task frames 0-1799) read and saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_120-180.json`; minute 2 (jobs 181-183) held back unread for a finder test (only its per-job mark counts were seen: 12, 10, 0). Against the tile-arm detections of chunk 3c: seen = a raw detection within +-3 frames and 30 px of the mark; tracked = a tracker point there; both sides = >= 3 tracked points in the 8 frames before and after; boxed = a bounce-finder candidate there. Side: mark below the net line in the image = near.
+
+| | hits | seen (raw) | tracked | tracked both sides | boxed by bounce finder |
+|---|---|---|---|---|---|
+| near | 11 | 4 | 3 | 2 | 2 |
+| far | 11 | 7 | 6 | 6 | 1 |
+| **all** | **22** | **11** | **9** | **8** | **3** |
+
+Same minute: 24 marked bounces, 20 finder boxes.
+
+**Reading.**
+- The bounce finder boxes 3 of 22 hits (14%). Every earlier hit test drew from that sliver.
+- Far side: the ball is tracked through 6 of 11 hits, but only 1 is boxed, consistent with the reasoning that a far hit turns the ball down the screen, the opposite of the dip the finder looks for (consistent, not proven). A finder for any sharp direction change could reach up to ~6 of 11 here.
+- Near side: the ball is detected at only 4 of 11 hits. Near the camera the ball is fast, blurred and next to the player's body; this is a detection ceiling, which no hit rule built on the ball track can get past. A ball-free cue (arm swing timing) is the only route for these, and it is untested.
+- Overall ceiling for any track-based hit finder on this minute: about 8 of 22 (tracked on both sides).
+
+**Caveats.** One minute, 22 hits, one camera, tile-arm detections (not production). Near/far by the image net line is approximate for a ball in the air.
