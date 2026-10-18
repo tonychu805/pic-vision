@@ -3993,7 +3993,7 @@ Overlap on hand_dist: hits 0.00-0.15; bounces 0.06-0.97, with 4 bounces at or be
 
 **Next.** Held-out confirmation for both cues: the 28 untagged events in CVAT project 5 (pre-registered transfer test `ce54d9a` for the speed ratio; the same events serve this cue).
 
-## 2026-10-18 (hit transfer tests) — On 25 new events neither cue holds: wrist proximity 72% correct, 3 of 7 hits caught (bar 75%, 60%): FAIL; speed ratio 64% correct, below always-"bounce" 72%, AUC 0.47: FAIL
+## 2026-10-18 (hit transfer tests) — Sorting the bounce finder's 25 new candidates into hit or bounce: the wrist rule keeps its signal (AUC 0.83) but misses the pre-set bar (72% correct = the always-"bounce" rate, 3 of 7 hits; bar 75%, 60%): FAIL; speed ratio has no signal (AUC 0.47): FAIL. Finding hits was not tested (there is no hit finder)
 
 **Why.** PIC-226, can we detect paddle hits. Both cues passed in-sample on chunk 1's 36 events (speed ratio AUC 0.12 i.e. 0.88, 2026-10-15; wrist/hand proximity AUC 0.97/0.95, earlier today). Held-out check on the 28 tile-arm candidates of the 18 PGC pilot clips (CVAT project 5). Speed ratio: pre-registered 2026-10-15 at `ce54d9a` (`scripts/eval_motion_transfer.py`). Proximity: pre-registered at `87e767d` (`scripts/eval_proximity_transfer.py`, cut 0.25 fixed from chunk 1, wrist primary), predictions frozen before tagging (`9ef466a`, sha256 b14120af..., verified unchanged at scoring).
 
