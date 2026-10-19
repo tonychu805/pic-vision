@@ -4117,3 +4117,22 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - About 1 in 3 hits is still missed and about 4 in 9 picks are wrong. It is a hit candidate generator, good enough to drive a hit count or shot timeline with visible error, not a referee.
 
 **Caveats.** One camera, one court, one session, three consecutive minutes, one operator. Tile-arm ball detections, not production. Nothing tested yet on the glare court or another venue.
+
+## 2026-10-19 (swing + ball hit rule, production detections) — The frozen rule (ADR-157) run on the production ball track instead of the tile-arm one finds 36 of 71 hits (51%, down from 63%); precision holds at 45%
+
+**Why.** The swing + ball rule was developed and tested on the sharper tile-arm detections (`cache/bounce_pilot/*.tile.csv`), not the pipeline's. Robustness check before relying on it: same frozen rule and params (`scripts/eval_swing_ball_hits.py`), same 71 hit marks (minutes 1-3), only the ball track swapped to the production scale pass (`cache/scale/eda301d9_2026-09-26T05-38-19_session-000.csv`, source-frame indexed, shifted by 3600 to chunk frames). Swings (pose) are identical; only the "ball in play / not far" gate sees a different ball track.
+
+| all 3 minutes (71 hits, 32 near) | tile-arm | production |
+|---|---|---|
+| hits found | 45 (63%) | **36 (51%)** |
+| near-side found | 18 / 32 | 16 / 32 |
+| picks on a hit | 45 / 102 (44%) | 36 / 80 (45%) |
+| tracked ball points, chunk 0-5399 | 1839 | 1146 |
+| per minute (found) | 15 / 12 / 18 | 13 / 7 / 16 |
+
+**Reading.**
+- The rule degrades but does not break with the production detector: recall 63% -> 51%, precision unchanged (~45%). The loss is almost all recall, from the production track holding the ball through ~40% fewer frames, so the "in play" gate (>= 3 tracked points within +-15 frames) passes less often.
+- Minute 2 fell most (12 -> 7); minute 3 held and even gained a near-side hit (7 -> 8). Variation by minute is large on these denominators.
+- Precision holding means the gate still removes the right swings; it is recall that depends on detector quality.
+
+**Caveats.** Same single court/session/operator as the tile result; this only swaps the detector. A better production ball track (or the tile-arm pass in the pipeline) would recover recall. Not pre-registered: a frozen-rule robustness check on existing labels, reported as such.
