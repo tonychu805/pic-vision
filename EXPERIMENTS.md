@@ -4221,3 +4221,27 @@ Leave-one-out AUC over **duration alone** (0.72 pbdc): + swing_rate 0.67 (**-0.0
 **Conclusion.** Do not wire swing_rate or movement into src/select.py. The new pose signals do not add a reliable highlight-ranking gain over duration on the available graded footage. Revisit only with a consistency-checked grade set (or more graded videos); the signals themselves are cheap to recompute if that target improves.
 
 **Caveats.** Two dev videos, soft grades. This tests ranking value only; it does not change the court-map / bounce / player-position findings.
+
+## 2026-10-19 (highlight signals, CORRECTION) — Tested on top of the REAL production ranker features, swing_rate adds a small positive on BOTH videos (+0.06, +0.03); the prior "did not replicate" used a wrong baseline
+
+**Why this corrects the entry above.** The replication entry compared swing_rate against *duration alone* with a crude crossing feature (whole-rally crossings/sec, AUC 0.52/0.64) and no ball-velocity feature. The shipped ranker (src/select.py rank_segments) actually uses **duration + peak_crossing_rate (busiest 3 s window) + ball-velocity spikes**. Operator asked whether swing was combined with crossing-counting and the production detector — it was not, properly. Redone with the real features.
+
+**Method.** Same two graded videos. Production features per rally computed with src.select (`peak_rate`, `frame_speeds`, `spike_threshold`) from the k14 ball predictions; swing_rate from the cached pose. Leave-one-out logistic AUC.
+
+| per-feature AUC(1>2) | brickwall | pbdc |
+|---|---|---|
+| duration | 0.82 | 0.77 |
+| peak_crossing_rate | 0.73 | 0.79 |
+| ball-velocity spikes/s | 0.31 | 0.49 |
+| swing_rate | 0.70 | 0.61 |
+
+Leave-one-out AUC: production 3-feature baseline 0.72 (brickwall) / 0.73 (pbdc); **+ swing_rate 0.78 (+0.06) / 0.76 (+0.03)** — positive on both.
+
+**Corrected reading.**
+- Against the *actual* production ranker, swing_rate is a small **consistent-sign** positive, not the sign-flip the prior entry reported. That earlier negative was an artifact of a weak baseline (bad crossing feature, no velocity, duration-only comparison).
+- The real **peak_crossing_rate** is a strong feature (0.73/0.79); the crude crossing-rate I first used was not — the lesson is to test against the shipped features, not a re-derived proxy.
+- The ranker's **ball-velocity-spike** feature looks weak-to-useless on both videos (0.31/0.49) — a separate flag worth revisiting in src/select.py weighting.
+
+**Verdict.** Upgrade from "no" to "small (+0.03 to +0.06), consistent-sign gain on top of the production ranker — worth a proper validation, not a ship." Blocker is still the target: 34-49 rallies, 10-13 grade-1, grade rubric never consistency-checked (LABELING.md); 4 features on that few positives is noise-prone. Do not change src/select.py until swing_rate is validated on a larger, consistency-checked grade set.
+
+**Caveats.** Two dev videos, soft grades, small n. This supersedes the "do not wire into ranker" line of the entry above only in the sense that the earlier *reason* (sign-flip) was wrong; the practical recommendation (validate before shipping) is unchanged.
