@@ -4293,3 +4293,11 @@ the grade bar on pb_draft_cup partly because that game *has* few kitchen wars, n
 is strong evidence the grade-separation bar is the wrong instrument for a *type detector* (it penalises a type that is
 rare in a video) and that the right validation is typed labels or a cross-court clip review. long_rally stays the only
 type confirmed consistent; kitchen_war/fast_dink are unvalidated-not-refuted.
+
+### Follow-up 2: does adding a net-cross / swing "exchange" gate to kitchen_war help? No.
+Tested kitchen_war gated on >=2 net-crosses or >=3 swings during the posture, and the raw rates, on both videos.
+brickwall: posture 0.70, +net-cross 0.59, +swing 0.72, cross-rate 0.65, swing-rate 0.74. pb_draft_cup: every variant
+0.50-0.55 (chance). Two findings: (1) if an exchange gate is wanted, swings beat net-crosses (the tracker loses soft
+dinks), vindicating leaving net-cross out; (2) no variant rescues pb_draft_cup because that game has ~no kitchen wars
+(2 flagged) -- the grade-AUC bar cannot validate a type on a court that lacks it. Confirms the blocker is typed labels /
+clip review, not the kitchen_war definition.
