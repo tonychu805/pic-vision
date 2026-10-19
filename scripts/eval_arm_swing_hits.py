@@ -38,6 +38,7 @@ import numpy as np
 CALIB = "cache/pgc_fieldtest/7358ef3f-6a41-4abe-b431-807eba7bc9f1.calib.json"
 META = "cache/scale/eda301d9_2026-09-26T05-38-19_session-000.meta.json"
 POSES = "cache/arm_swing/poses_chunk3c_0-3599.json"
+POSES3 = "cache/arm_swing/poses_chunk3c_3600-5399.json"   # minute 3 (list index 0 = chunk frame 3600)
 OFFSET = 3600                                    # chunk 3c frame 0 = source frame 3600
 MIN1 = "eval/labels/hits/cvat_eda301d9_0926T0538_s000_120-180.json"
 MIN2 = "eval/labels/hits/cvat_eda301d9_0926T0538_s000_180-240.json"
@@ -46,13 +47,13 @@ LAG, W, S = 2, 10, 0.06                          # wrist speed over LAG frames; 
 TOL, PAD = 5, 0.5                                # match: +-TOL frames, mark inside the player box grown by PAD box heights
 
 
-def poses():
+def poses(start=0, n=3600, out_path=POSES):
     import cv2
     from ultralytics import YOLO
     from src.bounce_eval import project
     H = json.load(open(CALIB))["homography"]; model = YOLO("yolov8x-pose.pt")
-    cap = cv2.VideoCapture(json.load(open(META))["path"]); cap.set(cv2.CAP_PROP_POS_FRAMES, OFFSET); out = []
-    for i in range(3600):
+    cap = cv2.VideoCapture(json.load(open(META))["path"]); cap.set(cv2.CAP_PROP_POS_FRAMES, OFFSET + start); out = []
+    for i in range(n):
         ok, im = cap.read()
         if not ok: raise RuntimeError(f"decode {i}")
         r = model.predict(im, imgsz=1280, conf=0.25, classes=[0], verbose=False)[0]; ps = []
@@ -62,7 +63,7 @@ def poses():
                 ps.append({"box": [round(float(v), 1) for v in b], "court": [round(float(cx), 2), round(float(cy), 2)],
                            "kp": [[round(float(x), 1), round(float(y), 1), round(float(c), 3)] for x, y, c in kp]})
         out.append(ps)
-    json.dump(out, open(POSES, "w"))
+    json.dump(out, open(out_path, "w"))
 
 
 def tracks(P, a, b):
@@ -144,4 +145,4 @@ def run(path, a, b, gated):
 
 
 if __name__ == "__main__":
-    {"--poses": poses, "--dev": lambda: run(MIN1, 0, 1799, False), "--score": lambda: run(MIN2, 1800, 3599, True)}[sys.argv[1]]()
+    {"--poses": poses, "--poses3": lambda: poses(3600, 1800, POSES3), "--dev": lambda: run(MIN1, 0, 1799, False), "--score": lambda: run(MIN2, 1800, 3599, True)}[sys.argv[1]]()
