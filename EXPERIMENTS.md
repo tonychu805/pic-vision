@@ -4092,3 +4092,28 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - Ball-track and swing cues fail in different places: the ball is visible mainly on the far side, swings show on both sides.
 
 **Caveats.** Two minutes, 44 hits, one camera, one court, one operator. A narrow pass on 22 held-out hits; a third minute (or another court) is needed before relying on it.
+
+## 2026-10-19 (swing + ball hit rule, held-out minute 3) — Arm swings kept only when the ball is in play and not far from the swinger found 18 of 27 new hits (near 7 of 12), and 56% of its picks were hits: PASS on all five checks; the swing rule alone also replicated (19/27, 37%)
+
+**Why.** PIC-226. The swing rule passed narrowly on minute 2, but about 3 in 4 swings were not hits. The ball track can't find hits (ADR-156), but it can tell whether the ball is in play and whether it is far from the swinging player.
+
+**Method.** Pre-registered in `scripts/eval_swing_ball_hits.py` (`8eaa84b`), rule fixed on minutes 1-2. It was committed, and the minute-3 poses computed, before the operator marked any minute-3 hit (CVAT task 148 had 0 marks at commit). Swings are as in `eval_arm_swing_hits.py`. A swing is kept if there are >= 3 tracked ball points within +-15 frames (in play), unless >= 2 tracked ball points within +-5 frames are all more than 0.5 box heights outside the player's box (ball far). A ball not seen near the swing does not veto. Matching: +-5 frames, mark inside the player box grown by half a box height. New data: chunk 3c minute 3 (source 4:00-5:00), 27 hits, saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_240-300.json`.
+
+| | minutes 1-2 (developed on) | **minute 3 (held out)** | bar |
+|---|---|---|---|
+| hits marked (near) | 44 (20) | 27 (12) | |
+| swing + ball: hits found | 27 (61%) | **18 (67%)** | >= 45% PASS |
+| swing + ball: near-side found | 11 / 20 | **7 / 12 (58%)** | >= 35% PASS |
+| swing + ball: picks on a hit | 27 / 70 (39%) | **18 / 32 (56%)** | >= 30% PASS |
+| swing alone: found / on a hit | 28 / 109 (26%) | 19 / 52 (37%) | better: PASS (loses 1 hit) |
+| chance (time-shifted picks) | | 1.8 hits | real >= 3x: PASS (10x) |
+
+**Replication.** The swing rule alone, against its own bar (found >= 50%, near >= 40%, precision >= 20%, >= 3x chance), passes on minute 3: 19/27 (70%), near 8/12, 37%, chance 2.4.
+
+**Reading.**
+- On new play, the system flags about two-thirds of hits (near side included), and more than half of what it flags is a real hit. That beats every earlier hit result by a wide margin, including the near side, which no ball-based rule reached.
+- The ball check removes about 40% of the false swings (52 -> 32 picks) and costs 1 hit.
+- Minute 3 came out better than minutes 1-2 on every count; that is likely variation in play (or a busier rally minute), not a reason to expect 56% everywhere. Minutes 1-3 together: 45 of 71 hits, 45 of 102 picks (44%).
+- About 1 in 3 hits is still missed and about 4 in 9 picks are wrong. It is a hit candidate generator, good enough to drive a hit count or shot timeline with visible error, not a referee.
+
+**Caveats.** One camera, one court, one session, three consecutive minutes, one operator. Tile-arm ball detections, not production. Nothing tested yet on the glare court or another venue.

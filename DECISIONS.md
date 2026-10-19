@@ -3439,3 +3439,15 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **What this does not change.** The bounce finder and the court-zone result (`EXPERIMENTS.md` 2026-10-18 zone test) are unaffected. Wrist proximity stays a live but weak cue for sorting hit from bounce (AUC 0.83, below its bar).
 
 **Caveat.** Two minutes of one camera, tile-arm detections. A better detector could change the ceiling; this decision is about rules on today's track.
+
+## ADR-157 — Paddle-hit candidates come from arm swings (pose wrist speed), checked against the ball track
+
+**Date:** 2026-10-19 · **Status:** decided (from pre-registered tests) · **Project:** pic-vision (PIC-226)
+
+**Context.** Hits can't be found from the ball track (ADR-156). A wrist-speed swing rule passed on held-out minute 2 (narrowly) and replicated on minute 3. Adding a ball check (ball in play, ball not seen far from the swinger) passed all five checks on held-out minute 3: 18 of 27 hits, near side 7 of 12, 56% of picks real (`EXPERIMENTS.md` 2026-10-19 arm-swing and swing + ball entries).
+
+**Decision.** The hit finder is `scripts/eval_swing_ball_hits.py`'s rule: yolov8x-pose wrist-speed swings, kept when the ball is in play and not far from the swinging player. Further hit work (hit counts, shot timelines, hit-vs-bounce sorting) starts from these candidates, not from the bounce finder's boxes or ball-track turns.
+
+**What this does not change.** It is still a research rule (scripts/), not in the reel pipeline. Wrist proximity for sorting bounce boxes (2026-10-18) is superseded as the main route but not retested.
+
+**Caveat.** One court, one session, three minutes, one operator, tile-arm detections. Running full-frame pose on every frame costs GPU time not yet measured against the reel budget. Next checks: another court (glare court c199a97c) and production detections.
