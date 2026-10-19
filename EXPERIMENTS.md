@@ -4377,3 +4377,13 @@ long_exchange holds on 2 and is marginal on the 3rd.
 **Conclusion.** Do not claim any highlight type as cross-court consistent -- not even long_rally. The practical status quo stands: the shipped ranker (duration + peak crossing-rate + velocity) plus the Jev guardrail for junk. Validating ANY type (length or dink) now has a hard prerequisite: a consistency-checked, comparably-graded set across multiple courts. This supersedes the "two consistent types" and "long_rally KEEP" lines in the entries above.
 
 **Caveat.** 4 courts, soft grades, small n. kitchen_war/fast_dink still only truly testable on dink-heavy courts (brickwall 0.74/0.81, brickwall-SEMI 0.61/0.55) -- both are from the same tournament, so not independent, and neither clears the bar on SEMI. Not refuted, not confirmed.
+
+## 2026-10-19 (reframe: cross-court grade-consistency is the WRONG bar for type detectors) — operator
+
+**Insight (operator).** Each session/court produces different highlight TYPES depending on players and level of play: a dinking match has dink highlights, a banger match has long-shot highlights. The most variable input is the players. So demanding a type separate grade-1 from grade-2 on EVERY court (the bar used in the entries above) is the wrong test -- it penalises a dink detector for a session with no dinks. A type detector's job is to faithfully find its type WHEN PRESENT, not to predict highlights uniformly.
+
+**Supporting evidence (already in the tag manifests).** Per-session dominant detected types: brickwall = kitchen_war 18 / fast_dink 6 (a dinking match); pb_draft_cup = long_rally 9 / long_exchange 7 (a grinding match); IMG_7743 = baseline-heavy. The detectors correctly report each session's character -- the "inconsistency" across courts is the sport, not a detector fault.
+
+**Revised evaluation.** (1) Validate each type as a DETECTOR by its precision ("of what it flags as a kitchen war, how many are real kitchen wars?"), pooled over footage that HAS the type -- court-independent, via clip review / type labels. NOT by grade-AUC across all courts. (2) The reel adapts per session: detect all types, surface the best instances of whichever types that session is rich in; per-session percentile flagging already handles level. (3) This un-blocks kitchen_war/fast_dink -- they need precision-on-their-type (clip-confirmed "close" on brickwall), not a pass on banger courts.
+
+**Supersedes** the "no type is consistent across 4 courts / none shippable" conclusion of the brickwall-SEMI entry: that used grade-consistency, the wrong instrument. The grade-AUC numbers stay as a weak within-session sanity check, not a gate. Next: type-precision validation via clips/type-labels, and a per-session adaptive type-selection for reel assembly.
