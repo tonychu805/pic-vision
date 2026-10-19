@@ -4311,3 +4311,17 @@ true near<->far ALTERNATION count is robust to the refractory (r5 17, r38 8) and
 Reading: fast_dink's counts slightly overstate but track reality -- adequate as a tempo/intensity signal (not an exact
 shot tally), and eyeball-confirmed as a sound fast-exchange detector on a dink-heavy court. Consistency across courts
 still unconfirmed because pb_draft_cup lacks kitchen wars; needs a SECOND dink-heavy court, not more tuning.
+
+## 2026-10-19 (long_rally robustness: real play vs padding) — Duration tracks real exchange (corr 0.73 with net-crossings) and long rallies' activity spans the whole clip; the padding-proof form is active-span + min_crossings, equally predictive (AUC 0.81 vs 0.82)
+
+**Why.** Operator asked how we ensure long_rally isn't just long footage / dead time / tosses rather than a genuinely long exchange. Checked on the 49 brickwall labelled rallies (duration = hand label, start ~0-3s pre-serve, end ball-dead).
+
+**Findings.**
+- corr(labelled duration, # detected net-crossings) = **+0.73** — long rallies really contain more exchanges.
+- Active span (first detected crossing -> last) is a median **53%** of the labelled span (the rest is the lead-in + crossings the tracker misses), but for the longest rallies the active span covers almost the whole clip (56.3s rally -> 51.6s active), i.e. activity throughout, not trailing dead time.
+- AUC(grade-1>grade-2): raw duration 0.82, **active span 0.81**, crossing count 0.78. Active span is as predictive as raw duration.
+- Low crossing density on long rallies (~0.16/s) is the tracker missing soft crossings, not slow play — so crossing *count* is noisy; active *span* (needs only first+last crossing) is the robust form.
+
+**Production safeguards against "long = padded/dead/toss".** (1) Shipped `min_crossings >= 6` means a toss/dead stretch never becomes a rally. (2) The Jev guardrail removes practice/not-play. (3) Define long_rally as active-play span (first-to-last crossing) under the min_crossings gate, NOT raw segment bounds — padding- and merge-proof, equally predictive. Validation used clean hand labels, so its 0.82 is honest; production should use active span.
+
+**Caveat.** One court; crossing detection is noisy on soft play, so active span can under-read a dink-heavy rally's length (it still needs some crossings).
