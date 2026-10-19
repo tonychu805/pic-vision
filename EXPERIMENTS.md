@@ -4196,3 +4196,28 @@ Leave-one-out logistic AUC: duration alone 0.76; **duration + swing_rate 0.84 (+
 - crossing_rate (per second) was flat here; note the shipped ranker uses *peak* crossing-rate, not this, so this is not a verdict on the ranker's own feature.
 
 **Caveats.** One video, 49 rallies, grade-1 n=13. The grade rubric is first-draft and never consistency-checked (LABELING.md), so this is a lead to validate on held-out graded footage, not a ranker change. Movement computed from a single-camera homography (feet are floor points, reliable).
+
+## 2026-10-19 (highlight signals, replication on pb_draft_cup) — The brickwall swing_rate lead did NOT replicate: swing and movement each help on one video and not the other; only duration is consistent
+
+**Why.** The brickwall test flagged swing_rate as a +0.08-AUC lead for ranking highlight rallies. A lead on one video with a soft grade rubric needs replication before belief. Same frozen features and bar (`scripts/eval_highlight_signals.py`), new video.
+
+**Method.** pb_draft_cup_30fps (dev), 34 graded rallies (10 grade-1, 24 grade-2). Identical pipeline (pose over rally windows, same features). `--score pbdc`.
+
+| feature | AUC(1>2) pbdc | (brickwall) |
+|---|---|---|
+| duration | 0.77 | 0.82 |
+| move_rate | 0.68 | 0.61 |
+| crossing_rate | 0.64 | 0.52 |
+| swing_rate | 0.61 | 0.70 |
+| peak_speed | 0.49 | 0.61 |
+
+Leave-one-out AUC over **duration alone** (0.72 pbdc): + swing_rate 0.67 (**-0.05**), + move_rate 0.76 (**+0.04**), + peak_speed worse. On brickwall the signs were reversed: + swing_rate +0.08, + move_rate +0.01.
+
+**Reading.**
+- **No replication.** swing_rate helped on brickwall and hurt on pb_draft_cup; move_rate did the opposite. A signal that flips sign across two videos is not a reliable ranking feature — the brickwall swing_rate lead was overfitting to one video's grades.
+- **Duration is the only consistent strong feature** (0.77-0.82), as the shipped ranker already uses.
+- Root cause is likely the target: tiny graded sets (n=34, 49; 10-13 grade-1) and a grade rubric that was never consistency-checked (LABELING.md). With a noisy target, single-video AUC gains of ~0.08 are within noise.
+
+**Conclusion.** Do not wire swing_rate or movement into src/select.py. The new pose signals do not add a reliable highlight-ranking gain over duration on the available graded footage. Revisit only with a consistency-checked grade set (or more graded videos); the signals themselves are cheap to recompute if that target improves.
+
+**Caveats.** Two dev videos, soft grades. This tests ranking value only; it does not change the court-map / bounce / player-position findings.
