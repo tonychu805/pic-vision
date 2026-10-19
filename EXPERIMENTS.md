@@ -4325,3 +4325,12 @@ still unconfirmed because pb_draft_cup lacks kitchen wars; needs a SECOND dink-h
 **Production safeguards against "long = padded/dead/toss".** (1) Shipped `min_crossings >= 6` means a toss/dead stretch never becomes a rally. (2) The Jev guardrail removes practice/not-play. (3) Define long_rally as active-play span (first-to-last crossing) under the min_crossings gate, NOT raw segment bounds — padding- and merge-proof, equally predictive. Validation used clean hand labels, so its 0.82 is honest; production should use active span.
 
 **Caveat.** One court; crossing detection is noisy on soft play, so active span can under-read a dink-heavy rally's length (it still needs some crossings).
+
+### Follow-up 4: v2 type definitions (robust forms)
+Refined each type after scrutiny: long_rally = active-play span (first->last net crossing, >=2 crossings) not raw
+duration; kitchen_war = fraction of rally in kitchen posture gated on a swing within +-0.5s (active exchange, not
+standing); fast_dink = near<->far alternations/sec during the posture (robust to swing false positives), not raw
+swings/sec. Consistency (AUC grade-1>grade-2, both videos): long_rally 0.81/0.70 KEEP (now padding-proof AND
+consistent); kitchen_war 0.74/0.51 (brickwall improved with the exchange gate; pbdc still chance); fast_dink 0.81/0.50.
+kitchen_war/fast_dink still drop only because pb_draft_cup lacks the type -- definition is now defensible; the gate is
+a second dink-heavy graded court, not more tuning.

@@ -6,13 +6,19 @@ and the consistency bar below were committed before the held-out video (pb_draft
 WHY only these types. Contact-dependent types (great serve/ace, put-away/smash) need the ball at the paddle, which the
 tracker cannot see (ADR-156) -- excluded as not feasible now; they are the Jev-reads-the-scene route, not this one.
 
-TYPES (per rally, from reliable signals; all frozen before the pb_draft_cup check):
-  long_rally  = rally duration in seconds. Anchor type; known consistent (AUC 0.82 brickwall / 0.77 pbdc earlier).
-  kitchen_war = fraction of rally frames with a player at the near kitchen line (court y 12-18 ft) AND one at the far
-                kitchen line (26-32 ft) -- a cross-net dinking posture. Pose feet through the homography (floor points).
-  fast_dink   = paddle swings per second DURING the kitchen-war frames (eval_arm_swing_hits.swing_picks), 0 if the
-                kitchen posture lasts < 1.5 s. The hands-battle escalation. Swings, not ball crossings: the tracker
-                loses soft low dinks, but pose sees the rapid swings (brickwall: swing-in-kitchen AUC 0.74 > crossings 0.65).
+TYPES (per rally, from reliable signals). v2 definitions (2026-10-19), refined after scrutinising each (see
+EXPERIMENTS 2026-10-19 long_rally robustness + kitchen_war net-cross follow-ups); the consistency bar is unchanged:
+  long_rally  = ACTIVE-PLAY span in seconds = (last net crossing - first net crossing), 0 if < 2 crossings. Padding-,
+                merge- and toss-proof: dead time or a toss has no sustained crossings, so it cannot inflate the span.
+                (v1 used raw segment duration; active span is equally predictive, AUC 0.81 vs 0.82, and robust.)
+  kitchen_war = fraction of rally frames in a cross-net dinking posture that is ALSO an active exchange: a player at
+                the near kitchen line (court y 12-18 ft) AND one at the far line (26-32 ft), AND a paddle swing within
+                +-15 frames (0.5 s). The swing gate (not a net-cross gate: the tracker loses soft dinks; swings beat
+                crossings, EXPERIMENTS follow-up 2) stops players merely standing at the kitchen from counting.
+  fast_dink   = true near<->far ALTERNATIONS per second during the kitchen posture, 0 if posture < 1.5 s. Alternations
+                (a swing on one side then the other) are the real back-and-forth and are robust to the swing detector's
+                false positives (operator clip review: raw counts "close", alternation count stable). (v1 used raw
+                swings/sec, which over-counts non-hit arm motion.)
 DATA: the two hand-graded videos, brickwall_30fps (49 rallies) and pb_draft_cup_30fps (34), grade 1 = highlight, 2 = ordinary.
   Pose cached per rally (eval_highlight_signals.POSES per target).
 CONSISTENCY BAR (what "ship this type" means): a type is KEPT only if its score separates grade-1 from grade-2 with
@@ -29,11 +35,14 @@ sys.path.insert(0, "."); sys.path.insert(0, "scripts")
 import numpy as np
 import eval_highlight_signals as H
 import eval_arm_swing_hits as A
+import eval_bounce_recovery as E
+from src.bounce_eval import project
 
 TARGETS = ["brickwall", "pbdc"]
 TYPES = ["long_rally", "kitchen_war", "fast_dink"]
 BAR = 0.65
 KITCHEN_MIN_S = 1.5
+SWING_GATE = 15   # frames: a kitchen-posture frame counts only if a swing is within +-this
 
 
 def in_kitchen_posture(players):
@@ -44,18 +53,32 @@ def in_kitchen_posture(players):
 def feats(target):
     H.set_target(target)
     P = {int(k): v for k, v in json.load(open(H.POSES)).items()}
+    Hm = np.array(json.load(open(H.CALIB))["homography"], float)
+    _, _, tracked, _ = E.clip_points({"calib": H.CALIB, "csv": H.CSV})
+    cy = {f: project(Hm, x, y)[1] for f, (x, y) in tracked.items()}
     rows = []
     for r in H.rallies():
         fs = list(H.rally_frames(r))
-        kit = [f for f in fs if in_kitchen_posture(P.get(f, []))]
-        kdur = len(kit) / H.FPS
+        # ball net-crossings in the rally -> active-play span
+        fsc = [f for f in fs if f in cy]
+        cross = [f for f0, f in zip(fsc, fsc[1:]) if f - f0 <= 6 and (cy[f0] - 22) * (cy[f] - 22) < 0]
+        active_span = (cross[-1] - cross[0]) / H.FPS if len(cross) >= 2 else 0.0
+        # swings with side
         TR = A.tracks([P.get(f, []) for f in fs], 0, len(fs) - 1)
-        kset = set(kit)
-        ksw = sum(1 for f, i in A.swing_picks(TR) if (fs[0] + f) in kset)
+        sw = sorted((fs[0] + lf, "near" if TR[i][lf]["court"][1] < 22 else "far")
+                    for lf, i in A.swing_picks(TR) if lf in TR[i])
+        swf = {f for f, _ in sw}
+        # active kitchen posture: posture AND a swing within +-SWING_GATE
+        kit = [f for f in fs if in_kitchen_posture(P.get(f, []))]
+        act_kit = [f for f in kit if any((f + d) in swf for d in range(-SWING_GATE, SWING_GATE + 1))]
+        kdur = len(kit) / H.FPS
+        # fast_dink: near<->far alternations/sec among swings during the kitchen posture
+        kset = set(kit); ksw = [(f, s) for f, s in sw if f in kset]
+        alt = sum(1 for a, b in zip(ksw, ksw[1:]) if a[1] != b[1])
         rows.append(dict(rid=r["rally_id"], q=r["quality"], dur=r["end"] - r["start"],
-                         long_rally=r["end"] - r["start"],
-                         kitchen_war=len(kit) / max(1, len(fs)),
-                         fast_dink=(ksw / max(0.5, kdur)) if kdur >= KITCHEN_MIN_S else 0.0,
+                         long_rally=active_span,
+                         kitchen_war=len(act_kit) / max(1, len(fs)),
+                         fast_dink=(alt / max(0.5, kdur)) if kdur >= KITCHEN_MIN_S else 0.0,
                          kdur=kdur))
     return rows
 
