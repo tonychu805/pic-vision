@@ -4265,3 +4265,22 @@ Dropped 7: 6 not-real, 1 real (a point Jev read as not_play, 34fab44c @493.5, sc
 - Residual junk after the guardrail is mostly warm-ups and serve+return-only clips, which Jev cannot see in still frames (consistent with Tests K/L).
 
 **Caveats.** Dry run on saved Jev scores (a live run re-sends footage, operator-only). 70 clips, one venue. Not a held-out test — Jev scores and verdicts were already known; this measures the integrated effect, not a new guardrail claim. The live API path (Jev called inside the pipeline) is built but unexercised here.
+
+## 2026-10-19 (highlight-type detection, cross-video consistency) — Of the feasible types, only "long rally" is consistent across both videos; kitchen-war and fast-dink separate highlights on brickwall but collapse on pb_draft_cup
+
+**Why.** Operator wants every highlight type that is feasible (from signals we measure) AND highly consistent. Pre-registered `scripts/highlight_types.py` (`8f17e88`): type definitions + the bar (AUC(grade-1>grade-2) >= 0.65 on BOTH graded videos) committed before pb_draft_cup was scored on the new types. Contact-dependent types (serve/put-away) excluded as not feasible (ball-at-contact, ADR-156).
+
+| type (reliable-signal definition) | brickwall (49) | pb_draft_cup (34) | verdict |
+|---|---|---|---|
+| long_rally (duration) | 0.82 | 0.77 | KEEP |
+| kitchen_war (both kitchen lines occupied, fraction of rally) | 0.70 | 0.55 | drop |
+| fast_dink (swings/s during kitchen posture) | 0.81 | 0.48 | drop |
+
+**Reading.**
+- Only **long_rally** clears the cross-video bar. kitchen_war and fast_dink looked strong on brickwall (0.70, 0.81) and fell to chance/below on pb_draft_cup (0.55, 0.48) — single-video artifacts, the same failure mode as the 2026-10-19 swing-rate lead. The pre-registered both-videos bar is what caught them.
+- **Caveat on the test itself:** grade-separation is an imperfect proxy for type-detector quality. A kitchen-war signature could correctly flag kitchen wars yet not predict the (soft) highlight grade — especially if the two courts differ in style or calibration. So "drop" here means "not confirmed as a consistent highlight *predictor*", not "the geometry is wrong". Confirming kitchen_war/fast_dink as valid *type* detectors needs typed labels (is this clip a kitchen war? y/n) across both courts, which do not exist.
+- Root blocker is again the ground truth: 34-49 rallies, ~10 grade-1, grades never consistency-checked (LABELING.md).
+
+**Produced.** Per-rally type manifests `cache/highlight_types/{brickwall,pbdc}.json` (scores + flags + primary type) for eyeballing / reel assembly.
+
+**Conclusion.** The only highlight type that is both feasible and highly consistent on current evidence is **long rally**. kitchen_war / fast_dink are plausible and geometrically sound but unproven across courts; they need typed, consistency-checked labels (or a cross-court clip-review) before shipping. Do not add them to selection on grade-correlation alone.
