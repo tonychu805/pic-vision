@@ -4035,3 +4035,34 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - Overall ceiling for any track-based hit finder on this minute: about 8 of 22 (tracked on both sides).
 
 **Caveats.** One minute, 22 hits, one camera, tile-arm detections (not production). Near/far by the image net line is approximate for a ball in the air.
+
+## 2026-10-19 (hit turn finder, held-out minute 2) — A hit finder built on the ball track (sharp turns and speed-ups, not dips) found 2 of 22 hits on new play, with 2 of 27 picks right: FAIL
+
+**Why.** PIC-226. The bounce finder boxes a hit only when it looks like a dip (3 of 22 in minute 1). Next step from the hit visibility entry: flag any sharp change in the tracked ball's path and see how many hits that reaches.
+
+**Method.** Pre-registered in `scripts/eval_hit_turn_finder.py` (`9f04a56`), rule fixed on minute 1, before minute 2's marks were read. At each tracked frame: incoming and outgoing velocity over 3 frames (4 or 5 if missing), both >= 2 px/frame; pick if the turn is >= 30 deg or the ball speeds up >= 1.8x; drop it if it is a dip (down then up, no sideways reversal); picks within 5 frames merge. Matching: +-3 frames and 30 px. Reachable = >= 3 tracked points in the 8 frames before and after the mark. Held-out data: minute 2 of CVAT task 147 (task frames 1800-3599), 22 hits, saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_180-240.json`.
+
+| | minute 1 (developed on) | minute 2 (held out) |
+|---|---|---|
+| hits marked (near / far) | 22 (11 / 11) | 22 (9 / 13) |
+| reachable (near / far) | 8 (2 / 6) | 7 (0 / 7) |
+| found by the turn finder | 7 | **2** |
+| found, of reachable | 6 of 8 | **2 of 7** (bar 50%: FAIL) |
+| boxed by the bounce finder | 3 | 1 (beats: PASS) |
+| picks / on a hit / on a bounce | 32 / 7 / 5 | 27 / **2** (7%, bar 15%: FAIL) / 4 |
+
+**Verdict: FAIL** (reach 2/7, precision 7%).
+
+**Why the 5 reachable minute-2 hits were missed** (looked at after scoring, descriptive):
+- 1822, 3305: the finder fired on the turn, but 5 and 2 frames early and about 50 px from the mark. The ball was moving 16-23 px a frame, so the 30 px window is about 1.5 frames wide for a fast ball. A wider window would also have changed minute 1; this was not pre-registered and does not change the verdict.
+- 3037: a far-side hit that looked like a dip (down, then up the screen), so the bounce-shape filter threw it out.
+- 2369: a gentle turn (22 deg, below 30).
+- 3325: no tracked ball within 3 frames of contact.
+
+**Reading.**
+- Minute 1's 7 of 22 was fitted to those 22 hits. On new play the same rule found 2, so the finder did not transfer.
+- Even with looser matching, precision stays poor (3 of 27 picks within 8 frames of a hit). Most picks are wobble in the track: segment ends, the ball slowing after a bounce, and tracker jumps.
+- Near side: 0 of 9 hits were reachable in minute 2 (2 of 11 in minute 1). This confirms the detection ceiling: near-camera hits are mostly invisible to the ball detector.
+- The bottleneck is the track around contact, not the rule. The ball is lost or jumps exactly where the paddle meets it. Finding hits needs either better ball tracking near the players or a cue that doesn't need the ball (wrist or arm swing).
+
+**Caveats.** Two minutes, one camera, one court, tile-arm detections (not production); 7 reachable held-out hits is a small denominator.

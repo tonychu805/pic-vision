@@ -3427,3 +3427,15 @@ The desktop reports an aggregate per-camera local-source state over its existing
 - Production is untouched: if PGC keeps recording court 1 on this camera, its sessions still get reels, and their quality is no longer measured by our tests.
 
 **Caveat.** Camera and day are confounded: every judged de3d1953 clip is from 2026-09-25 and every other judged clip from 2026-09-26. Part of the junk may be that day's play (more warm-ups and practice) rather than the camera. Removing the camera also removes most 09-25 footage from future samples, so warm-up and practice clips will be rarer in tests than they may be in real use.
+
+## ADR-156 — Paddle hits are not found from the ball track alone; a track-turn hit finder is not pursued further at the current track quality
+
+**Date:** 2026-10-19 · **Status:** decided (from a pre-registered test) · **Project:** pic-vision (PIC-226)
+
+**Context.** The first exhaustive hit marks (two minutes of PGC chunk 3c, 44 hits) showed that the ball detector sees about half the hits at contact, and almost none on the near side. A finder for sharp turns and speed-ups in the tracked path, developed on minute 1 (7 of 22 hits), found 2 of 22 on the held-out minute 2, with 2 of 27 picks right (`EXPERIMENTS.md` 2026-10-19 hit turn finder).
+
+**Decision.** No more tuning of rules on the ball track to find hits. Hit finding is reopened only through (a) a better ball track near contact (the ball is lost or jumps exactly where the paddle meets it), or (b) a player cue that doesn't need the ball (wrist position, arm-swing timing), tested against the exhaustive hit marks in `eval/labels/hits/`.
+
+**What this does not change.** The bounce finder and the court-zone result (`EXPERIMENTS.md` 2026-10-18 zone test) are unaffected. Wrist proximity stays a live but weak cue for sorting hit from bounce (AUC 0.83, below its bar).
+
+**Caveat.** Two minutes of one camera, tile-arm detections. A better detector could change the ceiling; this decision is about rules on today's track.
