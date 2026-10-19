@@ -44,7 +44,7 @@ import eval_arm_swing_hits as A
 import eval_bounce_recovery as E
 from src.bounce_eval import project
 
-TARGETS = ["brickwall", "pbdc"]
+TARGETS = ["brickwall", "pbdc", "img7743"]
 TYPES = ["long_rally", "long_exchange", "kitchen_war", "fast_dink"]
 BAR = 0.65
 KITCHEN_MIN_S = 1.5
@@ -96,16 +96,26 @@ def auc(pos, neg):
 
 def eval_consistency():
     data = {t: feats(t) for t in TARGETS}
-    print(f"consistency: AUC(grade-1 > grade-2) per type, must be >= {BAR} on BOTH to KEEP\n")
-    print(f"{'type':12s}" + "".join(f"{t:>14s}" for t in TARGETS) + "   verdict")
+    # a court "has" a type if >= 20% of its rallies show a non-trivial score for it (prevalence floor)
+    def prevalence(t, ty):
+        vals = [r[ty] for r in data[t]]
+        floor = max(1e-6, np.percentile([v for v in vals if v > 0] or [0], 25)) if any(vals) else 1
+        return sum(v >= floor for v in vals) / len(vals)
+    print(f"consistency: AUC(grade-1>grade-2) per type per court; shown as AUC(prev%). A type is KEPT if AUC >= {BAR}")
+    print(f"on every court where it is PREVALENT (>=20% of rallies); a court lacking the type is N/A, not a failure.\n")
+    print(f"{'type':13s}" + "".join(f"{t:>16s}" for t in TARGETS) + "   verdict")
     for ty in TYPES:
-        aucs = {}
+        cells = []; judged = []
         for t in TARGETS:
             g1 = [r[ty] for r in data[t] if r["q"] == 1]; g2 = [r[ty] for r in data[t] if r["q"] == 2]
-            aucs[t] = auc(g1, g2)
-        keep = all(a >= BAR for a in aucs.values())
-        print(f"{ty:12s}" + "".join(f"{aucs[t]:>14.2f}" for t in TARGETS) + f"   {'KEEP' if keep else 'drop'}")
-    print("\n(grades are soft/never consistency-checked; a KEEP is a lead to confirm by watching the flagged clips.)")
+            a = auc(g1, g2); prev = prevalence(t, ty); has = prev >= 0.20
+            cells.append(f"{a:.2f}({prev:.0%}){'*' if has else ' '}")
+            if has: judged.append(a)
+        keep = len(judged) >= 2 and all(a >= BAR for a in judged)
+        verdict = "KEEP" if keep else ("need 2nd court" if len(judged) < 2 else "drop")
+        print(f"{ty:13s}" + "".join(f"{c:>16s}" for c in cells) + f"   {verdict}")
+    print("\n* = type is prevalent on that court (counts toward the verdict). N/A courts (no *) are excluded.")
+    print("(grades are soft/never consistency-checked; a KEEP is a lead to confirm by watching the flagged clips.)")
 
 
 def tag(target):

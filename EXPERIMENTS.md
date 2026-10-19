@@ -4342,3 +4342,16 @@ AUC(grade-1>grade-2): net crossings 0.78/0.77 -> KEEP on BOTH courts (total pose
 over-count; alternations 0.85/0.65 borderline). Unlike kitchen_war/fast_dink, a long shot exchange occurs in both
 baseline and net styles, so both courts have the type and it passes. Two consistent types now: long_rally (time span)
 and long_exchange (shot count). kitchen_war/fast_dink remain defined-but-unconfirmed (need a 2nd dink-heavy court).
+
+### Follow-up 6: third court (IMG_7743) + prevalence-aware consistency
+Added IMG_7743 (33 rallies, 11 grade-1; locked eval set, used read-only for a frozen-definition consistency check, no
+tuning) and made the bar prevalence-aware (a type is judged only on courts where it is prevalent, >=20% of rallies; a
+court lacking the type is N/A). Three-court AUC(grade-1>grade-2), with prevalence:
+  long_rally    0.81(61%) / 0.70(56%) / 0.67(67%)  -> KEEP on all three.
+  long_exchange 0.78(82%) / 0.77(76%) / 0.64(70%)  -> borderline: 2 strong, IMG_7743 just under 0.65 (soft grades, n=33).
+  kitchen_war   0.74(65%) / 0.51(6%)  / 0.61(18%)  -> only brickwall prevalent; still 1 dink court.
+  fast_dink     0.81(47%) / 0.50(0%)  / 0.50(0%)   -> only brickwall prevalent.
+KEY: IMG_7743 is NOT dink-heavy (18% kitchen prevalence, 0% fast dinks); all three graded videos are baseline/rally-
+heavy, only brickwall has real dink play. So kitchen_war/fast_dink are NOT dropped -- the blocker is a confirmed footage
+gap (no second dink-heavy graded session exists in our set), not a broken detector. long_rally confirmed on 3 courts;
+long_exchange holds on 2 and is marginal on the 3rd.

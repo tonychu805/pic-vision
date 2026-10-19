@@ -39,6 +39,9 @@ TARGETS = {
     "pbdc": dict(lab="eval/labels/pb_draft_cup_30fps.jsonl", calib="calib/pb_draft_cup_30fps_calib.json",
                  csv="cache/pb_draft_cup_predictions_k14.csv", video="videos/pb_draft_cup_30fps.mp4",
                  poses="cache/arm_swing/poses_pbdc_rallies.json"),
+    "img7743": dict(lab="eval/labels/IMG_7743.jsonl", calib="calib/IMG_7743_calib.json",
+                    csv="cache/IMG_7743_predictions_k14.csv", video="videos/IMG_7743_fixed.mp4",
+                    poses="cache/arm_swing/poses_img7743_rallies.json"),
 }
 LAB = CALIB = CSV = VIDEO = POSES = None
 FPS = 30.0
