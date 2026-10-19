@@ -4301,3 +4301,13 @@ brickwall: posture 0.70, +net-cross 0.59, +swing 0.72, cross-rate 0.65, swing-ra
 dinks), vindicating leaving net-cross out; (2) no variant rescues pb_draft_cup because that game has ~no kitchen wars
 (2 flagged) -- the grade-AUC bar cannot validate a type on a court that lacks it. Confirms the blocker is typed labels /
 clip review, not the kitchen_war definition.
+
+### Follow-up 3: fast_dink clip review (operator) + refractory test
+Cut two brickwall fast_dink clips (r5 19.7s, r38 12.7s) with each detected swing flashed (near/far) and a running count.
+Operator eyeball: "not all but close" -- most flashes are real hits, a minority are not. A same-side refractory (drop a
+second same-side swing within 7 frames) barely changed the counts (r5 30->28, r38 13->13), so the over-count is NOT rapid
+double-detection; it is the swing detector's ordinary false-positive rate (flashes on some non-hit arm motion). The
+true near<->far ALTERNATION count is robust to the refractory (r5 17, r38 8) and is the most meaningful exchange measure.
+Reading: fast_dink's counts slightly overstate but track reality -- adequate as a tempo/intensity signal (not an exact
+shot tally), and eyeball-confirmed as a sound fast-exchange detector on a dink-heavy court. Consistency across courts
+still unconfirmed because pb_draft_cup lacks kitchen wars; needs a SECOND dink-heavy court, not more tuning.
