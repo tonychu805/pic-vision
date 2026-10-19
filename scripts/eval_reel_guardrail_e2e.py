@@ -38,7 +38,7 @@ def cost_report(records, live):
         print("\nTIME/COST: no per-call time or token data available."); return
     secs = [x["sec"] for x in r]; itok = sum(x["tok"] for x in r); otok = sum(x.get("otok", 0) for x in r)
     tot = sum(secs)
-    print(f"\nTIME/COST ({'LIVE this run' if live else 'recorded when these calls were made, 2026-10-17'}):")
+    print(f"\nTIME/COST ({'LIVE this run' if live else 'recorded per Jev call in cache/jev_rally/results.jsonl'}):")
     print(f"  calls {len(r)}  |  wall time total {tot:.1f}s ({tot/60:.1f} min), mean {tot/len(r):.2f}s, max {max(secs):.2f}s")
     print(f"  input tokens total {itok:,} (mean {itok//len(r):,}/call)" + (f"; output tokens total {otok:,}" if live else ""))
     print(f"  projection: per session (top-{N}) ~{N*tot/len(r):.1f}s and ~{N*itok//len(r):,} input tok; "
