@@ -32,12 +32,21 @@ import json, math, os, sys
 sys.path.insert(0, "."); sys.path.insert(0, "scripts")
 import numpy as np
 
-LAB = "eval/labels/brickwall_30fps.jsonl"
-CALIB = "calib/brickwall_30fps_calib.json"
-CSV = "cache/brickwall_30fps_predictions_k14.csv"
-VIDEO = "videos/brickwall_30fps.mp4"
-POSES = "cache/arm_swing/poses_brickwall_rallies.json"
+TARGETS = {
+    "brickwall": dict(lab="eval/labels/brickwall_30fps.jsonl", calib="calib/brickwall_30fps_calib.json",
+                      csv="cache/brickwall_30fps_predictions_k14.csv", video="videos/brickwall_30fps.mp4",
+                      poses="cache/arm_swing/poses_brickwall_rallies.json"),
+    "pbdc": dict(lab="eval/labels/pb_draft_cup_30fps.jsonl", calib="calib/pb_draft_cup_30fps_calib.json",
+                 csv="cache/pb_draft_cup_predictions_k14.csv", video="videos/pb_draft_cup_30fps.mp4",
+                 poses="cache/arm_swing/poses_pbdc_rallies.json"),
+}
+LAB = CALIB = CSV = VIDEO = POSES = None
 FPS = 30.0
+
+
+def set_target(name):
+    global LAB, CALIB, CSV, VIDEO, POSES
+    t = TARGETS[name]; LAB, CALIB, CSV, VIDEO, POSES = t["lab"], t["calib"], t["csv"], t["video"], t["poses"]
 STEP_CAP, SMOOTH = 3.0, 5
 
 
@@ -157,5 +166,6 @@ def score():
 
 
 if __name__ == "__main__":
+    set_target(sys.argv[2] if len(sys.argv) > 2 else "brickwall")
     if sys.argv[1] == "--poses": poses()
     else: score()
