@@ -11,6 +11,12 @@ EXPERIMENTS 2026-10-19 long_rally robustness + kitchen_war net-cross follow-ups)
   long_rally  = ACTIVE-PLAY span in seconds = (last net crossing - first net crossing), 0 if < 2 crossings. Padding-,
                 merge- and toss-proof: dead time or a toss has no sustained crossings, so it cannot inflate the span.
                 (v1 used raw segment duration; active span is equally predictive, AUC 0.81 vs 0.82, and robust.)
+  long_exchange = SHOT COUNT = number of net crossings in the rally (how many times the ball went over the net). A
+                different axis from long_rally (time): in a rally-heavy game, shot count and duration are nearly
+                uncorrelated (pbdc corr 0.11). Consistent across BOTH courts (net crossings 0.78/0.77) because grinding
+                exchanges happen in both baseline and net styles. (Total pose swings score higher, 0.85/0.75, but
+                over-count non-hit motion; net crossings is the cleaner "shots over the net" and under-counts soft dinks,
+                the safe direction.)
   kitchen_war = fraction of rally frames in a cross-net dinking posture that is ALSO an active exchange: a player at
                 the near kitchen line (court y 12-18 ft) AND one at the far line (26-32 ft), AND a paddle swing within
                 +-15 frames (0.5 s). The swing gate (not a net-cross gate: the tracker loses soft dinks; swings beat
@@ -39,7 +45,7 @@ import eval_bounce_recovery as E
 from src.bounce_eval import project
 
 TARGETS = ["brickwall", "pbdc"]
-TYPES = ["long_rally", "kitchen_war", "fast_dink"]
+TYPES = ["long_rally", "long_exchange", "kitchen_war", "fast_dink"]
 BAR = 0.65
 KITCHEN_MIN_S = 1.5
 SWING_GATE = 15   # frames: a kitchen-posture frame counts only if a swing is within +-this
@@ -77,6 +83,7 @@ def feats(target):
         alt = sum(1 for a, b in zip(ksw, ksw[1:]) if a[1] != b[1])
         rows.append(dict(rid=r["rally_id"], q=r["quality"], dur=r["end"] - r["start"],
                          long_rally=active_span,
+                         long_exchange=len(cross),
                          kitchen_war=len(act_kit) / max(1, len(fs)),
                          fast_dink=(alt / max(0.5, kdur)) if kdur >= KITCHEN_MIN_S else 0.0,
                          kdur=kdur))

@@ -4334,3 +4334,11 @@ swings/sec. Consistency (AUC grade-1>grade-2, both videos): long_rally 0.81/0.70
 consistent); kitchen_war 0.74/0.51 (brickwall improved with the exchange gate; pbdc still chance); fast_dink 0.81/0.50.
 kitchen_war/fast_dink still drop only because pb_draft_cup lacks the type -- definition is now defensible; the gate is
 a second dink-heavy graded court, not more tuning.
+
+### Follow-up 5: long_exchange (shot count) is a 2nd consistent type
+Added long_exchange = net crossings in the rally (shot count), a different axis from long_rally (time): in the
+rally-heavy pb_draft_cup, shot count and duration are nearly uncorrelated (corr 0.11; brickwall 0.75). Consistency
+AUC(grade-1>grade-2): net crossings 0.78/0.77 -> KEEP on BOTH courts (total pose swings higher at 0.85/0.75 but
+over-count; alternations 0.85/0.65 borderline). Unlike kitchen_war/fast_dink, a long shot exchange occurs in both
+baseline and net styles, so both courts have the type and it passes. Two consistent types now: long_rally (time span)
+and long_exchange (shot count). kitchen_war/fast_dink remain defined-but-unconfirmed (need a 2nd dink-heavy court).
