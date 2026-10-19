@@ -56,11 +56,14 @@ def poses():
     from src.bounce_eval import project
     H = json.load(open(CALIB))["homography"]; model = YOLO("yolov8x-pose.pt")
     want = sorted(set(f for r in rallies() for f in rally_frames(r)))
-    cap = cv2.VideoCapture(VIDEO); out = {}
-    for n, f in enumerate(want):
-        cap.set(cv2.CAP_PROP_POS_FRAMES, f); ok, im = cap.read()
-        if not ok: continue
-        r = model.predict(im, imgsz=1280, conf=0.25, classes=[0], verbose=False)[0]; ps = []
+    wantset = set(want); lo, hi = want[0], want[-1]
+    cap = cv2.VideoCapture(VIDEO); cap.set(cv2.CAP_PROP_POS_FRAMES, lo); out = {}; n = 0
+    for f in range(lo, hi + 1):
+        ok, im = cap.read()
+        if not ok: break
+        if f not in wantset: continue
+        n += 1
+        r = model.predict(im, imgsz=960, conf=0.25, classes=[0], verbose=False)[0]; ps = []
         for b, kp in zip(r.boxes.xyxy.cpu().numpy(), r.keypoints.data.cpu().numpy()):
             cx, cy = project(H, (b[0] + b[2]) / 2, b[3])
             if -2 <= cx <= 22 and -6 <= cy <= 50:
