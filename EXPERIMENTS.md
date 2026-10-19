@@ -4136,3 +4136,27 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - Precision holding means the gate still removes the right swings; it is recall that depends on detector quality.
 
 **Caveats.** Same single court/session/operator as the tile result; this only swaps the detector. A better production ball track (or the tile-arm pass in the pipeline) would recover recall. Not pre-registered: a frozen-rule robustness check on existing labels, reported as such.
+
+## 2026-10-19 (swing + ball hit rule, second court / glare) — The frozen rule (ADR-157) on a different camera and court finds 16 of 29 hits (55%, near 5/10), 33% of flags real, 7.6x chance: PASS on all four pre-registered checks
+
+**Why.** The rule was built and tested entirely on the clean court (eda301d9). First run on a second camera and court: the glare court c199a97c 2026-09-26 05:38 session-002, where glare is the main cause of lost ball tracking (ADR-154). Tests whether the method is a quirk of one court.
+
+**Method.** Pre-registered in `scripts/eval_swing_ball_glare.py` (`a5f0e4b`), committed while CVAT task 149 had 0 marks; rule and every parameter imported unchanged from `eval_arm_swing_hits.py` / `eval_swing_ball_hits.py`. Operator marked minutes 0-1 (session frames 0-3599, the two busiest; 25 marked bounces already present). 29 hits (13 + 16). Poses `cache/arm_swing/poses_chunk2_glare_0-3599.json`, computed before any mark existed. Scored on the tile-arm track (the detector the rule was tuned on); production track reported.
+
+| glare court, minutes 0-1 (29 hits, 10 near) | tile-arm (gated) | production (reported) |
+|---|---|---|
+| swing + ball: hits found | **16 (55%)** | 15 (52%) |
+| near-side found | 5 / 10 | 5 / 10 |
+| picks on a hit | 17 / 51 (33%) | 17 / 57 (30%) |
+| chance (time-shifted) | 2.1 (7.6x) | 2.1 |
+| swing alone: found / precision | 21 / 29, 23 / 109 (21%) | — |
+
+**Verdict: PASS** (found 55%, near 50%, precision 33%, 7.6x chance).
+
+**Reading.**
+- The method is not a quirk of the clean court: on a second camera and the harder glare court it lands in the same band (clean court held-out minute 3: 67% found, 56% precise; pooled clean court: 63%, 44%). Glare pulls recall and precision down a little, as expected, but every check clears.
+- Pose makes more, shorter player tracks here (47 vs 27 on the clean court) from glare and occlusion; the finder still holds because swings are scored per track and gated by the ball.
+- Production vs tile-arm is a smaller gap than on the clean court (15 vs 16), because on the glare court even the tile-arm ball track is already degraded.
+- Both open checks from ADR-157 (another court, production detections) are now answered and passed.
+
+**Caveats.** Still one venue, two courts, three sessions, one operator. The two courts share lighting and camera model; a different venue is untested. Hit marking remains the only ground truth.

@@ -3451,3 +3451,5 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **What this does not change.** It is still a research rule (scripts/), not in the reel pipeline. Wrist proximity for sorting bounce boxes (2026-10-18) is superseded as the main route but not retested.
 
 **Caveat.** One court, one session, three minutes, one operator, tile-arm detections. Running full-frame pose on every frame costs GPU time not yet measured against the reel budget. Next checks: another court (glare court c199a97c) and production detections.
+
+**Update 2026-10-19.** Both next checks done and passed (`EXPERIMENTS.md` 2026-10-19 production-detections and second-court/glare entries): production detector 36/71 hits (51%, precision held); glare court 16/29 (55%), all four pre-registered checks. The finder generalizes across both courts at this venue; recall tracks detector quality. Still one venue; a different venue is untested.
