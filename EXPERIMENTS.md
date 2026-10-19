@@ -4284,3 +4284,12 @@ Dropped 7: 6 not-real, 1 real (a point Jev read as not_play, 34fab44c @493.5, sc
 **Produced.** Per-rally type manifests `cache/highlight_types/{brickwall,pbdc}.json` (scores + flags + primary type) for eyeballing / reel assembly.
 
 **Conclusion.** The only highlight type that is both feasible and highly consistent on current evidence is **long rally**. kitchen_war / fast_dink are plausible and geometrically sound but unproven across courts; they need typed, consistency-checked labels (or a cross-court clip-review) before shipping. Do not add them to selection on grade-correlation alone.
+
+### Follow-up (same day): the type distributions explain much of the "drop"
+
+Per-rally primary-type counts from the manifests: brickwall = kitchen_war 15 / fast_dink 10 / long_rally 4 (dink-heavy);
+pb_draft_cup = long_rally 12 / kitchen_war 2 (rally-heavy, almost no kitchen wars). So kitchen_war/fast_dink likely fail
+the grade bar on pb_draft_cup partly because that game *has* few kitchen wars, not because the signature is broken. This
+is strong evidence the grade-separation bar is the wrong instrument for a *type detector* (it penalises a type that is
+rare in a video) and that the right validation is typed labels or a cross-court clip review. long_rally stays the only
+type confirmed consistent; kitchen_war/fast_dink are unvalidated-not-refuted.
