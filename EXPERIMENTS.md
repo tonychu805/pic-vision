@@ -4066,3 +4066,29 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - The bottleneck is the track around contact, not the rule. The ball is lost or jumps exactly where the paddle meets it. Finding hits needs either better ball tracking near the players or a cue that doesn't need the ball (wrist or arm swing).
 
 **Caveats.** Two minutes, one camera, one court, tile-arm detections (not production); 7 reachable held-out hits is a small denominator.
+
+## 2026-10-19 (arm-swing hit finder, held-out minute 2) — Peaks in a player's wrist speed found 12 of 22 hits on new play, including 4 of 9 near-side hits the ball tracker can't see; 22% of swings were hits, 4x chance: PASS (narrowly on every check)
+
+**Why.** PIC-226, after ADR-156 (no hit finding from the ball track). A hit is a fast arm movement by the player next to the ball; pose sees it whether or not the ball is visible.
+
+**Method.** Pre-registered in `scripts/eval_arm_swing_hits.py` (`2731988`), rule fixed on minute 1 and committed before running on minute 2. yolov8x-pose on every frame of chunk 3c 0-3599 (on-court players, cached in `cache/arm_swing/`), players linked frame to frame by feet position. Wrist speed = largest move of either wrist over 2 frames, per frame, in box heights. Swing = speed >= 0.06 and the peak within +-10 frames. A hit is found if a swing is within +-5 frames and the hit mark is inside that player's box grown by half a box height. Chance = the same swings shifted by +-15..150 frames. Minute 2's hit marks had already been read for the ball-track test, but this rule was not looked at against them before scoring.
+
+| | minute 1 (developed on) | minute 2 (held out) | bar |
+|---|---|---|---|
+| hits found | 16 / 22 (73%) | **12 / 22 (55%)** | >= 50% PASS |
+| near-side hits found | 7 / 11 | **4 / 9 (44%)** | >= 40% PASS |
+| far-side hits found | 9 / 11 | 8 / 13 | |
+| swings on a hit | 16 / 55 (29%) | **12 / 54 (22%)** | >= 20% PASS |
+| hits found by time-shifted swings (chance) | 3.0 | 2.9 | real >= 3x: PASS (4.1x) |
+| cut-off 0.08 (reported) | 12 found, 38% precise | 8 found, 35% | |
+| cut-off 0.10 (reported) | 9 found, 47% | 7 found, 41% | |
+
+**Verdict: PASS**, close to the line on every check (one hit fewer on either side would have failed found or near).
+
+**Reading.**
+- This is the first hit cue that reaches near-side hits: 4 of 9 on new play, against 0 of 9 for anything built on the ball track.
+- Recall dropped from 16 to 12 on new play; precision dropped from 29% to 22%. Expect numbers like minute 2, not minute 1.
+- About 3 in 4 swings are not hits: ready-position moves, practice swings, a player reacting without touching the ball, and swings assigned to the wrong player. It is a candidate generator, not a hit counter. The obvious next step is to combine it with the ball (a swing when the ball is near that player, or the ball changing direction just after), measured against the same 44 marks.
+- Ball-track and swing cues fail in different places: the ball is visible mainly on the far side, swings show on both sides.
+
+**Caveats.** Two minutes, 44 hits, one camera, one court, one operator. A narrow pass on 22 held-out hits; a third minute (or another court) is needed before relying on it.
