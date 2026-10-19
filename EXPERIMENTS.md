@@ -4245,3 +4245,23 @@ Leave-one-out AUC: production 3-feature baseline 0.72 (brickwall) / 0.73 (pbdc);
 **Verdict.** Upgrade from "no" to "small (+0.03 to +0.06), consistent-sign gain on top of the production ranker — worth a proper validation, not a ship." Blocker is still the target: 34-49 rallies, 10-13 grade-1, grade rubric never consistency-checked (LABELING.md); 4 features on that few positives is noise-prone. Do not change src/select.py until swing_rate is validated on a larger, consistency-checked grade set.
 
 **Caveats.** Two dev videos, soft grades, small n. This supersedes the "do not wire into ranker" line of the entry above only in the sense that the earlier *reason* (sign-flip) was wrong; the practical recommendation (validate before shipping) is unchanged.
+
+## 2026-10-19 (E2E: reel pipeline + Jev guardrail, dry run) — Wiring the Jev guardrail into selection lifts the reel's real-share from 66% to 71% (75% to 83% among non-short), removing 6 junk clips for 1 real clip lost, across 14 PGC sessions
+
+**Why.** Operator is implementing Jev for validation and asked to test the pipeline end to end. No integrated pipeline existed (Jev was standalone eval scripts; src/select.py never called it). This runs the real selection path (validate_absolute_ranking.detect -> src.select.score_segments -> top-5/session) with a Jev guardrail applied in selection, using the already-saved Jev scores (`cache/jev_rally/results.jsonl`) so NO footage is sent to TypeSafe. `scripts/eval_reel_guardrail_e2e.py`.
+
+**Rule.** Drop a top-N candidate when its saved Jev "real" score < 0.4 (frozen Test L cut); keep candidates with no Jev score. Truth = operator playback verdicts. 70 candidates (top-5 of 14 sessions), all Jev-scored, all verdict-decided.
+
+| | clips | real | short | not | real among non-short |
+|---|---|---|---|---|---|
+| before guardrail | 70 | 46 (66%) | 9 | 15 | 75% |
+| after guardrail (Jev >= 0.4) | 63 | 45 (71%) | 9 | 9 | **83%** |
+
+Dropped 7: 6 not-real, 1 real (a point Jev read as not_play, 34fab44c @493.5, score 0.22), 0 short. One session (c6a9136a) had all 5 top picks judged not-real (practice/not_play); the guardrail removed 4 of them.
+
+**Reading.**
+- The integrated pipeline runs end to end and the guardrail does what Tests K/L predicted: a safe, modest clean-up — +5 pp real-share overall, +8 pp among non-short clips, 6 junk removed for 1 real lost.
+- Biggest value is sessions that are mostly non-game (a warm-up/practice court): the guardrail stops a reel being built from them.
+- Residual junk after the guardrail is mostly warm-ups and serve+return-only clips, which Jev cannot see in still frames (consistent with Tests K/L).
+
+**Caveats.** Dry run on saved Jev scores (a live run re-sends footage, operator-only). 70 clips, one venue. Not a held-out test — Jev scores and verdicts were already known; this measures the integrated effect, not a new guardrail claim. The live API path (Jev called inside the pipeline) is built but unexercised here.
