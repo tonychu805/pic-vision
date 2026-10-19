@@ -42,6 +42,9 @@ TARGETS = {
     "img7743": dict(lab="eval/labels/IMG_7743.jsonl", calib="calib/IMG_7743_calib.json",
                     csv="cache/IMG_7743_predictions_k14.csv", video="videos/IMG_7743_fixed.mp4",
                     poses="cache/arm_swing/poses_img7743_rallies.json"),
+    "bwsemi": dict(lab="eval/labels/brickwall-SEMI.jsonl", calib="calib/brickwall_semi_calib.json",
+                   csv="cache/brickwall_semi_predictions_k14.csv", video="videos/brickwall_semi_30fps.mp4",
+                   poses="cache/arm_swing/poses_brickwall_semi_rallies.json"),
 }
 LAB = CALIB = CSV = VIDEO = POSES = None
 FPS = 30.0

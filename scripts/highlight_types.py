@@ -44,7 +44,7 @@ import eval_arm_swing_hits as A
 import eval_bounce_recovery as E
 from src.bounce_eval import project
 
-TARGETS = ["brickwall", "pbdc", "img7743"]
+TARGETS = ["brickwall", "pbdc", "img7743", "bwsemi"]
 TYPES = ["long_rally", "long_exchange", "kitchen_war", "fast_dink"]
 BAR = 0.65
 KITCHEN_MIN_S = 1.5

@@ -4355,3 +4355,25 @@ KEY: IMG_7743 is NOT dink-heavy (18% kitchen prevalence, 0% fast dinks); all thr
 heavy, only brickwall has real dink play. So kitchen_war/fast_dink are NOT dropped -- the blocker is a confirmed footage
 gap (no second dink-heavy graded session exists in our set), not a broken detector. long_rally confirmed on 3 courts;
 long_exchange holds on 2 and is marginal on the 3rd.
+
+## 2026-10-19 (fourth court, brickwall-SEMI) — No highlight-type metric is consistent across all four courts; the earlier "long_rally KEEP" was a 3-court artifact. Root blocker confirmed: soft, session-varying grades + variable ball-track quality
+
+**Why.** Operator asked to test another brickwall session (the one dink-heavy source) as a second dink court for kitchen_war/fast_dink. Added brickwall-SEMI (38 rallies, 18 grade-1; semifinal, same tournament as brickwall). It IS dink-heavy (kitchen 55%, fast_dink 39% prevalent).
+
+**Result — four-court AUC(grade-1>grade-2):**
+
+| court | raw duration | active span (long_rally v2) | crossings (long_exchange) |
+|---|---|---|---|
+| brickwall | 0.82 | 0.81 | 0.78 |
+| pb_draft_cup | 0.77 | 0.70 | 0.77 |
+| img7743 | 0.57 | 0.67 | 0.64 |
+| brickwall-SEMI | 0.66 | 0.50 | 0.40 |
+
+**Findings.**
+- NO metric clears 0.65 on all four courts. raw duration fails img7743 (0.57); active span fails brickwall-SEMI (0.50); crossings fail img7743 (0.64) and brickwall-SEMI (0.40). Each works on 2-3, fails a different one. The earlier two-/three-court KEEPs (long_rally, long_exchange) do NOT survive the fourth court.
+- The active-span change (v2 long_rally) was a mistake: it made long_rally ball-tracker-dependent, and on brickwall-SEMI (poor ball track: 12/38 rallies with <2 crossings, active spans ~1/3 of real durations) it collapsed to 0.50 while raw labelled duration held (0.66). Anti-padding belongs in the upstream min_crossings>=6 gate, not in active-span. Recommend reverting long_rally to raw duration.
+- brickwall-SEMI is 47% grade-1 (vs 27-33% elsewhere): a semifinal where nearly every rally is elite, so grade-1 vs grade-2 is a very fine, likely ill-defined distinction -- consistent with nothing separating them. Grades were never consistency-checked (LABELING.md).
+
+**Conclusion.** Do not claim any highlight type as cross-court consistent -- not even long_rally. The practical status quo stands: the shipped ranker (duration + peak crossing-rate + velocity) plus the Jev guardrail for junk. Validating ANY type (length or dink) now has a hard prerequisite: a consistency-checked, comparably-graded set across multiple courts. This supersedes the "two consistent types" and "long_rally KEEP" lines in the entries above.
+
+**Caveat.** 4 courts, soft grades, small n. kitchen_war/fast_dink still only truly testable on dink-heavy courts (brickwall 0.74/0.81, brickwall-SEMI 0.61/0.55) -- both are from the same tournament, so not independent, and neither clears the bar on SEMI. Not refuted, not confirmed.
