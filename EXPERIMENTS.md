@@ -4172,3 +4172,27 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - **The imprecise group is near-side, ball-unseen swings** (34 kept, 29% precision, 24 near-side) — and that is exactly the group giving near-side recall, which nothing else reaches. It cannot be tightened without discarding the method's one advantage.
 
 **Reading.** Rule-tuning on current data is spent. Real accuracy gains need either (1) a ball track that survives contact near players (lifts recall and revives the ball-confirmation cue) — detector work, or (2) a learned classifier on pose features with more labeled hits than the current ~100 (several minutes, ideally a second venue). Recorded so these dead levers are not re-run.
+
+## 2026-10-19 (highlight signals: do movement / swing activity help rank reels?) — Swing-activity rate adds ~+0.08 AUC over rally duration for picking highlight-worthy rallies (LEAD); player movement does not
+
+**Why.** PIC-226. Hits are not a production counter (39% precise), but ranking highlights needs rank-correlation, not per-event accuracy. The quality rubric (LABELING.md) marks highlights by length/intensity, momentum swing (scrambling), and sustained tension (dinking); the shipped ranker (src/select.py) uses duration + peak crossing-rate + velocity and has no movement measure. Test whether the new pose signals separate graded rallies.
+
+**Method.** Pre-registered `scripts/eval_highlight_signals.py` (`1eccc17`), committed before pose ran. brickwall_30fps (dev, not the locked eval), 49 hand-graded rallies (13 grade-1, 36 grade-2). yolov8x-pose over the 49 rally windows (14m39s of play; sequential decode + imgsz 960 on the local RTX 2000 Ada). Features per rally, rate-normalised: duration, crossing_rate, move_rate (court-feet/s travelled by players), peak_speed (5-frame court speed), swing_rate (wrist-speed peaks/s). Target: grade 1 vs 2. Metric: single-feature AUC and leave-one-out logistic AUC.
+
+| feature | AUC(1>2) | median g1 | median g2 |
+|---|---|---|---|
+| duration | 0.82 | 20.7 s | 11.5 s |
+| **swing_rate** | **0.70** | 1.04/s | 0.83/s |
+| move_rate | 0.61 | 9.9 | 9.2 |
+| peak_speed | 0.61 | 22.7 | 21.5 |
+| crossing_rate | 0.52 | 0.19/s | 0.24/s |
+
+Leave-one-out logistic AUC: duration alone 0.76; **duration + swing_rate 0.84 (+0.08)**; duration + move_rate 0.77 (+0.01); duration + peak_speed 0.70 (worse). Pre-registered bar (own AUC >= 0.65 AND +0.03 LOO over the {duration, crossing_rate} baseline of 0.73): **swing_rate PASS (+0.09)**; move_rate, peak_speed FAIL.
+
+**Reading.**
+- **swing_rate is a lead:** the pose swing detector — too noisy to count hits — is a useful rally-intensity feature for reel ranking, adding ~+0.08 AUC over duration. Ranking needs correlation, not per-event precision, so the "unusable counter" is still usable here.
+- **Player movement failed its hypothesis:** move_rate and peak_speed barely separate and add nothing over duration; "scrambling = highlight" did not hold on this data.
+- **Concentrated value:** within already-long rallies (dur > median) swing_rate's AUC falls to 0.54 — it mostly helps among shorter/medium rallies, and is a correlated-but-distinct flavour of intensity, not independent of length.
+- crossing_rate (per second) was flat here; note the shipped ranker uses *peak* crossing-rate, not this, so this is not a verdict on the ranker's own feature.
+
+**Caveats.** One video, 49 rallies, grade-1 n=13. The grade rubric is first-draft and never consistency-checked (LABELING.md), so this is a lead to validate on held-out graded footage, not a ranker change. Movement computed from a single-camera homography (feet are floor points, reliable).
