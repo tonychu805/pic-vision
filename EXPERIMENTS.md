@@ -4160,3 +4160,15 @@ Same minute: 24 marked bounces, 20 finder boxes.
 - Both open checks from ADR-157 (another court, production detections) are now answered and passed.
 
 **Caveats.** Still one venue, two courts, three sessions, one operator. The two courts share lighting and camera model; a different venue is untested. Hit marking remains the only ground truth.
+
+## 2026-10-19 (hit accuracy levers, exploration) — The cheap precision lever (ball velocity-change at the swing) has no signal; wrist-speed magnitude AUC 0.68; ball-distance signal already consumed by the gate
+
+**Why.** Before investing in a better hit finder, check whether accuracy can be raised by combining existing signals. Exploration only: pooled over all five already-scored minutes (clean minutes 1-3 + glare minutes 0-1, 153 kept swings, 62 on hits), not pre-registered, not a scored claim — the point is to avoid re-exploring dead levers.
+
+**Findings (on kept swings, i.e. after the ball-in-play/not-far gate).**
+- **Ball velocity-change at the swing: no signal.** A direction change (angle >= 30/45/60/90 deg) appears at the same rate in hit-swings and non-hit-swings (~15% vs ~15%), and is computable for only ~28% of swings — the ball is lost at contact. Same root cause as ADR-156. A ball-at-contact confirmation cannot work until the ball track survives contact.
+- **Wrist-speed magnitude: AUC 0.68** (hit median 0.108 vs 0.075 box heights/frame). Modest, already exploited by the 0.06 threshold; raising it trades recall for precision monotonically (no free lunch).
+- **Ball distance at the swing: AUC 0.50** among kept swings — the "not far" gate already consumed this signal; no residual.
+- **The imprecise group is near-side, ball-unseen swings** (34 kept, 29% precision, 24 near-side) — and that is exactly the group giving near-side recall, which nothing else reaches. It cannot be tightened without discarding the method's one advantage.
+
+**Reading.** Rule-tuning on current data is spent. Real accuracy gains need either (1) a ball track that survives contact near players (lifts recall and revives the ball-confirmation cue) — detector work, or (2) a learned classifier on pose features with more labeled hits than the current ~100 (several minutes, ideally a second venue). Recorded so these dead levers are not re-run.
