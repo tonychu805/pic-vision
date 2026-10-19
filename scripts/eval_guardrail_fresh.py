@@ -83,7 +83,7 @@ def jev():
         res = client.system_one(model=K.MODEL, extra_headers=K.HDR, state={"clip": img}, questions=K.questions())
         a = res.answers
         rec = {"clip": r["clip"], "real": a["real"].noul, "kind": a["kind"].choice, "sec": round(time.time() - t, 2),
-               "tok": res.usage.input_tokens}
+               "tok": res.usage.input_tokens, "otok": res.usage.output_tokens}
         open(JEV, "a").write(json.dumps(rec) + "\n"); print(r["clip"], f"real={rec['real']:.2f}", rec["kind"])
 
 

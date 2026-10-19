@@ -92,7 +92,8 @@ def ask_all(cs):
         r = client.system_one(model=MODEL, extra_headers=HDR, state={"clip": img}, questions=questions())
         a = r.answers
         rec = {"id": c["id"], "verdict": c["verdict"], "why": c["why"], "real": a["real"].noul, "kind": a["kind"].choice,
-               "kind_p": dict(a["kind"].probabilities), "sec": round(time.time() - t, 2), "tok": r.usage.input_tokens}
+               "kind_p": dict(a["kind"].probabilities), "sec": round(time.time() - t, 2), "tok": r.usage.input_tokens,
+               "otok": r.usage.output_tokens}
         open(OUT, "a").write(json.dumps(rec) + "\n"); print(c["id"], c["verdict"], f"real={rec['real']:.2f}", rec["kind"])
 
 
