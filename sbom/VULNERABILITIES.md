@@ -129,6 +129,15 @@ npx @cyclonedx/cyclonedx-npm --output-format JSON --spec-version 1.6 --output-fi
 npx @cyclonedx/cyclonedx-npm --omit dev --output-format JSON --spec-version 1.6 --output-file ../sbom/sbom-desktop-runtime.cdx.json
 ```
 
+> **Manual post-generation step (don't skip on regen):** `cyclonedx-npm` lists npm packages only, **not**
+> the Node/Chromium binaries Electron bundles and ships. After regenerating the two desktop SBOMs, re-add
+> the bundled runtime as `platform` components (carrying a CPE so scanners can match CVEs against them):
+> **Node.js** (`cpe:2.3:a:nodejs:node.js:<ver>`) and **Chromium** (`cpe:2.3:a:google:chrome:<ver>`), both
+> marked `picvision:runtime:addedManually=true`, edged under `electron@<ver>` in `sbom-desktop.cdx.json`
+> and under the app root in `sbom-desktop-runtime.cdx.json` (electron is dev-scoped, so absent there).
+> Get the versions for the installed Electron from <https://releases.electronjs.org/release/v44.9.3>
+> (currently Node 24.22.0, Chromium 152.0.7977.167). When you bump Electron, update these two versions.
+
 Longer-term: `ultralytics` is the **retired YOLO path** (`CLAUDE.md`, Pipeline state). Removing it from
 `requirements.txt` would drop the pillow/torchvision/matplotlib surface entirely — then the `pillow`
 floor line here can go too.
