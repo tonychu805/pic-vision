@@ -3354,6 +3354,60 @@
           "value": "node_modules/safe-buffer"
         }
       ]
+    },
+    {
+      "type": "platform",
+      "name": "node",
+      "version": "24.22.0",
+      "bom-ref": "runtime:node@24.22.0",
+      "description": "Node.js runtime bundled inside Electron 44.9.3; ships in the packaged app. Not an npm dependency, so cyclonedx-npm does not detect it -- added manually (see sbom/VULNERABILITIES.md).",
+      "purl": "pkg:generic/node@24.22.0",
+      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.0:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://nodejs.org/"
+        },
+        {
+          "type": "advisories",
+          "url": "https://nodejs.org/en/blog/vulnerability/october-2026-security-releases"
+        }
+      ],
+      "properties": [
+        {
+          "name": "picvision:runtime:bundledBy",
+          "value": "electron@44.9.3"
+        },
+        {
+          "name": "picvision:runtime:addedManually",
+          "value": "true"
+        }
+      ]
+    },
+    {
+      "type": "platform",
+      "name": "chromium",
+      "version": "152.0.7977.167",
+      "bom-ref": "runtime:chromium@152.0.7977.167",
+      "description": "Chromium engine bundled inside Electron 44.9.3; ships in the packaged app. Not an npm dependency, so cyclonedx-npm does not detect it -- added manually (see sbom/VULNERABILITIES.md).",
+      "purl": "pkg:generic/chromium@152.0.7977.167",
+      "cpe": "cpe:2.3:a:google:chrome:152.0.7977.167:*:*:*:*:*:*:*",
+      "externalReferences": [
+        {
+          "type": "website",
+          "url": "https://www.chromium.org/"
+        }
+      ],
+      "properties": [
+        {
+          "name": "picvision:runtime:bundledBy",
+          "value": "electron@44.9.3"
+        },
+        {
+          "name": "picvision:runtime:addedManually",
+          "value": "true"
+        }
+      ]
     }
   ],
   "dependencies": [
@@ -3368,7 +3422,9 @@
         "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0",
         "pic-vision-desktop@1.9.0|onvif@0.8.2",
         "pic-vision-desktop@1.9.0|oui-data@2.1.12",
-        "pic-vision-desktop@1.9.0|posthog-node@5.51.6"
+        "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
+        "runtime:node@24.22.0",
+        "runtime:chromium@152.0.7977.167"
       ]
     },
     {
@@ -3670,6 +3726,14 @@
     },
     {
       "ref": "pic-vision-desktop@1.9.0|safe-buffer@5.2.1"
+    },
+    {
+      "ref": "runtime:node@24.22.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "runtime:chromium@152.0.7977.167",
+      "dependsOn": []
     }
   ]
 }
