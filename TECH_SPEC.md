@@ -2040,6 +2040,10 @@ pic-vision/
 │                                  # hazard not a record. Prefer that shape for new retirements
 ├── docs/                        # misc planning docs
 ├── tests/                       # pytest suite
+├── sbom/                        # CycloneDX SBOMs + vuln scan for the tracked deps
+│                                  # (Python requirements.txt, desktop/). Regenerate per
+│                                  # sbom/VULNERABILITIES.md. Excludes the nested repos
+│                                  # (reel-page/, pic-vision-cloud-console/) and vendored cvat/
 │
 ├── videos/                      # source/derived footage -- gitignored
 ├── clips/                       # cut rally clips + review reels -- gitignored

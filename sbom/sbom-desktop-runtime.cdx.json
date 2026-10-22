@@ -1,0 +1,3305 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.6.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.6",
+  "version": 1,
+  "serialNumber": "urn:uuid:934da994-3f7b-4454-b14a-7826db829309",
+  "metadata": {
+    "timestamp": "2026-10-22T03:34:46.195Z",
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "npm",
+          "version": "9.2.0"
+        },
+        {
+          "type": "application",
+          "name": "cyclonedx-npm",
+          "group": "@cyclonedx",
+          "version": "6.0.1",
+          "author": "Jan Kowalleck",
+          "description": "Create CycloneDX Software Bill of Materials (SBOM) from NPM projects.",
+          "licenses": [
+            {
+              "license": {
+                "id": "Apache-2.0"
+              }
+            }
+          ],
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/CycloneDX/cyclonedx-node-npm.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-node-npm#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-node-npm/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">=20.18.0"
+            },
+            {
+              "name": "cdx:npm:package:constraint:engine:npm",
+              "value": ">=9"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "name": "cyclonedx-library",
+          "group": "@cyclonedx",
+          "version": "10.3.0",
+          "author": "Jan Kowalleck",
+          "description": "Core functionality of CycloneDX for JavaScript (Node.js or WebBrowser).",
+          "licenses": [
+            {
+              "license": {
+                "id": "Apache-2.0"
+              }
+            }
+          ],
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/CycloneDX/cyclonedx-javascript-library.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-javascript-library#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/CycloneDX/cyclonedx-javascript-library/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">=20.18.0"
+            }
+          ]
+        }
+      ]
+    },
+    "component": {
+      "type": "application",
+      "name": "pic-vision-desktop",
+      "version": "1.9.0",
+      "bom-ref": "pic-vision-desktop@1.9.0",
+      "author": "picvision ai",
+      "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
+      "purl": "pkg:npm/pic-vision-desktop@1.9.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:private",
+          "value": "true"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": ""
+        }
+      ]
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "inter",
+      "group": "@fontsource",
+      "version": "5.3.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0",
+      "author": "Google Inc.",
+      "description": "Self-host the Inter font in a neatly bundled NPM package.",
+      "licenses": [
+        {
+          "license": {
+            "id": "OFL-1.1",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40fontsource/inter@5.3.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fontsource/font-files.git#fonts/google/inter",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://fontsource.org/fonts/inter",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fontsource/font-files/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.3.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@fontsource/inter"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "web",
+      "group": "@phosphor-icons",
+      "version": "2.1.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2",
+      "author": "rektdeckard",
+      "description": "A clean and friendly icon family for web",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40phosphor-icons/web@2.1.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/phosphor-icons/web.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://phosphoricons.com",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/phosphor-icons/web/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@phosphor-icons/web"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "supabase-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
+      "author": "Supabase",
+      "description": "Isomorphic Javascript SDK for Supabase",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/supabase-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/supabase-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/supabase-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/supabase-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "electron-store",
+      "version": "10.1.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|electron-store@10.1.0",
+      "author": "Sindre Sorhus",
+      "description": "Simple data persistence for your Electron app or module - Save and load user settings, app state, cache, etc",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/electron-store@10.1.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/electron-store.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/electron-store#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/electron-store/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/electron-store/-/electron-store-10.1.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=20"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/electron-store"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ffmpeg-static",
+      "version": "5.3.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
+      "description": "ffmpeg binaries for macOS, Linux and Windows",
+      "licenses": [
+        {
+          "license": {
+            "id": "GPL-3.0-or-later",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ffmpeg-static@5.3.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/eugeneware/ffmpeg-static.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/eugeneware/ffmpeg-static#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/eugeneware/ffmpeg-static/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/ffmpeg-static/-/ffmpeg-static-5.3.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=16"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ffmpeg-static"
+        }
+      ],
+      "components": [
+        {
+          "type": "library",
+          "name": "https-proxy-agent",
+          "version": "5.0.1",
+          "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+          "author": "Nathan Rajlich",
+          "description": "An HTTP(s) proxy `http.Agent` implementation for HTTPS",
+          "licenses": [
+            {
+              "license": {
+                "id": "MIT",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/https-proxy-agent@5.0.1",
+          "externalReferences": [
+            {
+              "url": "git://github.com/TooTallNate/node-https-proxy-agent.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/TooTallNate/node-https-proxy-agent#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/TooTallNate/node-https-proxy-agent/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">= 6"
+            },
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/ffmpeg-static/node_modules/https-proxy-agent"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "name": "agent-base",
+          "version": "6.0.2",
+          "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
+          "author": "Nathan Rajlich",
+          "description": "Turn a function into an `http.Agent` instance",
+          "licenses": [
+            {
+              "license": {
+                "id": "MIT",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/agent-base@6.0.2",
+          "externalReferences": [
+            {
+              "url": "git://github.com/TooTallNate/node-agent-base.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/TooTallNate/node-agent-base#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/TooTallNate/node-agent-base/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">= 6.0.0"
+            },
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/ffmpeg-static/node_modules/agent-base"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ffprobe-static",
+      "version": "3.1.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0",
+      "author": "joshwnj",
+      "description": "Static binaries for ffprobe.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ffprobe-static@3.1.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/joshwnj/ffprobe-static.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/joshwnj/ffprobe-static#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/joshwnj/ffprobe-static/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/ffprobe-static/-/ffprobe-static-3.1.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ffprobe-static"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "onvif",
+      "version": "0.8.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|onvif@0.8.2",
+      "author": "Andrew D.Laptev",
+      "description": "Client to ONVIF NVT devices Profile S: cameras",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/onvif@0.8.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/agsh/onvif.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/agsh/onvif#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/agsh/onvif/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/onvif/-/onvif-0.8.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=14.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/onvif"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "oui-data",
+      "version": "2.1.12",
+      "bom-ref": "pic-vision-desktop@1.9.0|oui-data@2.1.12",
+      "author": "silverwind",
+      "description": "IEEE OUI database as JSON",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/oui-data@2.1.12",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/silverwind/oui-data.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/silverwind/oui-data#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/silverwind/oui-data/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/oui-data/-/oui-data-2.1.12.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/oui-data"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "posthog-node",
+      "version": "5.51.6",
+      "bom-ref": "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
+      "author": "PostHog",
+      "description": "PostHog Node.js integration",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/posthog-node@5.51.6",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/PostHog/posthog-js.git#packages/node",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/posthog-node/-/posthog-node-5.51.6.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": "^20.20.0 || >=22.22.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/posthog-node"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "auth-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
+      "author": "Supabase",
+      "description": "Official SDK for Supabase Auth",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/auth-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/auth-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/auth-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/auth-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "functions-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
+      "author": "Supabase",
+      "description": "JS SDK to interact with Supabase Functions.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/functions-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/functions-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/functions-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/functions-js/-/functions-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/functions-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "postgrest-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
+      "author": "Supabase",
+      "description": "Isomorphic PostgREST client",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/postgrest-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/postgrest-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/postgrest-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/postgrest-js/-/postgrest-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/postgrest-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "realtime-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
+      "author": "Supabase",
+      "description": "Listen to realtime updates to your PostgreSQL database",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/realtime-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/realtime-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/realtime-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/realtime-js/-/realtime-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/realtime-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "storage-js",
+      "group": "@supabase",
+      "version": "2.116.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0",
+      "author": "Supabase",
+      "description": "Isomorphic storage client for Supabase.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/storage-js@2.116.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/supabase-js.git#packages/core/storage-js",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/supabase-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.116.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=22.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/storage-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "conf",
+      "version": "14.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0",
+      "author": "Sindre Sorhus",
+      "description": "Simple config handling for your app or module",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/conf@14.0.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/conf.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/conf#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/conf/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/conf/-/conf-14.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=20"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/conf"
+        }
+      ],
+      "components": [
+        {
+          "type": "library",
+          "name": "env-paths",
+          "version": "3.0.0",
+          "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0",
+          "author": "Sindre Sorhus",
+          "description": "Get paths for storing things like data, config, cache, etc",
+          "licenses": [
+            {
+              "license": {
+                "id": "MIT",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/env-paths@3.0.0",
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/sindresorhus/env-paths.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/sindresorhus/env-paths#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/sindresorhus/env-paths/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/env-paths/-/env-paths-3.0.0.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": "^12.20.0 || ^14.13.1 || >=16.0.0"
+            },
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/conf/node_modules/env-paths"
+            }
+          ]
+        },
+        {
+          "type": "library",
+          "name": "semver",
+          "version": "7.8.5",
+          "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5",
+          "author": "GitHub Inc.",
+          "description": "The semantic version parser used by npm.",
+          "licenses": [
+            {
+              "license": {
+                "id": "ISC",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/semver@7.8.5",
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/npm/node-semver.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "https://github.com/npm/node-semver#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/npm/node-semver/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">=10"
+            },
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/conf/node_modules/semver"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "type-fest",
+      "version": "4.41.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|type-fest@4.41.0",
+      "author": "Sindre Sorhus",
+      "description": "A collection of essential TypeScript types",
+      "licenses": [
+        {
+          "expression": "(MIT OR CC0-1.0)",
+          "acknowledgement": "declared"
+        }
+      ],
+      "purl": "pkg:npm/type-fest@4.41.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/type-fest.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/type-fest#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/type-fest/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/type-fest/-/type-fest-4.41.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=16"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/type-fest"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "http-basic",
+      "group": "@derhuerst",
+      "version": "8.2.4",
+      "bom-ref": "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
+      "author": "ForbesLindesay",
+      "description": "Very low level wrapper arround http.request/https.request",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40derhuerst/http-basic@8.2.4",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/derhuerst/http-basic.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/derhuerst/http-basic#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/derhuerst/http-basic/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@derhuerst/http-basic/-/http-basic-8.2.4.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=6.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@derhuerst/http-basic"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "env-paths",
+      "version": "2.2.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|env-paths@2.2.1",
+      "author": "Sindre Sorhus",
+      "description": "Get paths for storing things like data, config, cache, etc",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/env-paths@2.2.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/env-paths.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/env-paths#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/env-paths/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=6"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/env-paths"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "progress",
+      "version": "2.0.3",
+      "bom-ref": "pic-vision-desktop@1.9.0|progress@2.0.3",
+      "author": "TJ Holowaychuk",
+      "description": "Flexible ascii progress bar",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/progress@2.0.3",
+      "externalReferences": [
+        {
+          "url": "git://github.com/visionmedia/node-progress.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/visionmedia/node-progress#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/visionmedia/node-progress/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/progress/-/progress-2.0.3.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=0.4.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/progress"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "xml2js",
+      "version": "0.6.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2",
+      "author": "Marek Kubica",
+      "description": "Simple XML to JavaScript object converter.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/xml2js@0.6.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/Leonidas-from-XIV/node-xml2js.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/Leonidas-from-XIV/node-xml2js",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/Leonidas-from-XIV/node-xml2js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/xml2js/-/xml2js-0.6.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=4.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/xml2js"
+        }
+      ],
+      "components": [
+        {
+          "type": "library",
+          "name": "xmlbuilder",
+          "version": "11.0.1",
+          "bom-ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1",
+          "author": "Ozgur Ozcitak",
+          "description": "An XML builder for node.js",
+          "licenses": [
+            {
+              "license": {
+                "id": "MIT",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/xmlbuilder@11.0.1",
+          "externalReferences": [
+            {
+              "url": "git://github.com/oozcitak/xmlbuilder-js.git",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\""
+            },
+            {
+              "url": "http://github.com/oozcitak/xmlbuilder-js",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "http://github.com/oozcitak/xmlbuilder-js/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/xmlbuilder/-/xmlbuilder-11.0.1.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:constraint:engine:node",
+              "value": ">=4.0"
+            },
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/xml2js/node_modules/xmlbuilder"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "group": "@posthog",
+      "version": "1.50.5",
+      "bom-ref": "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40posthog/core@1.50.5",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/PostHog/posthog-js.git#packages/core",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@posthog/core/-/core-1.50.5.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@posthog/core"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "rxjs",
+      "version": "7.8.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|rxjs@7.8.2",
+      "author": "Ben Lesh",
+      "description": "Reactive Extensions for modern JavaScript",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/rxjs@7.8.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/reactivex/rxjs.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://rxjs.dev",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/ReactiveX/RxJS/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/rxjs/-/rxjs-7.8.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/rxjs"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|tslib@2.8.1",
+      "author": "Microsoft Corp.",
+      "description": "Runtime library for TypeScript helper functions",
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/tslib@2.8.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/Microsoft/tslib.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://www.typescriptlang.org/",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/Microsoft/TypeScript/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/tslib"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "phoenix",
+      "group": "@supabase",
+      "version": "0.4.5",
+      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5",
+      "author": "Chris McCord",
+      "description": "The official JavaScript client for the Phoenix web framework.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "externalReferences": [
+        {
+          "url": "git://github.com/supabase/phoenix.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/supabase/phoenix#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/phoenix/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@supabase/phoenix/-/phoenix-0.4.5.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@supabase/phoenix"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "iceberg-js",
+      "version": "0.8.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|iceberg-js@0.8.1",
+      "author": "mandarini",
+      "description": "A small, framework-agnostic JavaScript/TypeScript client for the Apache Iceberg REST Catalog",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/iceberg-js@0.8.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/supabase/iceberg-js.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/supabase/iceberg-js#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/supabase/iceberg-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=20.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/iceberg-js"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ajv-formats",
+      "version": "3.0.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
+      "author": "Evgeny Poberezkin",
+      "description": "Format validation for Ajv v7+",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ajv-formats@3.0.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/ajv-validator/ajv-formats.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/ajv-validator/ajv-formats#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/ajv-validator/ajv-formats/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ajv-formats"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ajv",
+      "version": "8.20.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|ajv@8.20.0",
+      "author": "Evgeny Poberezkin",
+      "description": "Another JSON Schema Validator",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ajv@8.20.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/ajv-validator/ajv.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://ajv.js.org",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/ajv-validator/ajv/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ajv"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "atomically",
+      "version": "2.1.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|atomically@2.1.1",
+      "description": "Read and write files atomically and reliably.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/atomically@2.1.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fabiospampinato/atomically.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/atomically#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/atomically/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/atomically/-/atomically-2.1.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/atomically"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "debounce-fn",
+      "version": "6.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
+      "author": "Sindre Sorhus",
+      "description": "Debounce a function",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/debounce-fn@6.0.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/debounce-fn.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/debounce-fn#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/debounce-fn/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/debounce-fn/-/debounce-fn-6.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=18"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/debounce-fn"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dot-prop",
+      "version": "9.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
+      "author": "Sindre Sorhus",
+      "description": "Get, set, or delete a property from a nested object using a dot path",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/dot-prop@9.0.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/dot-prop.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/dot-prop#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/dot-prop/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/dot-prop/-/dot-prop-9.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=18"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/dot-prop"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "json-schema-typed",
+      "version": "8.0.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2",
+      "author": "Remy Rylan",
+      "description": "JSON Schema TypeScript definitions with complete inline documentation.",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-2-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/json-schema-typed@8.0.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/RemyRylan/json-schema-typed.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/RemyRylan/json-schema-typed/tree/main/dist/node",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/RemyRylan/json-schema-typed/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/json-schema-typed/-/json-schema-typed-8.0.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/json-schema-typed"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "uint8array-extras",
+      "version": "1.5.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0",
+      "author": "Sindre Sorhus",
+      "description": "Useful utilities for working with Uint8Array (and Buffer)",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/uint8array-extras@1.5.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/uint8array-extras.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/uint8array-extras#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/uint8array-extras/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/uint8array-extras/-/uint8array-extras-1.5.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=18"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/uint8array-extras"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "caseless",
+      "version": "0.12.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|caseless@0.12.0",
+      "author": "Mikeal Rogers",
+      "description": "Caseless object set/get/has, very useful when working with HTTP headers.",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/caseless@0.12.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/mikeal/caseless.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/mikeal/caseless#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/mikeal/caseless/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/caseless/-/caseless-0.12.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/caseless"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "concat-stream",
+      "version": "2.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
+      "author": "Max Ogden",
+      "description": "writable stream that concatenates strings or binary data and calls a callback with the result",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/concat-stream@2.0.0",
+      "externalReferences": [
+        {
+          "url": "git+ssh://git@github.com/maxogden/concat-stream.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/maxogden/concat-stream#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "http://github.com/maxogden/concat-stream/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/concat-stream/-/concat-stream-2.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/concat-stream"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "http-response-object",
+      "version": "3.0.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
+      "author": "ForbesLindesay",
+      "description": "A simple object to represent an http response",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/http-response-object@3.0.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/ForbesLindesay/http-response-object.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/ForbesLindesay/http-response-object#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/ForbesLindesay/http-response-object/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/http-response-object/-/http-response-object-3.0.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/http-response-object"
+        }
+      ],
+      "components": [
+        {
+          "type": "library",
+          "name": "node",
+          "group": "@types",
+          "version": "10.17.60",
+          "bom-ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60",
+          "description": "TypeScript definitions for Node.js",
+          "licenses": [
+            {
+              "license": {
+                "id": "MIT",
+                "acknowledgement": "declared"
+              }
+            }
+          ],
+          "purl": "pkg:npm/%40types/node@10.17.60",
+          "externalReferences": [
+            {
+              "url": "git+https://github.com/DefinitelyTyped/DefinitelyTyped.git#types/node",
+              "type": "vcs",
+              "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+            },
+            {
+              "url": "https://github.com/DefinitelyTyped/DefinitelyTyped#readme",
+              "type": "website",
+              "comment": "as detected from PackageJson property \"homepage\""
+            },
+            {
+              "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/issues",
+              "type": "issue-tracker",
+              "comment": "as detected from PackageJson property \"bugs.url\""
+            },
+            {
+              "url": "https://registry.npmjs.org/@types/node/-/node-10.17.60.tgz",
+              "type": "distribution",
+              "comment": "as detected from npm-ls property \"resolved\""
+            }
+          ],
+          "properties": [
+            {
+              "name": "cdx:npm:package:path",
+              "value": "node_modules/http-response-object/node_modules/@types/node"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "parse-cache-control",
+      "version": "1.0.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1",
+      "description": "Parse Cache-Control headers.",
+      "licenses": [
+        {
+          "license": {
+            "name": "BSD",
+            "acknowledgement": "declared",
+            "url": "http://github.com/hapijs/wreck/raw/master/LICENSE"
+          }
+        }
+      ],
+      "purl": "pkg:npm/parse-cache-control@1.0.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/roryf/parse-cache-control.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/roryf/parse-cache-control#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/roryf/parse-cache-control/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/parse-cache-control/-/parse-cache-control-1.0.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/parse-cache-control"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "debug",
+      "version": "4.4.3",
+      "bom-ref": "pic-vision-desktop@1.9.0|debug@4.4.3",
+      "author": "Josh Junon",
+      "description": "Lightweight debugging utility for Node.js and the browser",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/debug@4.4.3",
+      "externalReferences": [
+        {
+          "url": "git://github.com/debug-js/debug.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/debug-js/debug#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/debug-js/debug/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=6.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/debug"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sax",
+      "version": "1.6.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|sax@1.6.1",
+      "author": "Isaac Z. Schlueter",
+      "description": "An evented streaming XML parser in JavaScript",
+      "licenses": [
+        {
+          "license": {
+            "id": "BlueOak-1.0.0",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/sax@1.6.1",
+      "externalReferences": [
+        {
+          "url": "git+ssh://git@github.com/isaacs/sax-js.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/isaacs/sax-js#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/isaacs/sax-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=11.0.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/sax"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "group": "@posthog",
+      "version": "1.409.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|@posthog/types@1.409.0",
+      "description": "Type definitions for the PostHog JavaScript SDK",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/%40posthog/types@1.409.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/PostHog/posthog-js.git#packages/types",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\" and \"repository.directory\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/PostHog/posthog-js/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/@posthog/types/-/types-1.409.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@posthog/types"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fast-deep-equal",
+      "version": "3.1.3",
+      "bom-ref": "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3",
+      "author": "Evgeny Poberezkin",
+      "description": "Fast deep equal",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/fast-deep-equal@3.1.3",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/epoberezkin/fast-deep-equal.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/epoberezkin/fast-deep-equal#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/epoberezkin/fast-deep-equal/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/fast-deep-equal"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fast-uri",
+      "version": "3.1.6",
+      "bom-ref": "pic-vision-desktop@1.9.0|fast-uri@3.1.6",
+      "author": "Vincent Le Goff",
+      "description": "Dependency-free RFC 3986 URI toolbox",
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/fast-uri@3.1.6",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fastify/fast-uri.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/fastify/fast-uri",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fastify/fast-uri/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.6.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/fast-uri"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "json-schema-traverse",
+      "version": "1.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0",
+      "author": "Evgeny Poberezkin",
+      "description": "Traverse JSON Schema passing each schema object to callback",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/json-schema-traverse@1.0.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/epoberezkin/json-schema-traverse.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/epoberezkin/json-schema-traverse#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/epoberezkin/json-schema-traverse/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/json-schema-traverse"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "require-from-string",
+      "version": "2.0.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|require-from-string@2.0.2",
+      "author": "Vsevolod Strukchinsky",
+      "description": "Require module from string",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/require-from-string@2.0.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/floatdrop/require-from-string.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/floatdrop/require-from-string#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/floatdrop/require-from-string/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=0.10.0"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/require-from-string"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "stubborn-fs",
+      "version": "2.0.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
+      "description": "Stubborn versions of Node's fs functions that try really hard to do their job.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/stubborn-fs@2.0.0",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fabiospampinato/stubborn-fs.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/stubborn-fs#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/stubborn-fs/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/stubborn-fs/-/stubborn-fs-2.0.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/stubborn-fs"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "when-exit",
+      "version": "2.1.5",
+      "bom-ref": "pic-vision-desktop@1.9.0|when-exit@2.1.5",
+      "description": "Execute a function right before the process, or the browser's tab, is about to exit.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/when-exit@2.1.5",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fabiospampinato/when-exit.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/when-exit#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/when-exit/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/when-exit/-/when-exit-2.1.5.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/when-exit"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "mimic-function",
+      "version": "5.0.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|mimic-function@5.0.1",
+      "author": "Sindre Sorhus",
+      "description": "Make a function mimic another one",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/mimic-function@5.0.1",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/sindresorhus/mimic-function.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/mimic-function#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/sindresorhus/mimic-function/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/mimic-function/-/mimic-function-5.0.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">=18"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/mimic-function"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "buffer-from",
+      "version": "1.1.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|buffer-from@1.1.2",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/buffer-from@1.1.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/LinusU/buffer-from.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/LinusU/buffer-from#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/LinusU/buffer-from/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/buffer-from"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "inherits",
+      "version": "2.0.4",
+      "bom-ref": "pic-vision-desktop@1.9.0|inherits@2.0.4",
+      "description": "Browser-friendly inheritance fully compatible with standard node.js inherits()",
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/inherits@2.0.4",
+      "externalReferences": [
+        {
+          "url": "git://github.com/isaacs/inherits.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/isaacs/inherits#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/isaacs/inherits/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/inherits"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "readable-stream",
+      "version": "3.6.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
+      "description": "Streams3, a user-land copy of the stream library from Node.js",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/readable-stream@3.6.2",
+      "externalReferences": [
+        {
+          "url": "git://github.com/nodejs/readable-stream.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/nodejs/readable-stream#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/nodejs/readable-stream/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:constraint:engine:node",
+          "value": ">= 6"
+        },
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/readable-stream"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "typedarray",
+      "version": "0.0.6",
+      "bom-ref": "pic-vision-desktop@1.9.0|typedarray@0.0.6",
+      "author": "James Halliday",
+      "description": "TypedArray polyfill for old browsers",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/typedarray@0.0.6",
+      "externalReferences": [
+        {
+          "url": "git://github.com/substack/typedarray.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/substack/typedarray",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/substack/typedarray/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/typedarray/-/typedarray-0.0.6.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/typedarray"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ms",
+      "version": "2.1.3",
+      "bom-ref": "pic-vision-desktop@1.9.0|ms@2.1.3",
+      "description": "Tiny millisecond conversion utility",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/ms@2.1.3",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/vercel/ms.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/vercel/ms#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/vercel/ms/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/ms"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "stubborn-utils",
+      "version": "1.0.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2",
+      "description": "A small collection of utilities for making functions somewhat resilient against errors.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/stubborn-utils@1.0.2",
+      "externalReferences": [
+        {
+          "url": "git+https://github.com/fabiospampinato/stubborn-utils.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/stubborn-utils#readme",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/fabiospampinato/stubborn-utils/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/stubborn-utils/-/stubborn-utils-1.0.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/stubborn-utils"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "string_decoder",
+      "version": "1.3.0",
+      "bom-ref": "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
+      "description": "The string_decoder module from Node core",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/string_decoder@1.3.0",
+      "externalReferences": [
+        {
+          "url": "git://github.com/nodejs/string_decoder.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/nodejs/string_decoder",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/nodejs/string_decoder/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/string_decoder"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "util-deprecate",
+      "version": "1.0.2",
+      "bom-ref": "pic-vision-desktop@1.9.0|util-deprecate@1.0.2",
+      "author": "Nathan Rajlich",
+      "description": "The Node.js `util.deprecate()` function with browser support",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/util-deprecate@1.0.2",
+      "externalReferences": [
+        {
+          "url": "git://github.com/TooTallNate/util-deprecate.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/TooTallNate/util-deprecate",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/TooTallNate/util-deprecate/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/util-deprecate"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "safe-buffer",
+      "version": "5.2.1",
+      "bom-ref": "pic-vision-desktop@1.9.0|safe-buffer@5.2.1",
+      "author": "Feross Aboukhadijeh",
+      "description": "Safer Node.js Buffer API",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT",
+            "acknowledgement": "declared"
+          }
+        }
+      ],
+      "purl": "pkg:npm/safe-buffer@5.2.1",
+      "externalReferences": [
+        {
+          "url": "git://github.com/feross/safe-buffer.git",
+          "type": "vcs",
+          "comment": "as detected from PackageJson property \"repository.url\""
+        },
+        {
+          "url": "https://github.com/feross/safe-buffer",
+          "type": "website",
+          "comment": "as detected from PackageJson property \"homepage\""
+        },
+        {
+          "url": "https://github.com/feross/safe-buffer/issues",
+          "type": "issue-tracker",
+          "comment": "as detected from PackageJson property \"bugs.url\""
+        },
+        {
+          "url": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
+          "type": "distribution",
+          "comment": "as detected from npm-ls property \"resolved\""
+        }
+      ],
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/safe-buffer"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pic-vision-desktop@1.9.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0",
+        "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2",
+        "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
+        "pic-vision-desktop@1.9.0|electron-store@10.1.0",
+        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
+        "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0",
+        "pic-vision-desktop@1.9.0|onvif@0.8.2",
+        "pic-vision-desktop@1.9.0|oui-data@2.1.12",
+        "pic-vision-desktop@1.9.0|posthog-node@5.51.6"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
+        "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
+        "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
+        "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
+        "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|electron-store@10.1.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|conf@14.0.0",
+        "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
+        "pic-vision-desktop@1.9.0|env-paths@2.2.1",
+        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+        "pic-vision-desktop@1.9.0|progress@2.0.3"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
+        "pic-vision-desktop@1.9.0|debug@4.4.3"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|debug@4.4.3"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|onvif@0.8.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|xml2js@0.6.2"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|oui-data@2.1.12"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
+        "pic-vision-desktop@1.9.0|rxjs@7.8.2"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5",
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|iceberg-js@0.8.1",
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
+        "pic-vision-desktop@1.9.0|ajv@8.20.0",
+        "pic-vision-desktop@1.9.0|atomically@2.1.1",
+        "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
+        "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
+        "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0",
+        "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2",
+        "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5",
+        "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|caseless@0.12.0",
+        "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
+        "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
+        "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|env-paths@2.2.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|progress@2.0.3"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|sax@1.6.1",
+        "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|@posthog/types@1.409.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|rxjs@7.8.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|tslib@2.8.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|iceberg-js@0.8.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|ajv@8.20.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ajv@8.20.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3",
+        "pic-vision-desktop@1.9.0|fast-uri@3.1.6",
+        "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0",
+        "pic-vision-desktop@1.9.0|require-from-string@2.0.2"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|atomically@2.1.1",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
+        "pic-vision-desktop@1.9.0|when-exit@2.1.5"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|mimic-function@5.0.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|caseless@0.12.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|buffer-from@1.1.2",
+        "pic-vision-desktop@1.9.0|inherits@2.0.4",
+        "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
+        "pic-vision-desktop@1.9.0|typedarray@0.0.6"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|debug@4.4.3",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|ms@2.1.3"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|sax@1.6.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|@posthog/types@1.409.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|fast-uri@3.1.6"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|require-from-string@2.0.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|when-exit@2.1.5"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|mimic-function@5.0.1"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|buffer-from@1.1.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|inherits@2.0.4"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|inherits@2.0.4",
+        "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
+        "pic-vision-desktop@1.9.0|util-deprecate@1.0.2"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|typedarray@0.0.6"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|ms@2.1.3"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
+      "dependsOn": [
+        "pic-vision-desktop@1.9.0|safe-buffer@5.2.1"
+      ]
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|util-deprecate@1.0.2"
+    },
+    {
+      "ref": "pic-vision-desktop@1.9.0|safe-buffer@5.2.1"
+    }
+  ]
+}
