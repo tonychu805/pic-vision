@@ -30,6 +30,10 @@ SBOMs are **CycloneDX 1.6 JSON**.
 | **Python** | 29 (4 pkgs, all transitive) | **0** | none |
 | **Desktop — runtime (ships)** | 1 (fast-uri, high) | **0** | none |
 | **Desktop — dev/build only** | 17 | **8** | 8 moderate + 1 high, all build-time; need the breaking `electron-builder@26` bump (see below) |
+| **Desktop — bundled Node runtime** | — | — | **4 high** (Electron 44.9.3 ships Node 24.22.0; fix pending upstream Electron — see "Electron-bundled Node.js runtime" below) |
+
+> `npm audit` scans JS packages only, **not** the Node/Chromium binaries Electron bundles. The
+> bundled-runtime row is tracked separately (added 2026-10-22) and does not show up in the SBOMs above.
 
 Python test suite: **262 passed** (incl. the detection-regression gate — detector output unchanged).
 Desktop suite: **lint + 341 tests passed**.
@@ -79,6 +83,37 @@ installed-artifact smoke test** per `CLAUDE.md` "Delivery and release gates".
 
 ---
 
+## Open — Electron-bundled Node.js runtime (2026-10-22, fix pending upstream)
+
+Node.js shipped security releases on **2026-10-21** (10 CVEs, 4 high). The desktop app ships
+**Electron 44.9.3**, which bundles **Node 24.22.0** — affected by all four high-severity CVEs.
+This is separate from `npm audit` (JS packages only) and from the SBOMs.
+
+| CVE | Type | Node lines | Reachable in our app? |
+|---|---|---|---|
+| CVE-2026-111497 | Brotli decoder out-of-bounds write → possible RCE | 22.x / 24.x / 26.x | **Yes — a real path.** Main-process `fetch()` auto-decodes `br` responses; `electron/cameras/ssdp.js` fetches a LAN-advertised device-description URL and `electron/main.js` the update feed, so a hostile Brotli body is reachable from a LAN device or feed MITM. Needs a crafted stream; no known exploit, not on CISA KEV. |
+| CVE-2026-106069 | TLS cert hostname bypass (host loosely resolves to IP) | 22.x / 24.x / 26.x | Low — our TLS targets (Supabase, console) use real hostnames; LAN camera traffic is mostly plain HTTP. |
+| CVE-2026-105483 | TLS certificate bypass | 24.x / 26.x only | Low — same as above (note: applies to us; 24.x is affected). |
+| CVE-2026-105482 | `dns.resolve` truncates names containing a NUL char | 22.x / 24.x / 26.x | Very low — no untrusted names reach `dns.resolve`. |
+
+**Fixed in Node 24.22.1** (also 22.23.4 / 26.12.1). **No fixed Electron is published yet** — latest
+stable is 44.9.3 on Node 24.22.0. The `^44.2.0` pin in `desktop/package.json` will accept the patched
+release in-range once it ships.
+
+**Action (pending upstream):** when an Electron 44.9.x bundling Node ≥ 24.22.1 is released, bump it
+(in-range `npm update electron`), then do a **full DMG rebuild + installed-artifact smoke test** on a
+branch per `CLAUDE.md` "Delivery and release gates" — not a unit-pass alone. Watch the stable feed:
+<https://releases.electronjs.org/releases/stable>.
+
+**Also:** CI (`setup-node@v4`, `node-version: 22`) auto-resolves to ≥ 22.23.4 on its next run; the dev
+machine should update local Node to 22.23.4 (build-time only). The cloud **console** (Next.js) and
+**reel-page** are separate repos on their own Node runtimes — check their exposure in their own trees.
+
+Sources: Node.js 2026-10-21 security releases (nodejs.org/en/blog/vulnerability/october-2026-security-releases);
+Electron stable releases (releases.electronjs.org).
+
+---
+
 ## Regenerate
 
 ```bash
@@ -93,6 +128,15 @@ npm audit --omit=dev --json                           # runtime only
 npx @cyclonedx/cyclonedx-npm --output-format JSON --spec-version 1.6 --output-file ../sbom/sbom-desktop.cdx.json
 npx @cyclonedx/cyclonedx-npm --omit dev --output-format JSON --spec-version 1.6 --output-file ../sbom/sbom-desktop-runtime.cdx.json
 ```
+
+> **Manual post-generation step (don't skip on regen):** `cyclonedx-npm` lists npm packages only, **not**
+> the Node/Chromium binaries Electron bundles and ships. After regenerating the two desktop SBOMs, re-add
+> the bundled runtime as `platform` components (carrying a CPE so scanners can match CVEs against them):
+> **Node.js** (`cpe:2.3:a:nodejs:node.js:<ver>`) and **Chromium** (`cpe:2.3:a:google:chrome:<ver>`), both
+> marked `picvision:runtime:addedManually=true`, edged under `electron@<ver>` in `sbom-desktop.cdx.json`
+> and under the app root in `sbom-desktop-runtime.cdx.json` (electron is dev-scoped, so absent there).
+> Get the versions for the installed Electron from <https://releases.electronjs.org/release/v44.9.3>
+> (currently Node 24.22.0, Chromium 152.0.7977.167). When you bump Electron, update these two versions.
 
 Longer-term: `ultralytics` is the **retired YOLO path** (`CLAUDE.md`, Pipeline state). Removing it from
 `requirements.txt` would drop the pillow/torchvision/matplotlib surface entirely — then the `pillow`
