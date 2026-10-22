@@ -1,6 +1,7 @@
 # Dependency inventory & vulnerability scan
 
-Generated **2026-10-22** for the `pic-vision` repo.
+- **Scanned:** 2026-10-22
+- **Safe fixes applied:** 2026-10-22 (this branch)
 
 ## Scope
 
@@ -17,86 +18,64 @@ SBOMs are **CycloneDX 1.6 JSON**.
 `reel-page/`, `pic-vision-cloud-console/`, and the vendored `cvat/`.
 
 > Note: `sbom-python.cdx.json` is generated from the live `.venv`, which also contains the
-> scan tooling I installed (`pip-audit`, `cyclonedx-bom`) and their unique transitive deps.
-> Those are **not app runtime deps**. All flagged vulnerable packages trace to the app's own
-> direct dependencies (see chains below), so the findings are unaffected.
-
-## Summary
-
-| Component | Total | Critical | High | Moderate | In **runtime** (ships) |
-|---|---|---|---|---|---|
-| Python | 29 | — (pip-audit reports no CVSS) | | | 29, all transitive |
-| Desktop | 18 | 2 | 7 | 9 | **1** (rest dev/build-only) |
-
-The desktop headline (2 critical / 7 high) is almost entirely **build-time tooling** that never
-ships in the packaged app. Only **one** desktop finding is reachable at runtime.
+> scan tooling (`pip-audit`, `cyclonedx-bom`) and their unique transitive deps. Those are **not
+> app runtime deps**. All flagged packages trace to the app's own direct deps (chains below).
 
 ---
 
-## Python — 29 vulns, 4 packages (all transitive)
+## Current status (after fixes)
 
-None of the 9 direct deps (`opencv-python`, `numpy`, `ultralytics`, `pyyaml`, `python-dotenv`,
-`flask`, `boto3`, `requests`, `pytest`) is directly flagged. The hits are in transitive deps:
+| Component | Before | After | Remaining |
+|---|---|---|---|
+| **Python** | 29 (4 pkgs, all transitive) | **0** | none |
+| **Desktop — runtime (ships)** | 1 (fast-uri, high) | **0** | none |
+| **Desktop — dev/build only** | 17 | **8** | 8 moderate + 1 high, all build-time; need the breaking `electron-builder@26` bump (see below) |
 
-| Package | Ver | #Vulns | Fix | Pulled in by (direct dep) |
-|---|---|---|---|---|
-| **pillow** | 12.3.0 | 24 | **13.0.0** | `ultralytics` (+ matplotlib, torchvision) |
-| **urllib3** | 2.7.0 | 3 | **2.8.0** | `requests`, `boto3` (botocore) |
-| **werkzeug** | 3.1.8 | 1 | **3.1.9** | `flask` |
-| **certifi** | 2026.7.22 | 1 | **2026.10.19** | `requests` |
-
-Notes:
-- **pillow** — all 24 CVEs are fixed by the single bump to **13.0.0**. Biggest cluster; most trace
-  to the `ultralytics` torch/vision stack — which is the **retired YOLO path** (see `CLAUDE.md`
-  "Pipeline state"). If `ultralytics` can be dropped from `requirements.txt`, the pillow +
-  torchvision + matplotlib surface largely disappears.
-- **certifi** PYSEC-2026-4320 — bundled a compromised emSign CA root; on-path cert spoofing.
-  Low-effort fix, worth doing.
-- **werkzeug / urllib3** — one and three advisories respectively; clean minor bumps.
-
-### Fix
-```bash
-# pillow is transitive; pin an upgrade or let the resolver take it
-.venv/bin/pip install -U "pillow>=13.0.0" "urllib3>=2.8.0" "werkzeug>=3.1.9" "certifi>=2026.10.19"
-# then re-freeze / re-run: .venv/bin/pip-audit
-```
-Longer-term: evaluate removing `ultralytics` from `requirements.txt` (retired path).
+Python test suite: **262 passed** (incl. the detection-regression gate — detector output unchanged).
+Desktop suite: **lint + 341 tests passed**.
 
 ---
 
-## Desktop — 18 vulns, but only 1 ships
+## Remediation applied (2026-10-22)
 
-Running `npm audit --omit=dev` (what actually ends up in the packaged Electron app) leaves exactly
-one finding. The other 17 are in the **build/dev toolchain** (`electron-builder`, `vite`,
-`concurrently`, `dmg-builder`, …) — they run on the developer's machine at build time and are not
-distributed.
+**Python** — added security floors to `requirements.txt` for the vulnerable transitive deps and
+upgraded the `.venv`. Resolver accepted all four with no conflicts (pillow 13 coexists with
+ultralytics). `pip-audit` now reports no known vulnerabilities.
 
-### Runtime-reachable (1)
+| Package | 12.x → fixed | #Vulns cleared | Pulled in by |
+|---|---|---|---|
+| pillow | 12.3.0 → **13.0.0** | 24 | `ultralytics` (+ torchvision, matplotlib) |
+| urllib3 | 2.7.0 → **2.8.0** | 3 | `requests`, `boto3` |
+| werkzeug | 3.1.8 → **3.1.9** | 1 | `flask` |
+| certifi | 2026.7.22 → **2026.10.19** | 1 | `requests` (compromised emSign CA root) |
 
-| Package | Ver | Severity | Chain | Fix |
-|---|---|---|---|---|
-| **fast-uri** | 3.1.6 | high | `electron-store → conf → ajv → fast-uri` | `>=3.1.8` (via `npm audit fix`) |
+**Desktop** — ran `npm audit fix` (non-forced; `package.json` unchanged, only `package-lock.json`
+transitive bumps). This cleared the one runtime finding and 9 dev findings.
 
-`fast-uri` is used by `ajv` to validate the **developer-defined** electron-store config schema, not
-untrusted user-supplied URIs — so practical exploitability is low. Still a clean fix.
+| Package | Fixed | Note |
+|---|---|---|
+| fast-uri | 3.1.6 → **3.1.9** | runtime (via `electron-store → conf → ajv`); the only shipped vuln — now gone |
 
-### Dev/build-only (17, not shipped)
+---
 
-`@electron/get`, `app-builder-lib`, `brace-expansion`, `concurrently` *(critical — shell-quote
-command injection)*, `dmg-builder`, `electron`, `electron-builder`,
-`electron-builder-squirrel-windows`, `follow-redirects`, `global-agent`, `http-cache-semantics`,
-`joi`, `roarr`, `shell-quote` *(critical)*, `source-map-js`, `sprintf-js`, `vite`.
+## Still open — desktop dev/build toolchain only (no clean fix yet; do NOT --force)
 
-These are real but low-urgency: a build-tool DoS/injection requires a hostile build input on the
-dev/CI machine, not a path exposed to app users.
+The remaining 9 desktop findings (8 moderate + 1 high) are all in build/dev tooling — almost all one
+cluster inside `electron-builder`'s own dependency subtree (`app-builder-lib`, `dmg-builder`,
+`@electron/get`, `…-squirrel-windows`, and `global-agent → roarr → sprintf-js`), plus `brace-expansion`.
+This tooling **runs on the dev/CI machine at build time and is not distributed** in the packaged app.
 
-### Fix
-```bash
-cd desktop
-npm audit fix            # resolves fast-uri + many dev findings
-# the remaining dev findings need: npm audit fix --force  (installs electron-builder@26 — BREAKING,
-# so do it on a branch and rebuild + smoke-test the DMG per CLAUDE.md release gates)
-```
+**There is no clean upstream fix available.** The vulnerable sub-deps are pinned inside
+`electron-builder` 26.x's dependency ranges, so nothing swaps them within range. `npm audit fix --force`
+does **not** upgrade — it would **downgrade** `electron-builder` from the installed **26.18.0** to
+**26.5.0** (npm mislabels this `isSemVerMajor` / "breaking"), which is older and would not even clear
+the advisories. `brace-expansion` shows "fix available" but a plain `npm audit fix` does not actually
+clear it (multiple nested copies pinned by parents).
+
+**Action:** leave them as-is; do not run `--force`. Re-run `npm audit` periodically and pick up the fix
+when a newer `electron-builder` release ships a patched subtree — that will be a normal in-range update,
+no force. If it ever does cross a major, do it on its own branch with a **full DMG rebuild +
+installed-artifact smoke test** per `CLAUDE.md` "Delivery and release gates".
 
 ---
 
@@ -114,3 +93,7 @@ npm audit --omit=dev --json                           # runtime only
 npx @cyclonedx/cyclonedx-npm --output-format JSON --spec-version 1.6 --output-file ../sbom/sbom-desktop.cdx.json
 npx @cyclonedx/cyclonedx-npm --omit dev --output-format JSON --spec-version 1.6 --output-file ../sbom/sbom-desktop-runtime.cdx.json
 ```
+
+Longer-term: `ultralytics` is the **retired YOLO path** (`CLAUDE.md`, Pipeline state). Removing it from
+`requirements.txt` would drop the pillow/torchvision/matplotlib surface entirely — then the `pillow`
+floor line here can go too.
