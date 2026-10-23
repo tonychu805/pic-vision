@@ -3392,3 +3392,50 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **Decision.** Enumerate all non-internal IPv4 interfaces, exclude common virtual adapters, deduplicate identical CIDRs, and scan every remaining directly attached subnet automatically. Exclude every local address from its own sweep. The Settings page lists all automatic ranges and their adapter names so an installer can verify coverage. Operator-added ranges remain for routed camera VLANs; RTSP scanning can reach those networks, while ONVIF multicast discovery still cannot. A range larger than the existing 512-host safety limit is reported and skipped rather than allocating an unsafe address list.
 
 **Verification.** Desktop lint, renderer production build, and focused system/network-sweep tests pass (9 tests). Still required before release: an installed-artifact scan on a machine with both wired and Wi-Fi venue networks, including a camera on each subnet.
+
+## ADR-158 — Exclude the frame-dropping Tapo court-1 camera and coaching/drill sessions from serve/eval samples (consolidates and extends ADR-155)
+
+**Date.** 2026-10-23
+
+**Context.** The first near-side serve-review pass (CVAT project 17) was built from
+three PGC sessions and two turned out to be unusable footage that no filter caught:
+- `c6a9136a` ("PGC - Court 2") is a **coaching / ball-feeding drill** — balls
+  scattered across the court, a coach feeding from a cart, no real serves.
+  Confirmed by eye and by Jev (11/13 of its clips scored practice/not_play,
+  mean "real" 0.12 vs >0.5 for games sessions).
+- `499ed4b8` ("PGC - court 1") is the **Tapo C200**, which drops ~1/3 of its
+  frames (frozen/duplicated to hold 30fps CFR), so the serve is unwatchable. A
+  frame-drop audit (mpdecimate on a 30s mid-slice) then showed **all three
+  "PGC - court 1" recordings** — `499ed4b8`, `52f4de24`, `72852da9` — have the
+  same 32–33% frozen-frame signature; every other PGC camera measures 0%. They
+  are the same camera, different recordings.
+
+ADR-155 already decided to exclude this Tapo ("drops frames, no shutter control")
+but (a) named only one recording of it, `de3d1953`, missing the three above, and
+(b) **was never merged** — it is stranded on the local `feature/bounce-labelling`
+branch, so `footage_rules.py` was absent from the active tree and nothing was
+enforced. That is the direct cause of both leaks.
+
+**Decision.** Bring `footage_rules.py` onto the active branch and extend its
+exclusion set to the complete Tapo court-1 recording list plus the drill session
+(`EXCLUDED_CAMERAS` ∪ `EXCLUDED_TAPO` ∪ `EXCLUDED_DRILL`), and **wire `usable()`
+into `propose_serves.py`** so excluded footage can never become a serve
+candidate. `usable()` stays a pure string match (no video I/O) so it is cheap
+per candidate. New footage is vetted before entering a sample by the frame-drop
+audit (>15% frozen ⇒ Tapo-class) and a games-vs-drill check (Jev or a quick
+watch). This supersedes and consolidates ADR-155; when `feature/bounce-labelling`
+is reconciled, its `footage_rules.py` is the subset and this one wins.
+
+**Consequences.** The near-serve set was rebuilt on clean games sessions
+(`7358ef3f`, `3e1caf84`, `a96cbae3`). Note the **far**-serve ground truth
+(EXPERIMENTS 2026-10-23) was partly on this Tapo: far serves 13/15 (`499ed4b8`)
+and 27/28 (`72852da9`), and the whole `52f4de24` not-serve cluster — those
+numbers carry a frame-drop caveat (the clean session `365c798c` showed the same
+depth pattern independently, so the depth-floor finding itself stands). Other
+sample-builders (`eval_*`, labelling-chunk scripts) should route their session
+lists through `usable()` too; this change only wires the serve proposer.
+
+**Verification.** `tests/test_footage_rules.py` asserts the Tapo court-1 and
+drill prefixes are excluded and clean games sessions pass; `make test` green.
+Re-running `propose_serves.py` drops `c6a9136a`/`499ed4b8`/`52f4de24`/`72852da9`
+from the candidate set.

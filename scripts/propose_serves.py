@@ -24,6 +24,7 @@ import numpy as np
 ROOT = pathlib.Path("/home/tonychu/repository/pic-vision")
 sys.path.insert(0, str(ROOT)); sys.path.insert(0, str(ROOT / "scripts"))
 import tune_web as tw
+import footage_rules as fr
 
 PGC = ROOT / "cache/pgc_fieldtest"
 POSE = ROOT / "cache/arm_swing"
@@ -53,7 +54,11 @@ def sessions():
         uuid = csvp.stem; pre = uuid[:8]
         calib = PGC / f"{uuid}.calib.json"; pose = POSE / f"poses_pgc_{pre}.json"
         name = (PGC / f"{uuid}.label").read_text().strip() if (PGC / f"{uuid}.label").exists() else ""
-        if calib.exists() and pose.exists():
+        # Skip excluded footage (frame-dropping Tapo court-1 camera, coaching/drill
+        # sessions) so it never becomes a serve candidate -- see scripts/footage_rules.py
+        # (ADR-155/158). This is the gate whose absence let the Tapo + drill sessions
+        # leak into the first near-serve review pass.
+        if calib.exists() and pose.exists() and fr.usable(uuid):
             yield uuid, pre, name, str(csvp), str(calib), str(pose)
 
 

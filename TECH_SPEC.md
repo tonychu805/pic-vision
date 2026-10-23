@@ -1997,6 +1997,9 @@ pic-vision/
 │                                # not part of the operator's core run-a-session flow
 │   ├── pod_infer.py               # RunPod TrackNet inference driver -- calls the model via
 │   │                                # a tf.function direct call, not .predict() (ADR-065)
+│   ├── footage_rules.py           # usable(): excludes unusable PGC footage (frame-dropping
+│   │                                # Tapo court-1 camera, coaching/drill sessions) from any
+│   │                                # new eval/labelling/serve sample -- ADR-155/158
 │   ├── check_drift.py              # camera-drift CLI -- run before calibrating new footage
 │   ├── fp_anatomy.py                # false-positive mechanism classifier + plots
 │   ├── review_gaps.py                # gap-candidate review/merge tool
