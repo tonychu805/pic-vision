@@ -2607,3 +2607,39 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 **Conclusion.** Against the PIC-196 gate as written ("a feature that demonstrably tracks human grades is kept; otherwise record 'no signal' and stop ball-only work"): **no feature demonstrably beats the shipped score**. Whether to stop ball-only work, or to test it against category labels instead of the pooled grade, is the operator's decision (not made here). One analysis over four videos from three venues is not a go/no-go; a second session is still required.
 
 **Next, if ball-only work continues.** Label a small set of rallies by type on the pilot set (PIC-203/219), then test whether pace share / kitchen score / escalation separate *those* types, judged on playback (PIC-209).
+
+## 2026-10-23 — First far-side serve ground truth: are the proposer's far-serve candidates real, and does a court-depth floor fix the false ones? Precision 19% → ~47%, recall still unmeasured
+
+**Why.** Serve detection is not in production and far-side serves are the hard case (server small and distant). Before tuning, get a *trustworthy, traceable* far-serve set a human can confirm, replacing the orphaned `cache/pose_serve` set (no videos, no producer, unverifiable). Harness: `scripts/propose_serves.py` anchors to each shipped-detector rally start (`gap_sec=3`, `min_crossings=6`) and takes the earliest self-normalized "deep" arm-swing in `[start-4, start+1]` as the proposed server. 187 rallies → 184 serve proposals (147 near, **37 far**), 3 no-serve. The 37 far clips were cut (`scripts/cut_serve_clips.py`) and reviewed in CVAT.
+
+**Setup.** CVAT project 16 `serve-review-far`, one task per clip, labels `serve_contact` (points, ball at contact), `not_serve`, `wrong_side` (real serve but near-side), `unsure` (tags). Clips first cut at serve_t−3…+5 (8 s); re-cut to serve_t−4…+9 (**13 s**) after the operator hit serves developing late and falling off the tail (clip 34's real contact was ~3.7 s after the proposer's estimate — the estimate runs early). Operator labelled all 37 on the 13 s clips. This scores serve-event classification, not rally intervals, so the IoU≥0.5 rally rule does not apply.
+
+**Results.**
+
+| Verdict | Count |
+|---|---|
+| `serve` (real far serve) | 7 |
+| `not_serve` | 27 |
+| `wrong_side` (real serve, near-side) | 2 |
+| `unsure` | 1 |
+
+- **Far-serve proposal precision = 7/36 ≈ 19%** (excluding the 1 unsure). Four in five "far serve" proposals are not far serves.
+- **Clean cause — depth.** Real far serves sit at court_y 34.7–44.0 (calibrated feet; net=22, far baseline=44). False proposals sit mostly at court_y 28.6–33 — shallow players the self-normalized `DEEP_FRAC` far-cut wrongly classed "far". Two compressed-court sessions (`365c798c`, `52f4de24`) alone produced 20 of 27 false flags and **zero** real serves: nobody reaches the far baseline there, so the per-session far-cut collapses.
+- **Fix — a far-depth floor derived from the court's calibrated geometry** (not a hand-tuned constant). court_y is calibrated feet (net=22, far baseline=2*net=44, far kitchen line=net+7=29); the floor is the back `BACKCOURT_SERVE_FRAC=0.33` of the far backcourt behind the kitchen line → `geom_floor = 29 + 0.33*(44-29) = 33.95`, and `far_cut = max(self_norm, geom_floor)`. Deriving it from the court lines (not from where players stood) is what fixes the collapse, and it moves with the calibration instead of being pinned to these cameras. (A first version used an absolute `FAR_DEPTH_MIN=34.0` fit to the shallowest real serve here; replaced because court_y at the far end is itself the unreliable quantity, so a number fit to 7 points on one camera set was the wrong thing to trust.) Re-running the proposer: far proposals **37 → 17** (near 147→159, no-serve 3→11). Against these verdicts, **all 7 real serves survive as far (zero lost)**; new far set composition 7 serve / 6 not_serve / 2 wrong_side / 1 unsure / 1 new. **Precision 19% → ~47% (7/15), no serve recall-of-proposals lost.**
+
+**What this does and does not say.**
+- This is **precision of the far-serve proposals, not recall.** It does not measure how many real far serves exist in the footage or how many we catch. Recall needs an independent exhaustive far-serve pass over ≥1 full session (not done).
+- **A recall gap is likely.** Serving alternates sides, so ~half of all serves should originate far; the proposer called only 37/184 (20%) far pre-floor (17/176 post). Far serves are probably under-*detected*, not rare — the operator's "not a lot of far-side serve" read.
+- The 6 surviving `not_serve`s after the floor are **deep rally shots, not serves** — depth is necessary, not sufficient. A **"first shot of the rally" timing cue was tested and rejected**: `serve_t − rally_start` is ~0.00 for serves and not_serves alike (the proposer already pins the candidate to the rally start = first net crossing), so timing can't separate a real serve from a deep rally shot. Separating the remaining deep false positives needs a genuinely serve-specific signal (serve-motion classifier, or ball starting from rest on the serving side), not another position/timing threshold.
+
+**Serve TIMING — crossing-anchor beats the pose swing (big win).** The operator re-reviewed the 6 surviving false alarms: 3 were mid-rally grabs ("match already started", = rally fragmentation), 2 contained a real serve at a *different* frame than proposed (mis-timed), 1 was wrong-side. That exposed timing, not just precision, as a problem. A serve is struck ~0.5s before the rally's first net crossing, so serve time was re-anchored to `rally_start - 0.5` (rally_start already = the burst's first crossing) instead of the pose swing. On the 7 known serves, **median timing error fell from 3.7s (pose swing) to 0.2s (crossing anchor)** — 6/7 within 0.5s. Shipped into `propose_serves.py`; the deep swing is still used for side/depth gating, only the reported moment changed.
+
+**Cues tested against the 13 labeled clips and REJECTED (so we don't re-test):**
+- *Serve-motion shape from pose* — untestable: the `cache/arm_swing` pose is only 16–72% dense (built for swing *speed*, not shape), and 3 of 7 serves fall in frame gaps entirely.
+- *Held ball near the hand before the swing* — detectable on only 5/7, and too sparse (1–4 of 35 frames) to confirm "still"; fails as a hard gate.
+- *Ball "put into play" (no crossings before the serve)* — crossings too noisy: serves showed 0–3 before, false alarms 0–1, fully overlapping.
+- *Quiet-gap-before-rally = true serve-start* — overlapping: real serves 3.0–7.9s, mid-rally false alarms 3.1/3.1/5.7s. Gap length is driven by ball-tracker dropouts, not real dead-ball time.
+- *Serve side read from the ball before the first crossing* — only 3/7 correct, failures all where the far-side ball had 0–2 detections.
+The common thread: every cue works where the far-side ball/player is detected and fails where it isn't. The limiter is far-side detection quality, not serve logic.
+
+**Conclusion.** First trustworthy far-serve ground truth established (37 clips, CVAT project 16). The far-serve proposer was 19% precise; an absolute court-depth floor (`FAR_DEPTH_MIN=34.0`) raises it to ~47% with zero loss of the 7 known serves, and is physically principled. Serve detection remains **not production-ready**: precision is still ~50% and true far-serve recall is unmeasured. Tooling (`propose_serves.py` with the floor, `cut_serve_clips.py`, `cvat_make_serve_review.py`) is internal/uncommitted; verdict export in session scratchpad. Next: (1) a serve-specific signal (serve-motion classifier or ball-from-rest) for the remaining deep false positives — the first-shot timing cue was tested and does not separate them; (2) exhaustively label all far serves in 1–2 sessions for the first real recall number.
