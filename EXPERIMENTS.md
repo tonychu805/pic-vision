@@ -2792,3 +2792,26 @@ original "return/third shot are wrong" complaint), (3) far-serve side. I.e. the 
 60fps build is a **serve/analytics/overlay feature enabler with zero value to the core
 reel** — worth building only if serve-based features are on the near-term roadmap. Running
 pipeline integration before that decision is not warranted.
+
+**Hit-capture mechanism check (same day) — far-hit capture is blocked by the far-court SWING signal, not the ball; the far tile fixes the wrong leg.**
+Question (reframed by operator): not the overlay, but *how precisely can we capture
+hits*. Ran the ADR-157 v6 gate (swing-peak + ball at the swinger's OWN wrist) on the
+brickwall return hit, full-frame ball vs merged (full + far-crop, gated on-court):
+- **Leg 1 (ball): recoverable.** Through the full-frame blackout the far crop restores a
+  ball; closest approach to the far returner's wrist = **34px** (one frame).
+- **Leg 2 (swing): absent — the binding constraint.** The far returner's wrist peaks at
+  **234 px/s** across the whole window vs the gate's **1600**; even a 4×-loosened far
+  threshold (400 px/s) is never met. Far player ≈100px tall (vs ~350 near) so a real
+  swing is a few px of wrist travel, and far pose is low-confidence (one wrist 0.38).
+- **Result:** the hit gate does NOT fire with the ball recovered — there is no swing peak
+  to gate on. Recovering the far ball fixes the leg that was not binding.
+
+**Conclusion.** Hit-capture splits by court: NEAR works (ADR-157 ~half/half; improvable by
+association/threshold tuning + 60fps timing); FAR is blocked by the pose/swing signal at
+depth — the SAME wall as far-serve ([[project_far_serve_pose_coverage]]), not the ball or
+the detector. **The aspect-correct far-tile + 60fps pipeline work would NOT improve far-hit
+capture** (it addresses ball recall, which is leg 1 of 3; leg 2 stays broken). Far-hit
+precision needs a better far swing signal first — higher-res far pose and/or a
+perspective-normalized swing metric (thresholds scaled by player image-height) — pose
+first, ball second. n=1 far hit (mechanism, not a rate), consistent with the far-pose
+bottleneck. Scratchpad: `hit_recover_test.py`.
