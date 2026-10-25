@@ -2920,3 +2920,31 @@ the gate (far-ball tile deferred). Scratchpad: `hit_explore_bw.py`, frames in `h
   possibly ball flybys past a far wrist during a firefight, not contacts. Needs full-video /
   labeled-set confirmation. ⇒ next: pick the hit taxonomy (hard shots vs all contacts), which
   decides whether the soft-shot gap matters, then build a hit-labeled set for real P/R.
+
+### 2026-10-26 — Tile vs baseline for "every contact": the far-tile half-lifts the ADR-156 wall, doesn't clear it (real PGC + real hit labels)
+
+Tests whether better contact-time ball tracking (this session's far-tile) revives ball-based
+contact detection where ADR-156 failed. Real PGC footage (eda301d9 clean court, chunk3c
+min1-2, 44 hand-labeled hits recovered from git: `eval/labels/hits/` in history). Ran k14
+full-frame vs far-tile [600,390,1140,694] on the clip; measured **ball visible at the labeled
+contact** (±3 frames, 45px). Scratchpad: `hit_vis_infer.py`, `hit_vis_score.py`.
+
+| | baseline full-frame | + far-tile |
+|---|---|---|
+| FAR (24) | 9/24 (37%) | **13/24 (54%)** (+4 recovered) |
+| NEAR (20) | 9/20 (45%) | 10/20 (tile doesn't reach near) |
+| ALL (44) | 18/44 (41%) | **23/44 (52%)** |
+
+- **Tile delivers reopening-condition (a) partially:** far contact-time ball visibility 37%→54%
+  on real PGC. The resolution lever is real here, not just brickwall.
+- **But not enough for "every contact":** even maxed, the ball is visible at only ~52% of
+  contacts → a ball-track contact finder stays half-blind (ADR-156 wall half-lifted, not cleared).
+- **Near court unmoved (9→10)** — near-contact ball loss is occlusion/motion-blur at the paddle
+  (near ball is big, ~29px), NOT resolution; no crop fixes it, and near is ~half the contacts.
+- 45px/±3f is a generous "seen" bar, so ~52% is an optimistic ceiling.
+
+**Conclusion.** The far-tile is genuinely useful for far drive/contact RECALL, but **ball-track
+"every contact" detection remains blocked even with it.** Complete-rally contact capture
+realistically needs reopening-condition (b): a learned classifier on pose+ball+hands over the
+existing ~100 labels + more — a model project, not a heuristic. "Hard shots only" (ADR-157) is
+what's reachable today. See [[project_paddle_hit_finder]], [[project_detection_downscaling_bottleneck]].
