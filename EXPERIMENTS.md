@@ -2901,3 +2901,22 @@ de3d1953[Tapo, excluded]) — all 30fps, no 60fps anywhere in the real capture.
 actual PGC production camera (30fps, behind-baseline)** — that generalization is still open. Keep
 TrackNet (ADR-159 unchanged on the detector). See [[project_detection_downscaling_bottleneck]],
 [[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Hit-capture exploration on a real brickwall rally: the gate is a DRIVE detector, not an all-contact detector
+
+Combined near-court gate (full-frame ball+pose, ADR-157) + far-POSE tile (upscaled far crop
+for the swing) over the real brickwall rally 928.8–958.5s (29.8s). Full-frame ball used for
+the gate (far-ball tile deferred). Scratchpad: `hit_explore_bw.py`, frames in `hit_frames/`.
+- **21 hits fired: 2 near, 19 far** (full-frame 12, far-pose tile ADDED 9 far). Verified 4
+  frames by eye (project rule): 952.07 far (ball 5px, black player mid-drive), 938.7/939.2 far
+  (ball at far players in a fast exchange), 946.53 near (white player deep dig) — **all real
+  forceful contacts; the detector is not firing on empty air.**
+- **The 2/19 split is shot-type, not a bug:** the far team drives (hard swing → captured), the
+  near team mostly digs/resets softly (swing <1600 → missed). ⇒ **our hit capture is a
+  DRIVE / hard-swing detector**, systematically catching drives/putaways/speedups and missing
+  soft dinks/blocks/resets (no swing signal; ball cues for them failed, ADR-156).
+- **Far-tile works** (9 real far drives recovered on a real camera). 
+- **Open precision risk (not clearable from stills):** a few far hits cluster ~0.4s apart —
+  possibly ball flybys past a far wrist during a firefight, not contacts. Needs full-video /
+  labeled-set confirmation. ⇒ next: pick the hit taxonomy (hard shots vs all contacts), which
+  decides whether the soft-shot gap matters, then build a hit-labeled set for real P/R.
