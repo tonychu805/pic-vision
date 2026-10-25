@@ -85,3 +85,13 @@ eval/labels/*_gaps_all.jsonl
 pic-vision-cloud-console/
 reel-page/
 cvat/
+
+# Local tool / scratch output — regenerable or machine-specific
+.claude/
+.flash/
+skills-lock.json
+phase1_out/
+.yolo11x.pt*.part
+
+# PGC field-test footage (video, consent-gated) — never commit
+pgc-fieldtest-sept2026/
