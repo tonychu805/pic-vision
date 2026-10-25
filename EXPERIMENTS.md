@@ -2763,3 +2763,32 @@ the naive 5% result was pure aspect distortion. This validates ball-DETECTION re
 only; turning it into end-to-end serve/2nd-shot detection (downstream crossing/event
 logic on the merged track) and pipeline integration (pod_infer tile+merge, pod_driver
 60fps-on-serve-windows, re-score for near-side non-regression) are not yet done.
+
+**End-to-end check (same day) — the far tile adds far-side TRACK, not a new crossing; the "missed 2nd shot" is an overlay/hit-attribution gap, not a rally-detection miss.**
+Fed the merged (gated full-frame + aspect-correct far tile) track into the downstream
+crossing logic (`src/ball.crossing_times`, net_y 303.5) on the brickwall return window
+(929.5–930.3s), to test whether the recovered far ball makes the 2nd shot *detectable*:
+
+| track | pts | far-side pts | net-crossings in window |
+|---|---|---|---|
+| full-frame RAW (phantoms in) | 45 | 7 | 6 — `[929.2, 929.8, 930.17, 930.3, 930.7, 930.9]` |
+| full-frame GATED (off-court phantoms removed) | 29 | 4 | **2** `[929.2, 930.1]` |
+| MERGED (gated full + far tile) | 31 | 6 | **2** `[929.2, 930.1]` |
+
+Two findings. (a) **Full-frame's "6 crossings" were mostly phantom noise** — gating the
+adjacent-court detections (x≈1010) drops it to 2, so raw full-frame never cleanly
+"detected" these shots. (b) **The far tile adds real far-side track (4→6 pts) but NOT a
+new crossing.** The return's crossing (930.1, far→near) is already present from the
+*near-side* ball; the extra far points reinforce the far side, which a crossing does not
+need. net_y (303.5) and the far baseline (296.8) are only ~7px apart (extreme perspective
+compression), so crossing detection in the far court is inherently noisy.
+
+**Conclusion (refines ADR-159's "not load-bearing" caveat, does not overturn the bottleneck
+finding).** The coarse rally/crossing detector already has the 2nd shot via the near-side
+ball; the far-tile recovery is NOT load-bearing even for 2nd-shot *crossing* detection. Its
+value is at the finer layers: (1) far-ball TRACK completeness, (2) the hit/serve OVERLAY,
+which needs the ball *at the far contact* to place the marker on the far player (the
+original "return/third shot are wrong" complaint), (3) far-serve side. I.e. the far-tile +
+60fps build is a **serve/analytics/overlay feature enabler with zero value to the core
+reel** — worth building only if serve-based features are on the near-term roadmap. Running
+pipeline integration before that decision is not warranted.

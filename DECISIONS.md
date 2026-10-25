@@ -3469,3 +3469,11 @@ limit, an fps limit, a resolution limit, or an optics wall (EXPERIMENTS.md 2026-
 **Consequence.** Far-serve / 2nd-shot recovery is a **pipeline change** (`pod_infer.py`
 input handling + `pod_driver.py` fps), not a camera change or detector swap. Scoped,
 not built. Links EXPERIMENTS.md 2026-10-25.
+
+**Scope note (end-to-end check, 2026-10-25).** The merged (full + far-tile) track was run
+through the real downstream crossing logic: it adds far-side track points but **no new
+net-crossing** — the 2nd shot's crossing already comes from the near-side ball, so the
+coarse rally detector was never actually missing it. The "missed 2nd shot" is an
+**overlay / hit-attribution** gap (the marker needs the ball AT the far contact). So this
+fix buys serve/analytics/**per-shot-overlay** quality, with **zero value to the core reel**
+— build only when serve-based features are scheduled. (EXPERIMENTS.md 2026-10-25, "End-to-end check".)
