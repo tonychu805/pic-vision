@@ -583,6 +583,7 @@ pic-vision/
 ├── DECISIONS.md              # decision log (ADRs, append-only)
 ├── STRATEGY.md               # post-prototype direction (exploratory)
 ├── EXPERIMENTS.md            # append-only run log
+├── RND_REVIEW.md             # synthesis of EXPERIMENTS.md: known / shippable / close / needs work
 ├── PROGRESS.md               # pointer to progress/ + standing reference material
 ├── progress/                 # plain-language status, one file per day (MM.DD progress overview.md)
 ├── CHECKLIST.md              # phase-gate tracker for Phase 0-1 only; Linear is

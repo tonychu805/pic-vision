@@ -2643,3 +2643,61 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 The common thread: every cue works where the far-side ball/player is detected and fails where it isn't. The limiter is far-side detection quality, not serve logic.
 
 **Conclusion.** First trustworthy far-serve ground truth established (37 clips, CVAT project 16). The far-serve proposer was 19% precise; an absolute court-depth floor (`FAR_DEPTH_MIN=34.0`) raises it to ~47% with zero loss of the 7 known serves, and is physically principled. Serve detection remains **not production-ready**: precision is still ~50% and true far-serve recall is unmeasured. Tooling (`propose_serves.py` with the floor, `cut_serve_clips.py`, `cvat_make_serve_review.py`) is internal/uncommitted; verdict export in session scratchpad. Next: (1) a serve-specific signal (serve-motion classifier or ball-from-rest) for the remaining deep false positives — the first-shot timing cue was tested and does not separate them; (2) exhaustively label all far serves in 1–2 sessions for the first real recall number.
+
+### 2026-10-23 (later) — TrackNet on far-court CROPS: detection solved, discrimination not yet
+
+Tested the one untested lever from the serve-precision effort: run the ball
+detector on a **crop of the far court** instead of the full frame, so the far
+ball (~13px in 1080p) isn't destroyed by TrackNet's fixed 512×288 resize. k14
+weights, local RTX 2000 Ada (`/mnt/fast_scratch/tf215_env`), far-court crop box
+derived per session from the calibration homography (net→far-baseline, +180px
+upward airspace, +60px sides). Scored against the 13 labeled clips (7 serve /
+6 not_serve) with hand-marked ball-at-contact px for the 7 serves.
+
+- **Q1 — detection (WIN).** Crop TrackNet recovers the ball at **7/7** known
+  serve contacts (2–18px from the hand-marked ball, conf 0.59–0.68, blob 5–8px).
+  **Full-frame k14 gets only 4/7**, and the 3 it misses (clips 30, 32, 37) are
+  the deepest serves, where full-frame finds nothing within 500+px. So cropping
+  genuinely recovers the far serve ball that full-frame loses — the "ball put
+  into play from the hand" cue, declared undetectable after the color-detector
+  failure, **is detectable** with a crop. (Overall visible-% is lower on the
+  crop only because the crop excludes the rest of the court where full-frame
+  still sees the in-flight ball — not a detection deficit.)
+- **Q2 — signature visible by eye.** Anchored to the true contact, every serve
+  shows a *held/tossed ball → launch*: the ball sits near-stationary for ~0.2–0.5s
+  (clip 32 pinned at x=760 for 3f then launches to x=973; clip 13 holds at
+  ~(1140,111) for 6f then strikes), then accelerates. False alarms show either
+  **no ball** at the flagged moment (clips 1, 33, 34), a ball in **monotonic
+  flight** (clip 12: x 990→1113 steady; clip 31), or **jitter** (clip 35).
+- **Q3 — blind discriminator FAILS.** A production-style whole-clip scan for a
+  "held-ball run (≥5 frames, x-band ≤14px) + launch" fires on **4/7 serves and
+  6/6 false alarms**. 13-second clips contain stationary-ball clusters from
+  tracker jitter and between-rally rest; and the tossed serve ball drifts >14px
+  so 3 serves' real held runs are missed. Tightening thresholds to separate 13
+  clips would be overfitting to tiny ground truth (cf. the swing-magnitude
+  camera confound, same effort).
+
+**Conclusion.** TrackNet-on-crops **solves the far-ball detection half** (7/7 vs
+4/7) — a real, bankable capability finding that overturns "the held ball is
+undetectable". It does **not** by itself raise far-serve precision: turning the
+now-visible ball into a serve-vs-rally gate needs the ball track **fused with the
+event anchor** (launch-from-rest that *starts* the point, i.e. the first far→near
+crossing originating at the server) plus more labels — a real serve-event model,
+not a blind scan. Scripts in session scratchpad (`tn_crop.py`, `eval_q1/q2/q3.py`),
+crop CSVs in `scratchpad/tn_out/`. Not committed (exploratory).
+
+### 2026-10-24 — Brickwall serves: the far gap is pose COVERAGE, not the camera; and the ball-based side fix does NOT generalize
+
+Two questions, on brickwall_30fps (a different, more-elevated camera) + a re-check on PGC.
+
+**1. Does posing the SERVE MOMENT (not just rallies) recover far serves? YES.** The `poses_*_rallies.json` caches cover kitchen play but miss the far server standing back at the baseline before the point. Running dense yolov8x-pose@1280 on just the 44 pre-serve windows ([S-4.5,S+1.5]) lifted pre-serve deep-player coverage **4/44 → 26/44** and far-serve proposals **2 → 13** (servers captured at court_y 44–51, right at the far baseline). Critically, **depth is NOT compressed**: far players reach court_y 37–43 during rallies (18/44) — a deep player maps correctly. This **overturns the earlier "far is camera-geometry-limited" read** (2026-10-23): the far gap was that we weren't posing the serve.
+
+**2. Brickwall serve-review (CVAT project 18, 42 clips = 29 near + 13 far), operator-labelled.** Near 29/29 real serves (**100%**); far 8/13 real serves (**62%**; the 5 misses are dead-time/mid-rally deep swings, not side errors). Of 37 real serves, **7 (19%) got the wrong side** (6 far serves called near, 1 near called far) — side-assignment is the main residual error, confirming the near-side pattern (PGC project 17: 24 serve / 8 wrong_side, ~81% side-correct).
+
+**3. Ball-based side-assignment — looked perfect on brickwall, FAILED on PGC. Do not ship.**
+- Rule: the server's side = where the serve ball first appears clearly on one side (|court_y−22|>8) in the serve window (serve originates deep on server's end).
+- Brickwall: **37/37 = 100%** (fixed all 7 pose side errors). PGC near: **17/32 = 53%** — worse than pose (75%) and near coin-flip.
+- A confidence gate (trust ball only when clear-side detections are dense + coherent) did **not** rescue it: on PGC the gate fired 11× and was right only 3× — the PGC ball at serve time is **coherently on the wrong side** (ball-track noise / timing), so there is no ball-only signal that flags the untrustworthy cases.
+- **Conclusion: the ball tells the serving side only where the ball track is clean (brickwall), and misleads where it isn't (PGC), undetectably. Side-assignment stays on pose (~75–81%); not reliably improvable by the ball. Parked** — side only matters for future per-player stats, not the serve gate. This is the 2nd "great on one video, fails on the next" result the cross-venue check killed this session (cf. swing-magnitude camera confound, 2026-10-23).
+
+**Net serve status after two weeks:** near-side detection works (~97–100%); far-side detection is recoverable in software by posing the serve moment (not blocked on a camera); the leftover errors are (a) serve-vs-deep-rally-shot discrimination and (b) side-assignment — both still open, neither solved by any cue tested. Recall still unmeasured on both sides. Footage hygiene enforced (ADR-158). See [[project_far_serve_pose_coverage]].
