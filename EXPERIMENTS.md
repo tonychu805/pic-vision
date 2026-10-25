@@ -2839,3 +2839,25 @@ tile (ball + pose together); soft/blocked returns remain a floor for a swing gat
 works already (ADR-157). Next: a hit-labeled set to turn this mechanism into a precision
 number, and a repeat on PGC 1080p (far player even smaller → larger upscale). n=1 rally, 2
 recovered contacts (mechanism, not a rate). See [[project_far_serve_pose_coverage]], ADR-159.
+
+**PGC 1080p generalization (same day) — the far-pose tile transfers to production footage: +70% ball-validated far hits.**
+Repeated the far-pose-tile check on PGC `scan_420.mp4` (1920×1080@60fps, the production
+camera), full-frame pose (`pose420.json`) vs yolov8x-pose on the aspect-correct far tile
+[560,380,1300,796] upscaled 2×. Scratchpad: `far_pose_tile_pgc.py`.
+- **Gated far hits** (ADR-157 gate: far swing peak with the ball ≤60px of the wrist):
+  **full-frame pose 7 → far-pose tile 12** (same 7 + 5 new), **~1.7×**.
+- **Smaller lift than brickwall, which confirms the resolution thesis.** On brickwall (720p)
+  full-frame pose caught ≈0 far hits (swing 234); the tile was the whole fix. On PGC (1080p)
+  the far player has more native pixels, so full-frame pose is less starved (already 7) and
+  the tile adds the rest. More native res → less starvation → exactly as predicted. Third
+  independent angle, same conclusion (ADR-159).
+- **Jitter is gated, not shipped.** Full-frame pose's apparent peak (18494 px/s) was an
+  ID-swap spike with the ball 144px away (not a hit); both pose paths throw such spikes, and
+  the ball-at-wrist gate removes them — why ADR-157 pairs swing WITH ball. Precision protected.
+- **Caveats:** gate firings at ADR-157's ~half-precise rate, NOT verified contacts; not yet
+  watched (numbers≠verdict until playback). The transferable signal is the ratio, not the 12.
+
+**Decision gate result:** far-pose/ball tile RECOVERS far-court hits on both 720p and 1080p
+→ mechanism validated. Remaining before any build: (1) operator decision whether hit-level
+capture is on the near-term roadmap (the reel does not need it), (2) a hand-labeled hit set
+for a real precision/recall number. See [[project_far_serve_pose_coverage]], ADR-159.
