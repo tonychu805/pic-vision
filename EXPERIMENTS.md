@@ -2752,3 +2752,14 @@ a camera change: **aspect-correct far tile** (keeps 9px at ~4.8px) and/or **high
 TrackNet retrain** (keeps 9px), plus **60fps** on serve windows. Sub-5px fastest balls
 remain a residual floor (optics). Not built. See ADR-159,
 [[project_far_serve_pose_coverage]], [[project_frame_rate_requirement]].
+
+**Validation (same day) — aspect-correct far tile recovers the far ball (the ADR-159 fix).**
+Redid the crop as a true 16:9 tile (740×416 = 1.78:1, 1.45× downscale vs full 3.75×)
+on the PGC 60fps window. In the far court over 18s: full-frame **44** far-ball
+detections, aspect-correct tile **95**, **merged ≈120 (2.7×)** — the tile recovered
+**76 far balls full-frame missed**. Stand phantoms (tile detections above the far
+baseline) were **26/137 (19%)**, all removable by a drop-above-baseline gate. Confirms
+the naive 5% result was pure aspect distortion. This validates ball-DETECTION recovery
+only; turning it into end-to-end serve/2nd-shot detection (downstream crossing/event
+logic on the merged track) and pipeline integration (pod_infer tile+merge, pod_driver
+60fps-on-serve-windows, re-score for near-side non-regression) are not yet done.
