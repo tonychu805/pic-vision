@@ -2815,3 +2815,27 @@ precision needs a better far swing signal first — higher-res far pose and/or a
 perspective-normalized swing metric (thresholds scaled by player image-height) — pose
 first, ball second. n=1 far hit (mechanism, not a rate), consistent with the far-pose
 bottleneck. Scratchpad: `hit_recover_test.py`.
+
+**Far-POSE tile recovers the far swing (same day) — far-court hit capture is a resolution problem, not a floor; partially reverses the prior entry.**
+The prior check found the far swing crushed to 234 px/s on full-frame pose. Mirroring the
+far-BALL tile for the pose leg: ran yolov8x-pose@1280 on the far-court crop
+([359,114,952,426]) upscaled 2.4×, mapped wrists back, recomputed far swing on the same
+brickwall return window. Scratchpad: `far_pose_tile.py`.
+- **Swing recovered 7×.** Peak far swing **234 → 1626 px/s** (clears the 1600 gate), at
+  src 27918 / 930.60s, with the ball **6px** from the wrist → the ADR-157 gate FIRES a HIT.
+  A second contact at 930.80s (900 px/s, ball **3px**). Verified real (ball co-located with
+  the swing peak, not pose jitter; 121/121 frames had far wrists, 4 stable).
+- **⇒ The far court's hit-capture bottleneck is pose RESOLUTION, the same starvation as the
+  ball**: full frames → fixed-input nets shrink the far player (~100px) below what pose
+  resolves. An upscaled far tile fixes BOTH legs (ball + pose) for DRIVEN far shots. This
+  reverses "the far tile fixes the wrong leg" — a far tile *with pose* is the lever.
+- **Residual (not resolution): the soft 2nd-shot return itself.** At 929.7–930.1 (the
+  original return) the tile swing stays <182 px/s — a soft reset return with almost no wrist
+  motion. A swing gate can't catch it at any resolution; ball-trajectory cues for it already
+  failed (ADR-156). Soft far returns are a SHOT-TYPE floor, needing a non-swing cue.
+
+**Conclusion.** Far-court hit capture: driven shots are **recoverable** via an upscaled far
+tile (ball + pose together); soft/blocked returns remain a floor for a swing gate. Near
+works already (ADR-157). Next: a hit-labeled set to turn this mechanism into a precision
+number, and a repeat on PGC 1080p (far player even smaller → larger upscale). n=1 rally, 2
+recovered contacts (mechanism, not a rate). See [[project_far_serve_pose_coverage]], ADR-159.
