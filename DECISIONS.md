@@ -3470,6 +3470,18 @@ limit, an fps limit, a resolution limit, or an optics wall (EXPERIMENTS.md 2026-
 input handling + `pod_driver.py` fps), not a camera change or detector swap. Scoped,
 not built. Links EXPERIMENTS.md 2026-10-25.
 
+**⚠ Correction (2026-10-26) — footage provenance + the fps leg.** The "PGC 1080p@60" footage
+cited in this ADR and its EXPERIMENTS entry was actually **a pro match downloaded off YouTube**
+(`sample-clip.mp4`), not the PGC camera (verified: Google/Lavf download signature; the real PGC
+recordings are 30fps 1080p `.mkv`). Two consequences: (1) **the fps/temporal leg is downgraded** —
+PGC records 30fps natively, so "the pipeline throws away 60→30fps" is not a production reality; the
+fps gain needs a camera actually capturing >30fps, which PGC does not. The ADR's **spatial**
+(1920→512 resolution) leg is unaffected and remains the load-bearing finding, validated on brickwall
+(a real camera). (2) **The far-tile is NOT yet validated on real PGC footage** — only on brickwall
+(720p) and the downloaded 1080p match; the behind-baseline PGC camera (30fps) is untested. The
+decision (fix the input resolution, keep TrackNet) stands; "fps" in the headline should be read as
+"only where the camera captures >30fps." See EXPERIMENTS.md 2026-10-26.
+
 **Scope note (end-to-end check, 2026-10-25).** The merged (full + far-tile) track was run
 through the real downstream crossing logic: it adds far-side track points but **no new
 net-crossing** — the 2nd shot's crossing already comes from the near-side ball, so the

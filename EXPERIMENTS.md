@@ -2704,6 +2704,12 @@ Two questions, on brickwall_30fps (a different, more-elevated camera) + a re-che
 
 ### 2026-10-25 — The ball-detection bottleneck is input resolution + fps (the pipeline's own downscaling), not TrackNet; far ball is ~9px native, recoverable in software
 
+> ⚠ **CORRECTION 2026-10-26 (see entry at end of this day's block):** every "PGC 60fps / 1080p"
+> measurement below (the 60-vs-30 A/B, density 13–18%, native 9px ball, the far-tile 2.7×, and the
+> "PGC 1080p generalization") was run on **a pro match downloaded off YouTube** (`sample-clip.mp4`),
+> NOT PGC footage. Real PGC records **30fps**. The SPATIAL (resolution) findings and the brickwall
+> validations stand; the fps leg and all "PGC"/"production" labels below do not. Details at end.
+
 Chased "the far serve / 2nd shot (return) is missed" to its root across four scored
 runs (local, TF2.15 k14; PGC 60fps raw = `pgc-fieldtest-sept2026/4699a817…`,
 `brickwall_30fps`). Scratchpad: `far_crop_test.py`, 60-vs-30 analysis,
@@ -2861,3 +2867,37 @@ camera), full-frame pose (`pose420.json`) vs yolov8x-pose on the aspect-correct 
 → mechanism validated. Remaining before any build: (1) operator decision whether hit-level
 capture is on the near-term roadmap (the reel does not need it), (2) a hand-labeled hit set
 for a real precision/recall number. See [[project_far_serve_pose_coverage]], ADR-159.
+
+### 2026-10-26 — CORRECTION: this session's "PGC 60fps/1080p" footage was a downloaded pro match, not PGC
+
+Operator flagged that the `pgc-fieldtest-sept2026/*/sample-clip.mp4` files (4699a817 "Court 4",
+etc.) are **a pro pickleball match downloaded off YouTube**, not PGC-camera footage. Verified:
+`ffprobe` shows `handler_name=ISO Media file produced by Google Inc.` + `encoder=Lavf…` (a
+download/remux signature), and these sessions have **no raw `.mkv`** beside them. The **real PGC
+field-test recordings are the 30fps 1080p `.mkv` continuous files** (eda301d9 / c199a97c /
+de3d1953[Tapo, excluded]) — all 30fps, no 60fps anywhere in the real capture.
+
+**What this corrects in the 2026-10-25 entry and ADR-159:**
+- "PGC raw is 1080p@60", "production (1080p) footage", "PGC density 13–18%", "native 9px far ball
+  (PGC)" → all the **downloaded 1080p match**, not PGC. Relabel accordingly.
+- **The temporal/fps leg is downgraded.** "The pipeline downsamples 60→30 (`CFR_FPS=30`) and throws
+  away half the capture" is FALSE for PGC — PGC **records 30fps natively**, nothing is discarded.
+  The 60-vs-30 A/B was me downsampling the downloaded 60fps clip; the benefit only exists if a
+  camera actually captures >30fps, which PGC does not. 60fps is a camera-config question, not a
+  free pipeline flag.
+- **The "PGC 1080p generalization (+70% far hits, 7→12)" is RETRACTED** as a PGC result — it ran on
+  the downloaded match. It remains a valid second data point on a different real 1080p source, but
+  says little about PGC's behind-baseline camera.
+
+**What STANDS (unaffected):**
+- The **spatial downscaling** finding: 1920→512 (3.75×) starves the far ball (~9px→~2.4px) and the
+  far pose/swing. The math is general and was also shown on **brickwall (a real 720p camera)**.
+- **The far-tile fix** (aspect-correct upscaled crop) recovers far ball + far swing → far-hit
+  capture — validated on **brickwall (real)** and the downloaded match. Mechanism holds.
+- Far-hit capture = resolution problem, recoverable; soft/no-swing returns are the residual floor
+  (brickwall). Near works (ADR-157). The reel does not need any of this (near ball carries crossings).
+
+**Net:** the far-tile is validated on a real camera (brickwall) + a downloaded match, **NOT on the
+actual PGC production camera (30fps, behind-baseline)** — that generalization is still open. Keep
+TrackNet (ADR-159 unchanged on the detector). See [[project_detection_downscaling_bottleneck]],
+[[project_far_serve_pose_coverage]].
