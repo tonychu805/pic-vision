@@ -2701,3 +2701,54 @@ Two questions, on brickwall_30fps (a different, more-elevated camera) + a re-che
 - **Conclusion: the ball tells the serving side only where the ball track is clean (brickwall), and misleads where it isn't (PGC), undetectably. Side-assignment stays on pose (~75–81%); not reliably improvable by the ball. Parked** — side only matters for future per-player stats, not the serve gate. This is the 2nd "great on one video, fails on the next" result the cross-venue check killed this session (cf. swing-magnitude camera confound, 2026-10-23).
 
 **Net serve status after two weeks:** near-side detection works (~97–100%); far-side detection is recoverable in software by posing the serve moment (not blocked on a camera); the leftover errors are (a) serve-vs-deep-rally-shot discrimination and (b) side-assignment — both still open, neither solved by any cue tested. Recall still unmeasured on both sides. Footage hygiene enforced (ADR-158). See [[project_far_serve_pose_coverage]].
+
+### 2026-10-25 — The ball-detection bottleneck is input resolution + fps (the pipeline's own downscaling), not TrackNet; far ball is ~9px native, recoverable in software
+
+Chased "the far serve / 2nd shot (return) is missed" to its root across four scored
+runs (local, TF2.15 k14; PGC 60fps raw = `pgc-fieldtest-sept2026/4699a817…`,
+`brickwall_30fps`). Scratchpad: `far_crop_test.py`, 60-vs-30 analysis,
+`pose60.py`/`render_420.py`, native ball-size measure.
+
+**1. Where the ball blacks out = the return/2nd shot.** On brickwall, at the
+serve-return moment (src 27891–27903, 929.7–930.1s) TrackNet loses the ball for
+~0.5s; the only full-frame detections in that window are adjacent-court phantoms
+(x≈1010). Both cues fail at once — the far wrist never wins fastest-swing and one
+far player drops out of pose — so the 2nd shot is unidentifiable with current signals.
+
+**2. Far-crop (SAHI) recovers the far ball, but a blind union adds phantoms.** k14
+on a far-court bbox over the return window recovered **5/13** blackout frames,
+visually on the far returner (vs full-frame's adjacent-court phantoms). BUT on a
+near-play window (946–949s) the far crop fired 46/91 frames, **27 in the spectator
+stands** → ~30% phantom rate when the ball is near. Cannot union; needs gating
+(only-when-full-blank + trajectory-continuity + drop-above-baseline). Camera-dependent, like court_mask.
+
+**3. 60fps vs 30fps, SAME footage — the pipeline downsamples 60→30 (`CFR_FPS=30`).**
+PGC raw is 1080p@60; CFR-convert forces 30fps before TrackNet. On a 25s segment,
+overall density is similar (60fps 17% / 30fps 18%), but on the FAST shots 30fps goes
+blind where 60fps holds: t=23.08s (15,523 px/s) **60fps 8 vs 30fps 1**; t=9.88s **6 vs 0**;
+t=4.63s **17 vs 4**. Normalized for the 2× frame count, 60fps's per-frame rate on fast
+shots is **~2–4× higher** → each 60fps frame is individually more detectable (less
+blur/displacement). Gaps>0.3s: 30fps 19 vs 60fps 15. The pipeline *creates* the
+fast-ball blackout by downsampling.
+
+**4. On production (1080p) footage the binding constraint is the spatial downscale,
+not fps.** Ball-present density: brickwall (1280×720) **33%**; PGC (1920×1080@60) only
+**13–18%** — half, despite higher res + 60fps. TrackNet downscales every frame to
+512 wide: 1280→512 = 2.5×, 1920→512 = **3.75×**, so the 1080p ball is SMALLER in the
+network than the 720p one (confirms "720p≈1080p, resolution-not-gated" from the other
+side). A naive full-court crop made it WORSE (**5%**) — a 2.3:1 box squashed into
+512×288 distorts the ball (the old pod_infer x/y-ratio trap); **crops must be aspect-correct (16:9).**
+
+**5. Native far-ball size = ~9px → downscale problem, not optics wall.** HSV ball-blob
+measurement in native 1080p (PGC): FAR ball median **9px** (3–13px, n=179), NEAR ~29px.
+After the 1920→512 downscale, 9px → **~2.4px** (detection edge); the 3–6px fastest balls
+→ sub-pixel → gone. Caveat: measured on *detected* balls, so the undetected blackout
+balls are likely smaller/blurrier — 9px is the detectable-subset median.
+
+**Conclusion.** The detector is not the problem (TrackNetV3 was worse; single-frame
+YOLO retired). The failure is self-inflicted downscaling — temporal (`CFR_FPS=30`) +
+spatial (1920→512). Both recoverable in software for the median (9px) far ball without
+a camera change: **aspect-correct far tile** (keeps 9px at ~4.8px) and/or **higher-res
+TrackNet retrain** (keeps 9px), plus **60fps** on serve windows. Sub-5px fastest balls
+remain a residual floor (optics). Not built. See ADR-159,
+[[project_far_serve_pose_coverage]], [[project_frame_rate_requirement]].

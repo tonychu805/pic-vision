@@ -3439,3 +3439,33 @@ lists through `usable()` too; this change only wires the serve proposer.
 drill prefixes are excluded and clean games sessions pass; `make test` green.
 Re-running `propose_serves.py` drops `c6a9136a`/`499ed4b8`/`52f4de24`/`72852da9`
 from the candidate set.
+
+## ADR-159 — The ball-detection bottleneck is input resolution + fps (pipeline downscaling), not the detector; fix the input, keep TrackNet
+
+**Context.** Far serves and the 2nd shot (serve return) are missed because the ball
+blacks out at its fastest, deepest moment. We investigated whether this is a detector
+limit, an fps limit, a resolution limit, or an optics wall (EXPERIMENTS.md 2026-10-25).
+
+**Findings / decision.**
+- **Keep TrackNet.** Its multi-frame motion model is why the ball is findable at all;
+  TrackNetV3 (fabricates trajectory, [[project_tracknetv3_evaluated_not_adopted]]) and
+  single-frame YOLO (retired to `archive/`) are both worse. The detector is not the problem.
+- **The bottleneck is the pipeline's own downscaling**, in two independent stages:
+  - *temporal* — `CFR_FPS=30` (pod_driver.py) discards half of the 60fps capture; the
+    fast-ball blackout happens at the fps we throw away.
+  - *spatial* — the full 1920-wide frame is downscaled to TrackNet's 512 input (3.75×),
+    shrinking the far ball from ~9px native to ~2.4px, below reliable detection.
+- **Not an optics wall for the median far ball:** measured ~9px native at 1080p. The
+  signal is at the sensor; inference destroys it. (Sub-5px fastest balls ARE a residual floor.)
+- **Fix at the input stage, not the detector:** (a) aspect-correct far-court tiling
+  (SAHI done right — a naive non-16:9 crop distorts and *hurt*, 5% vs 18%), and/or
+  (b) retrain TrackNet at a higher input resolution (keeps 9px as 9px); plus (c) stop
+  forcing 30fps where it matters.
+- **Recommended next increment:** aspect-correct far tile + 60fps on serve/rally-start
+  windows only (~10% cost), with a **gated merge** (only-when-full-frame-blank +
+  trajectory-continuity + drop-above-baseline) — NOT a blind union, which adds ~30%
+  stand phantoms during near play.
+
+**Consequence.** Far-serve / 2nd-shot recovery is a **pipeline change** (`pod_infer.py`
+input handling + `pod_driver.py` fps), not a camera change or detector swap. Scoped,
+not built. Links EXPERIMENTS.md 2026-10-25.
