@@ -1,5 +1,7 @@
-"""Create the CVAT project 'serve-review-far' with one task per clip in
-cache/serve_review/far/ (the 37 far serve candidates from propose_serves.py).
+"""Create a CVAT project 'serve-review-<side>' with one task per clip in
+cache/serve_review/<side>/ (the serve candidates from propose_serves.py).
+
+--side far (default) or near; the near set is the near-side precision pass.
 
 Labels (per the house bounce/hit + scale-review pattern):
   serve_contact  (points) -- click the ball at the serve-contact frame.
@@ -13,11 +15,10 @@ Uses a short-lived API token for the local CVAT superuser, minted from the
 cvat_server container at run time and deleted at the end; never printed.
 Run: PYTHONPATH=. .venv/bin/python scripts/cvat_make_serve_review.py
 """
-import csv, pathlib, subprocess, time
+import argparse, csv, pathlib, subprocess, time
 import requests
 
 BASE = "http://localhost:8080"
-CLIPS = pathlib.Path("cache/serve_review/far")
 DC = ["docker", "--context", "desktop-linux", "exec", "cvat_server", "python3", "manage.py", "shell", "-c"]
 LABELS = [
     {"name": "serve_contact", "type": "points", "attributes": []},
@@ -40,14 +41,18 @@ def drop_token():
 
 
 def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--side", default="far", choices=["far", "near"])
+    side = ap.parse_args().side
+    clips = pathlib.Path(f"cache/serve_review/{side}")
     h = {"Authorization": f"Token {token()}"}
     try:
-        p = requests.post(f"{BASE}/api/projects", headers=h, json={"name": "serve-review-far", "labels": LABELS})
+        p = requests.post(f"{BASE}/api/projects", headers=h, json={"name": f"serve-review-{side}", "labels": LABELS})
         p.raise_for_status(); pid = p.json()["id"]
-        print("project", pid, "serve-review-far")
-        rows = list(csv.DictReader(open(CLIPS / "review.csv")))
+        print("project", pid, f"serve-review-{side}")
+        rows = list(csv.DictReader(open(clips / "review.csv")))
         for r in rows:
-            f = CLIPS / r["clip"]
+            f = clips / r["clip"]
             if not f.exists():
                 print("  SKIP missing", r["clip"]); continue
             name = (f"{int(r['idx']):02d} {r['session'][:8]} t{float(r['serve_t']):.0f}s "
