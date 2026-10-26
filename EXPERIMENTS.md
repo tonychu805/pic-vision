@@ -3289,3 +3289,27 @@ running. Scratchpad `anchor/bridge2.py`. Signatures found: 22 on eda, 8 on c199.
 
 **Conclusion.** The narrow bridge is safe on this data (no merges, nothing worse), but it only fixes 2-3 clips.
 In-sample only; a fresh session (a96cbae3) with playback is needed before any ship decision.
+
+### 2026-10-26 — Narrow occlusion bridge on fresh sessions: 11/12 changed clips judged good by playback
+
+The `bridge2.py` rule was applied unchanged to every clean PGC session not used in its design: 1974ac52, 3e1caf84,
+46fe3011, 7ace7db9, 81b38167, 85919543, a96cbae3. Excluded: eda/c199 (design), 365c798c (presumed warmup),
+and Tapo/drill sessions via `footage_rules.usable`. The rule changed 12 rallies across 7 sessions; a96cbae3 and
+7ace7db9 had no change. Operator watched all 12 (scratchpad `anchor/render_bridge_review.py`,
+`:8451/bridge_review/`).
+
+| change | n | operator verdict |
+|---|---|---|
+| start moved earlier | 5 | **4 captured the serve** (1974ac52 185s, 46fe3011 562s, 85919543 3s, 88s); 1 swallowed a prior rally (1974ac52 204s, moved 12.7 s) |
+| two of today's clips merged | 1 | one good point (85919543 298s) |
+| new rally (today has no clip) | 6 | **6/6 good points** (3e1caf84 354s, 46fe3011 280s, 81b38167 113s, 455s, 85919543 176s, 187s) |
+
+- Unchanged rallies are identical to today, so there is no regression elsewhere.
+- Not measured: cut-off serves the rule failed to recover on these sessions (only changed clips were reviewed).
+- The new-rally gain is recall: points whose crossings were split by occlusion into groups under 6, now held
+  together past 6.
+- 365c798c (excluded): the rule glued 4 pairs of presumed-warmup segments, which shows it can merge.
+
+**Conclusion.** On held-out footage the narrow occlusion bridge is net positive: +6 real points, 4 serves recovered,
+1 good merge, and 1 bad move (a 12.7 s jump that pulled in a previous point). Candidate for a `src/` change behind a
+flag, with a guard against long backward jumps.
