@@ -3214,3 +3214,11 @@ their own serve; 0 swallowed points; "no serve" on most warmups and ≤~10% of r
 **Conclusion.** Rejected: the swing-only serve anchor, both as a start fix and as a warmup signal. Not re-tuned on
 this data, which is now spent for design. Untested next candidate, to be judged on a fresh session: require the
 swing to be followed within ~1 s by a ball crossing heading away from the swinger's side.
+
+**Addendum (same day): part of the Stage 1 failure is an implementation gap, not the idea.** `deep_swings` filters
+players only by depth (court-y), never by court width. Of the ≥1600 px/s "serve" swings, **274/865 (32%) on eda and
+50/244 (20%) on c199 come from people outside our court's width** (court-x outside -2..22 ft: the neighbouring court,
+bystanders). Pose sees a median of 5-7 people per frame (max 11). The other 591/194 swings are on our court
+(~1.6/s), so the swing signal stays non-specific even with the filter. Read Stage 1 as "this implementation
+failed", not "serve anchoring cannot work". Unchecked suspicion: pose identity jumps (a wrist "moving" because
+a different person was matched between frames) may inflate speeds further.
