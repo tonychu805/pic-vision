@@ -32,7 +32,8 @@ WEIGHTS = (1 / 3, 1 / 3, 1 / 3)  # (duration, peak_crossing_rate, n_spikes) -- c
 
 
 def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path=None,
-                weights=WEIGHTS, include_chronological=True, logo_path=None):
+                weights=WEIGHTS, include_chronological=True, logo_path=None,
+                occlusion_bridge=False):
     """Detect rally candidates, rank them, and cut a highlight reel.
 
     Writes highlight_by_rank.mp4 (best-scored first) to out_dir, plus
@@ -76,7 +77,7 @@ def build_reel(video, csv, calib_path, out_dir, target_sec, session_id, log_path
             with open(log_path, "a") as f:
                 f.write(msg.rstrip("\n") + "\n")
 
-    cand = detect_candidates(video, csv, calib_path)
+    cand = detect_candidates(video, csv, calib_path, occlusion_bridge=occlusion_bridge)
     segments, times_crossed, speeds, threshold = cand["segments"], cand["times_crossed"], cand["speeds"], cand["threshold"]
     report(f"{len(segments)} candidate rally segments")
 
@@ -146,11 +147,15 @@ def main():
                      metavar=("W_DURATION", "W_PEAK_CROSSING_RATE", "W_N_SPIKES"),
                      help="override the shipped 1/3-1/3-1/3 ranking weights, "
                           "e.g. --weights 0 1 0 for a burst-only reel")
+    ap.add_argument("--occlusion-bridge", action="store_true",
+                    help="hold rallies open across near-kitchen ball occlusion instead of "
+                         "splitting them (opt-in; EXPERIMENTS.md 2026-10-26)")
     args = ap.parse_args()
 
     build_reel(args.video, args.csv, args.calib, args.out_dir,
                args.target_sec, args.session_id,
-               weights=tuple(args.weights) if args.weights else WEIGHTS)
+               weights=tuple(args.weights) if args.weights else WEIGHTS,
+               occlusion_bridge=args.occlusion_bridge)
 
 
 if __name__ == "__main__":

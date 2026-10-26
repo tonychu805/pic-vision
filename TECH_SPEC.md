@@ -583,6 +583,7 @@ pic-vision/
 ├── DECISIONS.md              # decision log (ADRs, append-only)
 ├── STRATEGY.md               # post-prototype direction (exploratory)
 ├── EXPERIMENTS.md            # append-only run log
+├── RND_REVIEW.md             # synthesis of EXPERIMENTS.md: known / shippable / close / needs work
 ├── PROGRESS.md               # pointer to progress/ + standing reference material
 ├── progress/                 # plain-language status, one file per day (MM.DD progress overview.md)
 ├── CHECKLIST.md              # phase-gate tracker for Phase 0-1 only; Linear is
@@ -1997,6 +1998,9 @@ pic-vision/
 │                                # not part of the operator's core run-a-session flow
 │   ├── pod_infer.py               # RunPod TrackNet inference driver -- calls the model via
 │   │                                # a tf.function direct call, not .predict() (ADR-065)
+│   ├── footage_rules.py           # usable(): excludes unusable PGC footage (frame-dropping
+│   │                                # Tapo court-1 camera, coaching/drill sessions) from any
+│   │                                # new eval/labelling/serve sample -- ADR-155/158
 │   ├── check_drift.py              # camera-drift CLI -- run before calibrating new footage
 │   ├── fp_anatomy.py                # false-positive mechanism classifier + plots
 │   ├── review_gaps.py                # gap-candidate review/merge tool

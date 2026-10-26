@@ -101,6 +101,63 @@ def cluster_crossings(times, gap_sec, min_crossings=2):
             for c in clusters if len(c) >= min_crossings]
 
 
+def cluster_crossings_keepalive(times, keepalive, gap_sec, min_crossings=2):
+    """cluster_crossings, plus keepalive event times that hold a burst open
+    across a gap without counting as crossings themselves -- start, end and
+    the crossing count still come from crossings only, and a burst of
+    keepalives alone never becomes a rally. Kept separate from
+    cluster_crossings so the default (flag-off) path runs unchanged code.
+    See occlusion_keepalive_times."""
+    events = sorted([(t, True) for t in times] + [(t, False) for t in keepalive])
+    if not events:
+        return []
+    clusters = [[events[0]]]
+    for e in events[1:]:
+        if e[0] - clusters[-1][-1][0] <= gap_sec:
+            clusters[-1].append(e)
+        else:
+            clusters.append([e])
+    out = []
+    for c in clusters:
+        cr = [t for t, is_crossing in c if is_crossing]
+        if len(cr) >= min_crossings:
+            out.append({"start": cr[0], "end": cr[-1], "crossings": len(cr)})
+    return out
+
+
+# Occlusion bridge (EXPERIMENTS.md 2026-10-26). Near-net zone at 1920 px wide;
+# scale by frame width for other resolutions.
+OCCLUSION_NEAR_NET_PX_1920 = 80.0
+
+
+def occlusion_keepalive_times(tracked, net_y, near_px, min_gap=0.2, max_gap=2.0,
+                              prev_window=0.1):
+    """Times where the ball most likely crossed to the near side unseen.
+
+    During dinks the near-side ball is hidden by the near players at the
+    kitchen, so the tracked side never flips, no crossing is counted, and the
+    3s gap splits the rally (often cutting the serve off). The signature: the
+    ball is last seen on the far side within near_px of the net line and
+    moving toward it, is unseen for min_gap..max_gap seconds, then reappears
+    on the far side. Returns the reappearance times, for cluster_crossings'
+    keepalive. tracked = [(time, y or None)]; far side is y < net_y.
+
+    prev_window: how far back (s) the previous sighting may be for the
+    "moving toward the net" check (3 frames at 30 fps).
+    """
+    seen = [(t, y) for t, y in tracked if y is not None]
+    out = []
+    for i in range(1, len(seen) - 1):
+        (tp, yp), (ta, ya), (tb, yb) = seen[i - 1], seen[i], seen[i + 1]
+        if not (min_gap <= tb - ta <= max_gap):
+            continue
+        if ta - tp > prev_window + 1e-6:   # 3 frames at 30 fps is 0.1 s up to float error
+            continue
+        if ya < net_y and net_y - ya <= near_px and ya > yp and yb < net_y:
+            out.append(tb)
+    return out
+
+
 def adaptive_gap_sec(times, min_crossings=2, *, base_gap=3.0, k=0.10,
                       gap_min=2.0, gap_max=5.0, ref_duration=10.0):
     """Derive a per-video gap_sec from the video's own observed rally length,
