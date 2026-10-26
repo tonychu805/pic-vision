@@ -277,7 +277,7 @@ def test_the_shared_files_the_pod_reads_are_covered_by_its_read_credential():
     # that moves to a new prefix is not a test failure anywhere -- it is a
     # job that 403s minutes into a billed GPU run. This is the tripwire.
     granted = ("pipeline/", "weights/")
-    for name in ("FFMPEG_R2_KEY", "FFPROBE_R2_KEY", "WEIGHTS_R2_KEY"):
+    for name in ("FFMPEG_R2_KEY", "FFPROBE_R2_KEY", "WEIGHTS_R2_KEY", "POSE_R2_KEY"):
         key = getattr(pod_driver, name)
         assert key.startswith(granted), f"{name}={key!r} is outside the read credential's prefixes {granted}"
 

@@ -116,6 +116,13 @@ OCCLUSION_BRIDGE = True
 
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
+# Badges (src/badges.py) need player pose: yolov8x-pose as TorchScript,
+# exported inside this pod's own image (torch 2.1) at 736x1280 -- the image
+# has torch but not ultralytics, so src/pose.py does the rest. Off until it
+# has run on pipeline staging (the staging branch turns it on).
+BADGES = False
+POSE_R2_KEY = "weights/yolov8x-pose-736x1280-torch21.torchscript"
+POSE_LOCAL = "/workspace/yolov8x-pose-736x1280.torchscript"
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
@@ -526,6 +533,56 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
+def find_badges(s3_in, video, segments, calib):
+    """Pose the rallies and assess badges; None if anything goes wrong.
+
+    Best effort on purpose: a badge is a bonus on top of the reel, so a
+    failure here (model download, GPU memory, a pose edge case) is logged
+    and the job carries on with plain ranked clips.
+    """
+    try:
+        import numpy as np
+        from src.badges import assess
+        from src.pose import PoseModel, pose_frames, pose_video
+        started = time.time()
+        if not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration",
+             "-of", "json", video], capture_output=True, text=True, check=True)
+        info = json.loads(probe.stdout)
+        w, h = info["streams"][0]["width"], info["streams"][0]["height"]
+        n_frames = int(float(info["format"]["duration"]) * 30)
+        # The homography maps calibration-resolution pixels to court feet;
+        # this video may be smaller (a 720p sub-stream against a 1080p
+        # calibration), so scale the image side first.
+        cw, ch = calib.get("calibration_resolution") or (w, h)
+        homography = np.array(calib["homography"]) @ np.diag([cw / w, ch / h, 1.0])
+        frames = pose_frames(segments, n_frames)
+
+        _check_cancel("badges", f"finding badges: posing {len(frames)} rally frames...")
+        last = [time.time()]
+
+        def progress(done, total):
+            # Also the heartbeat through a long pose pass, throttled like
+            # inference's: every batch would be a console call every ~0.4 s.
+            if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
+                last[0] = time.time()
+                _check_cancel("badges", f"finding badges: posed {done}/{total} rally frames...")
+
+        poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
+        result = assess(poses, segments, w, h)
+        result["pose_frames"] = len(frames)
+        result["pose_sec"] = round(time.time() - started, 1)
+        _log(f"badges: {sorted(result['awarded'])} from {len(frames)} posed frames in {result['pose_sec']}s")
+        return result
+    except Cancelled:
+        raise
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"badges skipped: {type(e).__name__}: {e}")
+        return None
+
+
 def run():
     s3_in, s3_out = _r2_clients()
     # Fresh per job: a pod kept for a session's next part (ADR-130) must
@@ -661,10 +718,13 @@ def run():
     # real outcome, far likelier now that a session is sent in 10-20 minute
     # parts (ADR-127): finish with no reels instead of crashing the job
     # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
-    if not detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]:
+    segments = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]
+    if not segments:
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
+    badges = find_badges(s3_in, proxy_video, segments, calib) if BADGES else None
+    _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
     full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
@@ -674,9 +734,10 @@ def run():
                                      BURST_TARGET_SEC, session_id, logo_path=logo_path,
                                      occlusion_bridge=OCCLUSION_BRIDGE)
     has_burst = burst_result["chronological"] is not None
+    awarded = {b: c["start"] for b, c in badges["awarded"].items()} if badges else None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
                                     session_id, n=TOP_RALLIES_N, logo_path=logo_path,
-                                    occlusion_bridge=OCCLUSION_BRIDGE)
+                                    occlusion_bridge=OCCLUSION_BRIDGE, badges=awarded)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
 
@@ -714,6 +775,9 @@ def run():
             # same stretch in its local high-res recording of this part
             # (dual-stream plan Stage 4/5).
             "start": clip["start"], "end": clip["end"],
+            # Badge name, or absent. The console ignores it until it has a
+            # column for it; the whole assessment is in result["badges"].
+            **({"badge": clip["badge"]} if clip.get("badge") else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
@@ -729,6 +793,10 @@ def run():
     report_final_job_status(done=True, stage="done", message="done", progress=None, result={
         "share_id": os.environ.get("SHARE_ID"), "reel_bucket": OUTPUT_BUCKET,
         "reels": reels, "stats": stats,
+        # Per-part: a session's badges are settled across all its parts,
+        # so every candidate (with its margin past the bar) travels, not
+        # just this part's winners.
+        **({"badges": badges} if badges else {}),
     })
     _log(f"done: {reels}")
 
