@@ -109,6 +109,11 @@ from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
 WORKDIR = "/workspace/job"
+# Occlusion bridge (ADR-160): hold rallies together across near-kitchen ball
+# occlusion. On for every reel the pod cuts, so all three agree on what a
+# rally is. Turning this on is the production change under review.
+OCCLUSION_BRIDGE = True
+
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
@@ -656,7 +661,7 @@ def run():
     # real outcome, far likelier now that a session is sent in 10-20 minute
     # parts (ADR-127): finish with no reels instead of crashing the job
     # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
-    if not detect_candidates(proxy_video, csv_path, calib_path)["segments"]:
+    if not detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]:
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
@@ -664,12 +669,14 @@ def run():
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
     full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
                               target_sec, session_id, weights=WEIGHTS, include_chronological=False,
-                              logo_path=logo_path)
+                              logo_path=logo_path, occlusion_bridge=OCCLUSION_BRIDGE)
     burst_result = build_burst_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "burst"),
-                                     BURST_TARGET_SEC, session_id, logo_path=logo_path)
+                                     BURST_TARGET_SEC, session_id, logo_path=logo_path,
+                                     occlusion_bridge=OCCLUSION_BRIDGE)
     has_burst = burst_result["chronological"] is not None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
-                                    session_id, n=TOP_RALLIES_N, logo_path=logo_path)
+                                    session_id, n=TOP_RALLIES_N, logo_path=logo_path,
+                                    occlusion_bridge=OCCLUSION_BRIDGE)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
 

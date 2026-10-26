@@ -28,7 +28,7 @@ DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       pad_sec=PAD_SEC, logo_path=None):
+                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -44,7 +44,7 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     the order this function's callers want. stats is
     {"n_candidates", "n_chosen"}.
     """
-    cand = detect_candidates(video, csv, calib_path)
+    cand = detect_candidates(video, csv, calib_path, occlusion_bridge=occlusion_bridge)
     segments, times_crossed, speeds = cand["segments"], cand["times_crossed"], cand["speeds"]
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
 
