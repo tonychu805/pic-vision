@@ -3100,3 +3100,25 @@ range 32.0-64.4), so it would rank in the top half of the reel. Crossing gaps ar
 **Conclusion.** Rejected: the capped re-attach. Root cause of the r01-type junk: tosses plus net-line jitter pad
 the crossing count. Candidate guardrails, untested: the serve/depth gate (built for warmup misses) on r01, and
 crossing *cadence*, since tosses run ~2-2.6s per crossing and play runs ~0.6-1.5s.
+
+### 2026-10-26 — Serve/depth gate on eda r01: does NOT catch it; drops 3 real rallies, exactly the mid-rally starts
+
+Ran `scripts/tune_web.compute()` with and without `serve_gate` (net 22 ft, min depth 18 ft, window [start-1s,
+start+3s]) on eda301d9 (`cache/pgc_fieldtest/7358ef3f-...csv`, the same footage and frame count as
+`cache/scale/eda301d9_...session-000`; pose `cache/arm_swing/poses_pgc_7358ef3f.json`). Rally numbering
+matches the playback review. Scratchpad: `gate_r01.py`.
+
+- **r01 (toss junk) is kept:** depth 25.7 ft. Someone stands deep while the ball is fed, so the gate can't see it.
+- **Dropped: r13 (17.1), r17 (13.4), r19 (16.7).** Playback (previous entry) confirmed all three are real rallies
+  where today's clip starts **mid-rally**, with players already at the kitchen. So on this session the gate
+  catches 0 junk and drops 3 real rallies. Every other rally reads 23-28 ft (r02 is borderline at 18.8).
+- **Lead (in-sample, n=17, not validated):** low depth at the detected start marks a *late* start. Re-attaching
+  only when depth < 18 ft would have changed exactly r13/r17/r19, all three judged "new better", with no
+  "worse". It misses r04 (23.5 ft, also judged better). The rule was picked after seeing the verdicts, so it
+  needs fresh playback on other sessions before anyone believes it.
+- The `c199` pose-paired CSV (`34fab44c`) is a different recording from the `c199` session-002 used in the
+  review, so it is not comparable and is skipped here.
+
+**Conclusion.** The depth gate is not a guardrail against toss/feeding junk. Run as a rally filter here, it
+removes real rallies whose start was detected late. Its useful reading may be the inverse: a flag that a clip's
+start is late.
