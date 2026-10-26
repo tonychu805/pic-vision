@@ -52,6 +52,21 @@ Never commit on `main` itself.
 
 ## Delivery and release gates
 
+**Merging to `main` here is a production deploy, and anything production-level goes
+through staging first.** On every push to `main`, `.github/workflows/pod-deps.yml`
+uploads `src/` + `scripts/` to the `pic-vision-pod-code` R2 bucket and repoints
+`latest.json`. The console (`lib/podCode.ts`) hands that code to every new reel pod.
+Pipeline staging (a staging pod-code pointer, orchestrator and R2) does **not exist
+yet**; it was deferred as tier-2. Until it does:
+- Before proposing a merge, state what it ships and that there is no staging step.
+- Don't open or propose a PR to `main` for a change that reaches the pod (anything in
+  `cloud_pipeline/pod_deps.py`'s file list) without the operator's explicit go-ahead.
+- "Flag off" or "behaviour unchanged" lowers risk; it does not replace staging.
+- Offer instead: hold; local-only use; or `scripts/rank_to_staging.py` (selection
+  into the staging DB) plus a recorded skip reason the operator approves.
+
+The cloud console has a real staging flow; follow its `CLAUDE.md`.
+
 `main` is the integration branch, not a scratchpad. Put a code, configuration,
 database, workflow, or documentation change on a short-lived branch and merge it
 through a PR, including when the author and reviewer are the same person. The PR
