@@ -28,7 +28,7 @@ DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       pad_sec=PAD_SEC, logo_path=None):
+                       pad_sec=PAD_SEC, logo_path=None, badges=None):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -43,6 +43,12 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     (start-time) order for its own manifest.json bookkeeping, which is not
     the order this function's callers want. stats is
     {"n_candidates", "n_chosen"}.
+
+    badges: {badge name: rally start (seconds)} from src/badges.py. A badged
+    rally always gets its own clip, carrying a 'badge' field, even when its
+    score is outside the top `n`; the best-scoring other rallies fill the
+    remaining places, so there are still at most `n` clips (operator,
+    2026-10-27: badged highlights first, then the ranked rest, up to 10).
     """
     cand = detect_candidates(video, csv, calib_path)
     segments, times_crossed, speeds = cand["segments"], cand["times_crossed"], cand["speeds"]
@@ -54,8 +60,12 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
         print("calibration has no net end points: scoring on length and pace only",
               file=sys.stderr)
     ranked = score_segments(segments, times_crossed, speeds, net_px)
-    chosen = ranked[:n]
-    print(f"chose top {len(chosen)}/{len(ranked)} rallies by score (n={n})",
+    by_start = {round(s, 3): b for b, s in (badges or {}).items()}
+    badged = [dict(seg, badge=by_start[round(seg["start"], 3)]) for seg in ranked
+              if round(seg["start"], 3) in by_start]
+    others = [seg for seg in ranked if round(seg["start"], 3) not in by_start]
+    chosen = (badged + others)[:max(n, len(badged))]
+    print(f"chose {len(chosen)}/{len(ranked)} rallies ({len(badged)} badged, rest by score; n={n})",
           file=sys.stderr)
 
     manifest = cut_clips(video, chosen, out_dir, court_id=session_id,
