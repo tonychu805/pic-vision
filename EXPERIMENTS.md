@@ -3263,3 +3263,29 @@ serves recovered.
 
 **Conclusion.** "Ball moving" is too broad a keep-alive signal. Untested next step: bridge only the occlusion signature,
 where the ball is last seen moving toward the net and reappears on the far side within ~2 s.
+
+### 2026-10-26 — Narrow occlusion bridge: no new merges, 2 of 5 cut-off serves recovered (misses the recovery bar by one)
+
+Keep-alive only on the occlusion signature: the ball was last seen on the far side within 80 px of the net line,
+moving toward the net, then is unseen for 0.2-2.0 s, then reappears on the far side. Constants were set before
+running. Scratchpad `anchor/bridge2.py`. Signatures found: 22 on eda, 8 on c199.
+
+| | today | narrow bridge |
+|---|---|---|
+| opens 0.5-3 s before own serve | 10/18 | 10/18 |
+| serve cut off | 5 | **3** |
+| more than 3 s of lead-in | 3 | 5 |
+| extra labeled points merged | 2 | **2** |
+
+- Changed starts: r13 331 s (-1.9 → +2.9 s, serve recovered), r17 416 s (-7.1 → +3.6 s, serve recovered), eda 242 s
+  (+0.5 → +3.6 s, the serve was barely in and is now comfortably in). No other point moved, and there were no new merges.
+- Still cut off: eda 283 s (-8.8), r02 98 s (+0.3), r19 460 s (-0.7). Their gaps don't show the signature.
+- **Bar:** merges ≤ today, pass. Recover ≥3 of 5 cut-offs, **fail (2/5)**.
+- Metric caveat found here: with today's 3 s pad, a clip starting exactly on the serve crossing (~0.5 s after contact)
+  scores lead ≈3.5 s and counts as "long" under the 0.5-3.0 s window. Both +3.6 s cases are that. Separately,
+  today's good starts sit at leads of 2.2-2.8 s, i.e. the first crossing is stamped ~0.2-0.8 s *before* the
+  labeled serve contact. That is physically odd and suggests a hit-label time offset or a toss crossing just before
+  the serve. Unresolved; it does not change which clips recovered.
+
+**Conclusion.** The narrow bridge is safe on this data (no merges, nothing worse), but it only fixes 2-3 clips.
+In-sample only; a fresh session (a96cbae3) with playback is needed before any ship decision.
