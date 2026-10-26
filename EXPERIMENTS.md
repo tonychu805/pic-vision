@@ -3064,3 +3064,39 @@ off the serve. Measured with production `rally_segments_from_predictions` (shipp
 **Conclusion.** Most missed starts are a clustering problem, not a detection problem: the serve is seen and then
 discarded. A capped re-attach (~10-12s) fixes most of them using only the ball track — no pose model, no extra GPU.
 Next: before/after playback review of the moved clips; if it holds, a `src/` change behind a flag with tests.
+
+### 2026-10-26 — Re-attach playback review: REJECTED (4 better / 1 same / 12 worse or wrong); why junk counts as a rally
+
+Operator watched all 17 before/after pairs (cap-12s re-attach vs today; clips cut at detected start + 10s, so this
+judges openings). Scratchpad: `render_start_review.py`, `why_rally.py`, `why_rally2.py`.
+
+| verdict | n | clips |
+|---|---|---|
+| new start better (catches the real serve) | 4 | eda r04, r13, r17, r19 (r17/r19: today opened mid-rally) |
+| same | 1 | eda r09 |
+| today better: the re-attached piece is a toss or a failed serve | 7 | eda r02, r05, r07, r10, r15; c199 r02, r03 |
+| new clip swallows a separate earlier point/rally | 4 | eda r11, r14, r21; c199 r01 |
+| not a rally at all (today too) | 1 | eda r01 |
+
+- **Why the numbers lied:** the earlier table scored "a labeled serve falls inside the clip". The fragments being
+  re-attached are mostly ball-feeding tosses, failed serves, or the *previous* point, and those can contain a
+  labeled serve too, just not *this* rally's. Inclusion is not the same as opening on the right serve. A
+  start-quality metric must check that the clip opens on the serve that begins the point it contains.
+- **The miss is real** (r13/r17/r19 opened mid-rally today), but a ball-track fragment can't tell "this point's
+  opening" from "a toss / the previous point". Re-attach is not shipped.
+
+**Why eda r01 (48.9-62.0s) passes as a rally.** 11 crossings, score **48.9**, *above* the session median (46.4,
+range 32.0-64.4), so it would rank in the top half of the reel. Crossing gaps are
+[2.0, 2.6, 0.63, 2.63, 0.2, 0.23, 2.3, 0.33, 0.97, 1.23] s. Two things inflate it:
+1. **Net-line jitter:** crossing pairs 0.1-0.35s apart with the ball only 20-35px past the net line. No shot
+   crosses and comes back that fast. The same pattern appears in r07 (6 → 4 after dropping such pairs) and in
+   `c199` 34.5s (11 → 9).
+2. **Tosses genuinely cross the net:** after removing jitter, r01 still has 7 slow (~2-2.6s) crossings, i.e. the
+   ball being fed back and forth. Crossing count alone cannot separate this from play.
+- Jitter de-bounce (drop a cross/re-cross pair < 0.4s) checked against hit labels in the labeled windows
+  (eda 120-300s, c199 0-120s): it drops r07 (3-hit point, fine) but also eda 244.1s (a real 7-hit rally, 7 → 5)
+  and does not drop r01. **Not a fix on its own.**
+
+**Conclusion.** Rejected: the capped re-attach. Root cause of the r01-type junk: tosses plus net-line jitter pad
+the crossing count. Candidate guardrails, untested: the serve/depth gate (built for warmup misses) on r01, and
+crossing *cadence*, since tosses run ~2-2.6s per crossing and play runs ~0.6-1.5s.
