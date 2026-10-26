@@ -2948,3 +2948,59 @@ contact** (±3 frames, 45px). Scratchpad: `hit_vis_infer.py`, `hit_vis_score.py`
 realistically needs reopening-condition (b): a learned classifier on pose+ball+hands over the
 existing ~100 labels + more — a model project, not a heuristic. "Hard shots only" (ADR-157) is
 what's reachable today. See [[project_paddle_hit_finder]], [[project_detection_downscaling_bottleneck]].
+
+### 2026-10-26 — Hit capture end-to-end P/R vs "every contact" (test A): REPRODUCED the frozen eval = 61% recall / 39% precision
+
+Reproduced the pre-registered ADR-157 evaluator (`scripts/eval_swing_ball_hits.py`, recovered from
+git commit 8eaa84b with its deps) in `--dev` on the eda301d9 chunk3c clip (min1-2, 44 hand-labeled
+contacts). The real gate: swings = wrist speed >= **0.06 box-heights/frame** (size-relative, ~500 px/s
+near / ~110 px/s far), **kept** when the tile-tracked ball is in play (>=3 pts within +-15f) and not
+clearly outside the player's box; a ball not seen near the swing does NOT veto. Ball track =
+`cache/bounce_pilot/chunk3c_eda301d9_0538_s000.tile.csv` (the far-tile track). Correct calib
+(`cache/pgc_fieldtest/7358ef3f...calib.json`, the eda session).
+
+| | recall | precision | near-rec | far-rec |
+|---|---|---|---|---|
+| min1 | 15/22 | 15/37 (41%) | 7/11 | 8/11 |
+| min2 | 12/22 | 12/33 (36%) | 4/9 | 8/13 |
+| **min1-2** | **27/44 (61%)** | **27/70 (39%)** | **11/20 (55%)** | **16/24 (67%)** |
+
+Matches the pre-registered committed figure (27/44, 39%). Candidate generator: good recall,
+moderate precision — not a shot counter (operator's 2026-10-19 not-production-ready call stands on
+the 39% precision). Far recall 67% already uses the far-tile ball track.
+
+**CORRECTION of an earlier same-day draft of this entry.** A first reconstruction hand-rolled the
+gate with an ABSOLUTE 1600 px/s swing threshold + a mandatory ball-within-60px-of-wrist veto and
+reported 16% recall / a "25% ceiling" / "only 36% of contacts have a swing" / "far tile adds ~1
+hit." That was WRONG — the absolute threshold is ~3x too high near and ~15x too high far, and the
+veto is not in the real gate. The size-relative gate catches far+soft swings the absolute one
+misses, so the "most contacts are soft / physics wall at 25%" framing does not hold; the real
+recall is 61% (far 67%). The honest limit is PRECISION (39%, candidate-not-counter), not recall.
+For the narrowed scope (rally-level intensity ranking signal), 61%/39% is usable. See
+[[project_paddle_hit_finder]].
+
+### 2026-10-26 — Serve side-assignment is a measured hard-wall (~62%), not a quick heuristic fix
+
+GT serves derived free from the hit labels (first hit of each rally cluster, >3s gap; side by
+image-y, calib-free) = 26 serves (15 far, 11 near) across eda chunk3c + c199 glare. Scored 4
+server-ID rules using the pose caches' correct cached court field (sidesteps the pgc_court_b calib,
+which — separate finding — does NOT fit the eda301d9 clip: maps on-court points off-court).
+Scratchpad: `serveGT2.py`.
+
+| rule | ALL | FAR | NEAR |
+|---|---|---|---|
+| fastest swing (current) | 62% | 67% | 55% |
+| earliest swing | 58% | 53% | 64% |
+| deepest player (position) | 62% | 73% | 45% |
+| ball-origin (track direction) | 35% | 33% | 36% |
+
+- **Base rate is 58%** (always-guess-far). Every rule is barely above it — side-assignment does NOT
+  work with simple signals, and it's not a threshold-tuning problem (4 different signals all ~55-73%).
+- **Structural reason (same wall ×3):** at a serve both players are deep (position symmetric), the far
+  serve swing is compression-crushed (swing grabs the near returner), and the far serve ball is
+  invisible (ball-origin unavailable, resolves only 14/26).
+
+**Conclusion / redirect.** Serve *side* is a hard problem here, not a quick win — park it unless a
+feature needs serve side. The serve **gate** (rally-precision guardrail, drops warmup FPs) only needs
+serve *detection* (serve-happened yes/no), where side is irrelevant — redirect far-serve effort there.
+See [[project_far_serve_pose_coverage]].
