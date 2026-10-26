@@ -3593,3 +3593,9 @@ Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court 
 - **Nearest recovers about half the gap** with few extra rallies. Sharpen adds spurious rallies.
 - About 4/13 rallies are still lost, so 720p also loses real information.
 - Before any change: (1) a real camera sub-stream recording; (2) a no-regression check of nearest on the labeled videos; (3) `pod_infer` behind a setting, through pipeline staging.
+
+**Staging parity (same day): the local harness reproduces the staging pipeline.** A 5-min brickwall-SEMI window was made into a 720p, 2 Mbps sub-stream copy, then run as a real staging reel job (staging code d6f2fcf, bridge on; job 1127d709, RTX 2000 Ada pod) and locally with the pod's exact steps.
+- Staging: 11 rally candidates, 10 top-rally clips.
+- Local, re-encoded with **h264_nvenc p4 cq20** (the pod's encoder): 11 rallies, and all 10 staging clips match a local rally within 1 s (whole-second rounding). The 11th local rally is simply not in the top 10.
+- With the local re-encode on libx264 crf20 instead, two rally starts shifted by 3-4.5 s, so the encoder matters at boundaries.
+- The harness now uses NVENC. Local harness results can stand in for staging for experiments; staging remains the final check before production.
