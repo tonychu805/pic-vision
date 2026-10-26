@@ -3313,3 +3313,33 @@ and Tapo/drill sessions via `footage_rules.usable`. The rule changed 12 rallies 
 **Conclusion.** On held-out footage the narrow occlusion bridge is net positive: +6 real points, 4 serves recovered,
 1 good merge, and 1 bad move (a 12.7 s jump that pulled in a previous point). Candidate for a `src/` change behind a
 flag, with a guard against long backward jumps.
+
+### 2026-10-26 — Narrow occlusion bridge on the hand-labeled non-PGC videos (IoU≥0.5)
+
+The `bridge2.py` rule, unchanged except that the 80 px near-net zone is scaled by frame height (80 px at 1080p,
+53 px at 720p; decided before running). Scored with `eval.harness.match_intervals` at IoU≥0.5 against full label
+files. IMG_7743 uses the pre-bump half (0-2900 s, pre-bump calib); it is the locked eval set and was only checked,
+never tuned on. Scratchpad `anchor/bridge_labeled.py`.
+
+| video | version | rallies | precision | recall | quality-1 recall | median start error |
+|---|---|---|---|---|---|---|
+| brickwall_30fps | today | 44 | 0.70 | 0.63 | 12/13 | 1.52 s |
+| | bridge | 43 | **0.86** | **0.76** | **13/13** | 1.44 s |
+| brickwall-SEMI | today | 31 | 0.77 | 0.63 | 12/18 | 1.50 s |
+| | bridge | 32 | **0.84** | **0.71** | **13/18** | 1.61 s |
+| pb_draft_cup | today | 22 | 0.86 | 0.56 | 7/10 | 1.50 s |
+| | bridge | 22 | 0.82 | 0.53 | 6/10 | 1.45 s |
+| IMG_7744 | today | 23 | 0.65 | 0.20 | 2/3 | 1.17 s |
+| | bridge | 28 | 0.61 | 0.23 | 2/3 | 1.08 s |
+| IMG_7743 eval (pre-bump) | today | 69 | 0.45 | 0.74 | 7/10 | 1.06 s |
+| | bridge | 71 | 0.46 | **0.79** | **9/10** | 1.16 s |
+
+- Large gains on both brickwall videos (doubles tournament, same venue as each other, different from PGC): precision
+  +0.07 to +0.16, recall +0.08 to +0.13, quality-1 recall +1 each.
+- Eval set: recall +0.05, quality-1 recall 7/10 → 9/10, precision flat.
+- pb_draft_cup (singles): small loss (-0.04 precision, -0.03 recall, quality-1 7 → 6). IMG_7744: +5 rallies,
+  precision -0.04, recall +0.03.
+- Median start error is unchanged (about ±0.1 s), so the gain is whole rallies held together, not sharper starts.
+
+**Conclusion.** The bridge generalizes beyond PGC: clear wins on brickwall ×2 and the eval set, small losses on
+pb_draft_cup and IMG_7744 precision. The pb_draft_cup quality-1 loss is not yet diagnosed (playback needed).
