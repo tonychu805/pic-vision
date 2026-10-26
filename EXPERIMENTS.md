@@ -3222,3 +3222,23 @@ bystanders). Pose sees a median of 5-7 people per frame (max 11). The other 591/
 (~1.6/s), so the swing signal stays non-specific even with the filter. Read Stage 1 as "this implementation
 failed", not "serve anchoring cannot work". Unchecked suspicion: pose identity jumps (a wrist "moving" because
 a different person was matched between frames) may inflate speeds further.
+
+### 2026-10-26 — Why serves split off: the near-side ball is hidden by players at the kitchen (playback-confirmed)
+
+Chart + overlay playback of eda r17 (414-432 s) and r13 (329-343 s), with tracked ball, image net line and counted
+crossings drawn (scratchpad `anchor/timeline.py`, `anchor/overlay_clips.py`; served at `:8451/timeline/`). In both,
+the ball reads FAR for long stretches mid-point (r17 418-426 s, r13 332-336 s). It is a real moving ball: x
+830-1110 px, y 410-500 px against a net line at 512 px. It is not a static phantom.
+
+- **Operator playback verdict:** the ball does come back to the near side, about 3 times in r17 and twice in r13
+  (hovering in the near kitchen). It is **occluded by the near players standing at the kitchen**, so it is never
+  detected there.
+- **Effect:** the tracked side never flips, so no crossings are counted. The 3 s gap expires and the serve's crossings
+  form a small group that min_crossings=6 drops. This is the mechanism behind the cut-off clip starts (r13, r17).
+- Checked in passing: the phantom/scenery defences in place are `court_wedge` and `track_ball` (teleport rejection,
+  2-candidate re-acquisition). The stationary-segment filter (`track_ball(min_seg_span=...)`) and the size/confidence
+  floors exist but are off everywhere. None of them is the cause here.
+
+**Conclusion.** Cut-off starts come from near-kitchen occlusion during dinks, not from the image-net-line geometry.
+A fix should treat "ball still in play" (seen moving on the far side, disappearing near the net and reappearing)
+as keeping the rally alive, rather than requiring counted crossings.
