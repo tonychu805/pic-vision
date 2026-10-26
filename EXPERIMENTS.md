@@ -3577,3 +3577,19 @@ Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court 
 - **Badge consequence:** the same session's badges at 720p are entirely different rallies than at 1080p, because rally detection changed.
 
 **Conclusion.** Production detection on the 720p sub-stream may be finding far fewer rallies than the 1080p field test. **Needs a real sub-stream recording before the 2026-11-01 Pickleday test.** If confirmed, options include sending a 1080p sub-stream (camera allows 1080p only at 15 fps on these units; ADR-131 floor is 25 fps) or changing pod_infer's resize.
+
+**Follow-up (same day): the shrink step in `pod_infer.py` explains part of the 720p loss.** Same 720p 2 Mbps copy, with only the 1280×720 → 512×288 resize in a scratch copy of `pod_infer.py` changed (scratchpad `resize/`). Rallies compared against the local 1080p control (13).
+
+| resize | detections | rallies | 1080p rallies overlapped | rallies not at 1080p |
+|---|---|---|---|---|
+| linear (today) | 17.7% | 6 | 4/13 | 3 |
+| **nearest** | **21.8%** | 11 | **8/13** | 2 |
+| sharpen (unsharp 1.8/-0.8) + linear | 19.9% | 12 | 6/13 | 7 |
+| cubic up to 1920×1080, then linear | 18.6% | 8 | — | — |
+| area | 15.8% | 4 | — | — |
+| 1080p linear (control) | 25.6% | 12 | — | — |
+
+- The ordering confirms the softening mechanism: more smoothing hurts, none helps.
+- **Nearest recovers about half the gap** with few extra rallies. Sharpen adds spurious rallies.
+- About 4/13 rallies are still lost, so 720p also loses real information.
+- Before any change: (1) a real camera sub-stream recording; (2) a no-regression check of nearest on the labeled videos; (3) `pod_infer` behind a setting, through pipeline staging.
