@@ -3242,3 +3242,24 @@ the ball reads FAR for long stretches mid-point (r17 418-426 s, r13 332-336 s). 
 **Conclusion.** Cut-off starts come from near-kitchen occlusion during dinks, not from the image-net-line geometry.
 A fix should treat "ball still in play" (seen moving on the far side, disappearing near the net and reappearing)
 as keeping the rally alive, rather than requiring counted crossings.
+
+### 2026-10-26 — Bridge rally gaps with "ball seen moving": recovers cut-off serves but merges points (fails bar)
+
+The 3 s gap is measured from the last *moving* tracked-ball frame (≥3 px/frame, within 2 frames) as well as from
+crossings; rally = ≥6 crossings; start = first crossing. eda + c199, same own-serve ground truth as Stage 1.
+Scratchpad `anchor/bridge.py`. Bar (set before running): merged points ≤ today, and ≥ half of today's cut-off
+serves recovered.
+
+| | today | bridged |
+|---|---|---|
+| opens 0.5-3 s before own serve | 10/18 | 6/16 |
+| serve cut off | 5 | **1** |
+| more than 3 s of lead-in | 3 | 9 |
+| extra labeled points merged into a rally | 2 | **9** |
+
+- It does what occlusion bridging should: r13 (+2.9 s), r17 (+3.6 s) and eda 283 s (+2.3 s) now keep their serve.
+- But between-point ball movement (tosses, bounces, pickups) keeps clusters alive too, so neighbouring points merge
+  and clips open long before the serve. **Fails the bar** (merges 9 > 2).
+
+**Conclusion.** "Ball moving" is too broad a keep-alive signal. Untested next step: bridge only the occlusion signature,
+where the ball is last seen moving toward the net and reappears on the far side within ~2 s.
