@@ -1,6 +1,6 @@
 from src.ball import (count_crossings, net_image_y, crossing_times,
                       cluster_crossings, adaptive_gap_sec, ball_box_ok, net_line_y,
-                      occlusion_keepalive_times)
+                      occlusion_keepalive_times, cluster_crossings_keepalive)
 
 
 def test_net_line_y_prefers_marked_net():
@@ -139,22 +139,21 @@ def test_cluster_crossings_keepalive_bridges_gap_without_counting():
     # two 3-crossing bursts 5s apart; a keepalive in the gap joins them into one 6-crossing rally
     times = [10.0, 10.5, 11.0, 16.0, 16.5, 17.0]
     assert cluster_crossings(times, gap_sec=3.0, min_crossings=6) == []
-    segs = cluster_crossings(times, gap_sec=3.0, min_crossings=6, keepalive=[13.5])
+    segs = cluster_crossings_keepalive(times, [13.5], gap_sec=3.0, min_crossings=6)
     assert segs == [{"start": 10.0, "end": 17.0, "crossings": 6}]
 
 
 def test_cluster_crossings_keepalive_never_moves_bounds_or_forms_rally_alone():
     times = [10.0, 10.5, 11.0, 11.5, 12.0, 12.5]
-    segs = cluster_crossings(times, gap_sec=3.0, min_crossings=6, keepalive=[8.0, 14.0])
+    segs = cluster_crossings_keepalive(times, [8.0, 14.0], gap_sec=3.0, min_crossings=6)
     assert segs == [{"start": 10.0, "end": 12.5, "crossings": 6}]   # bounds from crossings only
-    assert cluster_crossings([], gap_sec=3.0, min_crossings=1, keepalive=[1.0, 2.0]) == []
+    assert cluster_crossings_keepalive([], [1.0, 2.0], gap_sec=3.0, min_crossings=1) == []
 
 
-def test_cluster_crossings_without_keepalive_is_unchanged():
+def test_cluster_crossings_keepalive_with_none_matches_cluster_crossings():
     times = [1.0, 1.5, 2.0, 10.0, 10.4]
-    assert (cluster_crossings(times, gap_sec=3.0, min_crossings=2)
-            == cluster_crossings(times, gap_sec=3.0, min_crossings=2, keepalive=None)
-            == cluster_crossings(times, gap_sec=3.0, min_crossings=2, keepalive=[]))
+    assert (cluster_crossings_keepalive(times, [], gap_sec=3.0, min_crossings=2)
+            == cluster_crossings(times, gap_sec=3.0, min_crossings=2))
 
 
 def _seen(points, fps=30.0):

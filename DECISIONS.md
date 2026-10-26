@@ -3501,7 +3501,9 @@ Tried and rejected the same day (EXPERIMENTS.md 2026-10-26): re-attaching droppe
 worse), a pose swing-based serve anchor (6/17 vs today 10/17), a broad "ball seen moving" keep-alive (merged points,
 2 → 9), and trimming slow bridged pieces (cost real points to fix a cosmetic toss tail).
 
-**Decision.** Add `src.ball.occlusion_keepalive_times` and a `keepalive` argument to `cluster_crossings`. A keep-alive
+**Decision.** Add `src.ball.occlusion_keepalive_times` and a separate `cluster_crossings_keepalive`. The original
+`cluster_crossings` is untouched, so the flag-off path runs unchanged code. This matters because merging to `main`
+ships pod code to production via `pod-deps.yml`, with no staging step. A keep-alive
 fires when the ball was last seen on the far side within 80 px (at 1920 px wide, scaled by frame width) of the net
 line, moving toward it, is unseen for 0.2-2.0 s, and reappears on the far side. Keep-alives hold a burst open across
 the gap but never count as crossings, never set a rally's start or end, and never form a rally alone. Exposed as

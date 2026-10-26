@@ -10,8 +10,8 @@ segments with its own weights and cuts its own clips.
 """
 import json
 
-from src.ball import (OCCLUSION_NEAR_NET_PX_1920, cluster_crossings, crossing_times,
-                      net_line_y, occlusion_keepalive_times)
+from src.ball import (OCCLUSION_NEAR_NET_PX_1920, cluster_crossings, cluster_crossings_keepalive,
+                      crossing_times, net_line_y, occlusion_keepalive_times)
 from src.calib import court_wedge
 from src.render import probe_fps, probe_width
 from src.select import frame_speeds, spike_threshold
@@ -51,12 +51,13 @@ def detect_candidates(video, csv, calib_path, gap_sec=GAP_SEC, min_crossings=MIN
     ys = track_ball(frames, max_jump=max_jump_for_fps(fps), reset_after=reset_after_for_fps(fps))
     tracked = list(zip(times, ys))
     times_crossed = crossing_times(tracked, net_y=net_y, band=0.0)
-    keepalive = None
     if occlusion_bridge:
         near_px = OCCLUSION_NEAR_NET_PX_1920 * probe_width(video) / 1920
         keepalive = occlusion_keepalive_times(tracked, net_y=net_y, near_px=near_px)
-    segments = cluster_crossings(times_crossed, gap_sec=gap_sec, min_crossings=min_crossings,
-                                 keepalive=keepalive)
+        segments = cluster_crossings_keepalive(times_crossed, keepalive, gap_sec=gap_sec,
+                                               min_crossings=min_crossings)
+    else:
+        segments = cluster_crossings(times_crossed, gap_sec=gap_sec, min_crossings=min_crossings)
 
     raw_points = sorted([(t, x, y) for t, x, y, w, h, c in track if in_court(x, y)],
                         key=lambda p: p[0])

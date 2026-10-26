@@ -84,17 +84,31 @@ def crossing_times(track, net_y, band=0.0):
     return times
 
 
-def cluster_crossings(times, gap_sec, min_crossings=2, keepalive=None):
+def cluster_crossings(times, gap_sec, min_crossings=2):
     """Group dense bursts of crossing times into rally segments. Consecutive
     crossings within gap_sec belong to the same rally; a burst is kept only if
     it has >= min_crossings (an exchange, not a stray). Returns
-    [{start, end, crossings}] — the auto-annotated rallies.
+    [{start, end, crossings}] — the auto-annotated rallies."""
+    if not times:
+        return []
+    clusters = [[times[0]]]
+    for t in times[1:]:
+        if t - clusters[-1][-1] <= gap_sec:
+            clusters[-1].append(t)
+        else:
+            clusters.append([t])
+    return [{"start": c[0], "end": c[-1], "crossings": len(c)}
+            for c in clusters if len(c) >= min_crossings]
 
-    keepalive (optional): extra event times that hold a burst open across a
-    gap without counting as crossings themselves -- start, end and the
-    crossing count still come from crossings only, and a burst of keepalives
-    alone never becomes a rally. See occlusion_keepalive_times."""
-    events = sorted([(t, True) for t in times] + [(t, False) for t in (keepalive or [])])
+
+def cluster_crossings_keepalive(times, keepalive, gap_sec, min_crossings=2):
+    """cluster_crossings, plus keepalive event times that hold a burst open
+    across a gap without counting as crossings themselves -- start, end and
+    the crossing count still come from crossings only, and a burst of
+    keepalives alone never becomes a rally. Kept separate from
+    cluster_crossings so the default (flag-off) path runs unchanged code.
+    See occlusion_keepalive_times."""
+    events = sorted([(t, True) for t in times] + [(t, False) for t in keepalive])
     if not events:
         return []
     clusters = [[events[0]]]
