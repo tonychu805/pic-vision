@@ -3029,3 +3029,38 @@ Audited all serve-review labels before building anything on them. Scratchpad: `c
 **Conclusion.** Far-serve precision on brickwall is ~54-62% (near is solved). The current PGC proposer's far
 precision is unmeasured until project 19 is labeled. Any context-gate (dead-time / follow-on rally) work waits
 for that clean set. See [[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Missed clip starts: the serve is detected, then thrown away (fragmentation); "re-attach the opening" fixes most
+
+Shipped clips run [first crossing - 3s, last crossing + 3s] (`src/render.py`, `pad_sec=3.0`) and sometimes cut
+off the serve. Measured with production `rally_segments_from_predictions` (shipped settings: calib net line +
+`court_wedge`, gap_sec=3.0, min_crossings=6) on full-session preds (`cache/scale/eda301d9_...session-000`,
+`c199a97c_...session-002`) against real serve times = first hit of each hit-label rally (>3s gap). Scratchpad:
+`start_miss.py`, `start_miss2.py`, `start_reattach.py`, `start_reattach_cap.py`.
+
+- **Today, 8/17 serves are inside their clip** with >=0.5s lead-in (17 = serves whose point was detected; 8 more
+  are short points that never form a rally, by design). Missed starts hit **near and far alike** (near 3/6,
+  far 6/11), so the earlier "far serve ball invisible" hypothesis is wrong.
+- **Cause (verified):** in 7/9 misses the serve crossing IS detected (a 1-4 crossing cluster at +0.1..+1.9s),
+  then the ball goes undetected for 3-8s, the 3s split cuts the opening off, and min_crossings=6 drops it. 2/9
+  have no crossings for 5-9s after the serve. Bigger pre-pad barely helps (5s: 9/17, 6s: 10/17, 8s: 12/17);
+  `gap_sec=6` catches some but glues the previous rally on (starts 14-41s early) — consistent with not raising gap_sec.
+- **Re-attach rule:** walk back from each kept rally, attaching dropped fragments (<6 crossings) that end within 8s
+  of the current start and come after the previous kept rally, with a **cap on total move**. Matched against
+  today's rallies (same points every variant):
+
+| rule | in-sample (17) | held-out eda min3 (5) | start moves |
+|---|---|---|---|
+| today | 8 | 3 | — |
+| re-attach, cap 10s | 13 | 4 | <=9.6s |
+| re-attach, cap 12s | 13 | 5 | <=11.1s |
+| re-attach, no cap | 14 | 5 | up to 47s (dead air) |
+
+- Caveats: tiny n (22 points, one clip pair); rule designed on the in-sample points; the cap was chosen after
+  seeing the all-rally move distribution (held-out only scored serves); a first held-out read of "6/6" matched
+  against the extended starts and was flattering — superseded by the fixed-matching table above. Some clips now
+  open with 6-11s before the serve (setup, not dead air). Needs playback review before any ship decision.
+
+**Conclusion.** Most missed starts are a clustering problem, not a detection problem: the serve is seen and then
+discarded. A capped re-attach (~10-12s) fixes most of them using only the ball track — no pose model, no extra GPU.
+Next: before/after playback review of the moved clips; if it holds, a `src/` change behind a flag with tests.
