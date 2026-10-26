@@ -3551,3 +3551,29 @@ All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen W
 **Per 5-min part on the RTX 2000 Ada:** prep ~20 s, ball detection ~45 s, **badges (pose) ~2:15-2:35**, cut + upload ~35 s. Badges are now ~60% of each part.
 
 **Seen.** 29 rallies (replay #9, same 720p files on an A5000: 28). Kitchen War is the same rally as #8-#9 (p3 215-232). Killer Shot moved again: p2 23-46 here, p4 268-290 in #9, p1 120-132 at 1080p in #8. So it is not stable across GPU types even on identical input (float16 + XLA arithmetic differs by card); worth checking how close the Killer Shot candidates' measures are.
+
+### 2026-10-27 — Production-faithful harness: 720p input loses ~30% of ball detections on PGC footage (contradicts 08-28 "720p ≈ 1080p")
+
+Built a harness that copies the dual-stream production input (scratchpad `prodtest/harness.py`):
+1. Substream copy: 1280×720, 30 fps, 2048 kbps (the camera's VE_1 sub-stream setting).
+2. The pod's own 30 fps CFR re-encode (crf 20).
+3. `scripts/pod_infer.py` with the production k14 weights and `--calib`, with `calibration_resolution` set, as the console writes it.
+4. `src.rallies.detect_candidates` (production rally code, bridge off).
+5. Pose on the 720p frames, scaled back to calibration coordinates.
+
+Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court mask in `pod_infer.py` builds at calibration resolution and resizes, so it is correct at 720p; coordinate ranges match between runs.
+
+| input | ball detected in | rallies |
+|---|---|---|
+| 1080p, cached pod run (09-28) | 27.1% of frames | 17 |
+| 1080p, local harness (control) | 25.6% | 13 |
+| 720p, high quality (crf 16) | 18.1% | 4 |
+| 720p, 2 Mbps (substream copy) | 17.7% | 6 |
+
+- **Resolution, not compression, is the cause.** High-quality 720p is no better than 2 Mbps. The local 1080p control nearly reproduces the cached pod result, so the harness is sound.
+- **This contradicts the 2026-08-28 finding "720p detects as well as 1080p"**, the basis for sending the 720p sub-stream to the cloud (dual-stream architecture).
+- **Likely mechanism (unverified):** `pod_infer` resizes every frame to 512×288 with `cv2.resize`. From 1080p that keeps the small far ball sharp; from an already-smoothed 720p frame (ffmpeg here; the camera's scaler in production) the ball may be softened below detection.
+- **Not yet tested on a REAL camera sub-stream.** None exists on this machine (the last 720p file is a Sept cloud-job proxy). The copy starts from an already-compressed 1080p file, so it may be harsher than reality.
+- **Badge consequence:** the same session's badges at 720p are entirely different rallies than at 1080p, because rally detection changed.
+
+**Conclusion.** Production detection on the 720p sub-stream may be finding far fewer rallies than the 1080p field test. **Needs a real sub-stream recording before the 2026-11-01 Pickleday test.** If confirmed, options include sending a 1080p sub-stream (camera allows 1080p only at 15 fps on these units; ADR-131 floor is 25 fps) or changing pod_infer's resize.
