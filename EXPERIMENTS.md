@@ -3363,3 +3363,22 @@ pb_draft_cup and IMG_7744 precision. The pb_draft_cup quality-1 loss is not yet 
     81b38167 113 s) and part of the brickwall gain (recall 0.76 → 0.73, SEMI 0.71 → 0.66).
   - The harm it prevents (a 6 s toss tail on a clip that still contains its point) is smaller than the harm it causes
     (losing whole real points). Keep the untrimmed bridge; treat toss tails as a known cosmetic cost.
+
+### 2026-10-26 — Highlight badges with the occlusion bridge: Marathon shifts most; occlusion rate is a partial ball-only Kitchen War signal
+
+8 clean PGC sessions (pose caches `cache/arm_swing/poses_pgc_*.json`), rallies built with `cluster_crossings_keepalive`.
+
+- **Marathon (longest) and Firefight (most crossings), top 3 per session.** The bridge changes 10/24 Marathon picks
+  and 4/24 Firefight picks. Longest rally grows in 4 sessions (e.g. 1974ac52 16 → 23 s, 85919543 15 → 21 s). The
+  1974ac52 23 s rally is the held-out bad case (a 12.7 s backward move that swallowed a prior point), so Marathon is
+  the badge most exposed to merge errors.
+- **Kitchen War from the ball alone.** Occlusion-keepalive rate per rally vs the pose kitchen-posture share
+  (players at both kitchen lines; `pgc_types.in_kitchen_posture`, without the swing gate), 106 rallies with pose
+  coverage:
+  - Spearman **+0.26** (p=0.007). Crossing rate +0.03, duration +0.15.
+  - Top-20% kitchen rallies: median occlusion rate 0.10/s, others 0.00/s.
+  - Top-20% by occlusion that are also top-20% kitchen: **9/21** (chance ~4.2).
+
+**Conclusion.** The occlusion rate carries real Kitchen War signal for free (about 2× chance) but is too weak to award
+a badge alone, where precision is the bar. Use it as a cheap candidate filter before pose, or as a tiebreak. The
+bridge makes the ball-only badges measure whole rallies, but Marathon needs a merge guard before it can be trusted.
