@@ -56,14 +56,21 @@ Never commit on `main` itself.
 through staging first.** On every push to `main`, `.github/workflows/pod-deps.yml`
 uploads `src/` + `scripts/` to the `pic-vision-pod-code` R2 bucket and repoints
 `latest.json`. The console (`lib/podCode.ts`) hands that code to every new reel pod.
-Pipeline staging (a staging pod-code pointer, orchestrator and R2) does **not exist
-yet**; it was deferred as tier-2. Until it does:
-- Before proposing a merge, state what it ships and that there is no staging step.
-- Don't open or propose a PR to `main` for a change that reaches the pod (anything in
-  `cloud_pipeline/pod_deps.py`'s file list) without the operator's explicit go-ahead.
+
+Pipeline staging exists since 2026-10-26. A push to the `staging` branch (by the
+operator; never commit to `staging` itself) writes `staging.json` instead. Only the
+staging console reads that pointer, and only `pic-vision-orchestrator-staging` uses it,
+with staging buckets and the staging DB. See the console repo's `CLAUDE.md`,
+"Pipeline staging". The `staging` branch is disposable: `main` plus the one change
+under review.
+
+- Before proposing a merge, state what it ships. A change that reaches the pod
+  (anything in `cloud_pipeline/pod_deps.py`'s file list) must have run through
+  staging first: pushed to `staging`, a reel job run on the staging site, the
+  result checked. Only then propose the PR to `main`.
 - "Flag off" or "behaviour unchanged" lowers risk; it does not replace staging.
-- Offer instead: hold; local-only use; or `scripts/rank_to_staging.py` (selection
-  into the staging DB) plus a recorded skip reason the operator approves.
+- If staging can't exercise the change, say so and get the operator's explicit
+  go-ahead before proposing a merge.
 
 The cloud console has a real staging flow; follow its `CLAUDE.md`.
 
