@@ -58,3 +58,16 @@ def test_a_missing_dependency_fails_the_build_by_name(tmp_path):
 def test_ci_keys_are_per_commit_with_one_latest_pointer():
     assert pod_deps.ci_key("abc123") == "pipeline/pod_deps/abc123.tar"
     assert pod_deps.LATEST_KEY.startswith("pipeline/")
+
+
+def test_pointer_key_main_is_production_staging_is_separate():
+    assert pod_deps.pointer_key("refs/heads/main") == pod_deps.LATEST_KEY
+    assert pod_deps.pointer_key("refs/heads/staging") == pod_deps.STAGING_KEY
+    assert pod_deps.STAGING_KEY != pod_deps.LATEST_KEY
+
+
+def test_pointer_key_refuses_any_other_ref():
+    import pytest
+    for ref in ("refs/heads/feature/x", "refs/tags/v1", "refs/heads/staging-old", ""):
+        with pytest.raises(ValueError):
+            pod_deps.pointer_key(ref)

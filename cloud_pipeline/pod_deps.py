@@ -38,6 +38,18 @@ POD_DRIVER = "cloud_pipeline/pod_driver.py"
 # tarball through a presigned link, so no pod credential needs this bucket.
 CI_PREFIX = "pipeline/pod_deps"
 LATEST_KEY = f"{CI_PREFIX}/latest.json"
+# Pushes to the `staging` branch write this pointer instead, never LATEST_KEY,
+# so staging pods (the staging console + orchestrator) run branch code while
+# production keeps running main. Same bucket and per-commit tarball keys.
+STAGING_KEY = f"{CI_PREFIX}/staging.json"
+
+
+def pointer_key(ref):
+    """The pointer a CI push to `ref` may write: main -> latest, staging -> staging."""
+    keys = {"refs/heads/main": LATEST_KEY, "refs/heads/staging": STAGING_KEY}
+    if ref not in keys:
+        raise ValueError(f"no pod-code pointer for {ref!r}; only main and staging publish")
+    return keys[ref]
 
 
 def ci_key(sha):
