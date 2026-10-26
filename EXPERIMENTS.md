@@ -3354,3 +3354,12 @@ pb_draft_cup and IMG_7744 precision. The pb_draft_cup quality-1 loss is not yet 
   unchanged on four videos (5/13, 6/18, 5/10, 1/3); IMG_7743 eval drops 1/10 → 0/10. Better detection did not
   translate into more highlight-worthy clips in the top 10 here, which points at the ranker (see ADR-063's
   velocity-feature note), not the detector.
+- **pb tail playback (operator):** the extra 6.4 s is the ball being tossed back. The bridge fired on a toss-back
+  after the point.
+- **Trimming slow bridge-attached pieces (no consecutive crossings <1.5 s apart), tested and rejected.**
+  - Both ends: fixes pb (back to 0.86/0.56, 7/10) but undoes 4 of the 11 good held-out PGC changes (two recovered
+    serves, two new points) and doesn't fix the bad one. Some real serve openings are slow too.
+  - End only: still fixes pb and keeps all recovered serves, but loses 2 of the 6 new PGC points (46fe3011 280 s,
+    81b38167 113 s) and part of the brickwall gain (recall 0.76 → 0.73, SEMI 0.71 → 0.66).
+  - The harm it prevents (a 6 s toss tail on a clip that still contains its point) is smaller than the harm it causes
+    (losing whole real points). Keep the untrimmed bridge; treat toss tails as a known cosmetic cost.
