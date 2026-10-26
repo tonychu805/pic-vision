@@ -3489,3 +3489,39 @@ coarse rally detector was never actually missing it. The "missed 2nd shot" is an
 **overlay / hit-attribution** gap (the marker needs the ball AT the far contact). So this
 fix buys serve/analytics/**per-shot-overlay** quality, with **zero value to the core reel**
 — build only when serve-based features are scheduled. (EXPERIMENTS.md 2026-10-25, "End-to-end check".)
+
+## ADR-160 — Opt-in occlusion bridge: hold a rally open across near-kitchen ball occlusion
+
+**Date.** 2026-10-26
+
+**Context.** Clips that open mid-rally (serve cut off) were traced, by chart and operator playback, to the near-side
+ball being hidden by the near players at the kitchen during dinks. The tracked ball is only ever seen on the far side,
+no crossing is counted, the 3 s gap (ADR-048) expires, and the serve's crossings become a sub-6 group that is dropped.
+Tried and rejected the same day (EXPERIMENTS.md 2026-10-26): re-attaching dropped fragments (playback 4 better / 12
+worse), a pose swing-based serve anchor (6/17 vs today 10/17), a broad "ball seen moving" keep-alive (merged points,
+2 → 9), and trimming slow bridged pieces (cost real points to fix a cosmetic toss tail).
+
+**Decision.** Add `src.ball.occlusion_keepalive_times` and a `keepalive` argument to `cluster_crossings`. A keep-alive
+fires when the ball was last seen on the far side within 80 px (at 1920 px wide, scaled by frame width) of the net
+line, moving toward it, is unseen for 0.2-2.0 s, and reappears on the far side. Keep-alives hold a burst open across
+the gap but never count as crossings, never set a rally's start or end, and never form a rally alone. Exposed as
+`detect_candidates(..., occlusion_bridge=False)` and `scripts/rank_and_reel.py --occlusion-bridge`. **Default off**;
+the cloud pod path is unchanged.
+
+**Evidence.**
+- Held-out PGC (7 clean sessions, rule frozen before running): 12 clips changed. Operator playback: 4 serves recovered,
+  6 real points that today's version drops, 1 correct merge, 1 bad (a 12.7 s backward move that pulled in a prior point).
+- Labeled non-PGC at IoU≥0.5, production entry point:
+  - brickwall 0.70/0.63 → 0.86/0.73
+  - brickwall-SEMI 0.77/0.63 → 0.84/0.71
+  - pb_draft_cup 0.86/0.56 → 0.82/0.53 (one rally gains a 6 s toss-back tail and falls under IoU 0.5)
+  - IMG_7744 0.65/0.20 → 0.61/0.23
+  - IMG_7743 eval (pre-bump, prototype run) recall 0.74 → 0.79, quality-1 7/10 → 9/10
+
+**Consequences / not decided.**
+- Known costs: an occasional toss-back tail on a clip's end, and rare backward over-reach.
+- A backward-move cap was considered and left out: the only evidence is one bad case (12.7 s) against a good one
+  (10.6 s, eda r17), too thin to pick a number.
+- Top-10 reel picks change by 0-3 per video without adding highlight-worthy rallies, so the ranker, not detection,
+  is now the limit on reel quality.
+- Turning it on in the pod path is a separate decision (needs a reel-level watch on new sessions).
