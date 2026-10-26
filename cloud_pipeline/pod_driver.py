@@ -120,7 +120,7 @@ WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 # exported inside this pod's own image (torch 2.1) at 736x1280 -- the image
 # has torch but not ultralytics, so src/pose.py does the rest. Off until it
 # has run on pipeline staging (the staging branch turns it on).
-BADGES = False
+BADGES = True
 POSE_R2_KEY = "weights/yolov8x-pose-736x1280-torch21.torchscript"
 POSE_LOCAL = "/workspace/yolov8x-pose-736x1280.torchscript"
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
