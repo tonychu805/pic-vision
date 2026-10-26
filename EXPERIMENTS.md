@@ -3122,3 +3122,32 @@ matches the playback review. Scratchpad: `gate_r01.py`.
 **Conclusion.** The depth gate is not a guardrail against toss/feeding junk. Run as a rally filter here, it
 removes real rallies whose start was detected late. Its useful reading may be the inverse: a flag that a clip's
 start is late.
+
+### 2026-10-26 — CVAT project 19 (far-serve review, current HD proposer, 22 clips): labeled
+
+Operator labeled all 22 clips (13 s each at 30 fps; the proposed far serve sits at frame 120, i.e. 4.0 s). Pulled
+via the API with the token minted and deleted per house rule. Scratchpad: `pull_p19.py`, `p19_labels.json`.
+Four clips carry `wrong_side` plus a contact point; they are counted as wrong_side.
+
+| verdict | n |
+|---|---|
+| far serve_contact | 15 |
+| wrong_side (near serve) | 4 |
+| not_serve | 3 |
+
+- **Loose precision (a far serve somewhere in the clip): 15/22 = 68%.** Brickwall was 54-62%.
+- **Timing (contact point vs the proposed moment):** only 5 marks are within ±1 s and 7 within ±2 s, so **strict
+  precision is 7/22 = 32%**. The rest are 2.7-4.9 s off (two at frame 0, so possibly even earlier).
+- **Swing strength separates on-time from off-time.**
+  - Strong-swing proposals (≥4000 px/s, 11 clips): 7 on-time far serves (±2 s), 1 far serve at +2.7 s, 2 wrong_side, 1 not_serve.
+  - Weak-swing proposals (<300 px/s, 11 clips; below the ADR-157 swing level): **0 on time**. There are 7 far serves elsewhere in the clip, 2 not_serve and 2 wrong_side.
+  - A weak-swing proposal is effectively "a rally started near here", not a detected serve contact.
+- **Overlap with the clip-start review:** the 7358ef3f proposals at 48/101/152/335/385/426/463 s are the review's
+  rallies r01/r02/r04/r13/r15/r17/r19. A far serve was marked 3-4 s *before* the detected start on r04, r13 and r19,
+  which agrees with the playback verdict that those clips start late. r01 has a far serve marked at about +4.8 s,
+  which conflicts with the playback verdict "only a toss". This is unresolved.
+- **Repeat-clip consistency vs project 16 (4 clips): 3/4 agree.** #10 is `not_serve` in p16 and serve at frame 0
+  in p19. p16 used 8 s clips with the moment at 3 s, so the earlier serve may simply have fallen outside its clip.
+
+**Caveat.** Labels were made just after the operator asked whether to mark "any serve". So off-time marks may be
+"a far serve exists in the clip" rather than "the proposal is right". The loose and strict numbers bound the truth.
