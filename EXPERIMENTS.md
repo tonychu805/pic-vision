@@ -3343,3 +3343,14 @@ never tuned on. Scratchpad `anchor/bridge_labeled.py`.
 
 **Conclusion.** The bridge generalizes beyond PGC: clear wins on brickwall ×2 and the eval set, small losses on
 pb_draft_cup and IMG_7744 precision. The pb_draft_cup quality-1 loss is not yet diagnosed (playback needed).
+
+**Follow-ups (same day).**
+- **pb_draft_cup "lost" quality-1 rally (label 450.5-458.2 s) is not dropped:** the bridge extended its end from
+  457.4 s to 463.8 s, so IoU fell from 0.67 to 0.45. The next labeled rally starts at 467.1 s, so nothing merged.
+  This single tail extension accounts for all of pb_draft_cup's precision and recall loss. Playback of the tail is
+  pending (`:8451/pb_review/`).
+- **Reel ranking (`src/select.score_segments`, top 10).** The bridge swaps 0-3 of the top 10 per video
+  (brickwall 2, SEMI 3, pb 0, IMG_7744 2, IMG_7743 1). Quality-1 rallies in the top 10, counted at IoU≥0.3 coverage:
+  unchanged on four videos (5/13, 6/18, 5/10, 1/3); IMG_7743 eval drops 1/10 → 0/10. Better detection did not
+  translate into more highlight-worthy clips in the top 10 here, which points at the ranker (see ADR-063's
+  velocity-feature note), not the detector.
