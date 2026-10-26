@@ -3178,3 +3178,39 @@ that starts the point. Scratchpad: `cut_far_hd_ext.py`, `pull_p20.py`, `p20_labe
 
   The labeled serves agree with every playback verdict except r01. There, a serve at ~52.8 s follows the toss
   crossings that open the detected rally.
+
+### 2026-10-26 — Stage 1 serve-anchored clip start: FAILS the pre-set bar (worse than today)
+
+Proposed: start each clip 1.5 s before the last confident serve found in [previous rally end, sustained-play
+crossing - 0.2 s]. Confident serve = a deep-player wrist swing ≥1600 px/s (`propose_serves.deep_swings`); the anchor
+is the start of the last swing burst. If no serve is found, keep today's start and flag "no serve". Rules and bar were
+frozen in `score.py` before results. Pose: yolov8x-pose@1280, dense, on every window
+(eda 11,299 frames, c199 2,883, 365c 4,588). Scratchpad: `anchor/common.py`, `pose_windows.py`, `score.py`,
+`score_rows.json`.
+
+Ground truth = the serve of each rally's own point: the first hit of its hit-label point (eda 120-300 s, c199
+0-120 s), or the operator's p19/p20 serve mark (eda r01/r02/r13/r15/r17/r19). Bar: ≥80% open 0.5-3.0 s before
+their own serve; 0 swallowed points; "no serve" on most warmups and ≤~10% of real points.
+
+| | today (first crossing - 3 s) | serve anchor |
+|---|---|---|
+| opens 0.5-3 s before own serve (17 points) | **10/17** | **6/17** |
+| serve cut off (<0.5 s) | 4 | 7 |
+| too long (>3 s) | 3 | 4 |
+| swallowed an earlier point | 0 | 1 (eda r04, anchored 8 s early) |
+| "no serve" flag: real points | — | 0/17 |
+| "no serve" flag: presumed warmups (365c depth-gate drops, not individually watched) | — | 0/16 |
+
+- **Why:** "deep player + fast swing" is not serve-specific. eda has 865 qualifying frames in ~376 s of windows,
+  about 2.3/s (returns, ball chasing, walking, pose jitter). So "last swing before play" lands on the return
+  (r08, +3 s), on a mid-rally swing (r13, +6 s) or on the previous point (r04), and some swing is always present,
+  so the no-serve flag never fires. Fast-swing far proposals were on time in p19 only because they were already
+  pinned to a rally start.
+- **Cost (measured):** posing these windows took ~14 min for eda's 9.5 min of video (~1.5× realtime, local
+  RTX 2000 Ada), because the [previous rally end, play] windows cover ~2/3 of the session.
+- Note: today's start scores 10/17 under this own-serve ground truth, versus 8/17 in the earlier
+  serve-in-clip measure.
+
+**Conclusion.** Rejected: the swing-only serve anchor, both as a start fix and as a warmup signal. Not re-tuned on
+this data, which is now spent for design. Untested next candidate, to be judged on a fresh session: require the
+swing to be followed within ~1 s by a ball crossing heading away from the swinger's side.
