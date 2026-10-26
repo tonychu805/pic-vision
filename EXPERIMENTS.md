@@ -3151,3 +3151,30 @@ Four clips carry `wrong_side` plus a contact point; they are counted as wrong_si
 
 **Caveat.** Labels were made just after the operator asked whether to mark "any serve". So off-time marks may be
 "a far serve exists in the clip" rather than "the proposal is right". The loose and strict numbers bound the truth.
+
+### 2026-10-26 — Project 20: longer lead-in re-cut of 5 p19 clips; slow-swing proposals have no consistent offset
+
+Re-cut p19 #04/#12/#19 (not_serve) and #07/#10 (serve marked at frame 0) with a 10 s lead-in (19 s clips, proposal
+at frame 300) → `cache/serve_review/far_hd_ext/`, CVAT project 20 (tasks 344-348). The operator marked the serve
+that starts the point. Scratchpad: `cut_far_hd_ext.py`, `pull_p20.py`, `p20_labels.json`.
+
+- Offsets vs the proposal: #04 **-5.4 s**, #07 **-3.9 s**, #10 **-4.4 s**, #12 **-9.6 s**; #19 still has no serve.
+  #07 and #10 agree with their p19 frame-0 marks, i.e. the serve was just before the old clip start, which is a
+  consistency check that passed.
+- **Loose far-serve precision rises to 17/22 = 77%** (2 of 3 "not_serve" had the serve before the clip began).
+- **The slow-swing proposals have no fixed offset:** -9.6, -5.4, -4.4, -3.9, -3.1, -2.8, +3.4, +4.8, +4.9 s.
+  Shifting them by a constant can't fix them. They mark "rally activity near here", not a contact.
+- **Clip-start ground truth for eda (the 7358ef3f proposals = the review's rally starts):**
+
+  | rally | far serve vs detected start | today's clip (start-3 s) | playback verdict |
+  |---|---|---|---|
+  | r01 | +4.8 s | serve inside, tosses before it | "only a toss" |
+  | r02 | -2.8 s | serve 0.2 s after clip start | today better |
+  | r04 | -3.9 s | **cut off** | new better |
+  | r13 | -4.4 s | **cut off** | new better |
+  | r15 | +3.4 s | serve inside, tosses before it | today better |
+  | r17 | -9.6 s | **cut off** | new start captures it |
+  | r19 | -3.1 s | **cut off** (by 0.1 s) | new start captures it |
+
+  The labeled serves agree with every playback verdict except r01. There, a serve at ~52.8 s follows the toss
+  crossings that open the detected rally.
