@@ -3004,3 +3004,28 @@ Scratchpad: `serveGT2.py`.
 feature needs serve side. The serve **gate** (rally-precision guardrail, drops warmup FPs) only needs
 serve *detection* (serve-happened yes/no), where side is irrelevant — redirect far-serve effort there.
 See [[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Serve-review label audit: CVAT is the source of truth; brickwall far-serve precision 54-62%; new far set cut for the current proposer
+
+Audited all serve-review labels before building anything on them. Scratchpad: `cvat_serve_verdicts_now.txt`
+(read straight from the CVAT DB), `cut_far_hd.py`, `cvat_far_hd.py`.
+
+- **The scratchpad verdict JSONs (`serve_verdicts_p16/full`, `serve_review_verdicts_p15`) are stale snapshots,
+  not ground truth.** All predate both proposal CSVs (verdicts Oct 23 13:19-14:04; `serve_candidates_prefloor`
+  15:33; `serve_candidates_HD` Oct 24). The same 8 far clips (proj 16 #30-37, confirmed via
+  `cache/serve_review/far/review.csv` timestamps) carry different verdicts in each, because labels were revised
+  and **11 CVAT tasks hold two contradictory labels** (e.g. `not_serve` + `wrong_side`) that each export
+  collapsed differently. A "~20% serve precision" read off these files during this session was withdrawn (never logged).
+- **CVAT current state:** proj 16 serve-review-far (old list, 37): 8 serve_contact / 4 wrong_side / 24 not_serve
+  / 1 unsure. **Proj 18 serve-review-brickwall (42, fully labeled): far 7-8/13 (54-62%), near 29/29 (100%)** —
+  the first trustworthy far-serve precision (range = task #6 labeled both `wrong_side` and `serve_contact`).
+- **The current HD proposer was effectively unreviewed:** only 4 of its 22 far proposals match a proj-16 clip
+  (session + serve_t within 2s): 2 serve, 2 not. HD covers only the 8 sessions with HD pose (499ed4b8, 52f4de24,
+  72852da9 have none).
+- **New review set:** `cache/serve_review/far_hd/` (22 clips, serve_t-4..+9s, timestamped names; manifest
+  column `prior_proj16_idx` marks the 4 re-labeled overlaps as a consistency check) -> **CVAT project 19
+  `serve-review-far-hd`** (tasks 322-343). Labeling rule: exactly one verdict per clip.
+
+**Conclusion.** Far-serve precision on brickwall is ~54-62% (near is solved). The current PGC proposer's far
+precision is unmeasured until project 19 is labeled. Any context-gate (dead-time / follow-on rally) work waits
+for that clean set. See [[project_far_serve_pose_coverage]].
