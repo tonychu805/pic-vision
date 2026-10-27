@@ -2638,3 +2638,23 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 - Decided per session, the result matches the whole-video run, except Quick Hands with 10-minute parts: the 554.4 s rally crosses the 600 s split, so each half saw fewer fast swings, and the tie-equal 1063.6 s rally won. Real parts split at the same kind of boundary.
 
 **Conclusion.** Badges are decided per session by the console from every part's measurements (pods measure only), which became `feature/pod-badges` ee01dda + console `feature/session-badges`. Pose cost (~0.9× real time on dense play) is the open cost question; measure it on staging with real parts.
+
+## 2026-10-27 — 9:16 framing: ball only vs ball + players vs + serve start (brickwall full run, PGC Court B)
+
+**Why.** The 09-28 ball-following crop cut players out in doubles. The pod now poses every rally (badges), so the window can keep the ball and as many players as fit (`src/framing.py`). The operator also asked whether badges should be known before cropping.
+
+**Setup.** `scripts/vertical_framing_eval.py` on the 10 top clips of two runs, with the poses each run produced: brickwall_30fps (25-min full run, 720p, behind the baseline) and PGC Court B `46fe3011` (1080p, side-on, local only). Ball = the tracked x detection uses; players = on-court pose boxes. Measures from detections, not from watching. Three rules: ball only (09-28), ball + players (the window keeps the ball 0.1 window-widths inside the edge and, within that, shows the most player width, the player nearest the ball counting double; applied on every frame, the ball's unseen frames filled by interpolation), and + serve start (frame the server, the baseline swing `badges.serve_peak` finds, until 0.3 s past the first net crossing).
+
+| | Brickwall: ball / +players / +serve | Court B: ball / +players / +serve |
+|---|---|---|
+| Swings shown (wrist in window at each swing peak) | 91% / 93% / 94% | 88% / 90% / 87% |
+| Players fully in window | 80% / 89% / 90% | 69% / 74% / 73% |
+| Ball inside window (frames tracked) | 100% / 99% / 98% | 100% / 100% / 97% |
+| All kitchen players in window, during stand-offs | 66% / 97% / 97% | 81% / 97% / 97% |
+| Server fully in window at serve contact | 2/9 / 2/9 / 8/9 | 6/10 / 6/10 / 10/10 |
+
+The actual Kitchen War clip: all kitchen players in 65% (ball) vs 99%; Quick Hands 63% vs 97%. Hold past the crossing swept 0 / 0.3 / 0.6 / 1.0 s: brickwall server 5→8→9→9 of 9; Court B swings shown 85→87→84→83% (the return right after the serve is the cost). Applying the player rule only on frames with the ball seen (first try) gave Court B 84% swings shown, since the ball is tracked in few frames there.
+
+**Conclusion.** The player rule is what matters; it fixes the kitchen stand-off, which ball-only cuts in a third of frames. Badge-aware framing would add little: Kitchen War / Quick Hands are already 97–99%, the hardest and last swings' hitters 8–10 of 10, and First Strike is covered by the serve start, which applies to every clip. So framing can be decided before badges; when to crop is a practical choice (only delivered clips, high-res source). Side-on four-player spreads remain the limit (Court B players fully shown ~73%).
+
+**Caveats.** 20 clips, two cameras, two real badged rallies; "first swing" was a poor stand-in for the serve (the serve check above uses the detected serve). Not yet watched — the vertical and side-by-side clips are local (scratchpad `vertical/`).

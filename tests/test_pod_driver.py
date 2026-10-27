@@ -492,3 +492,20 @@ def test_a_next_part_without_its_storage_pass_is_refused(monkeypatch):
     del env["R2_READ_ACCESS_KEY_ID"]
     with pytest.raises(ValueError, match="R2_READ_ACCESS_KEY_ID"):
         pod_driver.apply_job_env(env)
+
+
+def test_clip_framings_gives_each_rally_clip_a_path(tmp_path, monkeypatch):
+    import subprocess
+    from src import framing
+    video = str(tmp_path / "v.mp4")
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=4:r=30",
+                    "-pix_fmt", "yuv420p", video], check=True)
+    monkeypatch.setattr(framing, "tracked_ball_xs", lambda csv, calib, fps=30.0: [1200.0] * 60 + [100.0] * 60)
+    clips = [{"file": "rally_001.mp4", "start": 0.0, "end": 2.0}, {"file": "rally_002.mp4", "start": 2.0, "end": 4.0}]
+    got = pod_driver.clip_framings(video, "unused.csv", {}, clips, poses=None)
+    assert set(got) == {"rally_001.mp4", "rally_002.mp4"}
+    assert got["rally_001.mp4"]["x"][0] > 0.8 and got["rally_002.mp4"]["x"][-1] < 0.2
+
+
+def test_clip_framings_never_costs_the_reel():
+    assert pod_driver.clip_framings("/no/such/video.mp4", "x.csv", {}, [{"file": "a", "start": 0, "end": 1}], None) == {}
