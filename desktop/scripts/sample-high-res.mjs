@@ -12,13 +12,15 @@
 //     --console https://staging--picvision-console.netlify.app \
 //     --token-file /path/to/agent-token \
 //     --source "1=/path/original.mp4@0" --source "2=/path/original.mp4@600" ... \
-//     --only /path/reel-ids.txt
+//     --only /path/reel-ids.txt        (or: --camera CAMERA_ID)
 //
 // --source maps a part index to the sample file and the second in it where
 // that part began. --only lists the sample session's reel ids, one per line:
 // the console offers every unsynced clip of this agent, and a clip from
 // another session must never be "sharpened" from this sample's footage.
-// Runs until no fetch has been offered for --idle-sec.
+// --camera instead takes every clip of that camera id, for a sample session
+// run on a camera id nothing else uses (clips appear as parts land, so their
+// ids aren't known up front). Runs until no fetch has been offered for --idle-sec.
 // The agent token is read from a file and never printed.
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -35,12 +37,13 @@ const { values } = parseArgs({
     "token-file": { type: "string" },
     source: { type: "string", multiple: true },
     only: { type: "string" },
+    camera: { type: "string" },
     "idle-sec": { type: "string", default: "180" },
     "poll-sec": { type: "string", default: "20" },
   },
 });
-if (!values.console || !values["token-file"] || !values.source?.length || !values.only) {
-  console.error("usage: --console URL --token-file FILE --source PART=FILE@OFFSET [--source ...] --only REEL_IDS_FILE");
+if (!values.console || !values["token-file"] || !values.source?.length || !(values.only || values.camera)) {
+  console.error("usage: --console URL --token-file FILE --source PART=FILE@OFFSET [--source ...] (--only REEL_IDS_FILE | --camera CAMERA_ID)");
   process.exit(2);
 }
 if (!/staging/.test(values.console) && !/localhost/.test(values.console)) {
@@ -48,7 +51,8 @@ if (!/staging/.test(values.console) && !/localhost/.test(values.console)) {
   process.exit(2);
 }
 const connection = { consoleUrl: values.console.replace(/\/$/, ""), apiToken: readFileSync(values["token-file"], "utf8").trim() };
-const only = new Set(readFileSync(values.only, "utf8").split(/\s+/).filter(Boolean));
+const only = values.only ? new Set(readFileSync(values.only, "utf8").split(/\s+/).filter(Boolean)) : null;
+const wanted = (f) => (only ? only.has(f.reelId) : f.cameraId === values.camera);
 const sources = new Map(values.source.map((s) => {
   const m = /^(\d+)=(.+)@([\d.]+)$/.exec(s);
   if (!m) throw new Error(`bad --source ${s}`);
@@ -76,7 +80,7 @@ let idleSince = Date.now();
 const log = (o) => console.log(JSON.stringify({ at: new Date().toISOString(), ...o }));
 while (Date.now() - idleSince < Number(values["idle-sec"]) * 1000) {
   const beat = await consoleFetch("/api/agents/heartbeat", { method: "POST", body: {}, connection });
-  const fetches = (beat.pendingHighResFetches ?? []).filter((f) => only.has(f.reelId) && !done.has(f.reelId) && sources.has(f.partIndex));
+  const fetches = (beat.pendingHighResFetches ?? []).filter((f) => wanted(f) && !done.has(f.reelId) && sources.has(f.partIndex));
   if (fetches.length) idleSince = Date.now();
   for (const f of fetches) {
     const work = mkdtempSync(path.join(tmpdir(), "sample-high-res-"));

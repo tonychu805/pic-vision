@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta, startMatchesCurrent } from "./autoSplit.js";
+import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta, startMatchesCurrent, sessionEndReport } from "./autoSplit.js";
 
 const seg = (i) => `session-${String(i).padStart(3, "0")}.mkv`;
 
@@ -150,4 +150,19 @@ test("a start for a different booking, or a booking over a hand recording, still
   assert.equal(startMatchesCurrent({ schedule_booking_id: "b2" }, { recordingSessionId: "s1", bookingId: null }), false);
   // A hand start with no booking while a booking records: not the same thing either.
   assert.equal(startMatchesCurrent({}, { recordingSessionId: "s1", bookingId: "b1" }), false);
+});
+
+test("the end report names the session and how many parts it was sent in", () => {
+  const dir = recording(3);
+  writeSessionMeta(dir, { recording_session_id: "33333333-3333-4333-8333-333333333333" });
+  makeDueParts(dir, { stillRecording: true, partMinutes: 5 });           // parts 1-2 while recording
+  makeDueParts(dir, { stillRecording: false, partMinutes: 5, flush: true }); // part 3 on stop
+  assert.deepEqual(sessionEndReport(dir), { recordingSessionId: "33333333-3333-4333-8333-333333333333", partCount: 3 });
+});
+
+// Paired: a recording outside any session has nothing to report.
+test("a recording outside a session sends no end report", () => {
+  const dir = recording(2);
+  makeDueParts(dir, { stillRecording: false, partMinutes: 5, flush: true });
+  assert.equal(sessionEndReport(dir), null);
 });

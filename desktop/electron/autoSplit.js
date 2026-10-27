@@ -222,3 +222,15 @@ export function sessionFieldsFor(dir, fileNames) {
   const segIndex = first ? Number(/\d+/.exec(first)[0]) : 0;
   return { recordingSessionId, partIndex: Number(partMatch[1]), partOffsetSec: segIndex * SEGMENT_MINUTES * 60 };
 }
+
+/**
+ * What the console is told once a recording has stopped and its last part
+ * has been cut (2026-10-27): the session and how many parts it was sent in,
+ * so its waiting GPUs can be let go as soon as they all arrive. Null for a
+ * recording outside any session.
+ */
+export function sessionEndReport(recordingDir) {
+  const recordingSessionId = readSessionMeta(recordingDir)?.recordingSessionId ?? null;
+  if (!recordingSessionId) return null;
+  return { recordingSessionId, partCount: listParts(recordingDir).length };
+}
