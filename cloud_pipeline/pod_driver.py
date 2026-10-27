@@ -91,6 +91,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
@@ -955,22 +956,52 @@ def prefetch_models():
 def warm_start():
     """A pod rented ahead of a session's first part (WARM_START, 2026-10-27):
     no part of its own. Report the warm job done -- that is the orchestrator's
-    sign it started -- then fetch the models while waiting."""
+    sign it started -- and fetch the models in the background, so the pod
+    registers as the session's waiting machine straight away (the
+    orchestrator terminates a pod that is neither running a part nor waiting
+    for one). Returns the prefetch thread; join it before running a part."""
     report_final_job_status(done=True, stage="done", message="machine ready for this session's first part")
-    prefetch_models()
+    t = threading.Thread(target=prefetch_models, daemon=True)
+    t.start()
+    return t
+
+
+# Written when this pod's work is over. RunPod restarts a pod's container
+# when its program exits (2026-10-27), which re-runs this file; a restart
+# that finds the marker exits at once instead of re-reporting its job or
+# registering as a session's waiting machine again, so the orchestrator sees
+# a pod that is not needed and terminates it.
+DONE_MARKER = "/workspace/.pod_driver_done"
 
 
 def main():
+    if os.path.exists(DONE_MARKER):
+        _log("this pod already finished its work; exiting (waiting to be terminated)")
+        return
+    try:
+        _main()
+    finally:
+        try:
+            open(DONE_MARKER, "w").close()
+        except OSError:
+            pass
+
+
+def _main():
     pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod -- still used to identify this pod when asking for a session's next part, just not to delete itself any more (PIC-138)
     idle_sec = float(os.environ.get("WARM_IDLE_SEC") or 0)
     accept_until = float(os.environ.get("WARM_ACCEPT_UNTIL") or 0)
     outcome = None
     warm = os.environ.get("WARM_START") == "1"
+    prefetch = None
     while True:
         if warm:
-            warm_start()
+            prefetch = warm_start()
             outcome, warm = "done", False
         else:
+            if prefetch is not None:
+                prefetch.join()   # models in place before the part uses them
+                prefetch = None
             outcome = run_reporting()
         session_id = os.environ.get("RECORDING_SESSION_ID")
         # A failure stops here: whatever broke may break the next part

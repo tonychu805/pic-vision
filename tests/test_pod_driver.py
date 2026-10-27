@@ -520,11 +520,24 @@ def test_warm_start_reports_in_then_waits_for_the_first_part_without_running_a_j
     monkeypatch.setenv("RUNPOD_POD_ID", "pod-1")
     monkeypatch.setenv("WARM_IDLE_SEC", "60")
     monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: calls.append(("report", kw.get("done"))))
-    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: calls.append(("prefetch",)))
+    import threading
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_prefetch():
+        started.set()
+        release.wait(5)
+        calls.append(("prefetch done",))
+    monkeypatch.setattr(pod_driver, "prefetch_models", slow_prefetch)
     monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
-    monkeypatch.setattr(pod_driver, "wait_for_next_part", lambda *a, **k: calls.append(("wait",)) or None)
+
+    def wait(*a, **k):
+        started.wait(5)
+        calls.append(("wait",))   # asked while the models are still downloading
+        release.set()
+    monkeypatch.setattr(pod_driver, "wait_for_next_part", wait)
     pod_driver.main()
-    assert calls == [("report", True), ("prefetch",), ("wait",)]
+    assert calls[:2] == [("report", True), ("wait",)]
 
 
 def test_warm_start_runs_the_part_it_is_handed(monkeypatch):
@@ -536,11 +549,14 @@ def test_warm_start_runs_the_part_it_is_handed(monkeypatch):
     handed = iter([{"JOB_ID": "part-1"}, None])
     monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: None)
     monkeypatch.setattr(pod_driver, "prefetch_models", lambda: None)
+    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: calls.append(("prefetched",)))
     monkeypatch.setattr(pod_driver, "apply_job_env", lambda env: calls.append(("took", env["JOB_ID"])))
     monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
     monkeypatch.setattr(pod_driver, "wait_for_next_part", lambda *a, **k: next(handed))
     pod_driver.main()
-    assert calls == [("took", "part-1"), ("run",)]
+    # The part runs only after the background download has finished.
+    assert calls.index(("prefetched",)) < calls.index(("run",))
+    assert ("took", "part-1") in calls
 
 
 # Paired: an ordinary job pod is unchanged -- it runs its own job first.
@@ -552,3 +568,38 @@ def test_without_warm_start_the_pod_runs_its_own_job_first(monkeypatch):
     monkeypatch.setattr(pod_driver, "warm_start", lambda: calls.append("warm"))
     pod_driver.main()
     assert calls == ["run"]
+
+
+
+# --- RunPod restarts a finished pod's container (2026-10-27) ---
+
+def test_a_restarted_pod_that_already_finished_exits_at_once(monkeypatch, tmp_path):
+    marker = tmp_path / "done"
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(marker))
+    ran = []
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: ran.append("run") or "done")
+    pod_driver.main()
+    assert ran == ["run"] and marker.exists()
+    pod_driver.main()   # the container restarts
+    assert ran == ["run"], "a restart must not run the job or wait for parts again"
+
+
+# Paired: a pod whose run failed still marks itself done -- a restart must not retry on a billing GPU.
+def test_a_failed_pod_is_marked_done_too(monkeypatch, tmp_path):
+    import pytest
+    marker = tmp_path / "done"
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(marker))
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: "failed")
+    with pytest.raises(SystemExit):
+        pod_driver.main()
+    assert marker.exists()
+
+
+@pytest.fixture(autouse=True)
+def _done_marker_in_tmp(monkeypatch, tmp_path):
+    """No test ever reads or writes the real /workspace marker."""
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(tmp_path / "pod_driver_done"))
