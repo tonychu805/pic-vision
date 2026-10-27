@@ -130,7 +130,7 @@ def manifest_entry(seg, rally_id, file, court_id=None, session_id=None):
         "duration": seg["end"] - seg["start"],
         "score": seg.get("score"),
         "file": file,
-        **({"badge": seg["badge"]} if seg.get("badge") else {}),
+        **({"rally_start": seg["rally_start"], "rally_end": seg["rally_end"]} if "rally_start" in seg else {}),
     }
 
 

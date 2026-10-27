@@ -1,7 +1,9 @@
 """src/badges.py: a badge goes only to a rally that clears its bar, each badge
-to at most one rally, and no rally holds two."""
+to at most one rally per session, and no rally holds two."""
+import json
+
 from src import badges
-from src.badges import BARS, assess, award
+from src.badges import BARS, assess, award, decide, measure
 
 
 def _player(x_ft, y_ft, box, wrist, conf=0.9):
@@ -69,3 +71,32 @@ def test_spectators_off_court_are_ignored():
     for f in P:
         P[f].append(_player(40, 15, (1100, 300, 1140, 380), (1120, 320)))   # beside the court, level with a kitchen
     assert all(len([p for p in v if badges._player(p)]) == 2 for v in P.values())
+
+
+def test_same_rally_number_in_two_parts_are_different_rallies():
+    cands = [
+        {"badge": "Killer Shot", "part": 0, "rally": 3, "margin": 2.0},
+        {"badge": "Kitchen War", "part": 1, "rally": 3, "margin": 1.5},
+    ]
+    assert {b: (c["part"], c["rally"]) for b, c in award(cands).items()} == {"Killer Shot": (0, 3), "Kitchen War": (1, 3)}
+
+
+def test_measure_is_json_and_decides_like_assess():
+    P = _rally_poses(0, 300, swing_at=270, swing_px=150.0)
+    segs = [{"start": 1.0, "end": 9.2}]
+    m = json.loads(json.dumps(measure(P, segs, 1280, 720)))      # what the pod sends survives JSON
+    assert decide([m])["awarded"].keys() == assess(P, segs, 1280, 720)["awarded"].keys()
+
+
+def test_the_bar_is_the_sessions_typical_swing_not_the_parts():
+    # One swing at 4x a slow part's typical clears Killer Shot (3.5x) within
+    # that part, but the session's other part swings twice as fast, so
+    # against the whole session's typical swing it is ordinary.
+    def part(speed, late):
+        swings = [[speed, 0.4 * i, 3.0] for i in range(20)] + [[late, 18.5, 3.0]]   # ordinary play before the rally
+        return {"swings": swings, "rallies": [{"start": 10.0, "end": 19.0, "share": 0.0, "serve": None}]}
+    slow = part(1.0, 4.0 * badges.ZONE_P90[0] / badges.ALL_P90)
+    assert "Killer Shot" in decide([slow])["awarded"]
+    session = decide([slow, part(2.0, 2.0)])
+    assert session["typical_swing"] == 2.0
+    assert "Killer Shot" not in session["awarded"]

@@ -533,8 +533,12 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
-def find_badges(s3_in, video, segments, calib):
-    """Pose the rallies and assess badges; None if anything goes wrong.
+def measure_badges(s3_in, video, segments, calib):
+    """Pose the rallies and measure them for badges; None if anything goes wrong.
+
+    Measures only (src/badges.py measure()): every bar is relative to the
+    whole session's typical swing, so the console decides the badges once
+    it has every part's measurements (decide()).
 
     Best effort on purpose: a badge is a bonus on top of the reel, so a
     failure here (model download, GPU memory, a pose edge case) is logged
@@ -542,7 +546,7 @@ def find_badges(s3_in, video, segments, calib):
     """
     try:
         import numpy as np
-        from src.badges import assess
+        from src.badges import measure
         from src.pose import PoseModel, pose_frames, pose_video
         started = time.time()
         if not os.path.exists(POSE_LOCAL):
@@ -560,7 +564,7 @@ def find_badges(s3_in, video, segments, calib):
         homography = np.array(calib["homography"]) @ np.diag([cw / w, ch / h, 1.0])
         frames = pose_frames(segments, n_frames)
 
-        _check_cancel("badges", f"finding badges: posing {len(frames)} rally frames...")
+        _check_cancel("badges", f"measuring for badges: posing {len(frames)} rally frames...")
         last = [time.time()]
 
         def progress(done, total):
@@ -568,13 +572,14 @@ def find_badges(s3_in, video, segments, calib):
             # inference's: every batch would be a console call every ~0.4 s.
             if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
                 last[0] = time.time()
-                _check_cancel("badges", f"finding badges: posed {done}/{total} rally frames...")
+                _check_cancel("badges", f"measuring for badges: posed {done}/{total} rally frames...")
 
         poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
-        result = assess(poses, segments, w, h)
+        result = measure(poses, segments, w, h)
         result["pose_frames"] = len(frames)
         result["pose_sec"] = round(time.time() - started, 1)
-        _log(f"badges: {sorted(result['awarded'])} from {len(frames)} posed frames in {result['pose_sec']}s")
+        _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
+             f"from {len(frames)} posed frames in {result['pose_sec']}s")
         return result
     except Cancelled:
         raise
@@ -723,7 +728,7 @@ def run():
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
-    badges = find_badges(s3_in, proxy_video, segments, calib) if BADGES else None
+    badge_measures = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else None
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
@@ -734,10 +739,9 @@ def run():
                                      BURST_TARGET_SEC, session_id, logo_path=logo_path,
                                      occlusion_bridge=OCCLUSION_BRIDGE)
     has_burst = burst_result["chronological"] is not None
-    awarded = {b: c["start"] for b, c in badges["awarded"].items()} if badges else None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
-                                    session_id, n=TOP_RALLIES_N, logo_path=logo_path,
-                                    occlusion_bridge=OCCLUSION_BRIDGE, badges=awarded)
+                                    session_id, n=None if BADGES else TOP_RALLIES_N, logo_path=logo_path,
+                                    occlusion_bridge=OCCLUSION_BRIDGE)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
 
@@ -775,9 +779,10 @@ def run():
             # same stretch in its local high-res recording of this part
             # (dual-stream plan Stage 4/5).
             "start": clip["start"], "end": clip["end"],
-            # Badge name, or absent. The console ignores it until it has a
-            # column for it; the whole assessment is in result["badges"].
-            **({"badge": clip["badge"]} if clip.get("badge") else {}),
+            # The rally's own unpadded times: how the console finds this
+            # clip again once it has decided a session's badges from every
+            # part's result["badge_measures"] (src/badges.py decide()).
+            "rally_start": clip["rally_start"], "rally_end": clip["rally_end"],
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
@@ -793,10 +798,9 @@ def run():
     report_final_job_status(done=True, stage="done", message="done", progress=None, result={
         "share_id": os.environ.get("SHARE_ID"), "reel_bucket": OUTPUT_BUCKET,
         "reels": reels, "stats": stats,
-        # Per-part: a session's badges are settled across all its parts,
-        # so every candidate (with its margin past the bar) travels, not
-        # just this part's winners.
-        **({"badges": badges} if badges else {}),
+        # Measurements only: a badge is relative to the whole session, so
+        # the console decides once it has every part's (src/badges.py).
+        **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
 
