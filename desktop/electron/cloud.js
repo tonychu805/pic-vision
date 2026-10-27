@@ -14,7 +14,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES } from "./autoSplit.js";
 import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
@@ -1096,7 +1096,7 @@ const partsInFlight = new Set();
 
 function sendPart(camera, recordingDir, part) {
   partsInFlight.add(part.dir);
-  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x 10 min)`);
+  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x ${SEGMENT_MINUTES} min)`);
   Promise.resolve(sendRecordingToCloud(camera, part.dir, partSessionId(camera.label, recordingDir, part.name)))
     .finally(() => partsInFlight.delete(part.dir));
 }
