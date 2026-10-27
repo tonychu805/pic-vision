@@ -156,24 +156,25 @@ export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
 
 // verticalPath (2026-10-27): the 9:16 crop of the same clip, when there is
 // one -- minted and uploaded the same way, confirmed in the same PATCH.
-async function uploadHighRes(reelId, filePath, verticalPath = null) {
-  const minted = await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "POST" });
+// `connection` is for callers outside the app (scripts/sample-high-res.mjs);
+// the app itself uses its stored one.
+async function uploadHighRes(reelId, filePath, verticalPath = null, connection = undefined) {
+  const call = (method, body) => consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method, body, connection });
+  const minted = await call("POST");
   await uploadFile(minted.url, filePath);
   let verticalKey;
   if (verticalPath) {
-    const v = await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "POST" });
+    const v = await call("POST");
     await uploadFile(v.url, verticalPath);
     verticalKey = v.key;
   }
-  await consoleFetch(`/api/agents/reels/${reelId}/high-res`, {
-    method: "PATCH", body: { key: minted.key, ...(verticalKey ? { verticalKey } : {}) },
-  });
+  await call("PATCH", { key: minted.key, ...(verticalKey ? { verticalKey } : {}) });
 }
 
 // The 9:16 crop of the trimmed clip, or null: no framing path from the
 // console (an older clip), or the crop failed -- the sharper 16:9 clip is
 // still sent either way.
-async function maybeCropVertical(camera, fetchReq, clipPath) {
+async function maybeCropVertical(label, fetchReq, clipPath) {
   const { framing, clipStartSec, partStartSec, reelId } = fetchReq;
   if (!framing || typeof clipStartSec !== "number") return null;
   const verticalPath = path.join(path.dirname(clipPath), "vertical.mp4");
@@ -181,9 +182,21 @@ async function maybeCropVertical(camera, fetchReq, clipPath) {
     await cropVertical(clipPath, verticalPath, framing, partStartSec - clipStartSec);
     return verticalPath;
   } catch (err) {
-    logEvent("vertical_reel_failed", `${camera.label}: couldn't make the phone-shaped version of a rally clip`, `${reelId}: ${err.message}`);
+    logEvent("vertical_reel_failed", `${label}: couldn't make the phone-shaped version of a rally clip`, `${reelId}: ${err.message}`);
     return null;
   }
+}
+
+/**
+ * Everything after the trim: crop the 9:16 version (when the console sent a
+ * framing path) and upload both. Shared with scripts/sample-high-res.mjs,
+ * which trims from a sample video instead of a camera recording, so sample
+ * sessions exercise this same code. Returns whether a vertical was sent.
+ */
+export async function deliverHighRes(fetchReq, clipPath, { label, connection } = {}) {
+  const verticalPath = await maybeCropVertical(label, fetchReq, clipPath);
+  await uploadHighRes(fetchReq.reelId, clipPath, verticalPath, connection);
+  return Boolean(verticalPath);
 }
 
 async function processOne(camera, fetchReq) {
@@ -213,8 +226,7 @@ async function processOne(camera, fetchReq) {
   try {
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
     await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
-    const verticalPath = await maybeCropVertical(camera, fetchReq, outPath);
-    await uploadHighRes(reelId, outPath, verticalPath);
+    await deliverHighRes(fetchReq, outPath, { label: camera.label });
     logEvent("high_res_reel_synced", `${camera.label}: sent a sharper version of a rally clip`, reelId);
   } finally {
     rmSync(path.dirname(outPath), { recursive: true, force: true });
