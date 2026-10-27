@@ -14,7 +14,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES, sessionEndReport } from "./autoSplit.js";
 import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
@@ -1105,6 +1105,21 @@ function sendPart(camera, recordingDir, part) {
     .finally(() => partsInFlight.delete(part.dir));
 }
 
+function reportSessionEnd(camera, recordingDir) {
+  const report = sessionEndReport(recordingDir);
+  if (!report) return;
+  const connection = getCloudConnection();
+  if (!connection?.apiToken) return;
+  fetch(`${connection.consoleUrl}/api/agents/recording-sessions/${report.recordingSessionId}/end`, {
+    signal: AbortSignal.timeout(30_000),
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
+    body: JSON.stringify({ partCount: report.partCount }),
+  })
+    .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); })
+    .catch((err) => console.error(`[autosplit] ${camera.label}: could not report the session's end: ${err.message}`));
+}
+
 /** Create and send the parts that are due for one recording; resend any whose earlier send never reached the console. */
 function sendDueParts(camera, recordingDir, { stillRecording, flush }) {
   const minutes = getAutoSplitMinutes();
@@ -1114,6 +1129,10 @@ function sendDueParts(camera, recordingDir, { stillRecording, flush }) {
     for (const part of unsentParts(recordingDir, isRunning)) sendPart(camera, recordingDir, part);
     const created = makeDueParts(recordingDir, { stillRecording, partMinutes: minutes, flush });
     for (const part of created) sendPart(camera, recordingDir, part);
+    // Recording has stopped and the last part is cut: say so, with how many
+    // parts there are, so the session's GPUs stop waiting once all arrive.
+    // Best effort and safe to repeat; without it they wait one part length.
+    if (!stillRecording && flush) reportSessionEnd(camera, recordingDir);
     return created.map((p) => p.name);
   });
 }
