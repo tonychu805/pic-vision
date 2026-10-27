@@ -102,6 +102,28 @@ def prep3(imgs):
     return np.stack(channels).reshape(1, 9, HEIGHT, WIDTH).astype(np.float32)
 
 
+def half_precision(model):
+    """The same network computing in float16 (weights copied); the original on any failure."""
+    try:
+        cfg = model.get_config()
+        for layer in cfg["layers"]:
+            if layer["class_name"] != "InputLayer":
+                layer["config"]["dtype"] = "mixed_float16"
+        half = model.__class__.from_config(cfg)
+        half.set_weights(model.get_weights())
+        return half
+    except Exception as e:  # noqa: BLE001 -- full precision still works, just slower
+        print(f"WARNING: float16 model unavailable ({type(e).__name__}: {e}); using float32")
+        return model
+
+
+def apply_mask(img, mask3):
+    """Court mask on a full-size BGR frame. cv2.bitwise_and with a 0/255 mask
+    gives the same pixels as img * mask (0/1) at ~1/3 of the CPU time --
+    the CPU side was what limited a pod (2026-10-27 profile)."""
+    return cv2.bitwise_and(img, mask3)
+
+
 def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     print("Loading model...")
     model = tf.keras.models.load_model(
@@ -117,9 +139,19 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     # shrink with batch size. This alone recovers the project's original
     # 58fps benchmark; batching was tried and made things worse, not better
     # (see DECISIONS.md ADR-065).
-    @tf.function
+    # Half precision + XLA (2026-10-27): 40 -> 13 ms per 3 frames on an RTX
+    # 2000 Ada, with every ball detection on a real 1080p part unchanged
+    # (shifts <= 0.5 px at 512 wide; EXPERIMENTS.md). The saved model pins
+    # each layer to float32, so the float16 copy is rebuilt from its config.
+    # PIC_VISION_INFER_FP16=0 / PIC_VISION_INFER_XLA=0 restore the old path.
+    if os.environ.get("PIC_VISION_INFER_FP16", "1") == "1":
+        model = half_precision(model)
+    xla = os.environ.get("PIC_VISION_INFER_XLA", "1") == "1"
+    print(f"model: {model.layers[-1].compute_dtype}, XLA {'on' if xla else 'off'}")
+
+    @tf.function(jit_compile=xla)
     def infer(x):
-        return model(x, training=False)
+        return tf.cast(model(x, training=False), tf.float32)
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -148,6 +180,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     x_ratio = out_w / WIDTH
     y_ratio = out_h / HEIGHT
     mask = court_mask(calib, img1.shape, margin_px) if calib else None
+    mask3 = cv2.merge([mask * 255] * 3) if mask is not None else None
     if mask is not None:
         print(f"court mask: keeping {100 * mask.mean():.0f}% of the frame "
               f"(margin {margin_px:.0f}px)")
@@ -161,7 +194,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
     # no frame is skipped or read twice.
     warm_trio = [img1, img2, img3]
     if mask is not None:
-        warm_trio = [im * mask[:, :, None] for im in warm_trio]
+        warm_trio = [apply_mask(im, mask3) for im in warm_trio]
     _ = infer(tf.constant(prep3(warm_trio))).numpy()
 
     with open(output_csv, "w", newline="") as f:
@@ -201,7 +234,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
                 while ok and not stop_event.is_set():
                     trio = [img1, img2, img3]
                     if mask is not None:
-                        trio = [im * mask[:, :, None] for im in trio]
+                        trio = [apply_mask(im, mask3) for im in trio]
                     item = prep3(trio)
                     while True:
                         try:

@@ -2718,3 +2718,18 @@ A 10-minute part took 13.6-17.4 min from end of recording to done. Badges were r
 | RTX 2000 Ada (parts 2, 4) | 12:18:35 | by 12:20:44 | ~2.1 min |
 
 All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen War), all 10 shown clips sharp + vertical by 12:19:03. GPU ~ $0.17 for the 21.7-min game (A5000 ~22.6 min, RTX 2000 ~17.7 min), against ~$0.22 for replay #3 cut short by hand and ~$0.27 left alone. After-session idle ~4 machine-minutes (was 13-24). Remaining idle: the warm machine's ~2.5 min head start and short gaps between parts.
+
+## 2026-10-27 (night) — Faster ball detection: cheaper court mask + float16 + XLA (local RTX 2000 Ada)
+
+**Why.** Ball detection was ~3.5 min of each 5-min part on the cloud cards, so one machine couldn't keep up with play. Profiled `scripts/pod_infer.py` (`scripts/profile_pod_infer.py`, 600 trios of a real 1080p30 part): decode 5.1 ms/trio, **CPU prep 37.7**, **GPU model 38.9**, post 0.8. The court mask was a numpy multiply over every full 1080p frame.
+
+**Changes, each measured on 1080p frames (CPU limited to 4 cores to resemble a pod):**
+- Mask with `cv2.bitwise_and` (0/255 mask) instead of `img * mask`: prep 40.8 -> 15.1 ms/trio, **bit-identical** model input. (Resizing before masking: 14.3 ms but changes the input -- rejected.)
+- Model in float16 (layers rebuilt from config; the saved model pins float32): 40.3 -> 19.6 ms/trio. XLA (`jit_compile`): 24.4 fp32, **13.3 fp16+XLA**. On 1,800 frames all three kept every detection (shifts <= 0.5 px at 512 wide).
+
+**End to end** (`pod_infer.py`, defaults now fp16 + XLA + bitwise mask; `PIC_VISION_INFER_FP16=0` / `_XLA=0` restore):
+- LFC 5-min part (9,000 frames, 4 cores): 144 s -> 61 s wall (65 -> 169 fps); 8,997/9,000 detections identical; **the same 8 rallies to the hundredth of a second**.
+- brickwall_30fps (45,396 frames, labelled): old 73.8 fps (16 cores) vs new 230 fps (4 cores); 120 frames (0.26%) differ, 12 found/not-found. Scored at IoU>=0.5: old 44 rallies, 31/49 matched, recall 0.633, 5.16 FP/10 min; new 45 rallies, 31/49, **recall 0.633**, 5.55 FP/10 min, boundary 1.42 -> 1.43 s.
+- fp32 + XLA alone (119.8 fps): 32 frames differ and **the same extra 45th rally** -- so it is a borderline stretch that flips with any change in arithmetic order, not a float16 effect; float16 + XLA costs nothing more and is faster.
+
+**Not yet measured on the cloud cards** (fewer/slower CPU cores, A5000/RTX 4000 GPUs); next is a staging replay.
