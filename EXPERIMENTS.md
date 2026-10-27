@@ -2680,3 +2680,11 @@ A 10-minute part took 13.6-17.4 min from end of recording to done. Badges were r
 - The L4 billed $0.59/hr against the $0.50 cap.
 
 **Caveats.** One session; GPU type is whatever the orchestrator rented. My first read of part 2 ("8 minutes to start") was wrong -- the job's message field lags the stage; stage timestamps showed a 1.3 min start.
+
+## 2026-10-27 (later) — Staging replay #2: framing fixed, sharp + vertical delivered for a sample session
+
+**Setup.** Same Lifetime Fall Classic 3-part replay on the game clock, staging pod code d0539a9 (framing module shipped). Then `desktop/scripts/sample-high-res.mjs` played the venue desktop: heartbeat as the staging agent, trim each offered clip from the original 1080p60 file, crop + upload through the app's own `deliverHighRes`.
+
+**Result.** Game end 07:41:46. Parts done +4.8 min (part 3, RTX 4000 Ada), +9.0 (part 1, RTX 2000 Ada), +13.2 (part 2, RTX 4000 Ada); badges final 07:55:00 (+13.2): Kitchen War (part 2) and Killer Shot (part 1) again. 28/28 rally clips carry a framing path. The console offered exactly the 10 delivered clips; each was trimmed, cropped to 9:16 (608x1080, no upscale) and uploaded in 9.5-17 s (~2 min for all 10, starting 07:59). The share API returned 10 vertical links and `/r/<share>/test` served 200. Pods terminated by id right after (3 were still RUNNING).
+
+**Caveats.** The stand-in desktop ran after the session finished, not alongside it; on a venue Mac clips would sharpen as each part lands. Vertical framing not yet judged by watching. Console deploy of c354bad (video/mp4 override) blocked by a Netlify-GitHub clone failure, so the sharp/vertical files are still served as application/octet-stream on staging.
