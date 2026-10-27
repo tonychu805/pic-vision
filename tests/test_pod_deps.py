@@ -58,3 +58,24 @@ def test_a_missing_dependency_fails_the_build_by_name(tmp_path):
 def test_ci_keys_are_per_commit_with_one_latest_pointer():
     assert pod_deps.ci_key("abc123") == "pipeline/pod_deps/abc123.tar"
     assert pod_deps.LATEST_KEY.startswith("pipeline/")
+
+
+def test_every_module_the_pod_imports_is_in_the_tarball():
+    """pod_driver.py and the bundled files import each other, often lazily
+    inside a function (so an ImportError only surfaces on a billing GPU, and
+    best-effort steps swallow it). src/framing.py was missed on 2026-10-27:
+    framing was silently skipped on every staging clip. Every `src.X` /
+    `from src import X` / `scripts.X` named anywhere in the closure must be
+    in POD_DEPS_FILES."""
+    import re
+    bundled = set(pod_deps.POD_DEPS_FILES)
+    missing = set()
+    for rel in [pod_deps.POD_DRIVER, *pod_deps.POD_DEPS_FILES]:
+        text = open(os.path.join(pod_deps.REPO_ROOT, rel)).read()
+        names = re.findall(r"^\s*(?:from|import)\s+((?:src|scripts)(?:\.\w+)+)", text, re.M)
+        names += [f"src.{m}" for grp in re.findall(r"^\s*from\s+src\s+import\s+([\w, ]+)", text, re.M) for m in re.split(r"[,\s]+", grp) if m]
+        for n in names:
+            path = n.replace(".", "/") + ".py"
+            if path not in bundled:
+                missing.add(f"{rel}: {n}")
+    assert not missing, sorted(missing)
