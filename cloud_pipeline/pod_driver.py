@@ -934,13 +934,44 @@ def run_reporting():
         return "failed"
 
 
+def prefetch_models():
+    """Download the ball and pose models while a warm pod waits, so the part
+    it takes skips both downloads. Best effort: run() fetches whatever is
+    still missing, exactly as before."""
+    try:
+        s3_in, _ = _r2_clients()
+        if not os.path.exists(WEIGHTS_LOCAL):
+            weights_tar = os.path.join("/workspace", "weights.tar")
+            s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
+            subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
+            os.remove(weights_tar)
+        if BADGES and not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        _log("warm start: models ready")
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"warm start: prefetch skipped ({type(e).__name__}: {e})")
+
+
+def warm_start():
+    """A pod rented ahead of a session's first part (WARM_START, 2026-10-27):
+    no part of its own. Report the warm job done -- that is the orchestrator's
+    sign it started -- then fetch the models while waiting."""
+    report_final_job_status(done=True, stage="done", message="machine ready for this session's first part")
+    prefetch_models()
+
+
 def main():
     pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod -- still used to identify this pod when asking for a session's next part, just not to delete itself any more (PIC-138)
     idle_sec = float(os.environ.get("WARM_IDLE_SEC") or 0)
     accept_until = float(os.environ.get("WARM_ACCEPT_UNTIL") or 0)
     outcome = None
+    warm = os.environ.get("WARM_START") == "1"
     while True:
-        outcome = run_reporting()
+        if warm:
+            warm_start()
+            outcome, warm = "done", False
+        else:
+            outcome = run_reporting()
         session_id = os.environ.get("RECORDING_SESSION_ID")
         # A failure stops here: whatever broke may break the next part
         # too, and a fresh machine will take it instead.

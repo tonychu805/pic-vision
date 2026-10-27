@@ -626,6 +626,10 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
         cameras,
         agentName: getAgentName(),
         ...agentBuildInfo(typeof app.getVersion === "function" ? app.getVersion() : null, process.platform),
+        // Part length (0 = whole recordings): the console readies a GPU this
+        // long into a session, minus 3 minutes, so part 1 isn't kept waiting
+        // for a machine to start (2026-10-27).
+        partMinutes: getAutoSplitMinutes(),
       }),
     });
     if (!res.ok) {
