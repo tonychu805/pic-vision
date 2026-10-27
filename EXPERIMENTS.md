@@ -2607,3 +2607,34 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 **Conclusion.** Against the PIC-196 gate as written ("a feature that demonstrably tracks human grades is kept; otherwise record 'no signal' and stop ball-only work"): **no feature demonstrably beats the shipped score**. Whether to stop ball-only work, or to test it against category labels instead of the pooled grade, is the operator's decision (not made here). One analysis over four videos from three venues is not a go/no-go; a second session is still required.
 
 **Next, if ball-only work continues.** Label a small set of rallies by type on the pilot set (PIC-203/219), then test whether pace share / kitchen score / escalation separate *those* types, judged on playback (PIC-209).
+
+## 2026-10-27 — Badges on a full 25-minute YouTube session through the pod's own code: pose cost, and why badges must be decided per session, not per part
+
+**Why.** Before badges go anywhere near production, the operator asked for a full-length session, not just the 5-15 minute clips used so far. Also: is a part's "typical swing" stable enough for each pod to award badges on its own?
+
+**Setup.** `videos/brickwall_30fps.mp4` (YouTube, 1280×720 30 fps, 1513 s — the substream's resolution), cached k14 predictions, occlusion bridge on. Run locally through the same functions the staging pod calls after inference (scratchpad `fullrun/run.py`): `detect_candidates` → `src/pose.py` (yolov8x-pose TorchScript, fp16, batch 8) on rally windows → `src/badges.py` → full / burst / top-10 reels. RTX 2000 Ada (the staging pod's GPU type), local torch 2.13 rather than the pod's 2.1 (same TorchScript file). Code: `staging/badges` 1605a4f (before the measure/decide split; the split reproduces it exactly).
+
+**Cost.**
+
+| step | time | note |
+|---|---|---|
+| rally detection | 0.4 s | 42 rallies |
+| pose | **1394 s (23.2 min)** | 27,329 of 45,396 frames (60%), steady 19.7 fps |
+| badges | 3.7 s | 685 swing peaks |
+| cut (full + burst + 10 clips) | 31 s | |
+
+- **Pose runs at 0.92× real time on this pro footage**: a 25-minute session adds about 23 minutes of pod time on top of TrackNet. Rec play has more dead time between rallies, so a smaller share of frames. Not yet measured on rec footage or on an L4.
+
+**Badges (whole video as one part).** Typical swing 1.95. 15 candidates: 10 Kitchen War (margins 1.06-1.55), 5 Quick Hands (1.00-1.25; five rallies exactly at the 4-fast-swing bar). Awarded: **Kitchen War 929.2 s, Quick Hands 554.4 s**. No Hardest Swing, First Strike or Killer Shot. Both badged rallies are in the top 10 by score (ranks 3 and 5).
+
+**Per part vs per session (same poses, split by time).**
+
+| split | typical swing per part | badges if each part decides | badges decided per session |
+|---|---|---|---|
+| 10-min parts (3) | 1.96 / 2.00 / **1.73** | **7** (3 Kitchen War, 3 Quick Hands, 1 First Strike) | 2: Kitchen War 929.2, Quick Hands 1063.6 |
+| 15-min parts (2) | 1.95 / 1.95 | 4 | 2: Kitchen War 929.2, Quick Hands 554.4 |
+
+- **Per-part awarding breaks "one per session" outright** (7 badges where the session earns 2), and the last 10-minute part's typical swing was 11% lower, which is what let a First Strike through there.
+- Decided per session, the result matches the whole-video run, except Quick Hands with 10-minute parts: the 554.4 s rally crosses the 600 s split, so each half saw fewer fast swings, and the tie-equal 1063.6 s rally won. Real parts split at the same kind of boundary.
+
+**Conclusion.** Badges are decided per session by the console from every part's measurements (pods measure only), which became `feature/pod-badges` ee01dda + console `feature/session-badges`. Pose cost (~0.9× real time on dense play) is the open cost question; measure it on staging with real parts.
