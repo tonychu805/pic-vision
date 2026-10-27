@@ -2688,3 +2688,20 @@ A 10-minute part took 13.6-17.4 min from end of recording to done. Badges were r
 **Result.** Game end 07:41:46. Parts done +4.8 min (part 3, RTX 4000 Ada), +9.0 (part 1, RTX 2000 Ada), +13.2 (part 2, RTX 4000 Ada); badges final 07:55:00 (+13.2): Kitchen War (part 2) and Killer Shot (part 1) again. 28/28 rally clips carry a framing path. The console offered exactly the 10 delivered clips; each was trimmed, cropped to 9:16 (608x1080, no upscale) and uploaded in 9.5-17 s (~2 min for all 10, starting 07:59). The share API returned 10 vertical links and `/r/<share>/test` served 200. Pods terminated by id right after (3 were still RUNNING).
 
 **Caveats.** The stand-in desktop ran after the session finished, not alongside it; on a venue Mac clips would sharpen as each part lands. Vertical framing not yet judged by watching. Console deploy of c354bad (video/mp4 override) blocked by a Netlify-GitHub clone failure, so the sharp/vertical files are still served as application/octet-stream on staging.
+
+## 2026-10-27 (evening) — Staging replay #3: 5-min parts + warm machine + GPU order + faster cutting
+
+**Setup.** Lifetime Fall Classic replayed as 5 parts (4 x 300 s + 102.7 s) through the real desktop agent API (create job -> presigned PUT -> complete) on the game clock; recording started 10:17:56 UTC, game end 10:39:38. Staging pod code 138f660, console 8ba1144, orchestrator with the reordered GPU list + live $0.50 cap and the warm-job tick. Stand-in desktop (`desktop/scripts/sample-high-res.mjs --camera`) running alongside. (Part 1 went ~1.5 min late: my driver sent `size` instead of `sizeBytes`.)
+
+| part | machine | queued -> done |
+|---|---|---|
+| warm job | RTX 4000 Ada, rented 10:20:01, waiting 10:21:49 | — |
+| 1 | warm machine | 10:23:39 -> 10:30:18 (6.6 min, 0 s pickup) |
+| 2 | new RTX 2000 Ada (no faster card free) | 10:28:15 -> 10:38:13 (10.0 min incl. 0.75 min pickup) |
+| 3 | warm (RTX 4000 Ada) | 10:33:15 -> 10:38:58 (5.7 min) |
+| 4 | warm (the RTX 2000 Ada, reused) | 10:38:15 -> 10:43:49 (5.6 min) |
+| 5 | warm (RTX 4000 Ada) | 10:39:50 -> 10:41:50 (2.0 min) |
+
+**Result.** All clips done **+4.2 min** after the game (13.2 min in replay #2); badges final +4.3 min (Kitchen War part 3, Killer Shot part 1); all 10 shown clips sharp + vertical +4.6 min (10:44:11). Uploads 16-17 s per 5-min part. 19 vertical crops made over the session (clips that were top-10 at the time; some later dropped out).
+
+**Findings.** The warm job queued exactly at part length - 3 min and the machine was waiting before part 1. With 5-minute parts a part takes longer to process (5.6-10 min) than to record, so one warm machine can't keep up: part 2 rented a fresh machine and got the slow RTX 2000 Ada (faster cards out of stock). A second warm machine during play would close that. Two pods were still RUNNING after the session (one is the session's legitimate 12-min waiter).
