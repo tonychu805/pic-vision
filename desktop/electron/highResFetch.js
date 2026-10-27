@@ -18,6 +18,7 @@ import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
 import { listCameras } from "./cameras/store.js";
+import { cropVertical } from "./verticalCrop.js";
 
 // Guards against the SAME reel being started twice -- the console keeps
 // offering a fetch on every heartbeat until this machine's own PATCH
@@ -153,10 +154,36 @@ export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
   }
 }
 
-async function uploadHighRes(reelId, filePath) {
+// verticalPath (2026-10-27): the 9:16 crop of the same clip, when there is
+// one -- minted and uploaded the same way, confirmed in the same PATCH.
+async function uploadHighRes(reelId, filePath, verticalPath = null) {
   const minted = await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "POST" });
   await uploadFile(minted.url, filePath);
-  await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "PATCH", body: { key: minted.key } });
+  let verticalKey;
+  if (verticalPath) {
+    const v = await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "POST" });
+    await uploadFile(v.url, verticalPath);
+    verticalKey = v.key;
+  }
+  await consoleFetch(`/api/agents/reels/${reelId}/high-res`, {
+    method: "PATCH", body: { key: minted.key, ...(verticalKey ? { verticalKey } : {}) },
+  });
+}
+
+// The 9:16 crop of the trimmed clip, or null: no framing path from the
+// console (an older clip), or the crop failed -- the sharper 16:9 clip is
+// still sent either way.
+async function maybeCropVertical(camera, fetchReq, clipPath) {
+  const { framing, clipStartSec, partStartSec, reelId } = fetchReq;
+  if (!framing || typeof clipStartSec !== "number") return null;
+  const verticalPath = path.join(path.dirname(clipPath), "vertical.mp4");
+  try {
+    await cropVertical(clipPath, verticalPath, framing, partStartSec - clipStartSec);
+    return verticalPath;
+  } catch (err) {
+    logEvent("vertical_reel_failed", `${camera.label}: couldn't make the phone-shaped version of a rally clip`, `${reelId}: ${err.message}`);
+    return null;
+  }
 }
 
 async function processOne(camera, fetchReq) {
@@ -186,7 +213,8 @@ async function processOne(camera, fetchReq) {
   try {
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
     await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
-    await uploadHighRes(reelId, outPath);
+    const verticalPath = await maybeCropVertical(camera, fetchReq, outPath);
+    await uploadHighRes(reelId, outPath, verticalPath);
     logEvent("high_res_reel_synced", `${camera.label}: sent a sharper version of a rally clip`, reelId);
   } finally {
     rmSync(path.dirname(outPath), { recursive: true, force: true });
