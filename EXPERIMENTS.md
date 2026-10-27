@@ -2658,3 +2658,25 @@ The actual Kitchen War clip: all kitchen players in 65% (ball) vs 99%; Quick Han
 **Conclusion.** The player rule is what matters; it fixes the kitchen stand-off, which ball-only cuts in a third of frames. Badge-aware framing would add little: Kitchen War / Quick Hands are already 97–99%, the hardest and last swings' hitters 8–10 of 10, and First Strike is covered by the serve start, which applies to every clip. So framing can be decided before badges; when to crop is a practical choice (only delivered clips, high-res source). Side-on four-player spreads remain the limit (Court B players fully shown ~73%).
 
 **Caveats.** 20 clips, two cameras, two real badged rallies; "first swing" was a poor stand-in for the serve (the serve check above uses the detected serve). Not yet watched — the vertical and side-by-side clips are local (scratchpad `vertical/`).
+
+## 2026-10-27 — Staging: a full live-replayed session with badges on (Lifetime Fall Classic, 3 parts)
+
+**Why.** Players leave ~10-15 min after a game ends (operator), so clips AND badges must be final by then. First multi-part staging session with badges on, on the cloud GPUs.
+
+**Setup.** "Lifetime Fall Classic.mp4" (YouTube, fixed behind-baseline camera, 1080p60, 21.7 min), re-encoded to camera-like 1080p30 parts of 600 / 600 / 102.7 s. Calibration marked by hand from a still (`calib/lifetime_fall_classic_calib.json`, 11 points, RMSE 0.28 ft, overlay checked). Replayed on the game clock: each part uploaded (29-30 s for 10 min) and queued when it would have finished recording. Staging console 76da4fa (badges re-decided when each part's job finishes), staging pod code 11d3934 (BADGES on, clip every rally).
+
+| part | queued after recording ends | GPU | machine start | ball detection | badge pose | done | after game end (06:50:15) |
+|---|---|---|---|---|---|---|---|
+| 1 (0-10 min) | 1.3 min | RTX 2000 Ada | 1.0 min | 6.8 min | 6.4 min (6,670 frames, 17 fps) | 06:57:22 | +7.1 min |
+| 2 (10-20 min) | 0.9 min | RTX 4000 Ada | 1.3 min | 6.1 min | 2.4 min (3,269 frames) | 07:02:11 | **+11.9 min** |
+| 3 (20-21.7 min) | 0.6 min | L4 | 2.0 min | 0.7 min | 0.4 min | 06:54:42 | +4.5 min |
+
+A 10-minute part took 13.6-17.4 min from end of recording to done. Badges were re-decided 10 s after part 1 finished and 7 s after part 2 (final at 07:02:18, +12.1 min): Killer Shot (part 1, score 37, rank 18) and Kitchen War (part 2, score 60). 28 rally clips, 10 delivered (badged + best by score).
+
+**Findings.**
+- **The deadline is the last full part's processing**, not badges: clips and badges were final 12 min after the game. A game ending exactly on a part boundary puts the last full part at ~14-17 min after the end -- past 10-15 min. Ball detection (6-7 min per 10-min part) is the larger share; pose is 2.4 min on an RTX 4000 Ada but 6.4 min on an RTX 2000 Ada.
+- **No clip carried a framing path**: `src/framing.py` was missing from `pod_deps.POD_DEPS_FILES`, the lazy import failed on the pod, and the best-effort step swallowed it. Fixed (dc5661c) with a test over the pod's whole import closure.
+- **Pod leak reproduced**: all three pods were still RUNNING 3-10 min after their parts finished; only the L4 was the session's legitimate warm pod. Terminated by id.
+- The L4 billed $0.59/hr against the $0.50 cap.
+
+**Caveats.** One session; GPU type is whatever the orchestrator rented. My first read of part 2 ("8 minutes to start") was wrong -- the job's message field lags the stage; stage timestamps showed a 1.3 min start.
