@@ -135,73 +135,107 @@ def _kitchen_standoff(people):
     return any(12 <= y <= 18 for y in yy) and any(26 <= y <= 32 for y in yy)
 
 
-def assess(P, segments, W, H):
-    """Badge candidates for one video's rallies, plus the winners within it.
+def measure(P, segments, W, H):
+    """One part's raw measurements -- what a pod sends; it decides nothing.
+
+    Every bar is relative to the SESSION's typical swing and serve, which no
+    single part knows (a slow part makes the next part's swings look fast),
+    so the console gathers every part's measurements and calls decide().
 
     P: {str(frame): [person]} from src/pose.py; segments: rallies in seconds.
-    Returns {"typical_swing", "n_swings", "candidates": [...], "awarded": {badge: candidate}}.
-    A candidate is {badge, rally, start, end, value, margin, t}; margin =
-    how far past its bar (1.0 = exactly on it), which is also how badges
-    are chosen when two want the same rally.
+    Returns {"swings": [[speed, t, court_y], ...] (every swing peak in the
+    part, fastest first), "rallies": [{"start", "end", "share", "serve":
+    [speed, t, court_y] or None}]}. share = fraction of the rally with a
+    player at each kitchen line; serve is None when the serve window wasn't
+    posed well enough to judge.
     """
     P = {f: [p for p in people if _player(p)] for f, people in P.items()}
-    pk = swing_peaks(P, W, H)
-    result = {"typical_swing": None, "n_swings": len(pk), "candidates": [], "awarded": {}}
-    if not pk:
+    swings = [[round(p[0], 5), round(p[1], 3), round(p[5], 3)] for p in swing_peaks(P, W, H)]
+    rallies = []
+    for r in segments:
+        fs = [f for f in range(int(r["start"] * FPS), int(r["end"] * FPS) + 1) if str(f) in P]
+        share = sum(_kitchen_standoff(P[str(f)]) for f in fs) / len(fs) if fs else 0.0
+        window = range(int((r["start"] - 1.5) * FPS), int(r["start"] * FPS) + 1)
+        serve = None
+        if sum(1 for f in window if str(f) in P) >= 0.8 * len(window):
+            b = serve_peak(P, window, W, H)
+            if b:
+                serve = [round(b[0], 5), round(b[1], 3), round(b[5], 3)]
+        rallies.append({"start": r["start"], "end": r["end"], "share": round(share, 5), "serve": serve})
+    return {"swings": swings, "rallies": rallies}
+
+
+def decide(parts):
+    """Badges for a whole session from every part's measure().
+
+    parts: list of measure() results, one per part, in any order. Returns
+    {"typical_swing", "n_swings", "candidates", "awarded"}. A candidate is
+    {badge, part, rally, start, end, value, margin, t}: `part` is the index
+    into `parts`, `rally` the index into that part's rallies; margin = how
+    far past its bar (1.0 = exactly on it), which is also how badges are
+    chosen when two want the same rally. Only candidates (every one at or
+    past its bar) can be awarded, so no rally clearing a bar means no badge.
+    """
+    speeds = [s[0] for m in parts for s in m["swings"]]
+    result = {"typical_swing": None, "n_swings": len(speeds), "candidates": [], "awarded": {}}
+    if not speeds:
         return result
-    med = st.median(p[0] for p in pk)
+    med = st.median(speeds)
     result["typical_swing"] = med
     if med <= 0:          # nobody actually swung: nothing to measure against
         return result
 
-    def adj(p):
-        return p[0] / med / ZONE_P90[zone(p[5])] * ALL_P90
+    def adj(s):           # [speed, t, court_y] -> times typical, position-corrected
+        return s[0] / med / ZONE_P90[zone(s[2])] * ALL_P90
 
     cands, serves = [], []
 
-    def add(badge, i, value, margin, t=None):
-        r = segments[i]
-        cands.append({"badge": badge, "rally": i, "start": r["start"], "end": r["end"],
+    def add(badge, k, i, value, margin, t=None):
+        r = parts[k]["rallies"][i]
+        cands.append({"badge": badge, "part": k, "rally": i, "start": r["start"], "end": r["end"],
                       "value": float(value), "margin": float(margin), "t": t})
 
-    for i, r in enumerate(segments):
-        fs = [f for f in range(int(r["start"] * FPS), int(r["end"] * FPS) + 1) if str(f) in P]
-        share = sum(_kitchen_standoff(P[str(f)]) for f in fs) / len(fs) if fs else 0.0
-        rs = sorted((p for p in pk if r["start"] - 1.5 <= p[1] <= r["end"] + 0.5), key=lambda p: p[1])
-        fast = [p for p in rs if adj(p) >= FAST]
-        if share >= BARS["Kitchen War"] and len(fast) <= 1:
-            add("Kitchen War", i, share, share / BARS["Kitchen War"])
-        if share >= BARS["Kitchen War"] and len(fast) >= BARS["Quick Hands"]:
-            add("Quick Hands", i, len(fast), len(fast) / BARS["Quick Hands"])
-        for p in rs:
-            if adj(p) >= BARS["Hardest Swing"] and not (15 <= p[5] <= 29) and r["start"] <= p[1] <= r["end"] + 0.5:
-                add("Hardest Swing", i, adj(p), adj(p) / BARS["Hardest Swing"], p[1])
-        late = [p for p in rs if adj(p) >= 1.0 and r["end"] - 2 <= p[1] <= r["end"] + 0.1]
-        if late and adj(late[-1]) >= BARS["Killer Shot"]:
-            add("Killer Shot", i, adj(late[-1]), adj(late[-1]) / BARS["Killer Shot"], late[-1][1])
-        window = range(int((r["start"] - 1.5) * FPS), int(r["start"] * FPS) + 1)
-        if sum(1 for f in window if str(f) in P) >= 0.8 * len(window):
-            b = serve_peak(P, window, W, H)
-            if b:
-                serves.append((adj(b), i, b))
+    for k, m in enumerate(parts):
+        for i, r in enumerate(m["rallies"]):
+            share = r["share"]
+            rs = sorted((s for s in m["swings"] if r["start"] - 1.5 <= s[1] <= r["end"] + 0.5), key=lambda s: s[1])
+            fast = [s for s in rs if adj(s) >= FAST]
+            if share >= BARS["Kitchen War"] and len(fast) <= 1:
+                add("Kitchen War", k, i, share, share / BARS["Kitchen War"])
+            if share >= BARS["Kitchen War"] and len(fast) >= BARS["Quick Hands"]:
+                add("Quick Hands", k, i, len(fast), len(fast) / BARS["Quick Hands"])
+            for s in rs:
+                if adj(s) >= BARS["Hardest Swing"] and not (15 <= s[2] <= 29) and r["start"] <= s[1] <= r["end"] + 0.5:
+                    add("Hardest Swing", k, i, adj(s), adj(s) / BARS["Hardest Swing"], s[1])
+            late = [s for s in rs if adj(s) >= 1.0 and r["end"] - 2 <= s[1] <= r["end"] + 0.1]
+            if late and adj(late[-1]) >= BARS["Killer Shot"]:
+                add("Killer Shot", k, i, adj(late[-1]), adj(late[-1]) / BARS["Killer Shot"], late[-1][1])
+            if r["serve"]:
+                serves.append((adj(r["serve"]), k, i, r["serve"]))
 
     if serves:
         typical_serve = st.median(s[0] for s in serves)
-        for v, i, b in serves:
+        for v, k, i, b in serves:
             if v >= BARS["First Strike"] and v / typical_serve >= FIRST_STRIKE_VS_SERVE:
-                add("First Strike", i, v, min(v / BARS["First Strike"], v / typical_serve / FIRST_STRIKE_VS_SERVE), b[1])
+                add("First Strike", k, i, v, min(v / BARS["First Strike"], v / typical_serve / FIRST_STRIKE_VS_SERVE), b[1])
 
     result["candidates"] = cands
     result["awarded"] = award(cands)
     return result
 
 
+def assess(P, segments, W, H):
+    """Badges for one video on its own: decide() over a single part."""
+    return decide([measure(P, segments, W, H)])
+
+
 def award(cands):
     """Each badge to at most one rally, each rally at most one badge, biggest margin first."""
     got, used = {}, set()
     for c in sorted(cands, key=lambda c: -c["margin"]):
-        if c["badge"] in got or c["rally"] in used:
+        key = (c.get("part", 0), c["rally"])
+        if c["badge"] in got or key in used:
             continue
         got[c["badge"]] = c
-        used.add(c["rally"])
+        used.add(key)
     return got
