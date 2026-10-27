@@ -580,12 +580,36 @@ def measure_badges(s3_in, video, segments, calib):
         result["pose_sec"] = round(time.time() - started, 1)
         _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
              f"from {len(frames)} posed frames in {result['pose_sec']}s")
-        return result
+        return result, poses
     except Cancelled:
         raise
     except Exception as e:  # noqa: BLE001 -- see docstring
         _log(f"badges skipped: {type(e).__name__}: {e}")
-        return None
+        return None, None
+
+
+def clip_framings(video, csv_path, calib, clips, poses):
+    """{clip file: 9:16 framing path} for every rally clip (src/framing.py); {} on any failure.
+
+    Data only, for vertical reels: where a phone-shaped window sits over the
+    clip as it plays, as fractions of the frame width, so the clip -- or its
+    high-res swap later -- can be cropped without re-running detection. With
+    poses (BADGES on) the window frames the server until the serve crosses
+    the net, then keeps the ball and as many players as fit; without, it
+    follows the ball. Best effort like badges: no framing never
+    costs the reel.
+    """
+    try:
+        from src import framing
+        probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=width,height", "-of", "json", video], capture_output=True, text=True, check=True)
+        st = json.loads(probe.stdout)["streams"][0]
+        xs = framing.tracked_ball_xs(csv_path, calib)
+        players = framing.on_court(poses)
+        return {c["file"]: framing.clip_framing(xs, players, c, st["width"], st["height"]) for c in clips}
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"framing skipped: {type(e).__name__}: {e}")
+        return {}
 
 
 def run():
@@ -728,7 +752,7 @@ def run():
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
-    badge_measures = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else None
+    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
@@ -744,6 +768,7 @@ def run():
                                     occlusion_bridge=OCCLUSION_BRIDGE)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
+    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
@@ -783,6 +808,9 @@ def run():
             # clip again once it has decided a session's badges from every
             # part's result["badge_measures"] (src/badges.py decide()).
             "rally_start": clip["rally_start"], "rally_end": clip["rally_end"],
+            # Where a 9:16 window sits over this clip as it plays (vertical
+            # reels, src/framing.py); absent if framing failed.
+            **({"framing": framings[clip["file"]]} if clip["file"] in framings else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
