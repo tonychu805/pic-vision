@@ -8,7 +8,9 @@ mp4v) so the clips play inline everywhere."""
 import json
 import logging
 import os
+import shutil
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 
 log = logging.getLogger(__name__)
 
@@ -83,12 +85,49 @@ def logo_filter(video_width):
             f"[0][logo]overlay=W-w-{m}:H-h-{m}")
 
 
-def clip_command(video, start, end, out_path, logo_path=None, video_width=None):
+# Clip encoders (2026-10-27: cutting took up to 2.5 min of a part on the pod,
+# every clip encoded one after another on its CPU). NVENC where the GPU and
+# ffmpeg build allow it -- the same settings pod_driver's convert step has
+# used since 2026-09-21 -- and libx264 otherwise; both yuv420p H.264, so
+# clips concatenate with -c copy either way.
+ENCODERS = {
+    "nvenc": ["-c:v", "h264_nvenc", "-preset", "p4", "-cq", "23", "-pix_fmt", "yuv420p"],
+    "cpu": ["-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p"],
+}
+# Clips encoded at once. Short clips spend much of their time starting ffmpeg
+# and seeking, which overlaps well; 4 stays inside consumer cards' NVENC
+# session limit.
+CUT_WORKERS = 4
+_encoder = None
+# Clips already cut in this process, by (video, start, end, logo): the full
+# reel and the per-rally clips cut the same padded stretches, so with every
+# rally clipped (badges on) the full reel's ~10 clips were encoded twice.
+# A repeat is hard-linked (or copied) instead of re-encoded.
+_cut_cache = {}
+
+
+def clip_encoder():
+    """"nvenc" or "cpu": PIC_VISION_ENCODER if set, else whether a one-frame
+    NVENC encode works here. Decided once per process."""
+    global _encoder
+    if _encoder is None:
+        forced = os.environ.get("PIC_VISION_ENCODER")
+        if forced in ENCODERS:
+            _encoder = forced
+        else:
+            probe = subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=256x144:d=0.1:r=30",
+                                    *ENCODERS["nvenc"], "-f", "null", "-"], capture_output=True)
+            _encoder = "nvenc" if probe.returncode == 0 else "cpu"
+        log.info("clip encoder: %s", _encoder)
+    return _encoder
+
+
+def clip_command(video, start, end, out_path, logo_path=None, video_width=None, encoder="cpu"):
     """ffmpeg command to cut [start, end] (seconds) of video into an H.264 clip.
     Re-encodes for frame-accurate boundaries; drops audio for now.
 
     With logo_path (and the source's video_width), the logo is burnt in
-    during that same encode -- no second pass."""
+    during that same encode -- no second pass. encoder: a key of ENCODERS."""
     duration = end - start
     cmd = ["ffmpeg", "-y", "-v", "error", "-ss", f"{start}", "-i", video]
     if logo_path:
@@ -96,9 +135,24 @@ def clip_command(video, start, end, out_path, logo_path=None, video_width=None):
         cmd += ["-i", logo_path, "-filter_complex", logo_filter(video_width)]
     return cmd + [
         "-t", f"{duration}",
-        "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+        *ENCODERS[encoder],
         "-movflags", "+faststart", "-an", out_path,
     ]
+
+
+def _encode_clip(video, start, end, out_path, logo_path, video_width):
+    """One clip on the chosen encoder; an NVENC failure falls back to the CPU
+    for this clip and every later one (a host that can't open an encode
+    session mid-run won't recover)."""
+    global _encoder
+    enc = clip_encoder()
+    r = subprocess.run(clip_command(video, start, end, out_path, logo_path, video_width, enc), capture_output=True, text=True)
+    if r.returncode != 0 and enc == "nvenc" and "nvenc" in (r.stderr or "").lower():
+        log.warning("NVENC failed mid-run, cutting on the CPU from here: %s", r.stderr.strip()[-200:])
+        _encoder = "cpu"
+        r = subprocess.run(clip_command(video, start, end, out_path, logo_path, video_width, "cpu"), capture_output=True, text=True)
+    if r.returncode != 0:
+        raise subprocess.CalledProcessError(r.returncode, r.args, r.stdout, r.stderr)
 
 
 def probe_width(video):
@@ -164,16 +218,35 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
     video_width = probe_width(video) if logo_path and segments else None
     sorted_segs = sorted(segments, key=lambda s: s["start"])
     n = len(sorted_segs)
-    manifest = []
+    jobs = []
     for i, seg in enumerate(sorted_segs, 1):
         fname = f"rally_{i:03d}.mp4"
         start = max(0.0, seg["start"] - pad_sec)
         end = seg["end"] + pad_sec
         log.info("[%d/%d] %.1f–%.1fs  (%.1fs, %d crossings)",
                  i, n, start, end, end - start, seg.get("crossings", 0))
-        out_path = os.path.join(out_dir, fname)
-        subprocess.run(clip_command(video, start, end, out_path,
-                                    logo_path=logo_path, video_width=video_width), check=True)
+        jobs.append((i, seg, fname, start, end, os.path.join(out_dir, fname)))
+    key = lambda j: (os.path.abspath(video), round(j[3], 3), round(j[4], 3), logo_path)
+    fresh = []
+    for j in jobs:
+        done = _cut_cache.get(key(j))
+        if done and os.path.exists(done):
+            if os.path.exists(j[5]):
+                os.remove(j[5])
+            try:
+                os.link(done, j[5])
+            except OSError:
+                shutil.copyfile(done, j[5])
+        else:
+            fresh.append(j)
+    if len(fresh) < len(jobs):
+        log.info("reused %d already-cut clips", len(jobs) - len(fresh))
+    with ThreadPoolExecutor(max_workers=CUT_WORKERS) as pool:
+        list(pool.map(lambda j: _encode_clip(video, j[3], j[4], j[5], logo_path, video_width), fresh))
+    for j in fresh:
+        _cut_cache[key(j)] = j[5]
+    manifest = []
+    for i, seg, fname, start, end, out_path in jobs:
         # The padded start/end actually requested, EXCEPT end is corrected
         # to the file's own real duration rather than trusted as cut --
         # a rally within pad_sec of the source video's own end asks ffmpeg

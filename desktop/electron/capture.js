@@ -3,7 +3,7 @@
 // management" bullet. Command shape is exactly TECH_SPEC.md §1.2's spec,
 // not reinvented: `-c copy` (stream copy, no re-encode -- nearly free on
 // CPU, and avoids PIC-67's GPU-encoder question entirely for this step),
-// 10-minute segments (`-f segment -segment_time 600` -- a crash or Wi-Fi
+// SEGMENT_MINUTES-long segments (`-f segment -segment_time`, autoSplit.js -- a crash or Wi-Fi
 // drop costs one segment, not the whole recording, per the real frame-
 // drop testing in ADR-030/032), and `-use_wallclock_as_timestamps 1`
 // (the camera's own RTP timestamps are unreliable/non-monotonic, same
@@ -15,7 +15,7 @@
 // becomes its own highlight reel once automatic capture is built"), just
 // not this one -- a manual button is simpler to get right first.
 import { spawn, spawnSync } from "node:child_process";
-import { listParts } from "./autoSplit.js";
+import { listParts, SEGMENT_MINUTES } from "./autoSplit.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -438,7 +438,7 @@ function spawnSegmenter(cameraId, slotName, url, slot) {
     "-use_wallclock_as_timestamps", "1",
     "-c", "copy",
     "-f", "segment",
-    "-segment_time", "600",
+    "-segment_time", String(SEGMENT_MINUTES * 60),
     "-segment_start_number", String(start),
     "-reset_timestamps", "1",
     path.join(slot.outDir, "session-%03d.mkv"),
