@@ -2733,3 +2733,11 @@ All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen W
 - fp32 + XLA alone (119.8 fps): 32 frames differ and **the same extra 45th rally** -- so it is a borderline stretch that flips with any change in arithmetic order, not a float16 effect; float16 + XLA costs nothing more and is faster.
 
 **Not yet measured on the cloud cards** (fewer/slower CPU cores, A5000/RTX 4000 GPUs); next is a staging replay.
+
+## 2026-10-27 (late) — Staging replay #6: faster ball detection on the cloud; orchestrator blind after ~50 requests
+
+**Setup.** Same 5-part replay, pod code 9eccc2f (float16 + XLA + cheaper mask). RunPod had none of the faster cards: every pod was an RTX 2000 Ada. The warm job was claimed at 15:30:00 but its pod only appeared at 15:34:36 (capacity retries), so part 1 rented its own pod at 15:33.
+
+**Result.** Game end 15:48:53; all clips done **15:50:42 (+1.8 min)**. Ball detection ("inference" stage) per 5-min part on the RTX 2000: 68 s, 46 s, 62 s, 44 s (was ~3.5 min). Part totals from claim: part 2 6.3 min (10.0 in replay #3 on the same card), part 3 4.9, part 4 3.2, part 5 1.5 -- under the 5-min real-time line from part 3 on, so one machine keeps up even on the slow card.
+
+**Finding.** Both pods were still RUNNING (restart loop) 9 min after their last part although the console answered `needed: false`. The orchestrator's Workflow instances had every read fail from 15:47:30 (job state, RunPod pod state and needed all null) after ~15 successful polls: Cloudflare Workers **Free** caps a Workflow instance at **50 external subrequests** (Paid: 10,000). Each poll makes 3 (2 before the needed check), so a job Workflow goes blind ~15-25 min in -- no cancel, no finished-pod detection -- and pods run to the 3-hour deadline (enforced from the Workflow's own clock). Replay #5's termination worked only because its instance happened to restart partway. Applies to production too. Pods terminated by id.
