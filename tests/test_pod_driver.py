@@ -509,3 +509,46 @@ def test_clip_framings_gives_each_rally_clip_a_path(tmp_path, monkeypatch):
 
 def test_clip_framings_never_costs_the_reel():
     assert pod_driver.clip_framings("/no/such/video.mp4", "x.csv", {}, [{"file": "a", "start": 0, "end": 1}], None) == {}
+
+
+# --- warm start: a pod rented ahead of a session's first part (2026-10-27) ---
+
+def test_warm_start_reports_in_then_waits_for_the_first_part_without_running_a_job(monkeypatch):
+    calls = []
+    monkeypatch.setenv("WARM_START", "1")
+    monkeypatch.setenv("RECORDING_SESSION_ID", "sess-1")
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod-1")
+    monkeypatch.setenv("WARM_IDLE_SEC", "60")
+    monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: calls.append(("report", kw.get("done"))))
+    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: calls.append(("prefetch",)))
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
+    monkeypatch.setattr(pod_driver, "wait_for_next_part", lambda *a, **k: calls.append(("wait",)) or None)
+    pod_driver.main()
+    assert calls == [("report", True), ("prefetch",), ("wait",)]
+
+
+def test_warm_start_runs_the_part_it_is_handed(monkeypatch):
+    calls = []
+    monkeypatch.setenv("WARM_START", "1")
+    monkeypatch.setenv("RECORDING_SESSION_ID", "sess-1")
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod-1")
+    monkeypatch.setenv("WARM_IDLE_SEC", "60")
+    handed = iter([{"JOB_ID": "part-1"}, None])
+    monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: None)
+    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: None)
+    monkeypatch.setattr(pod_driver, "apply_job_env", lambda env: calls.append(("took", env["JOB_ID"])))
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
+    monkeypatch.setattr(pod_driver, "wait_for_next_part", lambda *a, **k: next(handed))
+    pod_driver.main()
+    assert calls == [("took", "part-1"), ("run",)]
+
+
+# Paired: an ordinary job pod is unchanged -- it runs its own job first.
+def test_without_warm_start_the_pod_runs_its_own_job_first(monkeypatch):
+    calls = []
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append("run") or "done")
+    monkeypatch.setattr(pod_driver, "warm_start", lambda: calls.append("warm"))
+    pod_driver.main()
+    assert calls == ["run"]
