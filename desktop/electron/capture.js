@@ -15,7 +15,7 @@
 // becomes its own highlight reel once automatic capture is built"), just
 // not this one -- a manual button is simpler to get right first.
 import { spawn, spawnSync } from "node:child_process";
-import { listParts, SEGMENT_MINUTES } from "./autoSplit.js";
+import { listParts, partsDir, SEGMENT_MINUTES, SEGMENT_RE } from "./autoSplit.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -696,9 +696,31 @@ export function activeOutDir(cameraId) {
 // everything upload-related already only ever has a main outDir in hand
 // (started.outDir, note.outDir, activeOutDir()), by long-standing
 // convention this keeps rather than changes.
+//
+// The sibling existing is not enough (2026-10-28): startRecording creates
+// it before the sub-stream has connected, so a camera whose sub-stream
+// never came up left an empty folder that won every time -- nothing was
+// uploaded and the session got no clips, while main recorded fine. So:
+//   - once auto-split has made a part in either folder, stay with that one
+//     (part numbering and the high-res fetch read one folder per recording);
+//   - before that, use the sub-stream only while it keeps up with main (it
+//     may trail by the one segment it connected later), else main.
+// Uploading main costs bandwidth (~2-3x per part), not correctness: the pod
+// takes any resolution, and the high-res fetch re-trims main either way.
 export function uploadDirFor(outDir) {
   const subDir = `${outDir}-sub`;
-  return existsSync(subDir) ? subDir : outDir;
+  if (!existsSync(subDir)) return outDir;
+  if (existsSync(partsDir(subDir))) return subDir;
+  if (existsSync(partsDir(outDir))) return outDir;
+  return segmentCount(subDir) >= segmentCount(outDir) - 1 ? subDir : outDir;
+}
+
+function segmentCount(dir) {
+  try {
+    return readdirSync(dir).filter((f) => SEGMENT_RE.test(f)).length;
+  } catch {
+    return 0;
+  }
 }
 
 // Is `pid` still one of OUR recordings? Checked against its command line,
