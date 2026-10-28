@@ -3507,3 +3507,47 @@ All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen W
 - fp32 + XLA alone (119.8 fps): 32 frames differ and **the same extra 45th rally** -- so it is a borderline stretch that flips with any change in arithmetic order, not a float16 effect; float16 + XLA costs nothing more and is faster.
 
 **Not yet measured on the cloud cards** (fewer/slower CPU cores, A5000/RTX 4000 GPUs); next is a staging replay.
+
+## 2026-10-27 (late) — Staging replay #6: faster ball detection on the cloud; orchestrator blind after ~50 requests
+
+**Setup.** Same 5-part replay, pod code 9eccc2f (float16 + XLA + cheaper mask). RunPod had none of the faster cards: every pod was an RTX 2000 Ada. The warm job was claimed at 15:30:00 but its pod only appeared at 15:34:36 (capacity retries), so part 1 rented its own pod at 15:33.
+
+**Result.** Game end 15:48:53; all clips done **15:50:42 (+1.8 min)**. Ball detection ("inference" stage) per 5-min part on the RTX 2000: 68 s, 46 s, 62 s, 44 s (was ~3.5 min). Part totals from claim: part 2 6.3 min (10.0 in replay #3 on the same card), part 3 4.9, part 4 3.2, part 5 1.5 -- under the 5-min real-time line from part 3 on, so one machine keeps up even on the slow card.
+
+**Finding.** Both pods were still RUNNING (restart loop) 9 min after their last part although the console answered `needed: false`. The orchestrator's Workflow instances had every read fail from 15:47:30 (job state, RunPod pod state and needed all null) after ~15 successful polls: Cloudflare Workers **Free** caps a Workflow instance at **50 external subrequests** (Paid: 10,000). Each poll makes 3 (2 before the needed check), so a job Workflow goes blind ~15-25 min in -- no cancel, no finished-pod detection -- and pods run to the 3-hour deadline (enforced from the Workflow's own clock). Replay #5's termination worked only because its instance happened to restart partway. Applies to production too. Pods terminated by id.
+
+## 2026-10-28 (00:30 TW) — Staging replay #7: once-a-minute cleanup removes every machine on its own
+
+**Setup.** Same 5-part replay; console 59f10f6 (GET /api/runner/pods) and the staging orchestrator with the cron cleanup (machines handed off at check-in; cleanup terminates not-needed machines idle 90 s+, past the deadline, or vanished). No manual termination.
+
+**Result.** Game end 16:53:43; all clips 16:55:59 (+2.3 min), badges 16:56:03. Machines: A4500 (warm; parts 2-3) last part 16:51:39 -> gone by 16:54:13; RTX 2000 (parts 1, 4) and a fresh A4500 (part 5) last parts 16:55:51 / 16:55:59 -> RunPod empty at 16:58:20. ~35 machine-minutes, ~$0.14 (~$0.40 per hour of play).
+
+**Seen.** RunPod had no capacity at 16:34 and 16:35 for any card on the list ("There are no instances currently available"); the warm job's third try (after a 3-min backoff) got an A4500 at 16:38, after part 1 (16:37) had been claimed -- part 1's own pod also waited ~4 min for capacity. When the A4500 finished part 3 (16:51:39) another machine was the session's waiter and nothing was uploading, so warm_pod_next told it to stop; the last part (16:53:52) then needed a fresh machine. Next: retry a warm job every ~30 s, start it a little earlier, and keep a second machine for one part length while the session is recording.
+
+## 2026-10-28 (09:30 TW) — Staging replay #8: warm machine rented at recording start; part 1 held for it
+
+**Setup.** Same 5-part replay; console 0b3a4ec (PREWARM_LEAD_SEC 180 -> 360, so with 5-min parts the warm job is queued on the first tick after recording starts; claim_next_job holds a queued part while its session's warm job is queued/starting and < 8 min old).
+
+**Result.** Recording 01:07:52 UTC, game end 01:29:45. Warm job queued 01:08:00, RTX 4000 Ada ($0.28/h) on the first try, checked in 01:09:09; it took part 1 at 01:13:23 (12 s after upload) and parts 2-4 (each 3.1-4.9 min from claim). Part 5 (01:29:36) arrived while it was on part 4, so a fresh RTX 2000 Ada was rented (01:30:00 -> done 01:33:01). All clips done 01:33:01 (**+3.3 min**), badges 01:33:05; all 10 shown clips sharp + vertical by 01:31:54. Machines gone 01:33:07 and 01:35:04 (cleanup, no manual action). ~30 machine-minutes (25 + 5), **~$0.14** (~$0.37 per hour of play).
+
+**Seen.** The hold never had to act (the warm machine was ready 4 min before part 1); idle was the warm machine's 4.2-min wait for part 1, ~2.2 min of gaps between parts, and ~1.5 + ~2 min after each machine's last part. Finish time was set by the end of the session: part 4 (queued 01:27:54) finished 01:31:32 and part 5 needed a machine of its own; replay #7's +2.3 had a faster part 4/5 pair. **Correction to my 10-28 reading of replay #7:** its 5.6-min warm start was RunPod capacity retries (logged in the #7 entry above), not an image download; machine-minutes count from pod creation, so #7's ~35 min / ~$0.14 stands.
+
+## 2026-10-28 (11:00 TW) — Staging replay #9: 720p uploads (the dual-stream design); a stuck machine start nobody caught
+
+**Setup.** Same game and 5-min parts, but the desktop driver uploaded **720p30 ~2 Mbps** copies (cut from the original 1080p60 once, like a camera's sub-stream); the stand-in desktop cut sharp + vertical clips from the 1080p original, as the venue machine does from the main stream. Console 0b3a4ec.
+
+**Detection, 720p vs replay #8's 1080p (parts 1-4; same rally = IoU >= 0.5 within the part).** 1080p 26 rallies, 720p 27; **18 matched** (+1 at 1080p 120-132 vs 720p 115-127, IoU 0.41); 7 found only at 1080p, 8 only at 720p. Of the 10 shown clips, 6 are the same moments. Kitchen War: same rally (p3). Killer Shot: different rally (1080p p1 120-132, 720p p4 268-290). 720p scores generally lower. Part 5: 1 rally each. No collapse here, unlike the 10-27 PGC harness (13 -> 4-6 rallies) -- but this is a YouTube pro match, not a venue camera, and there are no labels to say which list is better. Upload time unchanged (17-19 s per part): the 720p copies' 2 Mbps matches the 1080p copies' ~1.9 Mbps.
+
+**Timing.** Recording 02:31:05 UTC, game end 02:52:58. Warm RTX A5000 ($0.27/h) up 02:32:23, parts 1-4 (3.4-3.6 min each from claim). Part 5 (queued 02:52:5x) got a fresh RTX 4000 Ada in Iceland at 02:53:06 whose container **did not start for 10.2 min** (runtime null until ~03:03:20; a host without our image). Part 5 done 03:04:16, badges final 03:04:19 (**+11.4 min**); the 10 shown clips were sharp + vertical by 02:55:35 (+2.6), and part 5 changed none of them. Machines gone 02:57 and 03:06:10. ~37 machine-minutes, ~$0.17.
+
+**Bug.** The orchestrator's 8-minute stuck-start retry (ADR-101) never fired: `reelJob.ts` treats any change to the job's `updated_at` as the pod checking in, and its own `record-gpu` PATCH (gpu + podId, right after creating the pod) changes `updated_at`, so the first poll a minute later reads "checked in" and hands the pod to the cleanup -- which keeps it because the job is running on it. Same comparison and PATCH on origin/main (production's `checkedIn` path), so a container that never starts is not retried there either; here the job would have hung until the 3-hour deadline had the container never started.
+
+## 2026-10-28 (12:00 TW) — Staging replay #10: 720p, all of today's fixes; one machine for the whole session
+
+**Setup.** Same 720p parts as replay #9 (cloud gets 720p30 ~2 Mbps; stand-in cuts sharp + vertical from 1080p). Console 1befc3c: warm machine at recording start, part held for a starting machine, **part held for a machine finishing the session's previous part** (stage inference or later), staging orchestrator c97c73d0 (check-in = stage moves; stuck start replaced after 4 min).
+
+**Result.** Recording 03:21:10 UTC, game end 03:43:03. One RTX 2000 Ada ($0.24/h, Iceland) rented 03:22:02, started 03:23:15 (1.2 min). It took every part: 1-4 at 4:02-4:16 each from claim; part 5 (queued 03:42:55, while part 4 was at badges) was held and taken by the same machine 5 s after part 4 finished (03:45:53 -> 03:47:03). Final list (badges) 03:47:07, **+4.1 min**; 10 shown clips sharp + vertical by 03:46:40 (+3.6). Machine gone ~03:49:00 (cleanup). **~27 machine-minutes, ~$0.11** (~$0.30 per hour of play).
+
+**Per 5-min part on the RTX 2000 Ada:** prep ~20 s, ball detection ~45 s, **badges (pose) ~2:15-2:35**, cut + upload ~35 s. Badges are now ~60% of each part.
+
+**Seen.** 29 rallies (replay #9, same 720p files on an A5000: 28). Kitchen War is the same rally as #8-#9 (p3 215-232). Killer Shot moved again: p2 23-46 here, p4 268-290 in #9, p1 120-132 at 1080p in #8. So it is not stable across GPU types even on identical input (float16 + XLA arithmetic differs by card); worth checking how close the Killer Shot candidates' measures are.
