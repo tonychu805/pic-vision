@@ -507,6 +507,25 @@ def test_clip_framings_gives_each_rally_clip_a_path(tmp_path, monkeypatch):
     assert got["rally_001.mp4"]["x"][0] > 0.8 and got["rally_002.mp4"]["x"][-1] < 0.2
 
 
+def test_clip_framings_puts_the_ball_where_it_is_when_the_video_is_smaller_than_the_calibration(tmp_path, monkeypatch):
+    # A 720p upload against a 1080p calibration (production's dual-stream
+    # sub-stream): the ball track is in calibration pixels, so a ball at the
+    # middle of the court (x=960 of 1920) must frame the middle of the 1280-wide
+    # video -- not 960/1280 = 0.75 (staging replays #9-#10).
+    import subprocess
+    from src import framing
+    video = str(tmp_path / "v.mp4")
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=2:r=30",
+                    "-pix_fmt", "yuv420p", video], check=True)
+    monkeypatch.setattr(framing, "tracked_ball_xs", lambda csv, calib, fps=30.0: [960.0] * 60)
+    clips = [{"file": "rally_001.mp4", "start": 0.0, "end": 2.0}]
+    got = pod_driver.clip_framings(video, "unused.csv", {"calibration_resolution": [1920, 1080]}, clips, poses=None)
+    assert all(abs(x - 0.5) < 0.02 for x in got["rally_001.mp4"]["x"])
+    # Paired: with no calibration_resolution the track is taken as the video's own pixels.
+    got = pod_driver.clip_framings(video, "unused.csv", {}, clips, poses=None)
+    assert all(abs(x - 0.75) < 0.02 for x in got["rally_001.mp4"]["x"])
+
+
 def test_clip_framings_never_costs_the_reel():
     assert pod_driver.clip_framings("/no/such/video.mp4", "x.csv", {}, [{"file": "a", "start": 0, "end": 1}], None) == {}
 

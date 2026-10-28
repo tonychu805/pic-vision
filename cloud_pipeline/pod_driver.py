@@ -605,7 +605,13 @@ def clip_framings(video, csv_path, calib, clips, poses):
         probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
                                 "stream=width,height", "-of", "json", video], capture_output=True, text=True, check=True)
         st = json.loads(probe.stdout)["streams"][0]
-        xs = framing.tracked_ball_xs(csv_path, calib)
+        # The ball track is in calibration-resolution pixels (pod_infer
+        # writes predictions there); poses and W are this video's. A 720p
+        # sub-stream against a 1080p calibration read every ball 1.5x too far
+        # right, so the window ran to the frame's right edge (staging replays
+        # #9-#10, 2026-10-28) -- scale the ball into the video's pixels.
+        sx = st["width"] / float((calib.get("calibration_resolution") or [st["width"]])[0])
+        xs = [None if x is None else x * sx for x in framing.tracked_ball_xs(csv_path, calib)]
         players = framing.on_court(poses)
         return {c["file"]: framing.clip_framing(xs, players, c, st["width"], st["height"]) for c in clips}
     except Exception as e:  # noqa: BLE001 -- see docstring
