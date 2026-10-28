@@ -24,13 +24,13 @@ import path from "node:path";
 import { powerSaveBlocker } from "electron";
 import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
 import { logEvent } from "./activityLog.js";
+import { retryWithinWindow } from "./uploadRetry.js";
 
 const SEGMENT_RE = /^session-\d+\.mkv$/;
 // Overridable only so a test can watch several polls without waiting a
 // minute; nothing else sets it. Same seam auth.js and cloud.js already have
 // for their endpoints.
 const POLL_INTERVAL_MS = Number(process.env.PIC_VISION_POLL_INTERVAL_MS) || 5_000;
-const UPLOAD_RETRIES = 3;
 const TERMINAL = new Set(["done", "error", "cancelled"]);
 
 // recordingDir -> { jobId, label, cancelled, abort }. Keyed by the recording's own
@@ -116,32 +116,32 @@ function segmentsIn(recordingDir) {
     .map((f) => path.join(recordingDir, f));
 }
 
+// Keeps trying for uploadRetry.js's window (15 min since 2026-10-28; it was
+// 3 tries a few seconds apart, which lost a whole part to a 2-minute stall).
 async function uploadWithRetry(jobId, upload, filePath, onProgress, rec) {
   let url = upload.url;
-  for (let attempt = 1; ; attempt++) {
-    try {
-      return await uploadFile(url, filePath, onProgress, rec?.abort?.signal);
-    } catch (err) {
-      // A cancel is not a transport failure. Without this the retry loop
-      // would helpfully start the very transfer the operator just stopped,
-      // twice, and the `refresh` below would 409 on the now-cancelled job.
-      if (err.aborted || rec?.cancelled) throw err;
-      // A 403 here is almost always an expired signature rather than a
-      // real permission problem -- a venue on slow Wi-Fi can take longer
-      // to push a session than the URL's lifetime. Ask for a fresh one
-      // before spending a retry on the same dead URL.
-      if (err.status === 403) {
-        const refreshed = await consoleFetch(`/api/agents/jobs/${jobId}`, {
-          method: "PATCH",
-          body: { action: "refresh" },
-        });
-        const match = refreshed.uploads?.find((u) => u.name === upload.name);
-        if (match) url = match.url;
-      }
-      if (attempt >= UPLOAD_RETRIES) throw err;
-      await new Promise((r) => setTimeout(r, 2000 * attempt));
-    }
-  }
+  return retryWithinWindow(() => uploadFile(url, filePath, onProgress, rec?.abort?.signal), {
+    // A cancel is not a transport failure. Without this the retry loop
+    // would helpfully start the very transfer the operator just stopped,
+    // and the `refresh` below would 409 on the now-cancelled job.
+    shouldStop: (err) => Boolean(err.aborted || rec?.cancelled),
+    onRetry: (err, n, delay) => {
+      logEvent("upload_retry", `${rec?.label ?? "Recording"} upload interrupted, trying again in ${Math.round(delay / 1000)}s (try ${n + 1})`, err.message);
+    },
+    // A 403 here is almost always an expired signature rather than a
+    // real permission problem -- a venue on slow Wi-Fi can take longer
+    // to push a session than the URL's lifetime. Ask for a fresh one
+    // before spending a retry on the same dead URL.
+    beforeRetry: async (err) => {
+      if (err.status !== 403) return;
+      const refreshed = await consoleFetch(`/api/agents/jobs/${jobId}`, {
+        method: "PATCH",
+        body: { action: "refresh" },
+      });
+      const match = refreshed.uploads?.find((u) => u.name === upload.name);
+      if (match) url = match.url;
+    },
+  });
 }
 
 async function uploadSegments(jobId, uploads, files, jobDir, rec) {
