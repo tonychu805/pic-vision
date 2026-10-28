@@ -39,13 +39,13 @@ WEIGHTS = (0.0, 0.5, 0.5)  # (duration, peak_crossing_rate, n_spikes) -- no
 
 def build_burst_reel(video, csv, calib_path, out_dir, target_sec, session_id,
                       weights=WEIGHTS, window=MOMENT_WINDOW, pad_sec=MOMENT_PAD,
-                      logo_path=None):
+                      logo_path=None, occlusion_bridge=False):
     """Detect rally candidates, rank them, and cut a reel of just each
     top-ranked rally's peak-intensity window (not the whole rally).
 
     Returns {"manifest", "chronological", "stats"} -- stats is
     {"n_candidates", "n_chosen", "total_duration_sec"}."""
-    cand = detect_candidates(video, csv, calib_path)
+    cand = detect_candidates(video, csv, calib_path, occlusion_bridge=occlusion_bridge)
     segments, times_crossed, speeds, threshold = cand["segments"], cand["times_crossed"], cand["speeds"], cand["threshold"]
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
 

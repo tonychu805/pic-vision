@@ -3392,3 +3392,138 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **Decision.** Enumerate all non-internal IPv4 interfaces, exclude common virtual adapters, deduplicate identical CIDRs, and scan every remaining directly attached subnet automatically. Exclude every local address from its own sweep. The Settings page lists all automatic ranges and their adapter names so an installer can verify coverage. Operator-added ranges remain for routed camera VLANs; RTSP scanning can reach those networks, while ONVIF multicast discovery still cannot. A range larger than the existing 512-host safety limit is reported and skipped rather than allocating an unsafe address list.
 
 **Verification.** Desktop lint, renderer production build, and focused system/network-sweep tests pass (9 tests). Still required before release: an installed-artifact scan on a machine with both wired and Wi-Fi venue networks, including a camera on each subnet.
+
+## ADR-158 — Exclude the frame-dropping Tapo court-1 camera and coaching/drill sessions from serve/eval samples (consolidates and extends ADR-155)
+
+**Date.** 2026-10-23
+
+**Context.** The first near-side serve-review pass (CVAT project 17) was built from
+three PGC sessions and two turned out to be unusable footage that no filter caught:
+- `c6a9136a` ("PGC - Court 2") is a **coaching / ball-feeding drill** — balls
+  scattered across the court, a coach feeding from a cart, no real serves.
+  Confirmed by eye and by Jev (11/13 of its clips scored practice/not_play,
+  mean "real" 0.12 vs >0.5 for games sessions).
+- `499ed4b8` ("PGC - court 1") is the **Tapo C200**, which drops ~1/3 of its
+  frames (frozen/duplicated to hold 30fps CFR), so the serve is unwatchable. A
+  frame-drop audit (mpdecimate on a 30s mid-slice) then showed **all three
+  "PGC - court 1" recordings** — `499ed4b8`, `52f4de24`, `72852da9` — have the
+  same 32–33% frozen-frame signature; every other PGC camera measures 0%. They
+  are the same camera, different recordings.
+
+ADR-155 already decided to exclude this Tapo ("drops frames, no shutter control")
+but (a) named only one recording of it, `de3d1953`, missing the three above, and
+(b) **was never merged** — it is stranded on the local `feature/bounce-labelling`
+branch, so `footage_rules.py` was absent from the active tree and nothing was
+enforced. That is the direct cause of both leaks.
+
+**Decision.** Bring `footage_rules.py` onto the active branch and extend its
+exclusion set to the complete Tapo court-1 recording list plus the drill session
+(`EXCLUDED_CAMERAS` ∪ `EXCLUDED_TAPO` ∪ `EXCLUDED_DRILL`), and **wire `usable()`
+into `propose_serves.py`** so excluded footage can never become a serve
+candidate. `usable()` stays a pure string match (no video I/O) so it is cheap
+per candidate. New footage is vetted before entering a sample by the frame-drop
+audit (>15% frozen ⇒ Tapo-class) and a games-vs-drill check (Jev or a quick
+watch). This supersedes and consolidates ADR-155; when `feature/bounce-labelling`
+is reconciled, its `footage_rules.py` is the subset and this one wins.
+
+**Consequences.** The near-serve set was rebuilt on clean games sessions
+(`7358ef3f`, `3e1caf84`, `a96cbae3`). Note the **far**-serve ground truth
+(EXPERIMENTS 2026-10-23) was partly on this Tapo: far serves 13/15 (`499ed4b8`)
+and 27/28 (`72852da9`), and the whole `52f4de24` not-serve cluster — those
+numbers carry a frame-drop caveat (the clean session `365c798c` showed the same
+depth pattern independently, so the depth-floor finding itself stands). Other
+sample-builders (`eval_*`, labelling-chunk scripts) should route their session
+lists through `usable()` too; this change only wires the serve proposer.
+
+**Verification.** `tests/test_footage_rules.py` asserts the Tapo court-1 and
+drill prefixes are excluded and clean games sessions pass; `make test` green.
+Re-running `propose_serves.py` drops `c6a9136a`/`499ed4b8`/`52f4de24`/`72852da9`
+from the candidate set.
+
+## ADR-159 — The ball-detection bottleneck is input resolution + fps (pipeline downscaling), not the detector; fix the input, keep TrackNet
+
+**Context.** Far serves and the 2nd shot (serve return) are missed because the ball
+blacks out at its fastest, deepest moment. We investigated whether this is a detector
+limit, an fps limit, a resolution limit, or an optics wall (EXPERIMENTS.md 2026-10-25).
+
+**Findings / decision.**
+- **Keep TrackNet.** Its multi-frame motion model is why the ball is findable at all;
+  TrackNetV3 (fabricates trajectory, [[project_tracknetv3_evaluated_not_adopted]]) and
+  single-frame YOLO (retired to `archive/`) are both worse. The detector is not the problem.
+- **The bottleneck is the pipeline's own downscaling**, in two independent stages:
+  - *temporal* — `CFR_FPS=30` (pod_driver.py) discards half of the 60fps capture; the
+    fast-ball blackout happens at the fps we throw away.
+  - *spatial* — the full 1920-wide frame is downscaled to TrackNet's 512 input (3.75×),
+    shrinking the far ball from ~9px native to ~2.4px, below reliable detection.
+- **Not an optics wall for the median far ball:** measured ~9px native at 1080p. The
+  signal is at the sensor; inference destroys it. (Sub-5px fastest balls ARE a residual floor.)
+- **Fix at the input stage, not the detector:** (a) aspect-correct far-court tiling
+  (SAHI done right — a naive non-16:9 crop distorts and *hurt*, 5% vs 18%), and/or
+  (b) retrain TrackNet at a higher input resolution (keeps 9px as 9px); plus (c) stop
+  forcing 30fps where it matters.
+- **Recommended next increment:** aspect-correct far tile + 60fps on serve/rally-start
+  windows only (~10% cost), with a **gated merge** (only-when-full-frame-blank +
+  trajectory-continuity + drop-above-baseline) — NOT a blind union, which adds ~30%
+  stand phantoms during near play.
+
+**Consequence.** Far-serve / 2nd-shot recovery is a **pipeline change** (`pod_infer.py`
+input handling + `pod_driver.py` fps), not a camera change or detector swap. Scoped,
+not built. Links EXPERIMENTS.md 2026-10-25.
+
+**⚠ Correction (2026-10-26) — footage provenance + the fps leg.** The "PGC 1080p@60" footage
+cited in this ADR and its EXPERIMENTS entry was actually **a pro match downloaded off YouTube**
+(`sample-clip.mp4`), not the PGC camera (verified: Google/Lavf download signature; the real PGC
+recordings are 30fps 1080p `.mkv`). Two consequences: (1) **the fps/temporal leg is downgraded** —
+PGC records 30fps natively, so "the pipeline throws away 60→30fps" is not a production reality; the
+fps gain needs a camera actually capturing >30fps, which PGC does not. The ADR's **spatial**
+(1920→512 resolution) leg is unaffected and remains the load-bearing finding, validated on brickwall
+(a real camera). (2) **The far-tile is NOT yet validated on real PGC footage** — only on brickwall
+(720p) and the downloaded 1080p match; the behind-baseline PGC camera (30fps) is untested. The
+decision (fix the input resolution, keep TrackNet) stands; "fps" in the headline should be read as
+"only where the camera captures >30fps." See EXPERIMENTS.md 2026-10-26.
+
+**Scope note (end-to-end check, 2026-10-25).** The merged (full + far-tile) track was run
+through the real downstream crossing logic: it adds far-side track points but **no new
+net-crossing** — the 2nd shot's crossing already comes from the near-side ball, so the
+coarse rally detector was never actually missing it. The "missed 2nd shot" is an
+**overlay / hit-attribution** gap (the marker needs the ball AT the far contact). So this
+fix buys serve/analytics/**per-shot-overlay** quality, with **zero value to the core reel**
+— build only when serve-based features are scheduled. (EXPERIMENTS.md 2026-10-25, "End-to-end check".)
+
+## ADR-160 — Opt-in occlusion bridge: hold a rally open across near-kitchen ball occlusion
+
+**Date.** 2026-10-26
+
+**Context.** Clips that open mid-rally (serve cut off) were traced, by chart and operator playback, to the near-side
+ball being hidden by the near players at the kitchen during dinks. The tracked ball is only ever seen on the far side,
+no crossing is counted, the 3 s gap (ADR-048) expires, and the serve's crossings become a sub-6 group that is dropped.
+Tried and rejected the same day (EXPERIMENTS.md 2026-10-26): re-attaching dropped fragments (playback 4 better / 12
+worse), a pose swing-based serve anchor (6/17 vs today 10/17), a broad "ball seen moving" keep-alive (merged points,
+2 → 9), and trimming slow bridged pieces (cost real points to fix a cosmetic toss tail).
+
+**Decision.** Add `src.ball.occlusion_keepalive_times` and a separate `cluster_crossings_keepalive`. The original
+`cluster_crossings` is untouched, so the flag-off path runs unchanged code. This matters because merging to `main`
+ships pod code to production via `pod-deps.yml`, with no staging step. A keep-alive
+fires when the ball was last seen on the far side within 80 px (at 1920 px wide, scaled by frame width) of the net
+line, moving toward it, is unseen for 0.2-2.0 s, and reappears on the far side. Keep-alives hold a burst open across
+the gap but never count as crossings, never set a rally's start or end, and never form a rally alone. Exposed as
+`detect_candidates(..., occlusion_bridge=False)` and `scripts/rank_and_reel.py --occlusion-bridge`. **Default off**;
+the cloud pod path is unchanged.
+
+**Evidence.**
+- Held-out PGC (7 clean sessions, rule frozen before running): 12 clips changed. Operator playback: 4 serves recovered,
+  6 real points that today's version drops, 1 correct merge, 1 bad (a 12.7 s backward move that pulled in a prior point).
+- Labeled non-PGC at IoU≥0.5, production entry point:
+  - brickwall 0.70/0.63 → 0.86/0.73
+  - brickwall-SEMI 0.77/0.63 → 0.84/0.71
+  - pb_draft_cup 0.86/0.56 → 0.82/0.53 (one rally gains a 6 s toss-back tail and falls under IoU 0.5)
+  - IMG_7744 0.65/0.20 → 0.61/0.23
+  - IMG_7743 eval (pre-bump, prototype run) recall 0.74 → 0.79, quality-1 7/10 → 9/10
+
+**Consequences / not decided.**
+- Known costs: an occasional toss-back tail on a clip's end, and rare backward over-reach.
+- A backward-move cap was considered and left out: the only evidence is one bad case (12.7 s) against a good one
+  (10.6 s, eda r17), too thin to pick a number.
+- Top-10 reel picks change by 0-3 per video without adding highlight-worthy rallies, so the ranker, not detection,
+  is now the limit on reel quality.
+- Turning it on in the pod path is a separate decision (needs a reel-level watch on new sessions).

@@ -1,6 +1,16 @@
 import os
+import subprocess
+
+import pytest
+
 import src.render as render
 from src.render import clip_command, manifest_entry, concat_clips, cut_clips
+
+
+@pytest.fixture(autouse=True)
+def _cpu_encoder(monkeypatch):
+    """Unit tests never probe the real GPU: the encoder is fixed to the CPU."""
+    monkeypatch.setattr(render, "_encoder", "cpu")
 
 
 def test_clip_command_builds_h264_ffmpeg_args():
@@ -50,7 +60,7 @@ def test_cut_clips_applies_padding(monkeypatch, tmp_path):
         if cmd[0] == "ffprobe":
             return FakeResult()
         calls.append(cmd)
-        return None
+        return subprocess.CompletedProcess(cmd, 0, "", "")
 
     monkeypatch.setattr(render.subprocess, "run", fake_run)
     segs = [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}]
@@ -78,7 +88,7 @@ def _fake_run_with_probed_duration(seconds):
         stdout = str(seconds)
 
     def fake_run(cmd, **kwargs):
-        return FakeResult() if cmd[0] == "ffprobe" else None
+        return FakeResult() if cmd[0] == "ffprobe" else subprocess.CompletedProcess(cmd, 0, "", "")
     return fake_run
 
 
@@ -177,3 +187,74 @@ def test_cut_clips_really_burns_the_logo_into_the_lower_right_corner(tmp_path):
     assert luma(20, 20) < 30
     # ...and the logo's own outermost corner pixel has been rounded away.
     assert luma(640 - 12, 360 - 12) < 60
+
+
+# --- clip encoder + parallel cutting (2026-10-27) ---------------------------
+
+def test_clip_command_uses_the_requested_encoder():
+    from src import render
+    assert "libx264" in clip_command("s.mp4", 1.0, 2.0, "o.mp4")
+    cmd = clip_command("s.mp4", 1.0, 2.0, "o.mp4", encoder="nvenc")
+    assert "h264_nvenc" in cmd and "libx264" not in cmd and cmd[cmd.index("-pix_fmt") + 1] == "yuv420p"
+    assert set(render.ENCODERS) == {"nvenc", "cpu"}
+
+
+def test_an_nvenc_failure_falls_back_to_the_cpu_for_good(monkeypatch):
+    import subprocess as sp
+    from src import render
+    calls = []
+
+    def fake_run(cmd, **kw):
+        calls.append("h264_nvenc" if "h264_nvenc" in cmd else "libx264")
+        if "h264_nvenc" in cmd:
+            return sp.CompletedProcess(cmd, 1, "", "OpenEncodeSessionEx failed: unsupported device (nvenc)")
+        return sp.CompletedProcess(cmd, 0, "", "")
+    monkeypatch.setattr(render, "_encoder", "nvenc")
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    render._encode_clip("s.mp4", 0, 1, "a.mp4", None, None)
+    render._encode_clip("s.mp4", 1, 2, "b.mp4", None, None)
+    assert calls == ["h264_nvenc", "libx264", "libx264"]
+    assert render._encoder == "cpu"
+
+
+def test_a_non_nvenc_failure_is_not_retried(monkeypatch):
+    import subprocess as sp
+    import pytest
+    from src import render
+    monkeypatch.setattr(render, "_encoder", "nvenc")
+    monkeypatch.setattr(render.subprocess, "run", lambda cmd, **kw: sp.CompletedProcess(cmd, 1, "", "No such file"))
+    with pytest.raises(sp.CalledProcessError):
+        render._encode_clip("missing.mp4", 0, 1, "a.mp4", None, None)
+
+
+def test_cut_clips_in_parallel_keeps_order_and_real_durations(tmp_path, monkeypatch):
+    import json
+    import subprocess as sp
+    from src import render
+    video = str(tmp_path / "v.mp4")
+    sp.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "testsrc=s=320x180:d=8:r=30", "-pix_fmt", "yuv420p", video], check=True)
+    monkeypatch.setattr(render, "_encoder", "cpu")
+    segs = [{"start": 5.0, "end": 6.0}, {"start": 1.0, "end": 2.0}, {"start": 3.0, "end": 4.0}]
+    m = render.cut_clips(video, segs, str(tmp_path / "out"), pad_sec=0.5)
+    assert [e["file"] for e in m] == ["rally_001.mp4", "rally_002.mp4", "rally_003.mp4"]
+    assert [round(e["start"], 1) for e in m] == [0.5, 2.5, 4.5]
+    assert all(abs((e["end"] - e["start"]) - 2.0) < 0.15 for e in m)
+    assert json.load(open(tmp_path / "out" / "manifest.json"))["clips"] == m
+
+
+def test_a_stretch_already_cut_is_reused_not_re_encoded(tmp_path, monkeypatch):
+    """The full reel and the per-rally clips cut the same padded stretches."""
+    encoded = []
+    monkeypatch.setattr(render, "_cut_cache", {})
+    monkeypatch.setattr(render, "_encode_clip", lambda video, s, e, out, *a: (encoded.append((s, e)), open(out, "w").write("x")))
+    monkeypatch.setattr(render, "probe_duration", lambda p: 3.0)
+    monkeypatch.setattr(render, "probe_width", lambda v: 1920)
+    a = [{"start": 10.0, "end": 12.0}, {"start": 20.0, "end": 22.0}]
+    render.cut_clips("v.mp4", a, str(tmp_path / "full"), pad_sec=0.5)
+    render.cut_clips("v.mp4", a + [{"start": 30.0, "end": 32.0}], str(tmp_path / "top"), pad_sec=0.5)
+    assert encoded == [(9.5, 12.5), (19.5, 22.5), (29.5, 32.5)]
+    assert sorted(os.listdir(tmp_path / "top")) == ["manifest.json", "rally_001.mp4", "rally_002.mp4", "rally_003.mp4"]
+    # Paired: a different logo or video is a different clip, never reused.
+    render.cut_clips("other.mp4", a[:1], str(tmp_path / "o"), pad_sec=0.5)
+    render.cut_clips("v.mp4", a[:1], str(tmp_path / "l"), pad_sec=0.5, logo_path="logo.png")
+    assert encoded[3:] == [(9.5, 12.5), (9.5, 12.5)]

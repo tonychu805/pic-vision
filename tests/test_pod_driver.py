@@ -277,7 +277,7 @@ def test_the_shared_files_the_pod_reads_are_covered_by_its_read_credential():
     # that moves to a new prefix is not a test failure anywhere -- it is a
     # job that 403s minutes into a billed GPU run. This is the tripwire.
     granted = ("pipeline/", "weights/")
-    for name in ("FFMPEG_R2_KEY", "FFPROBE_R2_KEY", "WEIGHTS_R2_KEY"):
+    for name in ("FFMPEG_R2_KEY", "FFPROBE_R2_KEY", "WEIGHTS_R2_KEY", "POSE_R2_KEY"):
         key = getattr(pod_driver, name)
         assert key.startswith(granted), f"{name}={key!r} is outside the read credential's prefixes {granted}"
 
@@ -492,3 +492,114 @@ def test_a_next_part_without_its_storage_pass_is_refused(monkeypatch):
     del env["R2_READ_ACCESS_KEY_ID"]
     with pytest.raises(ValueError, match="R2_READ_ACCESS_KEY_ID"):
         pod_driver.apply_job_env(env)
+
+
+def test_clip_framings_gives_each_rally_clip_a_path(tmp_path, monkeypatch):
+    import subprocess
+    from src import framing
+    video = str(tmp_path / "v.mp4")
+    subprocess.run(["ffmpeg", "-v", "error", "-f", "lavfi", "-i", "color=c=black:s=1280x720:d=4:r=30",
+                    "-pix_fmt", "yuv420p", video], check=True)
+    monkeypatch.setattr(framing, "tracked_ball_xs", lambda csv, calib, fps=30.0: [1200.0] * 60 + [100.0] * 60)
+    clips = [{"file": "rally_001.mp4", "start": 0.0, "end": 2.0}, {"file": "rally_002.mp4", "start": 2.0, "end": 4.0}]
+    got = pod_driver.clip_framings(video, "unused.csv", {}, clips, poses=None)
+    assert set(got) == {"rally_001.mp4", "rally_002.mp4"}
+    assert got["rally_001.mp4"]["x"][0] > 0.8 and got["rally_002.mp4"]["x"][-1] < 0.2
+
+
+def test_clip_framings_never_costs_the_reel():
+    assert pod_driver.clip_framings("/no/such/video.mp4", "x.csv", {}, [{"file": "a", "start": 0, "end": 1}], None) == {}
+
+
+# --- warm start: a pod rented ahead of a session's first part (2026-10-27) ---
+
+def test_warm_start_reports_in_then_waits_for_the_first_part_without_running_a_job(monkeypatch):
+    calls = []
+    monkeypatch.setenv("WARM_START", "1")
+    monkeypatch.setenv("RECORDING_SESSION_ID", "sess-1")
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod-1")
+    monkeypatch.setenv("WARM_IDLE_SEC", "60")
+    monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: calls.append(("report", kw.get("done"))))
+    import threading
+    started = threading.Event()
+    release = threading.Event()
+
+    def slow_prefetch():
+        started.set()
+        release.wait(5)
+        calls.append(("prefetch done",))
+    monkeypatch.setattr(pod_driver, "prefetch_models", slow_prefetch)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
+
+    def wait(*a, **k):
+        started.wait(5)
+        calls.append(("wait",))   # asked while the models are still downloading
+        release.set()
+    monkeypatch.setattr(pod_driver, "wait_for_next_part", wait)
+    pod_driver.main()
+    assert calls[:2] == [("report", True), ("wait",)]
+
+
+def test_warm_start_runs_the_part_it_is_handed(monkeypatch):
+    calls = []
+    monkeypatch.setenv("WARM_START", "1")
+    monkeypatch.setenv("RECORDING_SESSION_ID", "sess-1")
+    monkeypatch.setenv("RUNPOD_POD_ID", "pod-1")
+    monkeypatch.setenv("WARM_IDLE_SEC", "60")
+    handed = iter([{"JOB_ID": "part-1"}, None])
+    monkeypatch.setattr(pod_driver, "report_final_job_status", lambda **kw: None)
+    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: None)
+    monkeypatch.setattr(pod_driver, "prefetch_models", lambda: calls.append(("prefetched",)))
+    monkeypatch.setattr(pod_driver, "apply_job_env", lambda env: calls.append(("took", env["JOB_ID"])))
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append(("run",)) or "done")
+    monkeypatch.setattr(pod_driver, "wait_for_next_part", lambda *a, **k: next(handed))
+    pod_driver.main()
+    # The part runs only after the background download has finished.
+    assert calls.index(("prefetched",)) < calls.index(("run",))
+    assert ("took", "part-1") in calls
+
+
+# Paired: an ordinary job pod is unchanged -- it runs its own job first.
+def test_without_warm_start_the_pod_runs_its_own_job_first(monkeypatch):
+    calls = []
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: calls.append("run") or "done")
+    monkeypatch.setattr(pod_driver, "warm_start", lambda: calls.append("warm"))
+    pod_driver.main()
+    assert calls == ["run"]
+
+
+
+# --- RunPod restarts a finished pod's container (2026-10-27) ---
+
+def test_a_restarted_pod_that_already_finished_exits_at_once(monkeypatch, tmp_path):
+    marker = tmp_path / "done"
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(marker))
+    ran = []
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: ran.append("run") or "done")
+    pod_driver.main()
+    assert ran == ["run"] and marker.exists()
+    pod_driver.main()   # the container restarts
+    assert ran == ["run"], "a restart must not run the job or wait for parts again"
+
+
+# Paired: a pod whose run failed still marks itself done -- a restart must not retry on a billing GPU.
+def test_a_failed_pod_is_marked_done_too(monkeypatch, tmp_path):
+    import pytest
+    marker = tmp_path / "done"
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(marker))
+    monkeypatch.delenv("WARM_START", raising=False)
+    monkeypatch.delenv("RECORDING_SESSION_ID", raising=False)
+    monkeypatch.setattr(pod_driver, "run_reporting", lambda: "failed")
+    with pytest.raises(SystemExit):
+        pod_driver.main()
+    assert marker.exists()
+
+
+@pytest.fixture(autouse=True)
+def _done_marker_in_tmp(monkeypatch, tmp_path):
+    """No test ever reads or writes the real /workspace marker."""
+    monkeypatch.setattr(pod_driver, "DONE_MARKER", str(tmp_path / "pod_driver_done"))

@@ -91,6 +91,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 import time
 import uuid
 
@@ -109,8 +110,20 @@ from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
 WORKDIR = "/workspace/job"
+# Occlusion bridge (ADR-160): hold rallies together across near-kitchen ball
+# occlusion. On for every reel the pod cuts, so all three agree on what a
+# rally is. Turning this on is the production change under review.
+OCCLUSION_BRIDGE = True
+
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
+# Badges (src/badges.py) need player pose: yolov8x-pose as TorchScript,
+# exported inside this pod's own image (torch 2.1) at 736x1280 -- the image
+# has torch but not ultralytics, so src/pose.py does the rest. Off until it
+# has run on pipeline staging (the staging branch turns it on).
+BADGES = True
+POSE_R2_KEY = "weights/yolov8x-pose-736x1280-torch21.torchscript"
+POSE_LOCAL = "/workspace/yolov8x-pose-736x1280.torchscript"
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
@@ -521,6 +534,85 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
+def measure_badges(s3_in, video, segments, calib):
+    """Pose the rallies and measure them for badges; None if anything goes wrong.
+
+    Measures only (src/badges.py measure()): every bar is relative to the
+    whole session's typical swing, so the console decides the badges once
+    it has every part's measurements (decide()).
+
+    Best effort on purpose: a badge is a bonus on top of the reel, so a
+    failure here (model download, GPU memory, a pose edge case) is logged
+    and the job carries on with plain ranked clips.
+    """
+    try:
+        import numpy as np
+        from src.badges import measure
+        from src.pose import PoseModel, pose_frames, pose_video
+        started = time.time()
+        if not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        probe = subprocess.run(
+            ["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height:format=duration",
+             "-of", "json", video], capture_output=True, text=True, check=True)
+        info = json.loads(probe.stdout)
+        w, h = info["streams"][0]["width"], info["streams"][0]["height"]
+        n_frames = int(float(info["format"]["duration"]) * 30)
+        # The homography maps calibration-resolution pixels to court feet;
+        # this video may be smaller (a 720p sub-stream against a 1080p
+        # calibration), so scale the image side first.
+        cw, ch = calib.get("calibration_resolution") or (w, h)
+        homography = np.array(calib["homography"]) @ np.diag([cw / w, ch / h, 1.0])
+        frames = pose_frames(segments, n_frames)
+
+        _check_cancel("badges", f"measuring for badges: posing {len(frames)} rally frames...")
+        last = [time.time()]
+
+        def progress(done, total):
+            # Also the heartbeat through a long pose pass, throttled like
+            # inference's: every batch would be a console call every ~0.4 s.
+            if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
+                last[0] = time.time()
+                _check_cancel("badges", f"measuring for badges: posed {done}/{total} rally frames...")
+
+        poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
+        result = measure(poses, segments, w, h)
+        result["pose_frames"] = len(frames)
+        result["pose_sec"] = round(time.time() - started, 1)
+        _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
+             f"from {len(frames)} posed frames in {result['pose_sec']}s")
+        return result, poses
+    except Cancelled:
+        raise
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"badges skipped: {type(e).__name__}: {e}")
+        return None, None
+
+
+def clip_framings(video, csv_path, calib, clips, poses):
+    """{clip file: 9:16 framing path} for every rally clip (src/framing.py); {} on any failure.
+
+    Data only, for vertical reels: where a phone-shaped window sits over the
+    clip as it plays, as fractions of the frame width, so the clip -- or its
+    high-res swap later -- can be cropped without re-running detection. With
+    poses (BADGES on) the window frames the server until the serve crosses
+    the net, then keeps the ball and as many players as fit; without, it
+    follows the ball. Best effort like badges: no framing never
+    costs the reel.
+    """
+    try:
+        from src import framing
+        probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries",
+                                "stream=width,height", "-of", "json", video], capture_output=True, text=True, check=True)
+        st = json.loads(probe.stdout)["streams"][0]
+        xs = framing.tracked_ball_xs(csv_path, calib)
+        players = framing.on_court(poses)
+        return {c["file"]: framing.clip_framing(xs, players, c, st["width"], st["height"]) for c in clips}
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"framing skipped: {type(e).__name__}: {e}")
+        return {}
+
+
 def run():
     s3_in, s3_out = _r2_clients()
     # Fresh per job: a pod kept for a session's next part (ADR-130) must
@@ -656,22 +748,28 @@ def run():
     # real outcome, far likelier now that a session is sent in 10-20 minute
     # parts (ADR-127): finish with no reels instead of crashing the job
     # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
-    if not detect_candidates(proxy_video, csv_path, calib_path)["segments"]:
+    segments = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]
+    if not segments:
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
+    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else (None, None)
+    _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
     full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
                               target_sec, session_id, weights=WEIGHTS, include_chronological=False,
-                              logo_path=logo_path)
+                              logo_path=logo_path, occlusion_bridge=OCCLUSION_BRIDGE)
     burst_result = build_burst_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "burst"),
-                                     BURST_TARGET_SEC, session_id, logo_path=logo_path)
+                                     BURST_TARGET_SEC, session_id, logo_path=logo_path,
+                                     occlusion_bridge=OCCLUSION_BRIDGE)
     has_burst = burst_result["chronological"] is not None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
-                                    session_id, n=TOP_RALLIES_N, logo_path=logo_path)
+                                    session_id, n=None if BADGES else TOP_RALLIES_N, logo_path=logo_path,
+                                    occlusion_bridge=OCCLUSION_BRIDGE)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"]}
+    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
@@ -707,6 +805,13 @@ def run():
             # same stretch in its local high-res recording of this part
             # (dual-stream plan Stage 4/5).
             "start": clip["start"], "end": clip["end"],
+            # The rally's own unpadded times: how the console finds this
+            # clip again once it has decided a session's badges from every
+            # part's result["badge_measures"] (src/badges.py decide()).
+            "rally_start": clip["rally_start"], "rally_end": clip["rally_end"],
+            # Where a 9:16 window sits over this clip as it plays (vertical
+            # reels, src/framing.py); absent if framing failed.
+            **({"framing": framings[clip["file"]]} if clip["file"] in framings else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
@@ -722,6 +827,9 @@ def run():
     report_final_job_status(done=True, stage="done", message="done", progress=None, result={
         "share_id": os.environ.get("SHARE_ID"), "reel_bucket": OUTPUT_BUCKET,
         "reels": reels, "stats": stats,
+        # Measurements only: a badge is relative to the whole session, so
+        # the console decides once it has every part's (src/badges.py).
+        **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
 
@@ -827,13 +935,74 @@ def run_reporting():
         return "failed"
 
 
+def prefetch_models():
+    """Download the ball and pose models while a warm pod waits, so the part
+    it takes skips both downloads. Best effort: run() fetches whatever is
+    still missing, exactly as before."""
+    try:
+        s3_in, _ = _r2_clients()
+        if not os.path.exists(WEIGHTS_LOCAL):
+            weights_tar = os.path.join("/workspace", "weights.tar")
+            s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
+            subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
+            os.remove(weights_tar)
+        if BADGES and not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        _log("warm start: models ready")
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"warm start: prefetch skipped ({type(e).__name__}: {e})")
+
+
+def warm_start():
+    """A pod rented ahead of a session's first part (WARM_START, 2026-10-27):
+    no part of its own. Report the warm job done -- that is the orchestrator's
+    sign it started -- and fetch the models in the background, so the pod
+    registers as the session's waiting machine straight away (the
+    orchestrator terminates a pod that is neither running a part nor waiting
+    for one). Returns the prefetch thread; join it before running a part."""
+    report_final_job_status(done=True, stage="done", message="machine ready for this session's first part")
+    t = threading.Thread(target=prefetch_models, daemon=True)
+    t.start()
+    return t
+
+
+# Written when this pod's work is over. RunPod restarts a pod's container
+# when its program exits (2026-10-27), which re-runs this file; a restart
+# that finds the marker exits at once instead of re-reporting its job or
+# registering as a session's waiting machine again, so the orchestrator sees
+# a pod that is not needed and terminates it.
+DONE_MARKER = "/workspace/.pod_driver_done"
+
+
 def main():
+    if os.path.exists(DONE_MARKER):
+        _log("this pod already finished its work; exiting (waiting to be terminated)")
+        return
+    try:
+        _main()
+    finally:
+        try:
+            open(DONE_MARKER, "w").close()
+        except OSError:
+            pass
+
+
+def _main():
     pod_id = os.environ.get("RUNPOD_POD_ID")  # RunPod sets this itself, every pod -- still used to identify this pod when asking for a session's next part, just not to delete itself any more (PIC-138)
     idle_sec = float(os.environ.get("WARM_IDLE_SEC") or 0)
     accept_until = float(os.environ.get("WARM_ACCEPT_UNTIL") or 0)
     outcome = None
+    warm = os.environ.get("WARM_START") == "1"
+    prefetch = None
     while True:
-        outcome = run_reporting()
+        if warm:
+            prefetch = warm_start()
+            outcome, warm = "done", False
+        else:
+            if prefetch is not None:
+                prefetch.join()   # models in place before the part uses them
+                prefetch = None
+            outcome = run_reporting()
         session_id = os.environ.get("RECORDING_SESSION_ID")
         # A failure stops here: whatever broke may break the next part
         # too, and a fresh machine will take it instead.
