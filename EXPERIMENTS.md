@@ -3599,3 +3599,16 @@ Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court 
 - Local, re-encoded with **h264_nvenc p4 cq20** (the pod's encoder): 11 rallies, and all 10 staging clips match a local rally within 1 s (whole-second rounding). The 11th local rally is simply not in the top 10.
 - With the local re-encode on libx264 crf20 instead, two rally starts shifted by 3-4.5 s, so the encoder matters at boundaries.
 - The harness now uses NVENC. Local harness results can stand in for staging for experiments; staging remains the final check before production.
+
+### 2026-10-29 — Badge pose with decode/letterbox prefetch: x1.2 on RTX 2000 Ada, identical measures
+
+Why: the 10-29 production run showed pose (badges) at ~2:40 of every 5-min part (25-28 fps on A4500 / RTX 4000 Ada). With it, a part took ~5:40, so one machine fell behind real time.
+
+Change: `src/pose.py` `pose_video` decodes and letterboxes on a background thread, up to 4 batches ahead of the GPU. Same batches in the same order (branch `perf/pose-overlap`, aba92ac).
+
+Measured:
+- **Local (RTX 2000 Ada, LFC footage at 30 fps, 3,600 rally-window frames):** 18.9 → 22.9 fps (x1.21), output byte-identical to the old code. Model-only throughput on this card is ~24 fps, so here the GPU itself is the ceiling.
+- **Staging replay #12** (LFC part 1, 720p, 2,518 posed frames, RTX 2000 Ada): pose 147.1 s (replay #10, same part, same card type) → 123.9 s (x1.19). `badge_measures` (minus pose_sec) has the same md5 as replays #10 and #11: 65 swings, 7 rallies.
+- **Not measured:** the gain on stronger cards (A4500 / A5000 / 4000 Ada), where serial pose is further below the GPU's own ceiling. Staging picks the cheapest available card.
+
+Conclusion: a safe, result-neutral ~20%. That saves ~25-30 s per part, not enough by itself to bring a part (~5:40) under 5 min. Bigger cuts change the posed frames or the input size, and so the badge measures; they need the blind brickwall rerun (src/badges.py header).
