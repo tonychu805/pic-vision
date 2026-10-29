@@ -18,6 +18,9 @@ EXPORT_HW = (736, 1280)        # the TorchScript's fixed input (h, w)
 CONF = 0.25                    # ultralytics predict defaults, which the
 IOU = 0.7                      # badge bars were measured with
 PAD_VALUE = 114
+# Batches decoded + letterboxed ahead of the GPU in pose_video. A batch of 8
+# 736x1280 uint8 frames is ~22 MB, so this bounds memory at ~90 MB.
+PREFETCH_BATCHES = 4
 FPS = 30.0
 # Frames posed around each rally: the serve happens up to ~1.5 s before the
 # first net crossing (First Strike), and the last hit up to ~0.5 s after.
@@ -86,14 +89,24 @@ class PoseModel:
 
     def __call__(self, frames):
         """BGR frames (same size) -> per frame a list of (box, kps)."""
-        torch = self.torch
+        return self.infer(self.prepare(frames))
+
+    # The two halves of __call__, so pose_video can run them on different
+    # threads: prepare is CPU only (and cv2 releases the GIL), infer is the GPU.
+    def prepare(self, frames):
+        """Letterboxed RGB NCHW uint8 batch + each frame's (scale, pad)."""
         boxed = [letterbox(f) for f in frames]
-        x = np.stack([b[0][..., ::-1] for b in boxed]).transpose(0, 3, 1, 2)   # BGR->RGB, NCHW
-        x = torch.from_numpy(np.ascontiguousarray(x)).to(self.device).float() / 255.0
+        x = np.ascontiguousarray(np.stack([b[0][..., ::-1] for b in boxed]).transpose(0, 3, 1, 2))
+        return x, [(b[1], b[2]) for b in boxed]
+
+    def infer(self, prepared):
+        torch = self.torch
+        x, meta = prepared
+        x = torch.from_numpy(x).to(self.device).float() / 255.0
         with torch.no_grad():
             out = self.model(x.half() if self.half else x)
         out = (out[0] if isinstance(out, (list, tuple)) else out).float()
-        return [decode(out[i], b[1], b[2]) for i, b in enumerate(boxed)]
+        return [decode(out[i], scale, pad) for i, (scale, pad) in enumerate(meta)]
 
 
 def to_court(H, box):
@@ -102,28 +115,15 @@ def to_court(H, box):
     return [float(v[0] / v[2]), float(v[1] / v[2])]
 
 
-def pose_video(video, frames, model, H, batch=8, progress=None):
-    """Pose the given frame indices of `video`. Returns {str(frame): [person, ...]}.
+def _batches(video, frames, batch):
+    """(frame numbers, BGR images) in batches of `batch`, read sequentially.
 
-    Reads sequentially (grab() past unwanted frames is cheap next to decoding
-    them) so a sparse rally set doesn't pay for random seeks.
-    """
+    grab() past unwanted frames is cheap next to decoding them, so a sparse
+    rally set doesn't pay for random seeks."""
     want = set(frames)
-    out, buf, idx = {}, [], []
-
-    def flush():
-        for fn, people in zip(idx, model(buf)):
-            out[str(fn)] = [{"box": [float(v) for v in b], "court": to_court(H, b),
-                             "kp": [[float(k[0]), float(k[1]), float(k[2])] for k in kp]}
-                            for b, kp in people]
-        buf.clear()
-        idx.clear()
-
-    if not frames:
-        return out
     cap = cv2.VideoCapture(video)
     last = frames[-1]
-    f = 0
+    buf, idx, f = [], [], 0
     try:
         while f <= last:
             if f in want:
@@ -133,14 +133,82 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
                 buf.append(img)
                 idx.append(f)
                 if len(buf) == batch:
-                    flush()
-                    if progress:
-                        progress(len(out), len(frames))
+                    yield idx, buf
+                    buf, idx = [], []
             elif not cap.grab():
                 break
             f += 1
         if buf:
-            flush()
+            yield idx, buf
     finally:
         cap.release()
+
+
+def pose_video(video, frames, model, H, batch=8, progress=None):
+    """Pose the given frame indices of `video`. Returns {str(frame): [person, ...]}.
+
+    Decoding and letterboxing run on a background thread, a few batches ahead
+    of the GPU (2026-10-29). Done in turn, as before, the GPU sat idle while
+    the CPU worked and vice versa: production pods posed at 25-28 fps on
+    cards that manage far more, and pose was ~2:40 of every 5-min part,
+    which put one machine behind real time. Same batches in the same order,
+    so the output is identical to the serial version.
+    """
+    out = {}
+    if not frames:
+        return out
+
+    def keep(idx, people_per_frame):
+        for fn, people in zip(idx, people_per_frame):
+            out[str(fn)] = [{"box": [float(v) for v in b], "court": to_court(H, b),
+                             "kp": [[float(k[0]), float(k[1]), float(k[2])] for k in kp]}
+                            for b, kp in people]
+        if progress:
+            progress(len(out), len(frames))
+
+    if not hasattr(model, "prepare"):
+        # A plain callable (tests, or a model without the split): serially.
+        for idx, imgs in _batches(video, frames, batch):
+            keep(idx, model(imgs))
+        return out
+
+    import queue
+    import threading
+    q = queue.Queue(maxsize=PREFETCH_BATCHES)
+    stop = threading.Event()
+    DONE = object()
+
+    def put(item):
+        """Hand over, unless the consumer has stopped (it may never read again)."""
+        while not stop.is_set():
+            try:
+                q.put(item, timeout=0.5)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def produce():
+        try:
+            for idx, imgs in _batches(video, frames, batch):
+                if not put((idx, model.prepare(imgs))):
+                    return
+            put(DONE)
+        except BaseException as e:      # handed to the consumer, re-raised there
+            put(e)
+
+    worker = threading.Thread(target=produce, name="pose-prefetch", daemon=True)
+    worker.start()
+    try:
+        while True:
+            item = q.get()
+            if item is DONE:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            idx, prepared = item
+            keep(idx, model.infer(prepared))
+    finally:
+        stop.set()
+        worker.join(timeout=5)
     return out
