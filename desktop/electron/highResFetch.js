@@ -34,18 +34,30 @@ const inFlight = new Set();
 // names, and that part's own segment list -- parts live under the
 // recording's sub-stream sibling since the Stage 2 upload-direction fix
 // (uploadDirFor's doc comment), never under main itself.
-export function findRecordingForPart(camera, partIndex) {
+//
+// Matched by the reel's session id, not the part number alone (2026-10-29):
+// every recording of a camera has a part-01, part-02, ..., so "the first
+// folder with a part-03" cut a later session's sharp and 9:16 clips out of
+// an EARLIER session's recording -- other players, another time, on this
+// session's share page. A part's session id ends in "-<folder>-part-NN"
+// (autoSplit.js partSessionId), which names exactly one folder. Without a
+// session id (a console from before this change) a part number is used
+// only when one recording has it; anything ambiguous is skipped -- a clip
+// left at proxy resolution is better than someone else's footage.
+export function findRecordingForPart(camera, partIndex, sessionId = null) {
   const cameraDir = cameraRecordingsDir(camera);
   if (!existsSync(cameraDir)) return null;
   const partName = `part-${String(partIndex).padStart(2, "0")}`;
+  const matches = [];
   for (const name of readdirSync(cameraDir)) {
     if (name.endsWith("-sub")) continue;
+    if (sessionId && !sessionId.endsWith(`-${name}-${partName}`)) continue;
     const mainDir = path.join(cameraDir, name);
     if (!statSync(mainDir).isDirectory()) continue;
     const part = listParts(uploadDirFor(mainDir)).find((p) => p.name === partName);
-    if (part) return { mainDir, part };
+    if (part) matches.push({ mainDir, part });
   }
-  return null;
+  return matches.length === 1 ? matches[0] : null;
 }
 
 // Exactly the shape startRecording's outDir names itself in
@@ -200,8 +212,8 @@ export async function deliverHighRes(fetchReq, clipPath, { label, connection } =
 }
 
 async function processOne(camera, fetchReq) {
-  const { reelId, partIndex, partStartSec, partEndSec } = fetchReq;
-  const located = findRecordingForPart(camera, partIndex);
+  const { reelId, partIndex, partStartSec, partEndSec, sessionId } = fetchReq;
+  const located = findRecordingForPart(camera, partIndex, typeof sessionId === "string" ? sessionId : null);
   if (!located) {
     // Not an error worth logging on its own -- the local recording this
     // would trim from is routinely gone before this ever runs (retention,
