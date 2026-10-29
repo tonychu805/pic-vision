@@ -3,9 +3,9 @@
   "bomFormat": "CycloneDX",
   "specVersion": "1.6",
   "version": 1,
-  "serialNumber": "urn:uuid:f27ec481-c56f-4282-bec4-5e54991e0106",
+  "serialNumber": "urn:uuid:c57ecddb-8833-42df-8ef8-983a32ef64fd",
   "metadata": {
-    "timestamp": "2026-10-22T03:55:46.848Z",
+    "timestamp": "2026-10-29T03:07:20.087Z",
     "tools": {
       "components": [
         {
@@ -98,11 +98,11 @@
     "component": {
       "type": "application",
       "name": "pic-vision-desktop",
-      "version": "1.9.0",
-      "bom-ref": "pic-vision-desktop@1.9.0",
+      "version": "1.10.3",
+      "bom-ref": "pic-vision-desktop@1.10.3",
       "author": "picvision ai",
-      "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
-      "purl": "pkg:npm/pic-vision-desktop@1.9.0",
+      "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md \u00a75)",
+      "purl": "pkg:npm/pic-vision-desktop@1.10.3",
       "properties": [
         {
           "name": "cdx:npm:package:private",
@@ -121,7 +121,7 @@
       "name": "inter",
       "group": "@fontsource",
       "version": "5.3.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@fontsource/inter@5.3.0",
       "author": "Google Inc.",
       "description": "Self-host the Inter font in a neatly bundled NPM package.",
       "licenses": [
@@ -152,13 +152,7 @@
         {
           "url": "https://registry.npmjs.org/@fontsource/inter/-/inter-5.3.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "4687ccca56668e52447c42d778d1c558145c4acef9ac653fe9b5764b68df9efbffdeb3d73c67b42e05094e495c1d9f6533839998054585c24f9c009f6fdd40de"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -173,7 +167,7 @@
       "name": "web",
       "group": "@phosphor-icons",
       "version": "2.1.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|@phosphor-icons/web@2.1.2",
       "author": "rektdeckard",
       "description": "A clean and friendly icon family for web",
       "licenses": [
@@ -204,13 +198,7 @@
         {
           "url": "https://registry.npmjs.org/@phosphor-icons/web/-/web-2.1.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "acf011f68fdb11ca780b0e0311e6475dffa794608c34690d0d18b3607338ecd2f1cfdbef107a7f4ede8530ad4d71669dcf0fe91433e74411a2fe87d1c9af79f0"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -225,7 +213,7 @@
       "name": "supabase-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/supabase-js@2.116.0",
       "author": "Supabase",
       "description": "Isomorphic Javascript SDK for Supabase",
       "licenses": [
@@ -256,13 +244,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "6325a6297b7636ca55f623bc14f9e5b30505248467acb777a1309bfb7672611b8a66d047d310940e09d4aa8c80d1f194c6933f5217f00e361ffdd86dffd6e9ee"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -280,7 +262,7 @@
       "type": "library",
       "name": "electron-store",
       "version": "10.1.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|electron-store@10.1.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|electron-store@10.1.0",
       "author": "Sindre Sorhus",
       "description": "Simple data persistence for your Electron app or module - Save and load user settings, app state, cache, etc",
       "licenses": [
@@ -311,13 +293,7 @@
         {
           "url": "https://registry.npmjs.org/electron-store/-/electron-store-10.1.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "a0bf1b472ee95422e9c21997cb4e5187f2fa3bddfe93db7a76a4b0d3e31c9087373a6093666e8ca74e10e1ffc9d2bb6ef382b2eb2c2447c8afb463a6aeafb5eb"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -335,7 +311,7 @@
       "type": "library",
       "name": "ffmpeg-static",
       "version": "5.3.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0",
       "description": "ffmpeg binaries for macOS, Linux and Windows",
       "licenses": [
         {
@@ -365,13 +341,7 @@
         {
           "url": "https://registry.npmjs.org/ffmpeg-static/-/ffmpeg-static-5.3.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "1fe2bab16e938885fa5467a7774290c2d85efa469c79e1ff96e13c74867238fdf98a4eda858a230eeaa54d5d5b3abb44c25d35b32d8714d1907e2e480c9be8b6"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -389,7 +359,7 @@
           "type": "library",
           "name": "https-proxy-agent",
           "version": "5.0.1",
-          "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+          "bom-ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
           "author": "Nathan Rajlich",
           "description": "An HTTP(s) proxy `http.Agent` implementation for HTTPS",
           "licenses": [
@@ -420,13 +390,7 @@
             {
               "url": "https://registry.npmjs.org/https-proxy-agent/-/https-proxy-agent-5.0.1.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "7457008e94d0160a0b3330b657053e0bf09b4bbb912f49569b10c84e6aa6ec2fbb17439d9a3eacf65e9a95973a0042d786b9e080cd827964971c639d5f662dc0"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -444,7 +408,7 @@
           "type": "library",
           "name": "agent-base",
           "version": "6.0.2",
-          "bom-ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
+          "bom-ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|agent-base@6.0.2",
           "author": "Nathan Rajlich",
           "description": "Turn a function into an `http.Agent` instance",
           "licenses": [
@@ -475,13 +439,7 @@
             {
               "url": "https://registry.npmjs.org/agent-base/-/agent-base-6.0.2.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "45937035c945efe312ffc6c383bd1a9a0df6772799199c620ee42667128b025423af78c6c8bc7ee0a924e7c50eec3d90760148402a2fb92b991129dee911ba5d"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -501,7 +459,7 @@
       "type": "library",
       "name": "ffprobe-static",
       "version": "3.1.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|ffprobe-static@3.1.0",
       "author": "joshwnj",
       "description": "Static binaries for ffprobe.",
       "licenses": [
@@ -532,13 +490,7 @@
         {
           "url": "https://registry.npmjs.org/ffprobe-static/-/ffprobe-static-3.1.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "0efa5af6e85530e622be11ca58b183a1ae75d89ef9d6a3755990083be5f0e0bfe6ad448fc52e03029cd25036c2144fcb52adbec589f39c46a14ddeb702a052a4"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -552,7 +504,7 @@
       "type": "library",
       "name": "onvif",
       "version": "0.8.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|onvif@0.8.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|onvif@0.8.2",
       "author": "Andrew D.Laptev",
       "description": "Client to ONVIF NVT devices Profile S: cameras",
       "licenses": [
@@ -583,13 +535,7 @@
         {
           "url": "https://registry.npmjs.org/onvif/-/onvif-0.8.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "dc2f5f78392f4c53bbf01d420f2dd688b6c7a06caee5f906641d686792cd7600118867a8d0278b39acd1ae66312e388d3d9204ef6185d41a0d28455fa8dde455"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -607,7 +553,7 @@
       "type": "library",
       "name": "oui-data",
       "version": "2.1.12",
-      "bom-ref": "pic-vision-desktop@1.9.0|oui-data@2.1.12",
+      "bom-ref": "pic-vision-desktop@1.10.3|oui-data@2.1.12",
       "author": "silverwind",
       "description": "IEEE OUI database as JSON",
       "licenses": [
@@ -638,13 +584,7 @@
         {
           "url": "https://registry.npmjs.org/oui-data/-/oui-data-2.1.12.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "4598627bd1ae2422e63589c6c00b9abbbc3338934723b2caca01cc106ca3710ffb05688336d3ec19d65e997666b52b76ef5bc173d8a9a5110a4baf87cfa8d918"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -658,7 +598,7 @@
       "type": "library",
       "name": "posthog-node",
       "version": "5.51.6",
-      "bom-ref": "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
+      "bom-ref": "pic-vision-desktop@1.10.3|posthog-node@5.51.6",
       "author": "PostHog",
       "description": "PostHog Node.js integration",
       "licenses": [
@@ -689,13 +629,7 @@
         {
           "url": "https://registry.npmjs.org/posthog-node/-/posthog-node-5.51.6.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "afe19ede9d0e9ce70e59e4e7bca66602d0f0102788a32353cb1071b9973cc0ce911c243d8f65eb86882b7f7f474aad58da020ea562ea20346658372eef19aa70"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -714,7 +648,7 @@
       "name": "auth-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/auth-js@2.116.0",
       "author": "Supabase",
       "description": "Official SDK for Supabase Auth",
       "licenses": [
@@ -745,13 +679,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "0a6a2cb72d768322862bd3776d06fe94c9ae0057afe67994cda47502c9991ea28e006cea5f5550ce6a78f4234fc0ec7fa70d07f50aa4e2bb3dca1c1394aa5f0e"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -770,7 +698,7 @@
       "name": "functions-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/functions-js@2.116.0",
       "author": "Supabase",
       "description": "JS SDK to interact with Supabase Functions.",
       "licenses": [
@@ -801,13 +729,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/functions-js/-/functions-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "13e54e7364037278bf7f24aa9011626619e8077486c9d11d660148ebf744006007c7ac84841e3a4cdf6a6f6c17b3e13e452cce055d11e9d6ac892970e3195900"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -826,7 +748,7 @@
       "name": "postgrest-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/postgrest-js@2.116.0",
       "author": "Supabase",
       "description": "Isomorphic PostgREST client",
       "licenses": [
@@ -857,13 +779,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/postgrest-js/-/postgrest-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "906a556530c7c454c94b7b6efab534893019fb85346dc2d58f1c0293c7f7811863c37a9d0998d3065818bdce24187d9771c980cdb90ac172ff9ab34730649cf8"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -882,7 +798,7 @@
       "name": "realtime-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/realtime-js@2.116.0",
       "author": "Supabase",
       "description": "Listen to realtime updates to your PostgreSQL database",
       "licenses": [
@@ -913,13 +829,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/realtime-js/-/realtime-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "307027957c62daceb2889b19b1031fb36077445c5e55f416c5eaea62120ca9c09057f16e6372c87a8b8f1245f0fda87bc1458c2d8c1e9a917d30e09449cc9d76"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -938,7 +848,7 @@
       "name": "storage-js",
       "group": "@supabase",
       "version": "2.116.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/storage-js@2.116.0",
       "author": "Supabase",
       "description": "Isomorphic storage client for Supabase.",
       "licenses": [
@@ -969,13 +879,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.116.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "ebfde147abdc7013faa0633907a45f6f065c4c22a640ea1d77f65641db30f3226c539ccefdafffa012fac8b9e68317239c74ab7a55bcaec3bb84be433f26f251"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -993,7 +897,7 @@
       "type": "library",
       "name": "conf",
       "version": "14.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|conf@14.0.0",
       "author": "Sindre Sorhus",
       "description": "Simple config handling for your app or module",
       "licenses": [
@@ -1024,13 +928,7 @@
         {
           "url": "https://registry.npmjs.org/conf/-/conf-14.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "2fa06eb9e1d346e24742f41573a61761946d379bc952d39d0932e7d2d458615e5acdf6c015c3e0841e73104e34995ad5eb0eec94c4ea51f903a26bad20ad787f"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1048,7 +946,7 @@
           "type": "library",
           "name": "env-paths",
           "version": "3.0.0",
-          "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0",
+          "bom-ref": "pic-vision-desktop@1.10.3|conf@14.0.0|env-paths@3.0.0",
           "author": "Sindre Sorhus",
           "description": "Get paths for storing things like data, config, cache, etc",
           "licenses": [
@@ -1079,13 +977,7 @@
             {
               "url": "https://registry.npmjs.org/env-paths/-/env-paths-3.0.0.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "76d2544dea73316dcb9bf34fc517f7c0fe3ae365168632f6b10c5cfb29b660c8f59bf1f6cc33503a57b369fce41f09fab0cb2d8c74f01ba89042c72d0d6fdbd4"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -1103,7 +995,7 @@
           "type": "library",
           "name": "semver",
           "version": "7.8.5",
-          "bom-ref": "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5",
+          "bom-ref": "pic-vision-desktop@1.10.3|conf@14.0.0|semver@7.8.5",
           "author": "GitHub Inc.",
           "description": "The semantic version parser used by npm.",
           "licenses": [
@@ -1134,13 +1026,7 @@
             {
               "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -1160,7 +1046,7 @@
       "type": "library",
       "name": "type-fest",
       "version": "4.41.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|type-fest@4.41.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|type-fest@4.41.0",
       "author": "Sindre Sorhus",
       "description": "A collection of essential TypeScript types",
       "licenses": [
@@ -1189,13 +1075,7 @@
         {
           "url": "https://registry.npmjs.org/type-fest/-/type-fest-4.41.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "4de4d243a1f9607be9a95c0145c9cb0c20670ce1d662eec8bc66c74fa37c00eca672bf4f2468dcd464ed896653620d0d0a0630be761612454285002bf5b8dfc0"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1214,7 +1094,7 @@
       "name": "http-basic",
       "group": "@derhuerst",
       "version": "8.2.4",
-      "bom-ref": "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
+      "bom-ref": "pic-vision-desktop@1.10.3|@derhuerst/http-basic@8.2.4",
       "author": "ForbesLindesay",
       "description": "Very low level wrapper arround http.request/https.request",
       "licenses": [
@@ -1245,13 +1125,7 @@
         {
           "url": "https://registry.npmjs.org/@derhuerst/http-basic/-/http-basic-8.2.4.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "17dacbf64f578dfe5b942cfc1ec2513b8762cb5d7571ac8bdaf918d97138af8b779f4c8f5d5632dca0f79c9d6a6eb4a7f7be375164971f8230b826bf1d694617"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1269,7 +1143,7 @@
       "type": "library",
       "name": "env-paths",
       "version": "2.2.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|env-paths@2.2.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|env-paths@2.2.1",
       "author": "Sindre Sorhus",
       "description": "Get paths for storing things like data, config, cache, etc",
       "licenses": [
@@ -1300,13 +1174,7 @@
         {
           "url": "https://registry.npmjs.org/env-paths/-/env-paths-2.2.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "fa1d6590b2a164c4d88e8835544a49346ecd64959cb9cd830e4feab2a49345108e5e22e3790d5dd7fb9dad41a1a8cc5480097028d67471fdaea9a9f918bb92d8"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1324,7 +1192,7 @@
       "type": "library",
       "name": "progress",
       "version": "2.0.3",
-      "bom-ref": "pic-vision-desktop@1.9.0|progress@2.0.3",
+      "bom-ref": "pic-vision-desktop@1.10.3|progress@2.0.3",
       "author": "TJ Holowaychuk",
       "description": "Flexible ascii progress bar",
       "licenses": [
@@ -1355,13 +1223,7 @@
         {
           "url": "https://registry.npmjs.org/progress/-/progress-2.0.3.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "ecf887b4b965e4b767288330d74d08fbcc495d1e605b6430598913ea226f6b46d78ad64a6bf5ccad26dd9a0debd979da89dcfd42e99dd153da32b66517d57db0"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1379,7 +1241,7 @@
       "type": "library",
       "name": "xml2js",
       "version": "0.6.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|xml2js@0.6.2",
       "author": "Marek Kubica",
       "description": "Simple XML to JavaScript object converter.",
       "licenses": [
@@ -1410,13 +1272,7 @@
         {
           "url": "https://registry.npmjs.org/xml2js/-/xml2js-0.6.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "4f8ae2787682d445dc112d0ac718f825681a5101c393eab01dc60e0851df8b02b3eed3953cbabb1e3abd74cd5608c87296a3047cfee131c3880a1be8b6265e80"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1434,7 +1290,7 @@
           "type": "library",
           "name": "xmlbuilder",
           "version": "11.0.1",
-          "bom-ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1",
+          "bom-ref": "pic-vision-desktop@1.10.3|xml2js@0.6.2|xmlbuilder@11.0.1",
           "author": "Ozgur Ozcitak",
           "description": "An XML builder for node.js",
           "licenses": [
@@ -1465,13 +1321,7 @@
             {
               "url": "https://registry.npmjs.org/xmlbuilder/-/xmlbuilder-11.0.1.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "7c396c23f905131ee02ef6de71cd3fa212c6e747ee810a7caf21f3313b96f6f49ad462745d858a9e1b14c7ba227b71bdf3eaf9e9a4d0214078921b78d91dc9bc"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -1492,7 +1342,7 @@
       "name": "core",
       "group": "@posthog",
       "version": "1.50.5",
-      "bom-ref": "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
+      "bom-ref": "pic-vision-desktop@1.10.3|@posthog/core@1.50.5",
       "licenses": [
         {
           "license": {
@@ -1521,13 +1371,7 @@
         {
           "url": "https://registry.npmjs.org/@posthog/core/-/core-1.50.5.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "69f11c86e4a10da548a310088fbea40d94350e17deb039a07d5a7e9ad4f3b00df095cf03179ba8cfc623b938e7c4e89c5a4a4fe47083a9889d2bfd644f5db90a"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1541,7 +1385,7 @@
       "type": "library",
       "name": "rxjs",
       "version": "7.8.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|rxjs@7.8.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|rxjs@7.8.2",
       "author": "Ben Lesh",
       "description": "Reactive Extensions for modern JavaScript",
       "licenses": [
@@ -1572,20 +1416,10 @@
         {
           "url": "https://registry.npmjs.org/rxjs/-/rxjs-7.8.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "76129ff74dd4fcf41963a6e834db4019d59b1bce5601b8d3ff5c58a19202ec5018d3259aa4e05056c56b0e5e7c5bcebffded55a4c341b5157831a5df74cc9214"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
-        {
-          "name": "cdx:npm:package:development",
-          "value": "true"
-        },
         {
           "name": "cdx:npm:package:path",
           "value": "node_modules/rxjs"
@@ -1596,7 +1430,7 @@
       "type": "library",
       "name": "tslib",
       "version": "2.8.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|tslib@2.8.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|tslib@2.8.1",
       "author": "Microsoft Corp.",
       "description": "Runtime library for TypeScript helper functions",
       "licenses": [
@@ -1627,13 +1461,7 @@
         {
           "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "a0916ef781d06fe29576e49440bef09e99aa9df98bb0e03f9c087a6fa107d30084a0ad3f98f79753a737c0a0d5f373243ae1cf447b525ca294f7d2016b34bfdb"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1648,7 +1476,7 @@
       "name": "phoenix",
       "group": "@supabase",
       "version": "0.4.5",
-      "bom-ref": "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5",
+      "bom-ref": "pic-vision-desktop@1.10.3|@supabase/phoenix@0.4.5",
       "author": "Chris McCord",
       "description": "The official JavaScript client for the Phoenix web framework.",
       "licenses": [
@@ -1679,13 +1507,7 @@
         {
           "url": "https://registry.npmjs.org/@supabase/phoenix/-/phoenix-0.4.5.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "6809fd1fda2f572780a4acb5d4e58eaeb386abc0d5ebcc96787e2e77694df5fce7e1a3bc65be462cbf66d69520f672ea21c4fe6437c072c65ed04fe7a9dbf697"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1699,7 +1521,7 @@
       "type": "library",
       "name": "iceberg-js",
       "version": "0.8.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|iceberg-js@0.8.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|iceberg-js@0.8.1",
       "author": "mandarini",
       "description": "A small, framework-agnostic JavaScript/TypeScript client for the Apache Iceberg REST Catalog",
       "licenses": [
@@ -1730,13 +1552,7 @@
         {
           "url": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "d5d8554195e17078deefbf7c21533ec68a3fd597557f338c21cf3fae05528a344adfc103a8e2681ae95af4dffc648e510fc413c4d42d2bf1a8ce9afea94a9144"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1754,7 +1570,7 @@
       "type": "library",
       "name": "ajv-formats",
       "version": "3.0.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|ajv-formats@3.0.1",
       "author": "Evgeny Poberezkin",
       "description": "Format validation for Ajv v7+",
       "licenses": [
@@ -1785,13 +1601,7 @@
         {
           "url": "https://registry.npmjs.org/ajv-formats/-/ajv-formats-3.0.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "f2252a979d04511fae51c7514371c3a9ae84572a3776870bf20e5627714d7169aeeb621b90652e7bfa44c8b056f1518a2ae7133e0a9e92ce1f214d43038ca8c1"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1805,7 +1615,7 @@
       "type": "library",
       "name": "ajv",
       "version": "8.20.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|ajv@8.20.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|ajv@8.20.0",
       "author": "Evgeny Poberezkin",
       "description": "Another JSON Schema Validator",
       "licenses": [
@@ -1836,13 +1646,7 @@
         {
           "url": "https://registry.npmjs.org/ajv/-/ajv-8.20.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "4e16e58be3a53a3fa230f60505505f2773a60809da4b2367e0cd6fcfd4fa1a46b926df5b6bf1c8479ea3a32eb9b58ea4c7f142179557341f35f58eff194ac118"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1856,7 +1660,7 @@
       "type": "library",
       "name": "atomically",
       "version": "2.1.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|atomically@2.1.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|atomically@2.1.1",
       "description": "Read and write files atomically and reliably.",
       "licenses": [
         {
@@ -1886,13 +1690,7 @@
         {
           "url": "https://registry.npmjs.org/atomically/-/atomically-2.1.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "3f8c3da3676a0118e2e8fecc1e9ae495b7e202b6405afa34ef25bbaacde97658dbdc15abd7614807b5bea74cc98ae895b14a513b48999f590515ca4f7a0834b5"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1906,7 +1704,7 @@
       "type": "library",
       "name": "debounce-fn",
       "version": "6.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|debounce-fn@6.0.0",
       "author": "Sindre Sorhus",
       "description": "Debounce a function",
       "licenses": [
@@ -1937,13 +1735,7 @@
         {
           "url": "https://registry.npmjs.org/debounce-fn/-/debounce-fn-6.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "ac1316f85d935ebc81c01e7843477c76b34423e4dfa12f49a4d4c0a15a6e91b5848635d0ab8af248560b6aa5cc157c1dbfad596f6387b63e5bbe24a88a6ab145"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -1961,7 +1753,7 @@
       "type": "library",
       "name": "dot-prop",
       "version": "9.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|dot-prop@9.0.0",
       "author": "Sindre Sorhus",
       "description": "Get, set, or delete a property from a nested object using a dot path",
       "licenses": [
@@ -1992,13 +1784,7 @@
         {
           "url": "https://registry.npmjs.org/dot-prop/-/dot-prop-9.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "d60c4f049a48fe97234212a0214f75208e9691acbe74b70ddcceab7f6bb03fc851babdc7b505e356b7402b7b230b4a62684bb1cccc235c285c113889978ee501"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2016,7 +1802,7 @@
       "type": "library",
       "name": "json-schema-typed",
       "version": "8.0.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|json-schema-typed@8.0.2",
       "author": "Remy Rylan",
       "description": "JSON Schema TypeScript definitions with complete inline documentation.",
       "licenses": [
@@ -2047,13 +1833,7 @@
         {
           "url": "https://registry.npmjs.org/json-schema-typed/-/json-schema-typed-8.0.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "7d08685dd72f737576f31ec2ec132ce0fe7e90d96051445eda39944f54fffe8051303aeacb540f7a52629b0646a3b1e0f553d5dc4415e419eae216c5cb6bdeb4"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2067,7 +1847,7 @@
       "type": "library",
       "name": "uint8array-extras",
       "version": "1.5.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|uint8array-extras@1.5.0",
       "author": "Sindre Sorhus",
       "description": "Useful utilities for working with Uint8Array (and Buffer)",
       "licenses": [
@@ -2098,13 +1878,7 @@
         {
           "url": "https://registry.npmjs.org/uint8array-extras/-/uint8array-extras-1.5.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "aef2920620b9cea08288367d9003accd9703bdd007c3020a246df76248f8dce29c5ac9e670144bd3d6135389ce78767c6366bb9753204ddd3c4817bd03c423e8"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2122,7 +1896,7 @@
       "type": "library",
       "name": "caseless",
       "version": "0.12.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|caseless@0.12.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|caseless@0.12.0",
       "author": "Mikeal Rogers",
       "description": "Caseless object set/get/has, very useful when working with HTTP headers.",
       "licenses": [
@@ -2153,13 +1927,7 @@
         {
           "url": "https://registry.npmjs.org/caseless/-/caseless-0.12.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "e2d605ca27da15f19a72888e6e325e828964c12538c503466d581488d6155316d0db1da552c16f638855815cc68887ba58b38fab27165c0e3497e3d6b31b6153"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2173,7 +1941,7 @@
       "type": "library",
       "name": "concat-stream",
       "version": "2.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|concat-stream@2.0.0",
       "author": "Max Ogden",
       "description": "writable stream that concatenates strings or binary data and calls a callback with the result",
       "licenses": [
@@ -2204,13 +1972,7 @@
         {
           "url": "https://registry.npmjs.org/concat-stream/-/concat-stream-2.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "316b9f61d170e7771c1a3080f8e97b5c96290255bafe9ad2333b8f393467246706cee84b9f849caf3eea7faa3c6d1399e75e25b5acdc2052597af71f6e8d31ec"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2224,7 +1986,7 @@
       "type": "library",
       "name": "http-response-object",
       "version": "3.0.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|http-response-object@3.0.2",
       "author": "ForbesLindesay",
       "description": "A simple object to represent an http response",
       "licenses": [
@@ -2255,13 +2017,7 @@
         {
           "url": "https://registry.npmjs.org/http-response-object/-/http-response-object-3.0.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "6ea5f45d317a7e75d241c109d88bb2afbe7255a9328c80c2aaba0943f6877d276533be370b0aa88b69c360cccb19651cb935865b2f0002f38a5d37e2bfaabd44"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2276,7 +2032,7 @@
           "name": "node",
           "group": "@types",
           "version": "10.17.60",
-          "bom-ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60",
+          "bom-ref": "pic-vision-desktop@1.10.3|http-response-object@3.0.2|@types/node@10.17.60",
           "description": "TypeScript definitions for Node.js",
           "licenses": [
             {
@@ -2306,13 +2062,7 @@
             {
               "url": "https://registry.npmjs.org/@types/node/-/node-10.17.60.tgz",
               "type": "distribution",
-              "hashes": [
-                {
-                  "alg": "SHA-512",
-                  "content": "17428880325fcb69c0df330b99618ac5c1f665512d0995c71dd390b36812690dbbfa535e11f1b1ce4230f74697b300135fb019df7b5a84f6f3cba2807d4ade57"
-                }
-              ],
-              "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+              "comment": "as detected from npm-ls property \"resolved\""
             }
           ],
           "properties": [
@@ -2328,7 +2078,7 @@
       "type": "library",
       "name": "parse-cache-control",
       "version": "1.0.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|parse-cache-control@1.0.1",
       "description": "Parse Cache-Control headers.",
       "licenses": [
         {
@@ -2359,13 +2109,7 @@
         {
           "url": "https://registry.npmjs.org/parse-cache-control/-/parse-cache-control-1.0.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "eb4cefb0945e40f5f9fd03f42b37ddfd5ae98d270843b487056e9b14261f10ff9fa74129a6bd521e120ee677753e366dbdc9734b3112f43fe9e67149babc1f5a"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2379,7 +2123,7 @@
       "type": "library",
       "name": "debug",
       "version": "4.4.3",
-      "bom-ref": "pic-vision-desktop@1.9.0|debug@4.4.3",
+      "bom-ref": "pic-vision-desktop@1.10.3|debug@4.4.3",
       "author": "Josh Junon",
       "description": "Lightweight debugging utility for Node.js and the browser",
       "licenses": [
@@ -2410,13 +2154,7 @@
         {
           "url": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "446c305a7c10be455f6af295b76d8518bc3ec5849dcc04709b4aeee83853540dee994e6165cdbc57790ee2cb6062bcab4e52e9baf808f468a28e5b408cd6dca8"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2434,7 +2172,7 @@
       "type": "library",
       "name": "sax",
       "version": "1.6.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|sax@1.6.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|sax@1.6.1",
       "author": "Isaac Z. Schlueter",
       "description": "An evented streaming XML parser in JavaScript",
       "licenses": [
@@ -2465,13 +2203,7 @@
         {
           "url": "https://registry.npmjs.org/sax/-/sax-1.6.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "e36b415702d69da42f5b9cdce076d9ad3b9671c1020997c18bdd850eec2dab16ac1fe25b3c1dff14e29bd66db6d8ae364785b1bb1cf332c4ecc1fce0b52bbae1"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2490,7 +2222,7 @@
       "name": "types",
       "group": "@posthog",
       "version": "1.409.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|@posthog/types@1.409.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|@posthog/types@1.409.0",
       "description": "Type definitions for the PostHog JavaScript SDK",
       "licenses": [
         {
@@ -2520,13 +2252,7 @@
         {
           "url": "https://registry.npmjs.org/@posthog/types/-/types-1.409.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "db7f6e9a869955bd8605a5de132269c05be386bac28491fc3470b089aa36dc4052bb7340e843743133286874a63047f8ca389710516860903a1632405c5e4718"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2540,7 +2266,7 @@
       "type": "library",
       "name": "fast-deep-equal",
       "version": "3.1.3",
-      "bom-ref": "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3",
+      "bom-ref": "pic-vision-desktop@1.10.3|fast-deep-equal@3.1.3",
       "author": "Evgeny Poberezkin",
       "description": "Fast deep equal",
       "licenses": [
@@ -2571,13 +2297,7 @@
         {
           "url": "https://registry.npmjs.org/fast-deep-equal/-/fast-deep-equal-3.1.3.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "7f7a90f68432f63d808417bf1fd542f75c0b98a042094fe00ce9ca340606e61b303bb04b2a3d3d1dce4760dcfd70623efb19690c22200da8ad56cd3701347ce1"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2591,7 +2311,7 @@
       "type": "library",
       "name": "fast-uri",
       "version": "3.1.9",
-      "bom-ref": "pic-vision-desktop@1.9.0|fast-uri@3.1.9",
+      "bom-ref": "pic-vision-desktop@1.10.3|fast-uri@3.1.9",
       "author": "Vincent Le Goff",
       "description": "Dependency-free RFC 3986 URI toolbox",
       "licenses": [
@@ -2622,13 +2342,7 @@
         {
           "url": "https://registry.npmjs.org/fast-uri/-/fast-uri-3.1.9.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "852ff45addd86b4e37a0a5ecd2c231acca4a4084d784c2c8ad500a2978b8828cc60bdbfb6115959d7219ce334f4ced3633d05dc4b096a8ad7245780dce257225"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2642,7 +2356,7 @@
       "type": "library",
       "name": "json-schema-traverse",
       "version": "1.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|json-schema-traverse@1.0.0",
       "author": "Evgeny Poberezkin",
       "description": "Traverse JSON Schema passing each schema object to callback",
       "licenses": [
@@ -2673,13 +2387,7 @@
         {
           "url": "https://registry.npmjs.org/json-schema-traverse/-/json-schema-traverse-1.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "34cf3f3fd9f75e35e12199f594b86415a0024ce5114178d6855e0103f4673aff31be0aadaa9017f483b89914314b1d51968e2dab37aa6f4b0e96bb9a3b2dddba"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2693,7 +2401,7 @@
       "type": "library",
       "name": "require-from-string",
       "version": "2.0.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|require-from-string@2.0.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|require-from-string@2.0.2",
       "author": "Vsevolod Strukchinsky",
       "description": "Require module from string",
       "licenses": [
@@ -2724,13 +2432,7 @@
         {
           "url": "https://registry.npmjs.org/require-from-string/-/require-from-string-2.0.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "5dfd2759ee91b1ece214cbbe029f5b8a251b9a996ae92f7fa7eef0ed85cffc904786b5030d48706bebc0372b9bbaa7d9593bde53ffc36151ac0c6ed128bfef13"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2748,7 +2450,7 @@
       "type": "library",
       "name": "stubborn-fs",
       "version": "2.0.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|stubborn-fs@2.0.0",
       "description": "Stubborn versions of Node's fs functions that try really hard to do their job.",
       "licenses": [
         {
@@ -2778,13 +2480,7 @@
         {
           "url": "https://registry.npmjs.org/stubborn-fs/-/stubborn-fs-2.0.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "63402f4b00f0f32fa79523455cc9b683a2f9d6b046740413db42776123aac42e772e8ddb8d646daf604a71f62801fdf9d96629b19493511ac0d2daa17e0b9d3c"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2798,7 +2494,7 @@
       "type": "library",
       "name": "when-exit",
       "version": "2.1.5",
-      "bom-ref": "pic-vision-desktop@1.9.0|when-exit@2.1.5",
+      "bom-ref": "pic-vision-desktop@1.10.3|when-exit@2.1.5",
       "description": "Execute a function right before the process, or the browser's tab, is about to exit.",
       "licenses": [
         {
@@ -2828,13 +2524,7 @@
         {
           "url": "https://registry.npmjs.org/when-exit/-/when-exit-2.1.5.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "54690a279eb8933b7a32cd5d6e03cfff2b88a100abb0502745ba6da42e70384b0368db1b081d9b9df9da03c8bfbd1b39b6351210eb48baf97dfccc95b2f4190a"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2848,7 +2538,7 @@
       "type": "library",
       "name": "mimic-function",
       "version": "5.0.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|mimic-function@5.0.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|mimic-function@5.0.1",
       "author": "Sindre Sorhus",
       "description": "Make a function mimic another one",
       "licenses": [
@@ -2879,13 +2569,7 @@
         {
           "url": "https://registry.npmjs.org/mimic-function/-/mimic-function-5.0.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "54fefd5d43f15760a28183f78d6c005054a4bb668aa811fbb9301aa4558206abadb1b983a3de8a639a3cba1e94fbf612227e4ec499d7a7bddb795929a8c20684"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2903,7 +2587,7 @@
       "type": "library",
       "name": "buffer-from",
       "version": "1.1.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|buffer-from@1.1.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|buffer-from@1.1.2",
       "licenses": [
         {
           "license": {
@@ -2932,13 +2616,7 @@
         {
           "url": "https://registry.npmjs.org/buffer-from/-/buffer-from-1.1.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "13e5d0091c126da6a20a1b6fea4e83c2073e6f1f81b3abee2891c7979928c7f05a29b8625f3a903b02b870edb6c84946a763829a3c15853dc79b18323c69c97d"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -2952,7 +2630,7 @@
       "type": "library",
       "name": "inherits",
       "version": "2.0.4",
-      "bom-ref": "pic-vision-desktop@1.9.0|inherits@2.0.4",
+      "bom-ref": "pic-vision-desktop@1.10.3|inherits@2.0.4",
       "description": "Browser-friendly inheritance fully compatible with standard node.js inherits()",
       "licenses": [
         {
@@ -2982,13 +2660,7 @@
         {
           "url": "https://registry.npmjs.org/inherits/-/inherits-2.0.4.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "93fbc6697e3f6256b75b3c8c0af4d039761e207bea38ab67a8176ecd31e9ce9419cc0b2428c859d8af849c189233dcc64a820578ca572b16b8758799210a9ec1"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3002,7 +2674,7 @@
       "type": "library",
       "name": "readable-stream",
       "version": "3.6.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|readable-stream@3.6.2",
       "description": "Streams3, a user-land copy of the stream library from Node.js",
       "licenses": [
         {
@@ -3032,13 +2704,7 @@
         {
           "url": "https://registry.npmjs.org/readable-stream/-/readable-stream-3.6.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "f6efec9e20ab6370f959db04447cc71381b66025eaa06e454c7522082e1221bafa5dc2d9058d39c9af442a361e93d3b9c4e0308c6abed497460404bb43d49ca0"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3056,7 +2722,7 @@
       "type": "library",
       "name": "typedarray",
       "version": "0.0.6",
-      "bom-ref": "pic-vision-desktop@1.9.0|typedarray@0.0.6",
+      "bom-ref": "pic-vision-desktop@1.10.3|typedarray@0.0.6",
       "author": "James Halliday",
       "description": "TypedArray polyfill for old browsers",
       "licenses": [
@@ -3087,13 +2753,7 @@
         {
           "url": "https://registry.npmjs.org/typedarray/-/typedarray-0.0.6.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "fda0831066ad1af67604893e1e62dfe227c2245c2f28535bf7f25e64f32e95f805ada727f5015c01fe463bc07f9b07948d2a1b952e489f471686aa5fb3fe4f40"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3107,7 +2767,7 @@
       "type": "library",
       "name": "ms",
       "version": "2.1.3",
-      "bom-ref": "pic-vision-desktop@1.9.0|ms@2.1.3",
+      "bom-ref": "pic-vision-desktop@1.10.3|ms@2.1.3",
       "description": "Tiny millisecond conversion utility",
       "licenses": [
         {
@@ -3137,13 +2797,7 @@
         {
           "url": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "e85973b9b4cb646dc9d9afcd542025784863ceae68c601f268253dc985ef70bb2fa1568726afece715c8ebf5d73fab73ed1f7100eb479d23bfb57b45dd645394"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3157,7 +2811,7 @@
       "type": "library",
       "name": "stubborn-utils",
       "version": "1.0.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|stubborn-utils@1.0.2",
       "description": "A small collection of utilities for making functions somewhat resilient against errors.",
       "licenses": [
         {
@@ -3187,13 +2841,7 @@
         {
           "url": "https://registry.npmjs.org/stubborn-utils/-/stubborn-utils-1.0.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "cce87d8cf608fb1acd3b28ac49e960ca6e2da2529324241de460612b4fb4c49bdc60373094ea3117fae714a4362916649d7486f63580a7ae9fc0fe80c4df524e"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3207,7 +2855,7 @@
       "type": "library",
       "name": "string_decoder",
       "version": "1.3.0",
-      "bom-ref": "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
+      "bom-ref": "pic-vision-desktop@1.10.3|string_decoder@1.3.0",
       "description": "The string_decoder module from Node core",
       "licenses": [
         {
@@ -3237,13 +2885,7 @@
         {
           "url": "https://registry.npmjs.org/string_decoder/-/string_decoder-1.3.0.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "864457f14d568c915df0bb03276c90ff0596c5aa2912c0015355df90cf00fa3d3ef392401a9a6dd7a72bd56860e8a21b6f8a2453a32a97a04e8febaea7fc0a78"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3257,7 +2899,7 @@
       "type": "library",
       "name": "util-deprecate",
       "version": "1.0.2",
-      "bom-ref": "pic-vision-desktop@1.9.0|util-deprecate@1.0.2",
+      "bom-ref": "pic-vision-desktop@1.10.3|util-deprecate@1.0.2",
       "author": "Nathan Rajlich",
       "description": "The Node.js `util.deprecate()` function with browser support",
       "licenses": [
@@ -3288,13 +2930,7 @@
         {
           "url": "https://registry.npmjs.org/util-deprecate/-/util-deprecate-1.0.2.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "10f0f9ab5b97c85c49a42acb9c27359c79eade039ae83641a1c008888d93692080ed5089d5424331a802cc891736c5187c3d5d68afff2d3110f318886eb1ed73"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3308,7 +2944,7 @@
       "type": "library",
       "name": "safe-buffer",
       "version": "5.2.1",
-      "bom-ref": "pic-vision-desktop@1.9.0|safe-buffer@5.2.1",
+      "bom-ref": "pic-vision-desktop@1.10.3|safe-buffer@5.2.1",
       "author": "Feross Aboukhadijeh",
       "description": "Safer Node.js Buffer API",
       "licenses": [
@@ -3339,13 +2975,7 @@
         {
           "url": "https://registry.npmjs.org/safe-buffer/-/safe-buffer-5.2.1.tgz",
           "type": "distribution",
-          "hashes": [
-            {
-              "alg": "SHA-512",
-              "content": "ae9dd2a34eca71d9a629b1af81a37141226bedb1954959394bd12ad45fa9a5b468ef4f9879a0f1930e4377c34f37e183e9b8e7626d95b8fb825e6a6e62f9825d"
-            }
-          ],
-          "comment": "as detected from npm-ls property \"resolved\" and property \"integrity\""
+          "comment": "as detected from npm-ls property \"resolved\""
         }
       ],
       "properties": [
@@ -3358,11 +2988,11 @@
     {
       "type": "platform",
       "name": "node",
-      "version": "24.22.0",
-      "bom-ref": "runtime:node@24.22.0",
+      "version": "24.22.1",
+      "bom-ref": "runtime:node@24.22.1",
       "description": "Node.js runtime bundled inside Electron 44.9.3; ships in the packaged app. Not an npm dependency, so cyclonedx-npm does not detect it -- added manually (see sbom/VULNERABILITIES.md).",
-      "purl": "pkg:generic/node@24.22.0",
-      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.0:*:*:*:*:*:*:*",
+      "purl": "pkg:generic/node@24.22.1",
+      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.1:*:*:*:*:*:*:*",
       "externalReferences": [
         {
           "type": "website",
@@ -3387,11 +3017,11 @@
     {
       "type": "platform",
       "name": "chromium",
-      "version": "152.0.7977.167",
-      "bom-ref": "runtime:chromium@152.0.7977.167",
+      "version": "152.0.7977.169",
+      "bom-ref": "runtime:chromium@152.0.7977.169",
       "description": "Chromium engine bundled inside Electron 44.9.3; ships in the packaged app. Not an npm dependency, so cyclonedx-npm does not detect it -- added manually (see sbom/VULNERABILITIES.md).",
-      "purl": "pkg:generic/chromium@152.0.7977.167",
-      "cpe": "cpe:2.3:a:google:chrome:152.0.7977.167:*:*:*:*:*:*:*",
+      "purl": "pkg:generic/chromium@152.0.7977.169",
+      "cpe": "cpe:2.3:a:google:chrome:152.0.7977.169:*:*:*:*:*:*:*",
       "externalReferences": [
         {
           "type": "website",
@@ -3412,328 +3042,320 @@
   ],
   "dependencies": [
     {
-      "ref": "pic-vision-desktop@1.9.0",
+      "ref": "pic-vision-desktop@1.10.3",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0",
-        "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2",
-        "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
-        "pic-vision-desktop@1.9.0|electron-store@10.1.0",
-        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
-        "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0",
-        "pic-vision-desktop@1.9.0|onvif@0.8.2",
-        "pic-vision-desktop@1.9.0|oui-data@2.1.12",
-        "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
-        "runtime:node@24.22.0",
-        "runtime:chromium@152.0.7977.167"
+        "pic-vision-desktop@1.10.3|@fontsource/inter@5.3.0",
+        "pic-vision-desktop@1.10.3|@phosphor-icons/web@2.1.2",
+        "pic-vision-desktop@1.10.3|@supabase/supabase-js@2.116.0",
+        "pic-vision-desktop@1.10.3|electron-store@10.1.0",
+        "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0",
+        "pic-vision-desktop@1.10.3|ffprobe-static@3.1.0",
+        "pic-vision-desktop@1.10.3|onvif@0.8.2",
+        "pic-vision-desktop@1.10.3|oui-data@2.1.12",
+        "pic-vision-desktop@1.10.3|posthog-node@5.51.6",
+        "runtime:node@24.22.1",
+        "runtime:chromium@152.0.7977.169"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@fontsource/inter@5.3.0"
+      "ref": "pic-vision-desktop@1.10.3|@fontsource/inter@5.3.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@phosphor-icons/web@2.1.2"
+      "ref": "pic-vision-desktop@1.10.3|@phosphor-icons/web@2.1.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/supabase-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/supabase-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
-        "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
-        "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
-        "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
-        "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0"
+        "pic-vision-desktop@1.10.3|@supabase/auth-js@2.116.0",
+        "pic-vision-desktop@1.10.3|@supabase/functions-js@2.116.0",
+        "pic-vision-desktop@1.10.3|@supabase/postgrest-js@2.116.0",
+        "pic-vision-desktop@1.10.3|@supabase/realtime-js@2.116.0",
+        "pic-vision-desktop@1.10.3|@supabase/storage-js@2.116.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|electron-store@10.1.0",
+      "ref": "pic-vision-desktop@1.10.3|electron-store@10.1.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|conf@14.0.0",
-        "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+        "pic-vision-desktop@1.10.3|conf@14.0.0",
+        "pic-vision-desktop@1.10.3|type-fest@4.41.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0",
+      "ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
-        "pic-vision-desktop@1.9.0|env-paths@2.2.1",
-        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
-        "pic-vision-desktop@1.9.0|progress@2.0.3"
+        "pic-vision-desktop@1.10.3|@derhuerst/http-basic@8.2.4",
+        "pic-vision-desktop@1.10.3|env-paths@2.2.1",
+        "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+        "pic-vision-desktop@1.10.3|progress@2.0.3"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
+      "ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|https-proxy-agent@5.0.1",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
-        "pic-vision-desktop@1.9.0|debug@4.4.3"
+        "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|agent-base@6.0.2",
+        "pic-vision-desktop@1.10.3|debug@4.4.3"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ffmpeg-static@5.3.0|agent-base@6.0.2",
+      "ref": "pic-vision-desktop@1.10.3|ffmpeg-static@5.3.0|agent-base@6.0.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|debug@4.4.3"
+        "pic-vision-desktop@1.10.3|debug@4.4.3"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ffprobe-static@3.1.0"
+      "ref": "pic-vision-desktop@1.10.3|ffprobe-static@3.1.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|onvif@0.8.2",
+      "ref": "pic-vision-desktop@1.10.3|onvif@0.8.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|xml2js@0.6.2"
+        "pic-vision-desktop@1.10.3|xml2js@0.6.2"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|oui-data@2.1.12"
+      "ref": "pic-vision-desktop@1.10.3|oui-data@2.1.12"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|posthog-node@5.51.6",
+      "ref": "pic-vision-desktop@1.10.3|posthog-node@5.51.6",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
-        "pic-vision-desktop@1.9.0|rxjs@7.8.2"
+        "pic-vision-desktop@1.10.3|@posthog/core@1.50.5",
+        "pic-vision-desktop@1.10.3|rxjs@7.8.2"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/auth-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/auth-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/functions-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/functions-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/postgrest-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/postgrest-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/realtime-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/realtime-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5",
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|@supabase/phoenix@0.4.5",
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/storage-js@2.116.0",
+      "ref": "pic-vision-desktop@1.10.3|@supabase/storage-js@2.116.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|iceberg-js@0.8.1",
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|iceberg-js@0.8.1",
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0",
+      "ref": "pic-vision-desktop@1.10.3|conf@14.0.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
-        "pic-vision-desktop@1.9.0|ajv@8.20.0",
-        "pic-vision-desktop@1.9.0|atomically@2.1.1",
-        "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
-        "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
-        "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0",
-        "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2",
-        "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5",
-        "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0"
+        "pic-vision-desktop@1.10.3|ajv-formats@3.0.1",
+        "pic-vision-desktop@1.10.3|ajv@8.20.0",
+        "pic-vision-desktop@1.10.3|atomically@2.1.1",
+        "pic-vision-desktop@1.10.3|debounce-fn@6.0.0",
+        "pic-vision-desktop@1.10.3|dot-prop@9.0.0",
+        "pic-vision-desktop@1.10.3|conf@14.0.0|env-paths@3.0.0",
+        "pic-vision-desktop@1.10.3|json-schema-typed@8.0.2",
+        "pic-vision-desktop@1.10.3|conf@14.0.0|semver@7.8.5",
+        "pic-vision-desktop@1.10.3|uint8array-extras@1.5.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0|env-paths@3.0.0"
+      "ref": "pic-vision-desktop@1.10.3|conf@14.0.0|env-paths@3.0.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|conf@14.0.0|semver@7.8.5"
+      "ref": "pic-vision-desktop@1.10.3|conf@14.0.0|semver@7.8.5"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+      "ref": "pic-vision-desktop@1.10.3|type-fest@4.41.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@derhuerst/http-basic@8.2.4",
+      "ref": "pic-vision-desktop@1.10.3|@derhuerst/http-basic@8.2.4",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|caseless@0.12.0",
-        "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
-        "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
-        "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1"
+        "pic-vision-desktop@1.10.3|caseless@0.12.0",
+        "pic-vision-desktop@1.10.3|concat-stream@2.0.0",
+        "pic-vision-desktop@1.10.3|http-response-object@3.0.2",
+        "pic-vision-desktop@1.10.3|parse-cache-control@1.0.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|env-paths@2.2.1"
+      "ref": "pic-vision-desktop@1.10.3|env-paths@2.2.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|progress@2.0.3"
+      "ref": "pic-vision-desktop@1.10.3|progress@2.0.3"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2",
+      "ref": "pic-vision-desktop@1.10.3|xml2js@0.6.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|sax@1.6.1",
-        "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1"
+        "pic-vision-desktop@1.10.3|sax@1.6.1",
+        "pic-vision-desktop@1.10.3|xml2js@0.6.2|xmlbuilder@11.0.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|xml2js@0.6.2|xmlbuilder@11.0.1"
+      "ref": "pic-vision-desktop@1.10.3|xml2js@0.6.2|xmlbuilder@11.0.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@posthog/core@1.50.5",
+      "ref": "pic-vision-desktop@1.10.3|@posthog/core@1.50.5",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|@posthog/types@1.409.0"
+        "pic-vision-desktop@1.10.3|@posthog/types@1.409.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|rxjs@7.8.2",
+      "ref": "pic-vision-desktop@1.10.3|rxjs@7.8.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|tslib@2.8.1"
+        "pic-vision-desktop@1.10.3|tslib@2.8.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|tslib@2.8.1"
+      "ref": "pic-vision-desktop@1.10.3|tslib@2.8.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@supabase/phoenix@0.4.5"
+      "ref": "pic-vision-desktop@1.10.3|@supabase/phoenix@0.4.5"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|iceberg-js@0.8.1"
+      "ref": "pic-vision-desktop@1.10.3|iceberg-js@0.8.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ajv-formats@3.0.1",
+      "ref": "pic-vision-desktop@1.10.3|ajv-formats@3.0.1",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|ajv@8.20.0"
+        "pic-vision-desktop@1.10.3|ajv@8.20.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ajv@8.20.0",
+      "ref": "pic-vision-desktop@1.10.3|ajv@8.20.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3",
-        "pic-vision-desktop@1.9.0|fast-uri@3.1.9",
-        "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0",
-        "pic-vision-desktop@1.9.0|require-from-string@2.0.2"
+        "pic-vision-desktop@1.10.3|fast-deep-equal@3.1.3",
+        "pic-vision-desktop@1.10.3|fast-uri@3.1.9",
+        "pic-vision-desktop@1.10.3|json-schema-traverse@1.0.0",
+        "pic-vision-desktop@1.10.3|require-from-string@2.0.2"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|atomically@2.1.1",
+      "ref": "pic-vision-desktop@1.10.3|atomically@2.1.1",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
-        "pic-vision-desktop@1.9.0|when-exit@2.1.5"
+        "pic-vision-desktop@1.10.3|stubborn-fs@2.0.0",
+        "pic-vision-desktop@1.10.3|when-exit@2.1.5"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|debounce-fn@6.0.0",
+      "ref": "pic-vision-desktop@1.10.3|debounce-fn@6.0.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|mimic-function@5.0.1"
+        "pic-vision-desktop@1.10.3|mimic-function@5.0.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|dot-prop@9.0.0",
+      "ref": "pic-vision-desktop@1.10.3|dot-prop@9.0.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|type-fest@4.41.0"
+        "pic-vision-desktop@1.10.3|type-fest@4.41.0"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|json-schema-typed@8.0.2"
+      "ref": "pic-vision-desktop@1.10.3|json-schema-typed@8.0.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|uint8array-extras@1.5.0"
+      "ref": "pic-vision-desktop@1.10.3|uint8array-extras@1.5.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|caseless@0.12.0"
+      "ref": "pic-vision-desktop@1.10.3|caseless@0.12.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|concat-stream@2.0.0",
+      "ref": "pic-vision-desktop@1.10.3|concat-stream@2.0.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|buffer-from@1.1.2",
-        "pic-vision-desktop@1.9.0|inherits@2.0.4",
-        "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
-        "pic-vision-desktop@1.9.0|typedarray@0.0.6"
+        "pic-vision-desktop@1.10.3|buffer-from@1.1.2",
+        "pic-vision-desktop@1.10.3|inherits@2.0.4",
+        "pic-vision-desktop@1.10.3|readable-stream@3.6.2",
+        "pic-vision-desktop@1.10.3|typedarray@0.0.6"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2",
+      "ref": "pic-vision-desktop@1.10.3|http-response-object@3.0.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60"
+        "pic-vision-desktop@1.10.3|http-response-object@3.0.2|@types/node@10.17.60"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|http-response-object@3.0.2|@types/node@10.17.60"
+      "ref": "pic-vision-desktop@1.10.3|http-response-object@3.0.2|@types/node@10.17.60"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|parse-cache-control@1.0.1"
+      "ref": "pic-vision-desktop@1.10.3|parse-cache-control@1.0.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|debug@4.4.3",
+      "ref": "pic-vision-desktop@1.10.3|debug@4.4.3",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|ms@2.1.3"
+        "pic-vision-desktop@1.10.3|ms@2.1.3"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|sax@1.6.1"
+      "ref": "pic-vision-desktop@1.10.3|sax@1.6.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|@posthog/types@1.409.0"
+      "ref": "pic-vision-desktop@1.10.3|@posthog/types@1.409.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|fast-deep-equal@3.1.3"
+      "ref": "pic-vision-desktop@1.10.3|fast-deep-equal@3.1.3"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|fast-uri@3.1.9"
+      "ref": "pic-vision-desktop@1.10.3|fast-uri@3.1.9"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|json-schema-traverse@1.0.0"
+      "ref": "pic-vision-desktop@1.10.3|json-schema-traverse@1.0.0"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|require-from-string@2.0.2"
+      "ref": "pic-vision-desktop@1.10.3|require-from-string@2.0.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|stubborn-fs@2.0.0",
+      "ref": "pic-vision-desktop@1.10.3|stubborn-fs@2.0.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2"
+        "pic-vision-desktop@1.10.3|stubborn-utils@1.0.2"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|when-exit@2.1.5"
+      "ref": "pic-vision-desktop@1.10.3|when-exit@2.1.5"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|mimic-function@5.0.1"
+      "ref": "pic-vision-desktop@1.10.3|mimic-function@5.0.1"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|buffer-from@1.1.2"
+      "ref": "pic-vision-desktop@1.10.3|buffer-from@1.1.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|inherits@2.0.4"
+      "ref": "pic-vision-desktop@1.10.3|inherits@2.0.4"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|readable-stream@3.6.2",
+      "ref": "pic-vision-desktop@1.10.3|readable-stream@3.6.2",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|inherits@2.0.4",
-        "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
-        "pic-vision-desktop@1.9.0|util-deprecate@1.0.2"
+        "pic-vision-desktop@1.10.3|inherits@2.0.4",
+        "pic-vision-desktop@1.10.3|string_decoder@1.3.0",
+        "pic-vision-desktop@1.10.3|util-deprecate@1.0.2"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|typedarray@0.0.6"
+      "ref": "pic-vision-desktop@1.10.3|typedarray@0.0.6"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|ms@2.1.3"
+      "ref": "pic-vision-desktop@1.10.3|ms@2.1.3"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|stubborn-utils@1.0.2"
+      "ref": "pic-vision-desktop@1.10.3|stubborn-utils@1.0.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|string_decoder@1.3.0",
+      "ref": "pic-vision-desktop@1.10.3|string_decoder@1.3.0",
       "dependsOn": [
-        "pic-vision-desktop@1.9.0|safe-buffer@5.2.1"
+        "pic-vision-desktop@1.10.3|safe-buffer@5.2.1"
       ]
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|util-deprecate@1.0.2"
+      "ref": "pic-vision-desktop@1.10.3|util-deprecate@1.0.2"
     },
     {
-      "ref": "pic-vision-desktop@1.9.0|safe-buffer@5.2.1"
-    },
-    {
-      "ref": "runtime:node@24.22.0",
-      "dependsOn": []
-    },
-    {
-      "ref": "runtime:chromium@152.0.7977.167",
-      "dependsOn": []
+      "ref": "pic-vision-desktop@1.10.3|safe-buffer@5.2.1"
     }
   ]
 }

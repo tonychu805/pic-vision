@@ -1,6 +1,6 @@
 {
   "name": "pic-vision-desktop",
-  "version": "1.10.2",
+  "version": "1.10.3",
   "description": "Venue owner desktop client: camera discovery/management for pic-vision (STRATEGY.md §5)",
   "author": "picvision ai",
   "private": true,
@@ -75,7 +75,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.4",
     "concurrently": "^9.1.2",
-    "electron": "^44.2.0",
+    "electron": "^44.10.0",
     "electron-builder": "^26.15.3",
     "eslint": "^10.11.0",
     "globals": "^17.12.0",
