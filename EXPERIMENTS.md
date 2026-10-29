@@ -3551,3 +3551,51 @@ All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen W
 **Per 5-min part on the RTX 2000 Ada:** prep ~20 s, ball detection ~45 s, **badges (pose) ~2:15-2:35**, cut + upload ~35 s. Badges are now ~60% of each part.
 
 **Seen.** 29 rallies (replay #9, same 720p files on an A5000: 28). Kitchen War is the same rally as #8-#9 (p3 215-232). Killer Shot moved again: p2 23-46 here, p4 268-290 in #9, p1 120-132 at 1080p in #8. So it is not stable across GPU types even on identical input (float16 + XLA arithmetic differs by card); worth checking how close the Killer Shot candidates' measures are.
+
+### 2026-10-27 — Production-faithful harness: 720p input loses ~30% of ball detections on PGC footage (contradicts 08-28 "720p ≈ 1080p")
+
+Built a harness that copies the dual-stream production input (scratchpad `prodtest/harness.py`):
+1. Substream copy: 1280×720, 30 fps, 2048 kbps (the camera's VE_1 sub-stream setting).
+2. The pod's own 30 fps CFR re-encode (crf 20).
+3. `scripts/pod_infer.py` with the production k14 weights and `--calib`, with `calibration_resolution` set, as the console writes it.
+4. `src.rallies.detect_candidates` (production rally code, bridge off).
+5. Pose on the 720p frames, scaled back to calibration coordinates.
+
+Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court mask in `pod_infer.py` builds at calibration resolution and resizes, so it is correct at 720p; coordinate ranges match between runs.
+
+| input | ball detected in | rallies |
+|---|---|---|
+| 1080p, cached pod run (09-28) | 27.1% of frames | 17 |
+| 1080p, local harness (control) | 25.6% | 13 |
+| 720p, high quality (crf 16) | 18.1% | 4 |
+| 720p, 2 Mbps (substream copy) | 17.7% | 6 |
+
+- **Resolution, not compression, is the cause.** High-quality 720p is no better than 2 Mbps. The local 1080p control nearly reproduces the cached pod result, so the harness is sound.
+- **This contradicts the 2026-08-28 finding "720p detects as well as 1080p"**, the basis for sending the 720p sub-stream to the cloud (dual-stream architecture).
+- **Likely mechanism (unverified):** `pod_infer` resizes every frame to 512×288 with `cv2.resize`. From 1080p that keeps the small far ball sharp; from an already-smoothed 720p frame (ffmpeg here; the camera's scaler in production) the ball may be softened below detection.
+- **Not yet tested on a REAL camera sub-stream.** None exists on this machine (the last 720p file is a Sept cloud-job proxy). The copy starts from an already-compressed 1080p file, so it may be harsher than reality.
+- **Badge consequence:** the same session's badges at 720p are entirely different rallies than at 1080p, because rally detection changed.
+
+**Conclusion.** Production detection on the 720p sub-stream may be finding far fewer rallies than the 1080p field test. **Needs a real sub-stream recording before the 2026-11-01 Pickleday test.** If confirmed, options include sending a 1080p sub-stream (camera allows 1080p only at 15 fps on these units; ADR-131 floor is 25 fps) or changing pod_infer's resize.
+
+**Follow-up (same day): the shrink step in `pod_infer.py` explains part of the 720p loss.** Same 720p 2 Mbps copy, with only the 1280×720 → 512×288 resize in a scratch copy of `pod_infer.py` changed (scratchpad `resize/`). Rallies compared against the local 1080p control (13).
+
+| resize | detections | rallies | 1080p rallies overlapped | rallies not at 1080p |
+|---|---|---|---|---|
+| linear (today) | 17.7% | 6 | 4/13 | 3 |
+| **nearest** | **21.8%** | 11 | **8/13** | 2 |
+| sharpen (unsharp 1.8/-0.8) + linear | 19.9% | 12 | 6/13 | 7 |
+| cubic up to 1920×1080, then linear | 18.6% | 8 | — | — |
+| area | 15.8% | 4 | — | — |
+| 1080p linear (control) | 25.6% | 12 | — | — |
+
+- The ordering confirms the softening mechanism: more smoothing hurts, none helps.
+- **Nearest recovers about half the gap** with few extra rallies. Sharpen adds spurious rallies.
+- About 4/13 rallies are still lost, so 720p also loses real information.
+- Before any change: (1) a real camera sub-stream recording; (2) a no-regression check of nearest on the labeled videos; (3) `pod_infer` behind a setting, through pipeline staging.
+
+**Staging parity (same day): the local harness reproduces the staging pipeline.** A 5-min brickwall-SEMI window was made into a 720p, 2 Mbps sub-stream copy, then run as a real staging reel job (staging code d6f2fcf, bridge on; job 1127d709, RTX 2000 Ada pod) and locally with the pod's exact steps.
+- Staging: 11 rally candidates, 10 top-rally clips.
+- Local, re-encoded with **h264_nvenc p4 cq20** (the pod's encoder): 11 rallies, and all 10 staging clips match a local rally within 1 s (whole-second rounding). The 11th local rally is simply not in the top 10.
+- With the local re-encode on libx264 crf20 instead, two rally starts shifted by 3-4.5 s, so the encoder matters at boundaries.
+- The harness now uses NVENC. Local harness results can stand in for staging for experiments; staging remains the final check before production.
