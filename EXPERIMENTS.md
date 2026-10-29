@@ -3612,3 +3612,29 @@ Measured:
 - **Not measured:** the gain on stronger cards (A4500 / A5000 / 4000 Ada), where serial pose is further below the GPU's own ceiling. Staging picks the cheapest available card.
 
 Conclusion: a safe, result-neutral ~20%. That saves ~25-30 s per part, not enough by itself to bring a part (~5:40) under 5 min. Bigger cuts change the posed frames or the input size, and so the badge measures; they need the blind brickwall rerun (src/badges.py header).
+
+### 2026-10-29 — Posing fewer frames for badges: rejected (badges drop with the frames)
+
+Question: can badges pose fewer frames (to keep a 5-min part under 5 min of processing) without changing which badges are awarded?
+
+Method (local only; PGC footage stays on this machine):
+- **Sessions:** the 14 PGC field-test sessions that have cached full pose (`cache/arm_swing/poses_pgc_*.json`, the caches the bars were set on).
+- **Rallies:** found as the pod finds them (`detect_candidates`, occlusion bridge on).
+- **Reference:** `src.badges.measure` + `decide` on every cached frame.
+- **Sparse:** the same code on a subset of frames. Every variant keeps the full serve window.
+
+Results (IoU not applicable; per-session badge agreement against the reference's 7 badges):
+- **Every frame within ±W of ball-track direction changes, every K-th frame elsewhere** (W 6-12, K 6-10): 27-35% of frames posed, 2/7 reference badges kept, 4-5 changed. Ball-track "hits" come at only 0.15-0.75/s against about 1/s of real play, and only ~15-30% of swing peaks fall near one (the far-side gaps; cf. ADR-156).
+- **Two-pass:** pose every K-th frame, then every frame ±W around coarse wrist moves above X× the coarse median:
+
+| K | W | X | Frames posed | Swing peaks kept | Badges kept (of 7) |
+|---|---|---|---|---|---|
+| 3 | 12 | 1 | 100% | 100% | 7 |
+| 3 | 6 | 3 | 81% | 82% | 5 |
+| 3 | 6 | 4 | 72% | 67% | 5 |
+| 3 | 6 | 6 | 57% | 45% | 3 |
+| 6 | 9 | 6 | 32% | 20% | 3 |
+
+Conclusion: every saving in frames costs swing peaks almost one-for-one. Swing speed is a one-frame wrist step sustained into the next frame, so a swing is only seen when both of its frames are posed, and fast swings are spread through rallies, not just at the hits the ball track sees. **Not shipping frame reduction.**
+
+Only 7 reference badges, so the badge counts are small. The swing-peak retention is the stronger evidence. Remaining options to keep a part under 5 min: the result-neutral prefetch (x1.2, above); a second machine when a part has waited too long (no badge change); a smaller pose input size (untested; changes measures and would need the blind brickwall rerun).
