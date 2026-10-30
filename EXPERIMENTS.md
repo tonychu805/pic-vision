@@ -3729,3 +3729,33 @@ Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rall
 **Conclusion.** Do not adopt 640×1120 for badge inference. A roughly 27% pose-time saving does not compensate for changing two of the three production award locations and adding a fourth award. Keep the 736×1280 production input and batch 8; see ADR-163. The comparison is one complete session, so it rejects this candidate on the available blind set but does not estimate generalization across cameras or venues.
 
 **Measurement note.** The candidate pass's exact wall-time summary was not retained in the process output; its approximately 868 s is reconstructed from the last progress record and observed throughput, so the speed ratio is approximate. No cloud GPU was used.
+
+## 2026-10-30 — Staging YOLOv8n speed trial: full Lifetime Fall Classic clip
+
+**Question.** How does the speed-first YOLOv8n build perform in the real staging pipeline on the full Lifetime Fall Classic source?
+
+**Setup.** Staging only, branch commit `798c065` (`codex/staging-yolov8n-pose`), YOLOv8n TorchScript at 736×1280, batch 8. The staged model artifact was `weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript` in the staging private ingest bucket. Submitted the full `Lifetime Fall Classic.mp4` (1920×1080, 60000/1001 fps, 1,302.732 s / 21:42.7) through the actual staging agent upload flow as one job; staging converted it to 30 fps. This is a full-file one-job run, not the historical five-part game-clock replay.
+
+**Result.** Job `2a1b5164-e4e8-40ea-8462-5ca83f079837` was created at 09:32:03 UTC, entered the queue at 09:33:44, was first observed running at 09:34:12, and completed at 09:47:10. Queue update to completion was 13 min 25 s; first observed running to completion was about 12 min 58 s. Badge pose processed 11,096 frames in 192 s (57.8 frames/s). It measured 290 swing peaks across 30 rallies. Badge selection produced Kitchen War (rally 22, about 823.3 s) and Hardest Swing (rally 26, about 1047.7 s). Clip cutting produced 30 rally candidates; the full selection contained 10 reels totaling 170.7 s. The staging share is [available here](https://staging--picvision-reel-share.netlify.app/r/e94de081-633a-4e8a-9021-e6493913871b).
+
+**Interpretation.** This confirms YOLOv8n completes on the actual staging pipeline and gives a useful pose-stage measurement. The 192 s pose time is about 2.5× slower than the local seven-rally 97.8 fps result, but that is not a controlled GPU comparison. Do not compare the 13:25 queue-to-done time directly to the old five-part x runs: this run used one 21.7-minute 1080p60 source converted to 30 fps, one job, and an unrecorded cloud GPU type. RunPod billing for this job was not available, so cloud cost is unknown. The staging result's badges have no same-run YOLOv8x baseline; it demonstrates speed, not badge parity. Production remains unchanged.
+
+## 2026-10-30 — Staging YOLOv8n replay: Lifetime Fall Classic in five timed parts
+
+**Question.** What would players wait for if the speed-first YOLOv8n model processed the same five-minute, 720p30 Lifetime Fall Classic parts used in the earlier production-style staging replays?
+
+**Setup.** The five existing 720p30, ~2 Mbps parts cut from `Lifetime Fall Classic.mp4`: 300 / 300 / 300 / 300 / 102.7 seconds. Each part was uploaded through the real staging agent API at the time it would have finished recording, using commit `798c065` and the staging-only YOLOv8n 736×1280 model, batch 8. Uploads took 17–18 seconds for parts 1–4 and 7.3 seconds for part 5. Simulated recording end was about 11:47:11 UTC. The agent access used for this replay could not create a new `recording_sessions` row, so these were five separate jobs and share pages, without a session's warm-machine reuse, cumulative badge redecision, or one shared player link. Their job timings are real staging timings; the overall player wait is a stressed independent-job case, not a faithful measurement of the shared-session production path.
+
+| Part | Attempts to finish | Pose frames / time | Rallies / swings | Time from that part's recording end to reels ready | Share |
+|---:|---:|---:|---:|---:|---|
+| 1 | 1 | 2,518 / 43.0 s | 7 / 63 | 5:24 | [part 1](https://staging--picvision-reel-share.netlify.app/r/cbd96fe2-7445-4957-b68e-b4a6754ac487) |
+| 2 | 3 | 2,770 / 39.0 s | 8 / 68 | 28:51 | [part 2](https://staging--picvision-reel-share.netlify.app/r/e34e5d76-2dd8-4c89-8222-38e5efabb930) |
+| 3 | 2 | 2,383 / 37.3 s | 7 / 61 | 15:16 | [part 3](https://staging--picvision-reel-share.netlify.app/r/25fdcba4-9508-4d80-ac02-28f2311e3ec8) |
+| 4 | 2 | 2,300 / 37.7 s | 6 / 58 | 10:13 | [part 4](https://staging--picvision-reel-share.netlify.app/r/c691c4f5-53d2-41ac-a279-cc6630a6c086) |
+| 5 | 1 | 352 / 8.8 s | 1 / 8 | 3:28 | [part 5](https://staging--picvision-reel-share.netlify.app/r/0e6ec0ad-de20-49ed-a6df-7b805db2ab59) |
+
+**Outcome.** All five were ready at 12:04:19 UTC, **17:08 after recording ended**. Four parts were ready by +8:34; part 2 set the final wait. Successful pose work totaled 10,323 frames / 165.8 s, about 62.3 fps. Part 2's first two jobs were terminated after two stuck container starts each; part 3's first job had the same failure; part 4's first pod stopped without reporting an outcome. The successful retry for part 2 also waited through RunPod capacity failures before a machine started. These delays dominate the player-visible result. GPU types and billing for the successful jobs were unavailable from the agent API, so there is no reliable cost figure or controlled GPU comparison.
+
+**Badge check.** Running the unchanged `src.badges.decide` on the five successful jobs' combined `badge_measures` gives 258 swings and three hypothetical session awards: Kitchen War (part 3, rally 5), Hardest Swing (part 3, rally 2), and Killer Shot (part 4, rally 0). This is an offline calculation because the five jobs do not share a recording session. The earlier five-part YOLOv8x replay #10 on these files awarded Kitchen War in part 3 and Killer Shot in part 2; the current result moves Killer Shot and adds Hardest Swing. Different cloud machines and intervening pipeline changes prevent attributing that badge difference solely to YOLOv8n.
+
+**Conclusion.** YOLOv8n reduced the pose work on each five-minute part to roughly 37–43 seconds in this staging run. A complete player set was still late because machine starts failed. To measure the actual production path and cumulative badge behavior, the replay needs a fresh console-issued recording session so the warm machine and single share link are exercised.
