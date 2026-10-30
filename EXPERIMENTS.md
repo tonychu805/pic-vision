@@ -3638,3 +3638,94 @@ Results (IoU not applicable; per-session badge agreement against the reference's
 Conclusion: every saving in frames costs swing peaks almost one-for-one. Swing speed is a one-frame wrist step sustained into the next frame, so a swing is only seen when both of its frames are posed, and fast swings are spread through rallies, not just at the hits the ball track sees. **Not shipping frame reduction.**
 
 Only 7 reference badges, so the badge counts are small. The swing-peak retention is the stronger evidence. Remaining options to keep a part under 5 min: the result-neutral prefetch (x1.2, above); a second machine when a part has waited too long (no badge change); a smaller pose input size (untested; changes measures and would need the blind brickwall rerun).
+
+### 2026-10-30 — Pose inference batch size: larger batches rejected
+
+**Hypothesis.** The GPU is the pose bottleneck, so raising `pose_video`'s batch from 8 to 16 (or 32) may improve throughput without changing detections or badge measures.
+
+**Setup.** Commit `fcd310c88d0e78ca89f41f5c4a0a92bc0a325d7d`; production `src/pose.py` and the exact production TorchScript object `weights/yolov8x-pose-736x1280-torch21.torchscript`; RunPod RTX 2000 Ada, Torch 2.1.0+cu118, 16 GB VRAM. Used `videos/IMG_7743_consistency_0-300s.mp4` (1920×1080, 30 fps) and the seven blind labels in `eval/labels/IMG_7743_consistency_0-300s_blind.jsonl`, yielding the same 2,353 rally-window frames per run. Kept the production 736×1280 input, CUDA fp16, and decode/letterbox prefetch unchanged. Warmed each batch shape first; ran three full timed passes for each size in alternating order. Pose throughput timing excludes the separate `badges.measure` CPU calculation.
+
+**Result.**
+
+| Batch | Pose seconds (three runs) | Mean fps | Detections | Badge summary | Pose output vs batch 8 |
+|---:|---|---:|---:|---|---|
+| 8 | 102.635, 102.460, 102.392 | 22.96 | 7,992 | identical hash in all runs; 7 rallies, 62 swings | reference |
+| 16 | 102.081, 102.246, 102.566 | 23.00 | 7,992 | identical hash to batch 8 in all runs; 7 rallies, 62 swings | same frame/person counts; mean absolute coordinate delta 0.000030 px, max 0.375 px; badge hash unchanged |
+| 32 | 105.934, 105.813, 106.055 | 22.21 | 7,991 | stable hash across runs; 7 rallies, 62 swings, but hash differs from batch 8 | one frame's person count differs; p99 coordinate delta 0.094 px; max 974.2 px on the count-mismatch frame |
+
+**Conclusion.** Batch 16 was only 0.2% faster than batch 8 (0.20 seconds over this sample), within run-to-run variation, with no badge change. Batch 32 was 3.4% slower and changed one detection/output. Keep batch 8; increasing the batch does not reduce processing time on this GPU.
+
+**Cost.** The temporary RTX 2000 Ada pod was billed at $0.24/hour and ran for about 24 minutes, approximately $0.10. It was terminated after the runs.
+
+### 2026-10-30 — Lower pose input and smaller model: faster, with measurement drift
+
+**Hypothesis.** Lowering the image size from 736×1280 to 640×1120 should reduce model compute; replacing YOLOv8x-pose with the much smaller YOLOv8n-pose should cut pose time further. Test them separately and together, keeping batch 8 and the pose/badge code fixed.
+
+**Setup.** Local NVIDIA RTX 2000 Ada, Python 3.10, Torch 2.1.0+cu118, `src/pose.py`, CUDA fp16 and batch 8. Used the exact production TorchScript as the baseline, plus the repo's `yolov8x-pose.pt` exported at 640×1120 and `yolov8n-pose.pt` exported at both 736×1280 and 640×1120 (Ultralytics 8.3.0 exporter). `videos/IMG_7743_consistency_0-300s.mp4`, seven blind-labeled rallies, 2,353 identical pose frames. Two timed passes per variant, alternating order. The second pass also ran `src.badges.measure` and `decide` to inspect measured values and award candidates.
+
+**Result.**
+
+| Variant | Mean pose time | Mean fps | Pose detections | Difference vs production pose output | Badge measurements |
+|---|---:|---:|---:|---|---|
+| Production YOLOv8x, 736×1280 | 102.644 s | 22.92 | 7,992 | reference | 62 swings; 7 serve windows |
+| YOLOv8x, 640×1120 | 75.632 s | 31.11 | 7,242 | 1.36× throughput; 761/2,353 frames differ in person count; matched boxes mean IoU 0.974; matched keypoints shift 2.44 px on average, p95 7.00 px | 63 swings; 6 serve windows; kitchen-share measures shift on two rallies |
+| YOLOv8n, 736×1280 | 24.067 s | 97.77 | 6,802 | 4.26× throughput; 1,081/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.46 px on average, p95 19.69 px | 60 swings; 6 serve windows; kitchen-share measures shift |
+| YOLOv8n, 640×1120 | 20.981 s | 112.15 | 5,960 | 4.89× throughput; 1,484/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.96 px on average, p95 20.54 px | 57 swings; 6 serve windows; two kitchen-share measures fall from 0.175/0.282 to 0.003/0.000 |
+
+All four variants produced 7 rally measurements, but `decide([measure])` awarded no badges for this seven-rally sample under any variant. Thus this run demonstrates speed and raw-measure changes, not badge-award parity. Timing was measured on the same GPU for every condition. The sample is much smaller than the complete blind brickwall badge set.
+
+**Conclusion.** Input reduction alone gives a useful 26% wall-time cut, but it changes detections and several raw badge measurements; it is a candidate for the full blind badge rerun, not a production change yet. YOLOv8n gives much larger speed gains but diverges substantially from the production pose output; at reduced input it loses 5 of 62 swing peaks and nearly removes two kitchen-share measurements in this sample. Do not replace the production model on this evidence. The full blind brickwall badge comparison is required before selecting either variant.
+
+**Cost.** RunPod had no available GPUs across the same-generation and project-approved fallback list. The experiment ran on the local RTX 2000 Ada, with no cloud GPU charge. The Torch 2.1 and Ultralytics export environment and temporary model artifacts were removed afterward.
+
+### 2026-10-30 — Detailed badge-measure replay for the pose variants
+
+Follow-up replay of the same seven IMG_7743 rallies to inspect the raw fields behind the hashes. This is a detail capture, not another timing comparison; each variant was posed once with the same frames and `src.badges.measure` / `decide` code.
+
+**Kitchen share by labeled rally** (fraction of rally frames with players at both kitchen lines):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 2 | 0.17508 | 0.14815 | 0.13131 | 0.00337 |
+| 3 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 4 | 0.28218 | 0.25743 | 0.16832 | 0.00000 |
+| 5–7 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+
+**Estimated serve speed by rally** (box-heights per second; `—` means the serve window had no estimate):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 1.162 | 1.537 | 1.637 | 1.533 |
+| 2 | 1.220 | 1.341 | 1.815 | 1.421 |
+| 3 | 1.488 | 1.682 | 1.618 | 2.925 |
+| 4 | 2.821 | 2.510 | 2.393 | 2.496 |
+| 5 | 0.675 | 0.844 | 0.622 | 0.101 |
+| 6 | 0.532 | — | — | — |
+| 7 | 1.189 | 1.237 | 2.615 | 1.593 |
+
+Swing peaks assigned to each rally window were production `[7, 8, 6, 6, 12, 6, 5]`, x 640×1120 `[6, 8, 7, 7, 11, 6, 6]`, n 736×1280 `[8, 9, 7, 6, 10, 7, 4]`, and n 640×1120 `[7, 8, 6, 4, 10, 6, 5]`. Greedy timestamp matching within ±0.5 s paired 42/50 production-window peaks for x 640×1120, 40/50 for n 736×1280, and 37/50 for n 640×1120. This matches time only; it does not establish player identity or that a paired peak is the same physical swing.
+
+`decide([measure])` awarded no badges for the production measurements or any variant, so these seven rallies still cannot tell whether badge awards would agree on a session with actual candidates. The raw-field comparison makes the drift concrete: the reduced-resolution x model retains the two nonzero kitchen-share rallies fairly closely but loses one serve estimate; n at full size lowers both kitchen shares and changes several serve speeds; the combined n + smaller input nearly erases both kitchen-share measurements and reduces the assigned swing peaks from 50 to 46.
+
+### 2026-10-30 — Full blind brickwall badge comparison: YOLOv8x at 640×1120
+
+**Question.** Does reducing the production YOLOv8x-pose input from 736×1280 to 640×1120 preserve the badges awarded for a complete blind brickwall session, and how much pose time does it save?
+
+**Setup.** Full `videos/brickwall_30fps.mp4` session (1280×720, 45,397 source frames, about 25:13). Rally segments were regenerated with `detect_candidates(..., occlusion_bridge=True)` from the cached TrackNet predictions and calibration: 42 rallies and 27,329 identical pose frames for each condition. Both used `src.pose.pose_video`, batch 8, CUDA fp16, and the same RTX 2000 Ada / Torch 2.1.0+cu118 runtime. Baseline was the exact production TorchScript model at 736×1280; variant was the repo's YOLOv8x-pose weights exported at 640×1120 with Ultralytics 8.3.0. `src.badges.measure` and `decide` were unchanged. The production pass took 1,187.3 s (about 19:47). The reduced-size pass was about 868 s (about 14:28; estimated from the final 26,000-frame progress sample at 825.9 s and the remaining frames at that pass's observed rate), approximately 1.37× throughput / 27% less pose time. Both were local runs; no cloud GPU cost.
+
+**Badge result.** This is a failure of award parity, despite the throughput improvement:
+
+| Measure | Production x, 736×1280 | x, 640×1120 |
+|---|---:|---:|
+| Session swing peaks | 682 | 686 |
+| Rally serve windows | 30 | 29 |
+| Typical swing | 1.925 | 1.807 |
+| Awarded badges | 3 | 4 |
+| Kitchen-share mean absolute change across 42 rallies | — | 0.0695 (max 0.2851; 13 rallies change by more than 0.10) |
+
+Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rally 1 (46.6 s), and **Kitchen War** at rally 28 (929.2 s). Reduced input retained Quick Hands at rally 0, but moved Hardest Swing to rally 12 (350.4 s) and Kitchen War to rally 3 (123.4 s); it also awarded a new **Killer Shot** at rally 34 (1107.7 s). Award margins and underlying serve estimates also shifted. The total swing count being similar (682 vs 686) therefore masks material identity and ranking drift.
+
+**Conclusion.** Do not adopt 640×1120 for badge inference. A roughly 27% pose-time saving does not compensate for changing two of the three production award locations and adding a fourth award. Keep the 736×1280 production input and batch 8; see ADR-163. The comparison is one complete session, so it rejects this candidate on the available blind set but does not estimate generalization across cameras or venues.
+
+**Measurement note.** The candidate pass's exact wall-time summary was not retained in the process output; its approximately 868 s is reconstructed from the last progress record and observed throughput, so the speed ratio is approximate. No cloud GPU was used.

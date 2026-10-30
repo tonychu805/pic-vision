@@ -3527,3 +3527,39 @@ the cloud pod path is unchanged.
 - Top-10 reel picks change by 0-3 per video without adding highlight-worthy rallies, so the ranker, not detection,
   is now the limit on reel quality.
 - Turning it on in the pod path is a separate decision (needs a reel-level watch on new sessions).
+
+## ADR-161 — Keep badge pose inference batch size at 8
+
+**Date.** 2026-10-30
+
+**Context.** Production pose/badge work takes roughly 2:40 per 5-minute part. Since inference dominates and the RTX 2000 Ada had spare VRAM, larger inference batches looked like a low-risk way to shorten that stage.
+
+**Decision.** Keep `src.pose.pose_video` at batch size 8. Do not raise it to 16 or 32 as a speed optimization: on the production RTX 2000 Ada, batch 16 was indistinguishable from batch 8 in throughput, while batch 32 was slower and changed one detection on the measured rally windows.
+
+**Evidence.** Three repeated runs per batch size on the production TorchScript model and a 2,353-frame blind rally-window sample: batch 8 averaged 22.96 fps; batch 16 averaged 23.00 fps (0.2% faster, within run variation; same badge summary); batch 32 averaged 22.21 fps (3.4% slower; one frame's person count and the badge output hash changed). See `EXPERIMENTS.md`, 2026-10-30 “Pose inference batch size”. This is limited to the tested GPU, model, footage, and current 736×1280 input shape.
+
+**Consequences.** Batch-size tuning is not a useful route to lower pose time on this card. The remaining untested compute lever is reducing pose input resolution; because this affects detections and badge measures, evaluate it against the blind badge set before changing production.
+
+## ADR-162 — Keep production pose weights and input size pending blind badge validation
+
+**Date.** 2026-10-30
+
+**Context.** The production pose stage takes about 2:40 per 5-minute part. ADR-161 ruled out a batch-size increase. This experiment measured a reduced input size and a smaller pose model on the same RTX 2000 Ada.
+
+**Decision.** Keep the production YOLOv8x-pose at 736×1280 for now. Do not deploy the faster variants until the full blind brickwall badge comparison passes. Treat YOLOv8x at 640×1120 as the leading candidate for that check: it was 1.36× faster on the sample. Do not select YOLOv8n on this evidence; its much larger speed gain came with substantial pose-output and badge-measure drift.
+
+**Evidence.** On seven blind-labeled IMG_7743 rallies (2,353 posed frames), x at 640×1120 reduced mean time from 102.6 s to 75.6 s, while matched keypoints shifted 2.44 px on average and the raw measures changed (63 vs 62 swings, 6 vs 7 serve windows). YOLOv8n at 736×1280 was 4.26× faster but shifted matched keypoints 6.46 px on average, produced 60 swings, and changed the kitchen-share measurements; at 640×1120 it produced 57 swings and nearly erased two kitchen-share measurements. No variant produced an award candidate on this small sample, so award parity was not tested. Full details are in `EXPERIMENTS.md`, 2026-10-30 “Lower pose input and smaller model”.
+
+**Follow-up.** Re-run the full blind brickwall badge evaluation for x at 640×1120, including the final session-level `decide()` output. Keep the current production path unless that held-out run shows acceptable pose and badge results.
+
+## ADR-163 — Keep badge pose input at 736×1280; reject 640×1120
+
+**Date.** 2026-10-30
+
+**Context.** ADR-162 left reduced-resolution YOLOv8x as a candidate pending full-session badge validation, because the seven-rally speed sample had no award candidates.
+
+**Decision.** Keep the production YOLOv8x-pose model at 736×1280 and batch 8 for badge inference. Do not deploy the 640×1120 variant: it changes session-level badge results despite running about 27% faster.
+
+**Evidence.** On the complete blind brickwall session, both conditions processed the same 27,329 frames across 42 detected rallies. Production took 1,187.3 s and awarded three badges. The reduced-size variant took approximately 868 s and awarded four; only Quick Hands remained at the same rally, while Hardest Swing and Kitchen War moved to different rallies and a new Killer Shot appeared. Kitchen-share measurements also changed materially. The candidate time is estimated from its final progress sample; its exact terminal timing was not retained. Full results and limitations are in `EXPERIMENTS.md`, “Full blind brickwall badge comparison: YOLOv8x at 640×1120”.
+
+**Consequences.** The 640×1120 speedup is not acceptable for the current badge behavior. Further pose-time reductions must preserve full-session award locations on blind footage, or change the product's badge-quality requirement explicitly before deployment.

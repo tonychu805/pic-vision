@@ -117,13 +117,14 @@ OCCLUSION_BRIDGE = True
 
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
-# Badges (src/badges.py) need player pose: yolov8x-pose as TorchScript,
-# exported inside this pod's own image (torch 2.1) at 736x1280 -- the image
-# has torch but not ultralytics, so src/pose.py does the rest. Off until it
-# has run on pipeline staging (the staging branch turns it on).
+# Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
+# exported with the pod's Torch 2.1 runtime at 736x1280 for the staging
+# speed trial. Keep this model selection on the staging branch until its
+# cloud runtime and badge measurements have been reviewed. The image has
+# torch but not ultralytics, so src/pose.py does the rest.
 BADGES = True
-POSE_R2_KEY = "weights/yolov8x-pose-736x1280-torch21.torchscript"
-POSE_LOCAL = "/workspace/yolov8x-pose-736x1280.torchscript"
+POSE_R2_KEY = "weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript"
+POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
