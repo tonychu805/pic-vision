@@ -3638,3 +3638,21 @@ Results (IoU not applicable; per-session badge agreement against the reference's
 Conclusion: every saving in frames costs swing peaks almost one-for-one. Swing speed is a one-frame wrist step sustained into the next frame, so a swing is only seen when both of its frames are posed, and fast swings are spread through rallies, not just at the hits the ball track sees. **Not shipping frame reduction.**
 
 Only 7 reference badges, so the badge counts are small. The swing-peak retention is the stronger evidence. Remaining options to keep a part under 5 min: the result-neutral prefetch (x1.2, above); a second machine when a part has waited too long (no badge change); a smaller pose input size (untested; changes measures and would need the blind brickwall rerun).
+
+## 2026-10-31 — Five-part staging replay with AAC audio
+
+**Question.** Does preserving source sound through the cloud clip, venue desktop high-res replacement, and vertical crop produce audible reels without a material increase in the final wait?
+
+**Setup.** The same 21:43 Lifetime Fall Classic file was replayed in five parts at 300 / 300 / 300 / 300 / 102.7-second boundaries. This time each 720p upload included the source AAC audio. All jobs shared recording session `5ceffed7-451c-4f74-8e13-a2a006d95b0a` and [staging share](https://staging--picvision-reel-share.netlify.app/r/030f1d5b-1711-4fa5-bbc0-9dfb27dd33bb). The staging desktop stand-in concurrently trimmed the original 1080p source and used the normal `deliverHighRes` path for the sharp wide and 9:16 replacements. The staging reel page enabled its sound control. The temporary authenticated staging session setup route was removed immediately after issuing the session; its POST now returns 404. Pipeline code `3dad7e3`, reel page `d80ce65`; production was unchanged.
+
+| Part | Footage boundary (UTC) | Upload | Cloud done (UTC) | Boundary to done | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---|---:|
+| 1 | 07:59:03 | 18.3 s | 08:02:09 | 3:06 | 2,518 / 39.5 s | 7 / 63 |
+| 2 | 08:04:03 | 18.1 s | 08:06:56 | 2:53 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 08:09:04 | 18.0 s | 08:11:35 | 2:31 | 2,383 / 32.3 s | 7 / 61 |
+| 4 | 08:14:02 | 17.7 s | 08:16:41 | 2:39 | 2,366 / 31.0 s | 6 / 59 |
+| 5 | 08:15:46 | 7.7 s | 08:17:38 | 1:52 | 352 / 6.1 s | 1 / 8 |
+
+**Result.** All five jobs completed without retries. The last of the final ten vertical clips uploaded at 08:17:33, and part 5 finalized the set at 08:17:38: **1:52 after the footage ended**, versus 1:46 in the prior silent replay. The share page returned HTTP 200, rendered ten selected reels, and had its sound control enabled. `ffprobe` confirmed every selected vertical file is 608×1080 H.264 with 48 kHz AAC. Five-second decodes of all ten had measurable audio (mean volume −23.1 to −26.0 dB); a cloud 720p clip sampled before desktop replacement also had 48 kHz AAC. Rally and swing counts match the silent run in all five parts.
+
+**Interpretation and limits.** This staging file replay demonstrates working audio through cloud and desktop output. The six-second difference in final wait is too small to attribute to AAC: machine startup, job queueing, and network timing differed between runs. Part upload time increased by about a second for the full-size parts. This test uses the sample video's soundtrack, not a real camera microphone, and does not test packaged desktop capture, iPhone playback controls, or GPU billing. The production branches remain unchanged.
