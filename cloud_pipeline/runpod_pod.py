@@ -80,19 +80,26 @@ DEFAULT_GPU_TYPES = [
 # unverified cross-architecture cuDNN-consistency caveat as the consumer Ada
 # cards above already do (ADR-064/065's "explicit availability-over-certainty
 # trade, not a re-proof of consistency"), not a new category of risk.
-# Reordered 2026-10-27, same as the orchestrator's (reelJob.ts): fastest
-# first, the slow RTX 2000 Ada last; RTX A5000/A4500 added. L4 and A40 now
-# price at $0.59 on the secure tier -- the orchestrator checks live prices and
-# skips anything over $0.50; this legacy runner does not.
+# Reordered 2026-10-27, same as the orchestrator's (reelJob.ts): speed-priority
+# candidates first, the slow RTX 2000 Ada last; RTX A5000/A4500 added.
+# L4 and A40 now price at $0.59 on the secure tier; the orchestrator checks
+# live prices and skips anything over $0.50; this legacy runner does not.
+# Added 2026-10-31: RTX 4080, RTX 3090 Ti, RTX 3090, and RTX A4000 were
+# $0.50, $0.46, $0.50, and $0.25/hr in RunPod's live Secure Cloud price API.
+# Their order is provisional until the staging pipeline measures them.
 FALLBACK_GPU_TYPES = [
     "NVIDIA RTX 4000 Ada Generation",
     "NVIDIA RTX 4000 SFF Ada Generation",
     "NVIDIA RTX A5000",
     "NVIDIA RTX A4500",
     "NVIDIA GeForce RTX 4080 SUPER",
+    "NVIDIA GeForce RTX 4080",
+    "NVIDIA GeForce RTX 3090 Ti",
+    "NVIDIA GeForce RTX 3090",
     "NVIDIA GeForce RTX 4070 Ti",
     "NVIDIA L4",
     "NVIDIA A40",
+    "NVIDIA RTX A4000",
     "NVIDIA RTX 2000 Ada Generation",
 ]
 # Emptied 2026-09-26 (operator: "having 4090 or anything more expensive than

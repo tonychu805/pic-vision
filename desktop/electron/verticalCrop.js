@@ -96,7 +96,9 @@ export async function cropVertical(inPath, outPath, framing, shiftSec) {
     const vf = `sendcmd=f='${escaped}',crop=${cw}:${h}:${lefts[0] ?? 0}:0,scale=-2:${outH}:flags=lanczos`;
     await run(FFMPEG, [
       "-y", "-v", "error", "-i", inPath, "-vf", vf,
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", outPath,
+      "-map", "0:v:0", "-map", "0:a:0?",
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", "20", "-pix_fmt", "yuv420p",
+      "-c:a", "copy", "-movflags", "+faststart", outPath,
     ]);
   } finally {
     rmSync(workDir, { recursive: true, force: true });

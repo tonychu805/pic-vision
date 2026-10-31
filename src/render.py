@@ -124,7 +124,8 @@ def clip_encoder():
 
 def clip_command(video, start, end, out_path, logo_path=None, video_width=None, encoder="cpu"):
     """ffmpeg command to cut [start, end] (seconds) of video into an H.264 clip.
-    Re-encodes for frame-accurate boundaries; drops audio for now.
+    Re-encodes for frame-accurate boundaries; keeps optional source audio
+    as AAC so clips play with sound in browsers. Silent inputs stay silent.
 
     With logo_path (and the source's video_width), the logo is burnt in
     during that same encode -- no second pass. encoder: a key of ENCODERS."""
@@ -133,10 +134,14 @@ def clip_command(video, start, end, out_path, logo_path=None, video_width=None, 
     if logo_path:
         # Before -t: an -i after it would make -t apply to the logo input.
         cmd += ["-i", logo_path, "-filter_complex", logo_filter(video_width)]
+    else:
+        cmd += ["-map", "0:v:0"]
     return cmd + [
+        "-map", "0:a:0?",
         "-t", f"{duration}",
         *ENCODERS[encoder],
-        "-movflags", "+faststart", "-an", out_path,
+        "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+        "-movflags", "+faststart", out_path,
     ]
 
 

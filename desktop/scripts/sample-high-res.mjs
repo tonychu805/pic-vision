@@ -72,7 +72,10 @@ function ffmpeg(args) {
 // the sample file instead of a concatenation of camera segments.
 async function trimSample(src, startSec, endSec, outPath) {
   await ffmpeg(["-y", "-v", "error", "-ss", String(src.offsetSec + startSec), "-i", src.file, "-t", String(endSec - startSec),
-    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", outPath]);
+    "-map", "0:v:0", "-map", "0:a:0?",
+    "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+    "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+    "-movflags", "+faststart", outPath]);
 }
 
 const done = new Set();

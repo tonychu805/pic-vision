@@ -224,3 +224,20 @@ test("a cut entirely inside the first segment never reaches the second", { timeo
   const dur = probedDuration(out);
   assert.ok(Math.abs(dur - 2) < 0.3, `expected ~2s, got ${dur}`);
 });
+
+test("trimHighRes converts camera PCM audio to browser-compatible AAC", { timeout: 30_000 }, async () => {
+  const source = path.join(outDir, "session-with-audio.mkv");
+  const made = spawnSync(FFMPEG, [
+    "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=red:size=320x240:rate=30:duration=4",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=4",
+    "-c:v", "libx264", "-c:a", "pcm_alaw", source,
+  ], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr?.slice(-300));
+  const out = path.join(outDir, "clip-with-audio.mp4");
+  await trimHighRes([source], 1, 3, out);
+  const probed = spawnSync(FFPROBE, ["-v", "error", "-show_entries", "stream=codec_type,codec_name,sample_rate", "-of", "json", out], { encoding: "utf8" });
+  assert.equal(probed.status, 0, probed.stderr);
+  const streams = JSON.parse(probed.stdout).streams;
+  assert.ok(streams.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
+  assert.ok(streams.some((s) => s.codec_type === "audio" && s.codec_name === "aac" && s.sample_rate === "48000"));
+});

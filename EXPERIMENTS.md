@@ -3638,3 +3638,182 @@ Results (IoU not applicable; per-session badge agreement against the reference's
 Conclusion: every saving in frames costs swing peaks almost one-for-one. Swing speed is a one-frame wrist step sustained into the next frame, so a swing is only seen when both of its frames are posed, and fast swings are spread through rallies, not just at the hits the ball track sees. **Not shipping frame reduction.**
 
 Only 7 reference badges, so the badge counts are small. The swing-peak retention is the stronger evidence. Remaining options to keep a part under 5 min: the result-neutral prefetch (x1.2, above); a second machine when a part has waited too long (no badge change); a smaller pose input size (untested; changes measures and would need the blind brickwall rerun).
+
+### 2026-10-30 — Pose inference batch size: larger batches rejected
+
+**Hypothesis.** The GPU is the pose bottleneck, so raising `pose_video`'s batch from 8 to 16 (or 32) may improve throughput without changing detections or badge measures.
+
+**Setup.** Commit `fcd310c88d0e78ca89f41f5c4a0a92bc0a325d7d`; production `src/pose.py` and the exact production TorchScript object `weights/yolov8x-pose-736x1280-torch21.torchscript`; RunPod RTX 2000 Ada, Torch 2.1.0+cu118, 16 GB VRAM. Used `videos/IMG_7743_consistency_0-300s.mp4` (1920×1080, 30 fps) and the seven blind labels in `eval/labels/IMG_7743_consistency_0-300s_blind.jsonl`, yielding the same 2,353 rally-window frames per run. Kept the production 736×1280 input, CUDA fp16, and decode/letterbox prefetch unchanged. Warmed each batch shape first; ran three full timed passes for each size in alternating order. Pose throughput timing excludes the separate `badges.measure` CPU calculation.
+
+**Result.**
+
+| Batch | Pose seconds (three runs) | Mean fps | Detections | Badge summary | Pose output vs batch 8 |
+|---:|---|---:|---:|---|---|
+| 8 | 102.635, 102.460, 102.392 | 22.96 | 7,992 | identical hash in all runs; 7 rallies, 62 swings | reference |
+| 16 | 102.081, 102.246, 102.566 | 23.00 | 7,992 | identical hash to batch 8 in all runs; 7 rallies, 62 swings | same frame/person counts; mean absolute coordinate delta 0.000030 px, max 0.375 px; badge hash unchanged |
+| 32 | 105.934, 105.813, 106.055 | 22.21 | 7,991 | stable hash across runs; 7 rallies, 62 swings, but hash differs from batch 8 | one frame's person count differs; p99 coordinate delta 0.094 px; max 974.2 px on the count-mismatch frame |
+
+**Conclusion.** Batch 16 was only 0.2% faster than batch 8 (0.20 seconds over this sample), within run-to-run variation, with no badge change. Batch 32 was 3.4% slower and changed one detection/output. Keep batch 8; increasing the batch does not reduce processing time on this GPU.
+
+**Cost.** The temporary RTX 2000 Ada pod was billed at $0.24/hour and ran for about 24 minutes, approximately $0.10. It was terminated after the runs.
+
+### 2026-10-30 — Lower pose input and smaller model: faster, with measurement drift
+
+**Hypothesis.** Lowering the image size from 736×1280 to 640×1120 should reduce model compute; replacing YOLOv8x-pose with the much smaller YOLOv8n-pose should cut pose time further. Test them separately and together, keeping batch 8 and the pose/badge code fixed.
+
+**Setup.** Local NVIDIA RTX 2000 Ada, Python 3.10, Torch 2.1.0+cu118, `src/pose.py`, CUDA fp16 and batch 8. Used the exact production TorchScript as the baseline, plus the repo's `yolov8x-pose.pt` exported at 640×1120 and `yolov8n-pose.pt` exported at both 736×1280 and 640×1120 (Ultralytics 8.3.0 exporter). `videos/IMG_7743_consistency_0-300s.mp4`, seven blind-labeled rallies, 2,353 identical pose frames. Two timed passes per variant, alternating order. The second pass also ran `src.badges.measure` and `decide` to inspect measured values and award candidates.
+
+**Result.**
+
+| Variant | Mean pose time | Mean fps | Pose detections | Difference vs production pose output | Badge measurements |
+|---|---:|---:|---:|---|---|
+| Production YOLOv8x, 736×1280 | 102.644 s | 22.92 | 7,992 | reference | 62 swings; 7 serve windows |
+| YOLOv8x, 640×1120 | 75.632 s | 31.11 | 7,242 | 1.36× throughput; 761/2,353 frames differ in person count; matched boxes mean IoU 0.974; matched keypoints shift 2.44 px on average, p95 7.00 px | 63 swings; 6 serve windows; kitchen-share measures shift on two rallies |
+| YOLOv8n, 736×1280 | 24.067 s | 97.77 | 6,802 | 4.26× throughput; 1,081/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.46 px on average, p95 19.69 px | 60 swings; 6 serve windows; kitchen-share measures shift |
+| YOLOv8n, 640×1120 | 20.981 s | 112.15 | 5,960 | 4.89× throughput; 1,484/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.96 px on average, p95 20.54 px | 57 swings; 6 serve windows; two kitchen-share measures fall from 0.175/0.282 to 0.003/0.000 |
+
+All four variants produced 7 rally measurements, but `decide([measure])` awarded no badges for this seven-rally sample under any variant. Thus this run demonstrates speed and raw-measure changes, not badge-award parity. Timing was measured on the same GPU for every condition. The sample is much smaller than the complete blind brickwall badge set.
+
+**Conclusion.** Input reduction alone gives a useful 26% wall-time cut, but it changes detections and several raw badge measurements; it is a candidate for the full blind badge rerun, not a production change yet. YOLOv8n gives much larger speed gains but diverges substantially from the production pose output; at reduced input it loses 5 of 62 swing peaks and nearly removes two kitchen-share measurements in this sample. Do not replace the production model on this evidence. The full blind brickwall badge comparison is required before selecting either variant.
+
+**Cost.** RunPod had no available GPUs across the same-generation and project-approved fallback list. The experiment ran on the local RTX 2000 Ada, with no cloud GPU charge. The Torch 2.1 and Ultralytics export environment and temporary model artifacts were removed afterward.
+
+### 2026-10-30 — Detailed badge-measure replay for the pose variants
+
+Follow-up replay of the same seven IMG_7743 rallies to inspect the raw fields behind the hashes. This is a detail capture, not another timing comparison; each variant was posed once with the same frames and `src.badges.measure` / `decide` code.
+
+**Kitchen share by labeled rally** (fraction of rally frames with players at both kitchen lines):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 2 | 0.17508 | 0.14815 | 0.13131 | 0.00337 |
+| 3 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 4 | 0.28218 | 0.25743 | 0.16832 | 0.00000 |
+| 5–7 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+
+**Estimated serve speed by rally** (box-heights per second; `—` means the serve window had no estimate):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 1.162 | 1.537 | 1.637 | 1.533 |
+| 2 | 1.220 | 1.341 | 1.815 | 1.421 |
+| 3 | 1.488 | 1.682 | 1.618 | 2.925 |
+| 4 | 2.821 | 2.510 | 2.393 | 2.496 |
+| 5 | 0.675 | 0.844 | 0.622 | 0.101 |
+| 6 | 0.532 | — | — | — |
+| 7 | 1.189 | 1.237 | 2.615 | 1.593 |
+
+Swing peaks assigned to each rally window were production `[7, 8, 6, 6, 12, 6, 5]`, x 640×1120 `[6, 8, 7, 7, 11, 6, 6]`, n 736×1280 `[8, 9, 7, 6, 10, 7, 4]`, and n 640×1120 `[7, 8, 6, 4, 10, 6, 5]`. Greedy timestamp matching within ±0.5 s paired 42/50 production-window peaks for x 640×1120, 40/50 for n 736×1280, and 37/50 for n 640×1120. This matches time only; it does not establish player identity or that a paired peak is the same physical swing.
+
+`decide([measure])` awarded no badges for the production measurements or any variant, so these seven rallies still cannot tell whether badge awards would agree on a session with actual candidates. The raw-field comparison makes the drift concrete: the reduced-resolution x model retains the two nonzero kitchen-share rallies fairly closely but loses one serve estimate; n at full size lowers both kitchen shares and changes several serve speeds; the combined n + smaller input nearly erases both kitchen-share measurements and reduces the assigned swing peaks from 50 to 46.
+
+### 2026-10-30 — Full blind brickwall badge comparison: YOLOv8x at 640×1120
+
+**Question.** Does reducing the production YOLOv8x-pose input from 736×1280 to 640×1120 preserve the badges awarded for a complete blind brickwall session, and how much pose time does it save?
+
+**Setup.** Full `videos/brickwall_30fps.mp4` session (1280×720, 45,397 source frames, about 25:13). Rally segments were regenerated with `detect_candidates(..., occlusion_bridge=True)` from the cached TrackNet predictions and calibration: 42 rallies and 27,329 identical pose frames for each condition. Both used `src.pose.pose_video`, batch 8, CUDA fp16, and the same RTX 2000 Ada / Torch 2.1.0+cu118 runtime. Baseline was the exact production TorchScript model at 736×1280; variant was the repo's YOLOv8x-pose weights exported at 640×1120 with Ultralytics 8.3.0. `src.badges.measure` and `decide` were unchanged. The production pass took 1,187.3 s (about 19:47). The reduced-size pass was about 868 s (about 14:28; estimated from the final 26,000-frame progress sample at 825.9 s and the remaining frames at that pass's observed rate), approximately 1.37× throughput / 27% less pose time. Both were local runs; no cloud GPU cost.
+
+**Badge result.** This is a failure of award parity, despite the throughput improvement:
+
+| Measure | Production x, 736×1280 | x, 640×1120 |
+|---|---:|---:|
+| Session swing peaks | 682 | 686 |
+| Rally serve windows | 30 | 29 |
+| Typical swing | 1.925 | 1.807 |
+| Awarded badges | 3 | 4 |
+| Kitchen-share mean absolute change across 42 rallies | — | 0.0695 (max 0.2851; 13 rallies change by more than 0.10) |
+
+Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rally 1 (46.6 s), and **Kitchen War** at rally 28 (929.2 s). Reduced input retained Quick Hands at rally 0, but moved Hardest Swing to rally 12 (350.4 s) and Kitchen War to rally 3 (123.4 s); it also awarded a new **Killer Shot** at rally 34 (1107.7 s). Award margins and underlying serve estimates also shifted. The total swing count being similar (682 vs 686) therefore masks material identity and ranking drift.
+
+**Conclusion.** Do not adopt 640×1120 for badge inference. A roughly 27% pose-time saving does not compensate for changing two of the three production award locations and adding a fourth award. Keep the 736×1280 production input and batch 8; see ADR-163. The comparison is one complete session, so it rejects this candidate on the available blind set but does not estimate generalization across cameras or venues.
+
+**Measurement note.** The candidate pass's exact wall-time summary was not retained in the process output; its approximately 868 s is reconstructed from the last progress record and observed throughput, so the speed ratio is approximate. No cloud GPU was used.
+
+## 2026-10-30 — Staging YOLOv8n speed trial: full Lifetime Fall Classic clip
+
+**Question.** How does the speed-first YOLOv8n build perform in the real staging pipeline on the full Lifetime Fall Classic source?
+
+**Setup.** Staging only, branch commit `798c065` (`codex/staging-yolov8n-pose`), YOLOv8n TorchScript at 736×1280, batch 8. The staged model artifact was `weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript` in the staging private ingest bucket. Submitted the full `Lifetime Fall Classic.mp4` (1920×1080, 60000/1001 fps, 1,302.732 s / 21:42.7) through the actual staging agent upload flow as one job; staging converted it to 30 fps. This is a full-file one-job run, not the historical five-part game-clock replay.
+
+**Result.** Job `2a1b5164-e4e8-40ea-8462-5ca83f079837` was created at 09:32:03 UTC, entered the queue at 09:33:44, was first observed running at 09:34:12, and completed at 09:47:10. Queue update to completion was 13 min 25 s; first observed running to completion was about 12 min 58 s. Badge pose processed 11,096 frames in 192 s (57.8 frames/s). It measured 290 swing peaks across 30 rallies. Badge selection produced Kitchen War (rally 22, about 823.3 s) and Hardest Swing (rally 26, about 1047.7 s). Clip cutting produced 30 rally candidates; the full selection contained 10 reels totaling 170.7 s. The staging share is [available here](https://staging--picvision-reel-share.netlify.app/r/e94de081-633a-4e8a-9021-e6493913871b).
+
+**Interpretation.** This confirms YOLOv8n completes on the actual staging pipeline and gives a useful pose-stage measurement. The 192 s pose time is about 2.5× slower than the local seven-rally 97.8 fps result, but that is not a controlled GPU comparison. Do not compare the 13:25 queue-to-done time directly to the old five-part x runs: this run used one 21.7-minute 1080p60 source converted to 30 fps, one job, and an unrecorded cloud GPU type. RunPod billing for this job was not available, so cloud cost is unknown. The staging result's badges have no same-run YOLOv8x baseline; it demonstrates speed, not badge parity. Production remains unchanged.
+
+## 2026-10-30 — Staging YOLOv8n replay: Lifetime Fall Classic in five timed parts
+
+**Question.** What would players wait for if the speed-first YOLOv8n model processed the same five-minute, 720p30 Lifetime Fall Classic parts used in the earlier production-style staging replays?
+
+**Setup.** The five existing 720p30, ~2 Mbps parts cut from `Lifetime Fall Classic.mp4`: 300 / 300 / 300 / 300 / 102.7 seconds. Each part was uploaded through the real staging agent API at the time it would have finished recording, using commit `798c065` and the staging-only YOLOv8n 736×1280 model, batch 8. Uploads took 17–18 seconds for parts 1–4 and 7.3 seconds for part 5. Simulated recording end was about 11:47:11 UTC. The agent access used for this replay could not create a new `recording_sessions` row, so these were five separate jobs and share pages, without a session's warm-machine reuse, cumulative badge redecision, or one shared player link. Their job timings are real staging timings; the overall player wait is a stressed independent-job case, not a faithful measurement of the shared-session production path.
+
+| Part | Attempts to finish | Pose frames / time | Rallies / swings | Time from that part's recording end to reels ready | Share |
+|---:|---:|---:|---:|---:|---|
+| 1 | 1 | 2,518 / 43.0 s | 7 / 63 | 5:24 | [part 1](https://staging--picvision-reel-share.netlify.app/r/cbd96fe2-7445-4957-b68e-b4a6754ac487) |
+| 2 | 3 | 2,770 / 39.0 s | 8 / 68 | 28:51 | [part 2](https://staging--picvision-reel-share.netlify.app/r/e34e5d76-2dd8-4c89-8222-38e5efabb930) |
+| 3 | 2 | 2,383 / 37.3 s | 7 / 61 | 15:16 | [part 3](https://staging--picvision-reel-share.netlify.app/r/25fdcba4-9508-4d80-ac02-28f2311e3ec8) |
+| 4 | 2 | 2,300 / 37.7 s | 6 / 58 | 10:13 | [part 4](https://staging--picvision-reel-share.netlify.app/r/c691c4f5-53d2-41ac-a279-cc6630a6c086) |
+| 5 | 1 | 352 / 8.8 s | 1 / 8 | 3:28 | [part 5](https://staging--picvision-reel-share.netlify.app/r/0e6ec0ad-de20-49ed-a6df-7b805db2ab59) |
+
+**Outcome.** All five were ready at 12:04:19 UTC, **17:08 after recording ended**. Four parts were ready by +8:34; part 2 set the final wait. Successful pose work totaled 10,323 frames / 165.8 s, about 62.3 fps. Part 2's first two jobs were terminated after two stuck container starts each; part 3's first job had the same failure; part 4's first pod stopped without reporting an outcome. The successful retry for part 2 also waited through RunPod capacity failures before a machine started. These delays dominate the player-visible result. GPU types and billing for the successful jobs were unavailable from the agent API, so there is no reliable cost figure or controlled GPU comparison.
+
+**Badge check.** Running the unchanged `src.badges.decide` on the five successful jobs' combined `badge_measures` gives 258 swings and three hypothetical session awards: Kitchen War (part 3, rally 5), Hardest Swing (part 3, rally 2), and Killer Shot (part 4, rally 0). This is an offline calculation because the five jobs do not share a recording session. The earlier five-part YOLOv8x replay #10 on these files awarded Kitchen War in part 3 and Killer Shot in part 2; the current result moves Killer Shot and adds Hardest Swing. Different cloud machines and intervening pipeline changes prevent attributing that badge difference solely to YOLOv8n.
+
+**Conclusion.** YOLOv8n reduced the pose work on each five-minute part to roughly 37–43 seconds in this staging run. A complete player set was still late because machine starts failed. To measure the actual production path and cumulative badge behavior, the replay needs a fresh console-issued recording session so the warm machine and single share link are exercised.
+
+## 2026-10-31 — Shared-session staging replay: Lifetime Fall Classic in five timed parts
+
+**Question.** How long after a 21:43 recording ends are all five parts available when the staging pipeline uses a single recording session and a warm pod?
+
+**Setup.** Replayed the same five 720p30, ~2 Mbps Lifetime Fall Classic files (300 / 300 / 300 / 300 / 102.7 seconds) through the normal staging agent upload API at game-clock times. All five jobs used recording session `25675cf7-31c9-41a7-8a4e-36ed3ead7109` and share ID `315d2f0e-11d7-468d-92f7-3c45a0e03bb0`. The session was created by a temporary staging-only helper route because the agent token cannot create sessions. That route was removed after the replay (staging POST now returns 404). The staged pod code pointer was still `798c065`; it uses YOLOv8n-pose at 736×1280, batch 8. The wider sub-$0.50 GPU fallback list was active. This was a staged replay of pre-encoded files, not a live camera recording.
+
+| Part | Recording finished (UTC) | Upload | Job completed (UTC) | Part-end to ready | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|---:|
+| 1 | 17:37:51 | 17.8 s | 17:41:55 | 4:04 | 2,518 / 36.6 s | 7 / 63 |
+| 2 | 17:42:51 | 17.2 s | 17:45:51 | 3:00 | 2,770 / 34.4 s | 8 / 68 |
+| 3 | 17:47:50 | 17.5 s | 17:50:40 | 2:49 | 2,383 / 29.8 s | 7 / 61 |
+| 4 | 17:52:50 | 17.6 s | 17:55:39 | 2:49 | 2,366 / 29.1 s | 6 / 59 |
+| 5 | 17:54:32 | 7.5 s | 17:56:40 | 2:07 | 352 / 5.8 s | 1 / 8 |
+
+**Result.** The simulated footage ended around 17:54:32 UTC; the end-recording notification was accepted at 17:54:46. Parts 1–3 were already ready, part 4 finished about 1:08 after footage ended, and all five were ready at 17:56:40, **2:08 after footage ended**. All five jobs completed without retries and share one [staging highlight page](https://staging--picvision-reel-share.netlify.app/r/315d2f0e-11d7-468d-92f7-3c45a0e03bb0). Successful pose work totaled 10,389 frames / 135.7 s, about 76.6 frames/s. The prior independent-job replay was 17:08 after recording; its pod failures and lack of session reuse make this a useful operational comparison, not a controlled model or GPU speed comparison.
+
+**Machine and cost.** Warm-pod allocation initially met Secure Cloud capacity failures. One $0.28/hour pod was created at 17:37:29 UTC, about 4:28 after the warm job was queued, and reused for all five parts. It remained active at the last observed poll, 17:58:25 UTC, then was terminated; the exact stop time and invoice are unavailable. Compute through that poll is approximately $0.098 at the reported rate, a lower bound rather than the final charge, excluding storage. The observed rate is consistent with RTX 4000 Ada, but the pod API did not report its GPU type. This run did not select any of the four newly added fallback GPUs, so their performance remains unmeasured.
+
+**Vertical delivery.** The five-part replay had no venue desktop, so its share initially opened wide. On 2026-10-31, the staging desktop stand-in used the original 1080p source and the console's pending fetches for this share only. It trimmed and uploaded all ten selected rally clips through the app's normal high-res and 9:16 crop flow; all ten returned `vertical: true`. The share video API now reports 10 vertical addresses and the same share URL renders the vertical feed (HTTP 200). This was a later post-processing step, not included in the 2:08 game-end-to-ready timing above.
+
+**Limit.** The share page returned HTTP 200. This test confirms the five jobs, one session, one link, and warm-pod reuse in staging; it does not establish production reliability across repeated sessions, badge parity against YOLOv8x, or the final billed cost.
+
+## 2026-10-31 — Five-part staging replay with concurrent vertical delivery
+
+**Question.** When the venue desktop's trim/crop/upload step runs alongside cloud processing, when are all ten final 9:16 highlights available after a 21:43 game?
+
+**Setup.** Replayed the same five pre-encoded 720p30 Lifetime Fall Classic parts at 300 / 300 / 300 / 300 / 102.7-second game-clock boundaries through the normal staging agent job API. All jobs shared recording session `5a1d419d-c526-4967-9cab-38933088348d` and [share page](https://staging--picvision-reel-share.netlify.app/r/3ccb2890-6e7e-4ac5-86e0-b9250f1e96fc). A temporary authenticated, staging-only route issued the session and was removed immediately after creation; POST to it now returns 404. In parallel, the staging desktop stand-in polled this share's pending high-res fetches, trimmed from the original 1080p source, and used the app's own `deliverHighRes` path to upload sharp wide clips and 9:16 crops as each cloud part became available. This is a file replay, not an RTSP camera or a packaged venue desktop. The staging pod still used YOLOv8n-pose at 736×1280, batch 8.
+
+| Part | Part recorded (UTC) | Upload | Cloud done (UTC) | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|
+| 1 | 07:14:42 | 17.4 s | 07:17:26 | 2,518 / 36.3 s | 7 / 63 |
+| 2 | 07:19:42 | 17.4 s | 07:22:29 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 07:24:43 | 17.1 s | 07:27:17 | 2,383 / 29.4 s | 7 / 61 |
+| 4 | 07:29:42 | 16.9 s | 07:32:18 | 2,366 / 30.2 s | 6 / 59 |
+| 5 | 07:31:24 | 7.9 s | 07:33:10 | 352 / 5.6 s | 1 / 8 |
+
+**Result.** All five jobs finished without retries. The footage ended at 07:31:24 UTC (15:31:24 Taiwan); part 4 finished 54 seconds later. The last of the ten **final selected** vertical crops was uploaded at 07:33:08, and part 5 completed/finalized the set at 07:33:10: **about 1:46 after footage ended**. The first vertical crop had arrived at 07:17:40, 14 seconds after part 1's cloud completion, while recording was still underway. The desktop stand-in uploaded 21 crops as the evolving top-ten set changed; the final share page contains ten selected reels and all ten have vertical addresses. It rendered the vertical feed with HTTP 200; `ffprobe` confirmed all ten selected videos are 608×1080 (9:16). Pose work totaled 10,389 frames / 135.6 s (~76.6 fps).
+
+**Interpretation and limits.** This closes the missing desktop stage in the previous shared-session replay and measures full vertical availability for this staged file replay. Its 1:46 final wait is 22 seconds shorter than that run's 2:08 cloud-only wait, but the runs had different machine allocation and queue conditions, so it is not an estimate of a vertical-cropping speedup. The 21 interim crops reflect the changing provisional top ten; only ten remained selected. GPU type and exact billed cost were not established, and this does not test real camera capture, venue uplink, packaged desktop behavior, or badge parity with production YOLOv8x.
+
+## 2026-10-31 — Five-part staging replay with AAC audio
+
+**Question.** Does preserving source sound through the cloud clip, venue desktop high-res replacement, and vertical crop produce audible reels without a material increase in the final wait?
+
+**Setup.** The same 21:43 Lifetime Fall Classic file was replayed in five parts at 300 / 300 / 300 / 300 / 102.7-second boundaries. This time each 720p upload included the source AAC audio. All jobs shared recording session `5ceffed7-451c-4f74-8e13-a2a006d95b0a` and [staging share](https://staging--picvision-reel-share.netlify.app/r/030f1d5b-1711-4fa5-bbc0-9dfb27dd33bb). The staging desktop stand-in concurrently trimmed the original 1080p source and used the normal `deliverHighRes` path for the sharp wide and 9:16 replacements. The staging reel page enabled its sound control. The temporary authenticated staging session setup route was removed immediately after issuing the session; its POST now returns 404. Pipeline code `3dad7e3`, reel page `d80ce65`; production was unchanged.
+
+| Part | Footage boundary (UTC) | Upload | Cloud done (UTC) | Boundary to done | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---|---:|
+| 1 | 07:59:03 | 18.3 s | 08:02:09 | 3:06 | 2,518 / 39.5 s | 7 / 63 |
+| 2 | 08:04:03 | 18.1 s | 08:06:56 | 2:53 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 08:09:04 | 18.0 s | 08:11:35 | 2:31 | 2,383 / 32.3 s | 7 / 61 |
+| 4 | 08:14:02 | 17.7 s | 08:16:41 | 2:39 | 2,366 / 31.0 s | 6 / 59 |
+| 5 | 08:15:46 | 7.7 s | 08:17:38 | 1:52 | 352 / 6.1 s | 1 / 8 |
+
+**Result.** All five jobs completed without retries. The last of the final ten vertical clips uploaded at 08:17:33, and part 5 finalized the set at 08:17:38: **1:52 after the footage ended**, versus 1:46 in the prior silent replay. The share page returned HTTP 200, rendered ten selected reels, and had its sound control enabled. `ffprobe` confirmed every selected vertical file is 608×1080 H.264 with 48 kHz AAC. Five-second decodes of all ten had measurable audio (mean volume −23.1 to −26.0 dB); a cloud 720p clip sampled before desktop replacement also had 48 kHz AAC. Rally and swing counts match the silent run in all five parts.
+
+**Interpretation and limits.** This staging file replay demonstrates working audio through cloud and desktop output. The six-second difference in final wait is too small to attribute to AAC: machine startup, job queueing, and network timing differed between runs. Part upload time increased by about a second for the full-size parts. This test uses the sample video's soundtrack, not a real camera microphone, and does not test packaged desktop capture, iPhone playback controls, or GPU billing. The production branches remain unchanged.
