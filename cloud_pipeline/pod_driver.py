@@ -118,10 +118,10 @@ OCCLUSION_BRIDGE = True
 WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
 WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 # Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
-# exported with the pod's Torch 2.1 runtime at 736x1280 for the staging
-# speed trial. Keep this model selection on the staging branch until its
-# cloud runtime and badge measurements have been reviewed. The image has
-# torch but not ultralytics, so src/pose.py does the rest.
+# exported with the pod's Torch 2.1 runtime at 736x1280. The operator
+# selected the faster model after the staging replay, accepting possible
+# badge changes (ADR-164). The image has torch but not ultralytics, so
+# src/pose.py does the rest.
 BADGES = True
 POSE_R2_KEY = "weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript"
 POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"

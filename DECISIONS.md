@@ -3563,3 +3563,15 @@ the cloud pod path is unchanged.
 **Evidence.** On the complete blind brickwall session, both conditions processed the same 27,329 frames across 42 detected rallies. Production took 1,187.3 s and awarded three badges. The reduced-size variant took approximately 868 s and awarded four; only Quick Hands remained at the same rally, while Hardest Swing and Kitchen War moved to different rallies and a new Killer Shot appeared. Kitchen-share measurements also changed materially. The candidate time is estimated from its final progress sample; its exact terminal timing was not retained. Full results and limitations are in `EXPERIMENTS.md`, “Full blind brickwall badge comparison: YOLOv8x at 640×1120”.
 
 **Consequences.** The 640×1120 speedup is not acceptable for the current badge behavior. Further pose-time reductions must preserve full-session award locations on blind footage, or change the product's badge-quality requirement explicitly before deployment.
+
+## ADR-164 — Select YOLOv8n for a speed-first production rollout
+
+**Date.** 2026-10-31
+
+**Context.** ADR-162 and ADR-163 kept the production YOLOv8x model because smaller variants change pose measurements and may change badges. The operator has since made player wait time the priority and explicitly requested YOLOv8n for production after reviewing the staging replay with audio.
+
+**Decision.** Use YOLOv8n-pose at 736×1280, batch 8, for production badge measurement. This supersedes ADR-162's model choice and ADR-163's requirement to retain YOLOv8x, while keeping the 736×1280 input shape. Badge behavior may differ from the previous model; do not present the rollout as badge-equivalent.
+
+**Evidence.** On the seven-rally blind sample, YOLOv8n was 4.26× faster in pose inference than YOLOv8x but changed keypoints and raw badge measurements (ADR-162). The staged five-part shared-session replay completed all ten vertical highlights with audio 1:52 after footage ended. All five parts completed without retries, but that one replay is not a controlled production latency or badge-parity study; see `EXPERIMENTS.md`, 2026-10-31 audio replay.
+
+**Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.
