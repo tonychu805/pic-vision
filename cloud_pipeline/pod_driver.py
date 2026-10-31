@@ -709,12 +709,16 @@ def run():
         # Already exactly what the encode below would produce (ADR-130):
         # repackage the video stream as-is, in seconds, instead of re-encoding.
         _log(f"recording is already 30fps CFR H.264 ({why}) -- repackaging instead of re-encoding")
-        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", raw_video, "-map", "0:v:0", "-c", "copy",
-                     "-an", "-movflags", "+faststart", cfr_video])
+        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", raw_video,
+                     "-map", "0:v:0", "-map", "0:a:0?", "-c:v", "copy",
+                     "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+                     "-movflags", "+faststart", cfr_video])
     else:
         _log(f"converting to 30fps CFR: {why}")
         _encode_h264(["-err_detect", "ignore_err", "-i", raw_video],
-                     ["-an", "-vsync", "cfr", "-r", "30", cfr_video])
+                     ["-map", "0:v:0", "-map", "0:a:0?",
+                      "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+                      "-vsync", "cfr", "-r", "30", cfr_video])
 
     _check_cancel("proxy", "preparing the inference/upload resolution...")
     if not calib.get("calibration_resolution"):
@@ -730,7 +734,8 @@ def run():
             proxy_video = cfr_video
         else:
             proxy_video = os.path.join(WORKDIR, "video_proxy_1080p.mp4")
-            _encode_h264(["-i", cfr_video, "-vf", "scale=-2:1080"], ["-an", proxy_video])
+            _encode_h264(["-i", cfr_video, "-vf", "scale=-2:1080"],
+                         ["-map", "0:v:0", "-map", "0:a:0?", "-c:a", "copy", proxy_video])
 
     # --- Weights: same R2-cached tarball every pod-based run already used. ---
     _check_cancel("inference", "fetching model weights...")
