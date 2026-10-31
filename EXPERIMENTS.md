@@ -3781,3 +3781,21 @@ Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rall
 **Vertical delivery.** The five-part replay had no venue desktop, so its share initially opened wide. On 2026-10-31, the staging desktop stand-in used the original 1080p source and the console's pending fetches for this share only. It trimmed and uploaded all ten selected rally clips through the app's normal high-res and 9:16 crop flow; all ten returned `vertical: true`. The share video API now reports 10 vertical addresses and the same share URL renders the vertical feed (HTTP 200). This was a later post-processing step, not included in the 2:08 game-end-to-ready timing above.
 
 **Limit.** The share page returned HTTP 200. This test confirms the five jobs, one session, one link, and warm-pod reuse in staging; it does not establish production reliability across repeated sessions, badge parity against YOLOv8x, or the final billed cost.
+
+## 2026-10-31 — Five-part staging replay with concurrent vertical delivery
+
+**Question.** When the venue desktop's trim/crop/upload step runs alongside cloud processing, when are all ten final 9:16 highlights available after a 21:43 game?
+
+**Setup.** Replayed the same five pre-encoded 720p30 Lifetime Fall Classic parts at 300 / 300 / 300 / 300 / 102.7-second game-clock boundaries through the normal staging agent job API. All jobs shared recording session `5a1d419d-c526-4967-9cab-38933088348d` and [share page](https://staging--picvision-reel-share.netlify.app/r/3ccb2890-6e7e-4ac5-86e0-b9250f1e96fc). A temporary authenticated, staging-only route issued the session and was removed immediately after creation; POST to it now returns 404. In parallel, the staging desktop stand-in polled this share's pending high-res fetches, trimmed from the original 1080p source, and used the app's own `deliverHighRes` path to upload sharp wide clips and 9:16 crops as each cloud part became available. This is a file replay, not an RTSP camera or a packaged venue desktop. The staging pod still used YOLOv8n-pose at 736×1280, batch 8.
+
+| Part | Part recorded (UTC) | Upload | Cloud done (UTC) | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|
+| 1 | 07:14:42 | 17.4 s | 07:17:26 | 2,518 / 36.3 s | 7 / 63 |
+| 2 | 07:19:42 | 17.4 s | 07:22:29 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 07:24:43 | 17.1 s | 07:27:17 | 2,383 / 29.4 s | 7 / 61 |
+| 4 | 07:29:42 | 16.9 s | 07:32:18 | 2,366 / 30.2 s | 6 / 59 |
+| 5 | 07:31:24 | 7.9 s | 07:33:10 | 352 / 5.6 s | 1 / 8 |
+
+**Result.** All five jobs finished without retries. The footage ended at 07:31:24 UTC (15:31:24 Taiwan); part 4 finished 54 seconds later. The last of the ten **final selected** vertical crops was uploaded at 07:33:08, and part 5 completed/finalized the set at 07:33:10: **about 1:46 after footage ended**. The first vertical crop had arrived at 07:17:40, 14 seconds after part 1's cloud completion, while recording was still underway. The desktop stand-in uploaded 21 crops as the evolving top-ten set changed; the final share page contains ten selected reels and all ten have vertical addresses. It rendered the vertical feed with HTTP 200; `ffprobe` confirmed all ten selected videos are 608×1080 (9:16). Pose work totaled 10,389 frames / 135.6 s (~76.6 fps).
+
+**Interpretation and limits.** This closes the missing desktop stage in the previous shared-session replay and measures full vertical availability for this staged file replay. Its 1:46 final wait is 22 seconds shorter than that run's 2:08 cloud-only wait, but the runs had different machine allocation and queue conditions, so it is not an estimate of a vertical-cropping speedup. The 21 interim crops reflect the changing provisional top ten; only ten remained selected. GPU type and exact billed cost were not established, and this does not test real camera capture, venue uplink, packaged desktop behavior, or badge parity with production YOLOv8x.
