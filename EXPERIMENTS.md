@@ -3759,3 +3759,23 @@ Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rall
 **Badge check.** Running the unchanged `src.badges.decide` on the five successful jobs' combined `badge_measures` gives 258 swings and three hypothetical session awards: Kitchen War (part 3, rally 5), Hardest Swing (part 3, rally 2), and Killer Shot (part 4, rally 0). This is an offline calculation because the five jobs do not share a recording session. The earlier five-part YOLOv8x replay #10 on these files awarded Kitchen War in part 3 and Killer Shot in part 2; the current result moves Killer Shot and adds Hardest Swing. Different cloud machines and intervening pipeline changes prevent attributing that badge difference solely to YOLOv8n.
 
 **Conclusion.** YOLOv8n reduced the pose work on each five-minute part to roughly 37–43 seconds in this staging run. A complete player set was still late because machine starts failed. To measure the actual production path and cumulative badge behavior, the replay needs a fresh console-issued recording session so the warm machine and single share link are exercised.
+
+## 2026-10-31 — Shared-session staging replay: Lifetime Fall Classic in five timed parts
+
+**Question.** How long after a 21:43 recording ends are all five parts available when the staging pipeline uses a single recording session and a warm pod?
+
+**Setup.** Replayed the same five 720p30, ~2 Mbps Lifetime Fall Classic files (300 / 300 / 300 / 300 / 102.7 seconds) through the normal staging agent upload API at game-clock times. All five jobs used recording session `25675cf7-31c9-41a7-8a4e-36ed3ead7109` and share ID `315d2f0e-11d7-468d-92f7-3c45a0e03bb0`. The session was created by a temporary staging-only helper route because the agent token cannot create sessions. That route was removed after the replay (staging POST now returns 404). The staged pod code pointer was still `798c065`; it uses YOLOv8n-pose at 736×1280, batch 8. The wider sub-$0.50 GPU fallback list was active. This was a staged replay of pre-encoded files, not a live camera recording.
+
+| Part | Recording finished (UTC) | Upload | Job completed (UTC) | Part-end to ready | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|---:|
+| 1 | 17:37:51 | 17.8 s | 17:41:55 | 4:04 | 2,518 / 36.6 s | 7 / 63 |
+| 2 | 17:42:51 | 17.2 s | 17:45:51 | 3:00 | 2,770 / 34.4 s | 8 / 68 |
+| 3 | 17:47:50 | 17.5 s | 17:50:40 | 2:49 | 2,383 / 29.8 s | 7 / 61 |
+| 4 | 17:52:50 | 17.6 s | 17:55:39 | 2:49 | 2,366 / 29.1 s | 6 / 59 |
+| 5 | 17:54:32 | 7.5 s | 17:56:40 | 2:07 | 352 / 5.8 s | 1 / 8 |
+
+**Result.** The simulated footage ended around 17:54:32 UTC; the end-recording notification was accepted at 17:54:46. Parts 1–3 were already ready, part 4 finished about 1:08 after footage ended, and all five were ready at 17:56:40, **2:08 after footage ended**. All five jobs completed without retries and share one [staging highlight page](https://staging--picvision-reel-share.netlify.app/r/315d2f0e-11d7-468d-92f7-3c45a0e03bb0). Successful pose work totaled 10,389 frames / 135.7 s, about 76.6 frames/s. The prior independent-job replay was 17:08 after recording; its pod failures and lack of session reuse make this a useful operational comparison, not a controlled model or GPU speed comparison.
+
+**Machine and cost.** Warm-pod allocation initially met Secure Cloud capacity failures. One $0.28/hour pod was created at 17:37:29 UTC, about 4:28 after the warm job was queued, and reused for all five parts. It remained active at the last observed poll, 17:58:25 UTC, then was terminated; the exact stop time and invoice are unavailable. Compute through that poll is approximately $0.098 at the reported rate, a lower bound rather than the final charge, excluding storage. The observed rate is consistent with RTX 4000 Ada, but the pod API did not report its GPU type. This run did not select any of the four newly added fallback GPUs, so their performance remains unmeasured.
+
+**Limit.** The share page returned HTTP 200. This test confirms the five jobs, one session, one link, and warm-pod reuse in staging; it does not establish production reliability across repeated sessions, badge parity against YOLOv8x, or the final billed cost.
