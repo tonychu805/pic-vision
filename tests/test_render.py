@@ -1,3 +1,4 @@
+import json
 import os
 import subprocess
 
@@ -187,6 +188,27 @@ def test_cut_clips_really_burns_the_logo_into_the_lower_right_corner(tmp_path):
     assert luma(20, 20) < 30
     # ...and the logo's own outermost corner pixel has been rounded away.
     assert luma(640 - 12, 360 - 12) < 60
+
+
+def test_logo_clip_keeps_audio_when_source_has_it(tmp_path):
+    """An overlaid video must still map its audio stream into the MP4."""
+    if not _ffmpeg_available():
+        pytest.skip("ffmpeg not installed")
+    video = str(tmp_path / "with-sound.mkv")
+    subprocess.run(["ffmpeg", "-y", "-v", "error",
+                    "-f", "lavfi", "-i", "color=c=black:s=320x180:r=30:d=3",
+                    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=3",
+                    "-c:v", "libx264", "-c:a", "pcm_alaw", video], check=True)
+    logo = str(tmp_path / "logo.png")
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=white:s=80x80",
+                    "-frames:v", "1", logo], check=True)
+    out = str(tmp_path / "clip.mp4")
+    subprocess.run(clip_command(video, 0.5, 2.5, out, logo_path=logo, video_width=320), check=True)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-show_entries", "stream=codec_type,codec_name,sample_rate",
+                            "-of", "json", out], capture_output=True, text=True, check=True)
+    streams = json.loads(probe.stdout)["streams"]
+    assert {(s["codec_type"], s["codec_name"]) for s in streams} == {("video", "h264"), ("audio", "aac")}
+    assert next(s for s in streams if s["codec_type"] == "audio")["sample_rate"] == "48000"
 
 
 # --- clip encoder + parallel cutting (2026-10-27) ---------------------------

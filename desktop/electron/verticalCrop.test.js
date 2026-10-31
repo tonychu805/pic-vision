@@ -98,3 +98,19 @@ test("real ffmpeg: the window moves within the clip, frame by frame", async () =
   assert.ok(cols.length > 50);
   assert.ok(Math.abs((cols[0] + cols[cols.length - 1]) / 2 - w / 2) < 10);
 });
+
+test("real ffmpeg: a vertical crop keeps the clip's AAC sound", async () => {
+  const src = path.join(work, "wide-with-audio.mp4");
+  const made = spawnSync(FFMPEG, ["-y", "-v", "error",
+    "-f", "lavfi", "-i", "color=c=gray:s=1920x1080:d=2:r=30",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=48000:duration=2",
+    "-c:v", "libx264", "-c:a", "aac", src]);
+  assert.equal(made.status, 0, made.stderr?.toString());
+  const out = path.join(work, "vertical-with-audio.mp4");
+  await cropVertical(src, out, { fps: 5, x: new Array(10).fill(0.5) }, 0);
+  const probed = spawnSync(FFPROBE, ["-v", "error", "-show_entries", "stream=codec_type,codec_name", "-of", "json", out], { encoding: "utf8" });
+  assert.equal(probed.status, 0, probed.stderr);
+  const streams = JSON.parse(probed.stdout).streams;
+  assert.ok(streams.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
+  assert.ok(streams.some((s) => s.codec_type === "audio" && s.codec_name === "aac"));
+});

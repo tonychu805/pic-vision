@@ -159,7 +159,10 @@ export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
     await run(["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", concatOut]);
     await run([
       "-y", "-v", "error", "-ss", String(startSec), "-i", concatOut, "-t", String(endSec - startSec),
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", outPath,
+      "-map", "0:v:0", "-map", "0:a:0?",
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+      "-movflags", "+faststart", outPath,
     ]);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
