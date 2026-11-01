@@ -128,11 +128,18 @@ WEIGHTS_LOCAL = "/workspace/weights_pdsc_ft_e2"
 # HEAT_HIGH detections for a video that already detects the ball in at least
 # HEALTHY_DETECTION_RATE of its frames, and the HEAT_LOW ones otherwise. The
 # low value alone merges separate rallies on a venue that works (held-out
-# brickwall: 72 s and 45 s blobs); the strict value alone finds 3 rallies a
-# part on Court 3 where the low one finds 10.
-HEAT_LOW = 0.35
+# brickwall, 4 min: 15 rallies at 0.5; at 0.35, 9 with a 71 s blob; at 0.40, 12 with a
+# 35 s blob); the strict value alone finds almost nothing on Court 3. 0.40 over 0.35:
+# on the operator's rated candidates 70% (of 10) were real or part real against 57%
+# (of 21), at the price of fewer rallies. Both are small samples.
+HEAT_LOW = 0.40
 HEAT_HIGH = 0.5
 HEALTHY_DETECTION_RATE = 0.25
+# The model sees only the court and the airspace over it (src/court_crop.py), not the
+# whole frame: the far ball shrinks 2.4x instead of 3.75x on its way to the model's
+# 512x288 input. With the fine-tuned weights, 13 of 22 court-side and 8 of 12 wall-side
+# marked balls are found against 3 and 3 on the whole frame (EXPERIMENTS.md 2026-11-01).
+CROP_TO_COURT = True
 # Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
 # exported with the pod's Torch 2.1 runtime at 736x1280. The operator
 # selected the faster model after the staging replay, accepting possible
@@ -766,7 +773,7 @@ def run():
     infer_cmd = ["python3", os.path.join(REPO_ROOT, "scripts", "pod_infer.py"),
                  "--video", proxy_video, "--model", WEIGHTS_LOCAL,
                  "--output", csv_path, "--calib", calib_path,
-                 "--heat-threshold", str(HEAT_LOW)]
+                 "--heat-threshold", str(HEAT_LOW)] + (["--crop-to-court"] if CROP_TO_COURT else [])
     _run_inference_streaming(infer_cmd)
     choice = apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH, healthy_rate=HEALTHY_DETECTION_RATE)
     _log(f"ball found in {choice['rate_at_high']:.1%} of frames at confidence {HEAT_HIGH} and "

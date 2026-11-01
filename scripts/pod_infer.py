@@ -15,6 +15,7 @@ import argparse
 import csv
 import os
 import queue
+import sys
 import threading
 import time
 
@@ -24,6 +25,10 @@ import cv2
 import numpy as np
 import tensorflow as tf
 import keras.backend as K
+
+# court_crop is the one src/ module this script needs (the pod ships src/ beside it).
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from src.court_crop import court_crop_box, grid_to_calibration  # noqa: E402
 
 HEIGHT, WIDTH = 288, 512
 
@@ -92,10 +97,15 @@ def court_mask(calib, shape, margin_px=80.0):
     return mask
 
 
-def prep3(imgs):
-    """Convert 3 BGR frames to (1,9,H,W) float32 numpy array."""
+def prep3(imgs, crop=None):
+    """Convert 3 BGR frames to (1,9,H,W) float32 numpy array.
+
+    crop: (x0, y0, x1, y1) in frame pixels (src/court_crop.py) -- only that part
+    of each frame goes to the model, so the ball shrinks less on its way down."""
     channels = []
     for img in imgs:
+        if crop:
+            img = img[crop[1]:crop[3], crop[0]:crop[2]]
         r = cv2.resize(img, (WIDTH, HEIGHT))
         r = r[..., ::-1].astype(np.float32) / 255.0
         channels.extend([r[..., 0], r[..., 1], r[..., 2]])
@@ -124,7 +134,7 @@ def apply_mask(img, mask3):
     return cv2.bitwise_and(img, mask3)
 
 
-def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5):
+def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5, crop_to_court=False):
     print("Loading model...")
     model = tf.keras.models.load_model(
         model_path,
@@ -180,6 +190,10 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     x_ratio = out_w / WIDTH
     y_ratio = out_h / HEIGHT
     mask = court_mask(calib, img1.shape, margin_px) if calib else None
+    crop = court_crop_box(calib, img1.shape) if (crop_to_court and calib) else None
+    if crop:
+        print(f"cropping each frame to the court: x {crop[0]}-{crop[2]}, y {crop[1]}-{crop[3]} "
+              f"of {img1.shape[1]}x{img1.shape[0]}")
     mask3 = cv2.merge([mask * 255] * 3) if mask is not None else None
     if mask is not None:
         print(f"court mask: keeping {100 * mask.mean():.0f}% of the frame "
@@ -195,7 +209,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     warm_trio = [img1, img2, img3]
     if mask is not None:
         warm_trio = [apply_mask(im, mask3) for im in warm_trio]
-    _ = infer(tf.constant(prep3(warm_trio))).numpy()
+    _ = infer(tf.constant(prep3(warm_trio, crop))).numpy()
 
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -235,7 +249,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                     trio = [img1, img2, img3]
                     if mask is not None:
                         trio = [apply_mask(im, mask3) for im in trio]
-                    item = prep3(trio)
+                    item = prep3(trio, crop)
                     while True:
                         try:
                             frame_q.put(item, timeout=0.5)
@@ -296,11 +310,18 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                             return float(probs[i][blob_mask.astype(bool)].max())
                         best_c = max(cnts, key=blob_confidence)
                         best = cv2.boundingRect(best_c)
-                        cx = int(x_ratio * (best[0] + best[2] / 2))
-                        cy = int(y_ratio * (best[1] + best[3] / 2))
+                        if crop:   # the blob is on the crop's grid; the CSV is in the calibration's pixels
+                            cxf, cyf = grid_to_calibration(best[0] + best[2] / 2, best[1] + best[3] / 2,
+                                                           crop, (WIDTH, HEIGHT), img1.shape, cal_res)
+                            cx, cy = int(cxf), int(cyf)
+                            bw_ratio, bh_ratio = x_ratio * (crop[2] - crop[0]) / img1.shape[1], y_ratio * (crop[3] - crop[1]) / img1.shape[0]
+                        else:
+                            cx = int(x_ratio * (best[0] + best[2] / 2))
+                            cy = int(y_ratio * (best[1] + best[3] / 2))
+                            bw_ratio, bh_ratio = x_ratio, y_ratio
                         writer.writerow([count, 1, cx, cy,
-                                         round(x_ratio * best[2], 1),
-                                         round(y_ratio * best[3], 1),
+                                         round(bw_ratio * best[2], 1),
+                                         round(bh_ratio * best[3], 1),
                                          round(blob_confidence(best_c), 4)])
                     count += 1
 
@@ -365,6 +386,9 @@ def main():
                         "Each detection's own peak confidence is still written to the Conf "
                         "column, so a run at a lower value can be cut back to a higher one "
                         "afterwards (src/ball_threshold.py).")
+    p.add_argument("--crop-to-court", action="store_true",
+                   help="send the model only the court and the airspace over it "
+                        "(needs --calib; src/court_crop.py), so the far ball shrinks less")
     args = p.parse_args()
     calib = None
     if args.calib:
@@ -372,7 +396,7 @@ def main():
         with open(args.calib) as f:
             calib = json.load(f)
     run(args.video, args.model, args.output, calib=calib, margin_px=args.court_margin,
-        heat_threshold=args.heat_threshold)
+        heat_threshold=args.heat_threshold, crop_to_court=args.crop_to_court)
 
 
 if __name__ == "__main__":

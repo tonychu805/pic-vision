@@ -631,3 +631,10 @@ def test_the_ball_detector_runs_at_the_low_threshold_and_is_then_cut_per_video()
     source = inspect.getsource(pod_driver.run)
     assert '"--heat-threshold", str(HEAT_LOW)' in source
     assert "apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH" in source
+
+
+def test_the_ball_model_is_sent_the_court_not_the_whole_frame():
+    # pod_infer maps the crop's detections back to calibration pixels, so every consumer is unchanged;
+    # dropping this flag silently returns to the whole-frame run that loses the far-side ball.
+    assert pod_driver.CROP_TO_COURT is True
+    assert '"--crop-to-court"' in inspect.getsource(pod_driver.run)
