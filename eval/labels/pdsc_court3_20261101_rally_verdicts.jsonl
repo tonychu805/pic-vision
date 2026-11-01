@@ -18,3 +18,12 @@
 {"recording": "2026-11-01T03-12-08-425Z", "part": 9, "candidate_from": "epoch-2 model, whole frame, 0.35 (pod conditions)", "start_s": 210.9, "end_s": 220.7, "crossings": 8, "verdict": "not"}
 {"recording": "2026-11-01T03-12-08-425Z", "part": 9, "candidate_from": "epoch-2 model, whole frame, 0.35 (pod conditions)", "start_s": 226.7, "end_s": 233.7, "crossings": 7, "verdict": "not"}
 {"recording": "2026-11-01T03-12-08-425Z", "part": 9, "candidate_from": "epoch-2 model, whole frame, 0.35 (pod conditions)", "start_s": 246.8, "end_s": 252.0, "crossings": 7, "verdict": "real"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 9, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 279.2, "end_s": 289.6, "crossings": 8, "verdict": "real"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 0, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 22.5, "end_s": 26.6, "crossings": 6, "verdict": "partly"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 0, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 69.4, "end_s": 74.9, "crossings": 6, "verdict": "real"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 0, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 160.1, "end_s": 166.0, "crossings": 10, "verdict": "real"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 0, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 205.2, "end_s": 216.0, "crossings": 10, "verdict": "not"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 0, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 267.6, "end_s": 275.9, "crossings": 6, "verdict": "partly"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 5, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 24.4, "end_s": 31.7, "crossings": 6, "verdict": "not"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 5, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 74.1, "end_s": 79.8, "crossings": 6, "verdict": "real"}
+{"recording": "2026-11-01T03-12-08-425Z", "part": 5, "candidate_from": "retrained model + court crop, 0.40, whole frame, pod conditions", "start_s": 127.2, "end_s": 134.7, "crossings": 6, "verdict": "partly"}

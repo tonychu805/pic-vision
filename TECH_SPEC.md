@@ -1988,6 +1988,9 @@ pic-vision/
 │   │                                     # yield rallies is refused before the CFR
 │   │                                     # encode, the R2 upload or the GPU pod.
 │   │                                     # Packet timestamps only, no decoding
+│   ├── court_crop.py                    # crop box for the ball model (the court + its airspace) and the
+│   │                                      # grid -> calibration coordinate mapping; EXPERIMENTS.md 2026-11-01
+│   ├── ball_threshold.py                # per-video choice of the ball detector's confidence cut
 │   ├── players.py                      # player/court-position helpers
 │   ├── events.py                        # motion_series / kitchen_series signals
 │   ├── render.py                         # clip rendering
@@ -1998,6 +2001,8 @@ pic-vision/
 │                                # not part of the operator's core run-a-session flow
 │   ├── pod_infer.py               # RunPod TrackNet inference driver -- calls the model via
 │   │                                # a tf.function direct call, not .predict() (ADR-065)
+│   ├── finetune_tracknet_data.py   # builds the pale-wall fine-tuning set (pseudo-labels from brickwall)
+│   ├── finetune_tracknet.py        # fine-tunes the k14 ball model on it; how the pod's weights were made
 │   ├── footage_rules.py           # usable(): excludes unusable PGC footage (frame-dropping
 │   │                                # Tapo court-1 camera, coaching/drill sessions) from any
 │   │                                # new eval/labelling/serve sample -- ADR-155/158
