@@ -186,6 +186,11 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     # This keeps that contract true without any of them needing to know a
     # proxy was ever involved.
     cal_res = calib.get("calibration_resolution") if calib else None
+    # Taken once, before the loader thread starts: img1/img2/img3 are that thread's working
+    # variables and it sets them to None when it reaches the end of the video, while this
+    # thread may still be writing the last few results. Anything in the loop below that
+    # needs the frame size must use frame_shape, never img1.shape.
+    frame_shape = img1.shape
     out_w, out_h = cal_res if cal_res else (img1.shape[1], img1.shape[0])
     x_ratio = out_w / WIDTH
     y_ratio = out_h / HEIGHT
@@ -312,9 +317,9 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                         best = cv2.boundingRect(best_c)
                         if crop:   # the blob is on the crop's grid; the CSV is in the calibration's pixels
                             cxf, cyf = grid_to_calibration(best[0] + best[2] / 2, best[1] + best[3] / 2,
-                                                           crop, (WIDTH, HEIGHT), img1.shape, cal_res)
+                                                           crop, (WIDTH, HEIGHT), frame_shape, cal_res)
                             cx, cy = int(cxf), int(cyf)
-                            bw_ratio, bh_ratio = x_ratio * (crop[2] - crop[0]) / img1.shape[1], y_ratio * (crop[3] - crop[1]) / img1.shape[0]
+                            bw_ratio, bh_ratio = x_ratio * (crop[2] - crop[0]) / frame_shape[1], y_ratio * (crop[3] - crop[1]) / frame_shape[0]
                         else:
                             cx = int(x_ratio * (best[0] + best[2] / 2))
                             cy = int(y_ratio * (best[1] + best[3] / 2))
