@@ -3817,3 +3817,48 @@ Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rall
 **Result.** All five jobs completed without retries. The last of the final ten vertical clips uploaded at 08:17:33, and part 5 finalized the set at 08:17:38: **1:52 after the footage ended**, versus 1:46 in the prior silent replay. The share page returned HTTP 200, rendered ten selected reels, and had its sound control enabled. `ffprobe` confirmed every selected vertical file is 608×1080 H.264 with 48 kHz AAC. Five-second decodes of all ten had measurable audio (mean volume −23.1 to −26.0 dB); a cloud 720p clip sampled before desktop replacement also had 48 kHz AAC. Rally and swing counts match the silent run in all five parts.
 
 **Interpretation and limits.** This staging file replay demonstrates working audio through cloud and desktop output. The six-second difference in final wait is too small to attribute to AAC: machine startup, job queueing, and network timing differed between runs. Part upload time increased by about a second for the full-size parts. This test uses the sample video's soundtrack, not a real camera microphone, and does not test packaged desktop capture, iPhone playback controls, or GPU billing. The production branches remain unchanged.
+
+## 2026-11-01 — Why PDSC Court 3 finds no rallies: the far-side ball is lost against the pale wall
+
+**Question.** The 2026-11-01 field test at PDSC Court 3 produced "no rallies found" on every production reel job (three parts of the 02:51 UTC session, finished 03:03, 03:04 and 03:05 UTC). Players were on the court (checked on a still). Why does the shipped pipeline find nothing here when it finds rallies on brickwall?
+
+**Setup.** All runs are local replays of the pod's own steps (30 fps CFR, k14 TrackNet weights, `detect_candidates` at shipped `gap_sec=3.0`, `min_crossings=6`) on the venue recordings: the 02:51 UTC session (2880x1620, six parts, 16-300 s each) and the 03:12 UTC session (1080p, twelve parts, 66-301 s each). Calibration is the console's `live-snapshot` fit at 2880x1620 (RMSE 0.46 ft; it lines up with the net in the frame). "Crop" means cropping the 1080p frame to the court region (x 432-1536, y 300-921) before the model, which cuts the downscale into the 512x288 model input from about 3.75x to 2.2x; the calibration was transformed into crop coordinates. Frame rate was ruled out first: both recordings are a true 30 fps (9,000 frames per 300 s, 10-12 near-duplicate frames per 1,800).
+
+**Result 1: crop finds more crossings but almost no rallies.** Across all 18 parts, full-frame found 0 rallies. Crop found 4 candidate rallies, all in parts 9 and 11, and no more than 55 net crossings per part (needs 6 within one exchange).
+
+| Recording | Net crossings per part, full-frame | Net crossings per part, crop |
+|---|---|---|
+| 02:51 (parts 0-5) | 8, 2, 10, 6, 0, 0 | 30, 18, 20, 23, 2, 0 |
+| 03:12 (parts 0-11) | 8, 4, 12, 0, 4, 4, 2, 12, 4, 4, 4, 18 | 28, 22, 22, 0, 26, 20, 22, 35, 29, 36, 22, 55 |
+
+Ball detected in only about 6-14% of frames in every run. Part 9 crop: one rally, 246.8-255.1 s (6 crossings). Part 11 crop: 102.9-110.9 s (7 crossings), 237.1-242.1 s (6), and 231.2-233.8 s with 10 crossings in 2.6 s, which is not physically a rally (tracker flipping). None of these was watched in playback beyond the part 9 window below.
+
+**Result 2: the pipeline works on brickwall.** Today's code on 3 minutes of `brickwall_semi_30fps`: ball detected in 36.9% of frames, 130 crossings, 7 rallies. Cached full sessions: brickwall-SEMI 31.6% of frames, 31 rallies found against 38 hand-labelled; brickwall_30fps 32.7%, 44 found against 49 labelled. Court 3: about 6-14%, 0 rallies. Brickwall has dark navy walls; Court 3 has a pale cream wall behind the far baseline, and its camera is higher and wider-angle.
+
+**Result 3: washing the brickwall wall to cream reproduces the failure.** Same clip, same code, rows above the far baseline blended 85% toward cream (ball keeps 15% of its contrast): ball detected in 13.3% of frames (from 36.9%), detections above the far baseline 1,292 -> 42, crossings 130 -> 49, rallies 7 -> 4. This is a stress test, not a copy of Court 3 (it also faded the players and background).
+
+**Result 4: hand-marked ball positions in a real rally (part 9 of the 03:12 session, 4:07-4:13).** The operator marked the ball in 60 consecutive steps (0.1 s apart, three flip frames per step): ball marked in 34 steps (12 above the far baseline, i.e. against the wall; 22 against court/net), "can't see ball" in 26. The operator reported the far-side ball over the wall is barely visible by eye. Labels: `eval/labels/pdsc_court3_20261101_ball_marks.jsonl` (also holds the 31 earlier stills, 8 with a ball marked; coordinates are in the crop frame above; frames count from the part's start at 30 fps). A hit is a detection within 20 px of the mark in the same frame +-1. "Ghost steps" are steps with no visible ball where a detection still fired.
+
+| Method (applied to the court crop) | Wall-side balls found | Court-side balls found | Ghost steps (of 26) |
+|---|---|---|---|
+| Baseline crop | 1 / 12 | 10 / 22 | 0 |
+| Far-side 640x360 tile (~1.25x downscale) | 2 / 12 | 6 / 22 | 0 |
+| Global saturation x2.5 + contrast x1.15 (part 0, whole part) | 771 vs 759 detections, 24 vs 28 crossings, 0 rallies | | |
+| c1 local contrast (CLAHE) | 2 / 12 | 10 / 22 | 1 |
+| c2 contrast stretch around the wall's brightness | 3 / 12 | 12 / 22 | 1 |
+| c3 green boost on the wall rows | 3 / 12 | 11 / 22 | 0 |
+| c4 steep curve darkening the wall | 1 / 12 | 12 / 22 | 0 |
+| v1 static wall replaced by dark navy (moving pixels kept, estimated from a per-pixel median) | 7 / 12 | 10 / 22 | 11 |
+| v2 soft background difference | 2 / 12 | 12 / 22 | 2 |
+| v3 / v4 small moving blobs only | 3-4 / 12 | 0-4 / 22 | 25-26 |
+| v1 + neighbour filter (keep a dot only with 2 neighbours within 3 frames) | 5 / 12 | 10 / 22 | 0 |
+
+The v1 ghost dots are scattered noise: median jump 364 px between consecutive 0.1 s steps, against 14 px (90th percentile 31 px) for the marked real ball. The neighbour filter was tuned on these same 60 marks, so its numbers are optimistic.
+
+**Result 5: no end-to-end gain yet.** v1 + neighbour filter over whole parts: part 0 found one unverified candidate (4:23-4:31, 6 crossings, baseline found none); part 9 found none, losing the 4:07-4:15 rally the baseline found and the operator labelled. Detection stays near 11% of frames. The unfiltered v1 run first looked like a 5.6x gain (4,258 detections, 2 rallies in part 0); the operator watched the overlay and saw dots "popping all over", which the ghost-step count above confirms.
+
+**Result 6: first-pass stills.** 31 stills chosen by whole-court motion (not by the detector): ball marked in only 8; TrackNet found 0 of 8 within 18 px (a 20 px match in the right frame on one, one more at 18 px four frames off). Too few to split wall from court; motion peaks also catch serves and resets.
+
+**Conclusion and limits.** The pale wall behind the far baseline is a major cause: the far-side ball is detected 1 time in 12 against the wall and 10 in 22 against the court, and the same pipeline loses most of its detections on a known-good clip when that clip's wall is washed pale. One measured ball (resting at the net) is as bright as the wall (brightness 173 vs wall 156-208; purple court 68-125) and differs only faintly in hue. Higher resolution on the far side did not help against the wall, and none of the contrast tweaks recovers more than 3 of 12 wall-side balls. Simple preprocessing recovers some wall-side balls but has not produced more rallies end to end. This does not say the wall is the only cause: Court 3's camera is higher and wider than brickwall's, so the far ball is smaller, and one rally of 12 wall-side balls is a small sample. Not an ADR: no decision settled. No pod or pipeline code changed; the replays used ad-hoc scripts that are not committed. Not scored at IoU>=0.5 (no rally-level labels for this footage). A fine-tune of the detector on this venue's footage is the remaining software route and needs far more marked frames than the 91 rows here.
+
+**Corrections made during the investigation (kept so they are not re-learned).** A colour-and-motion tracker (yellow-green blobs) reported a ball in 97% of frames and 4 "rallies"; its picks were an orange fence, a hand and an arm, so it proves nothing. An early reading that the wall was not the main cause was based on the crop run recovering wall-region detections and was wrong. Parts the notes called "quiet" were just short (66, 91, 105, 138, 182 s, 16 s); detection rate per minute matches the long parts.
