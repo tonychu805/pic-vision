@@ -124,7 +124,7 @@ def apply_mask(img, mask3):
     return cv2.bitwise_and(img, mask3)
 
 
-def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
+def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5):
     print("Loading model...")
     model = tf.keras.models.load_model(
         model_path,
@@ -275,7 +275,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0):
                 if unit is None:
                     break
                 raw_pred = infer(tf.constant(unit)).numpy()
-                mask_pred = (raw_pred > 0.5).astype(np.float32)
+                mask_pred = (raw_pred > heat_threshold).astype(np.float32)
                 h_pred = (mask_pred[0] * 255).astype(np.uint8)
                 probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred
 
@@ -360,13 +360,19 @@ def main():
                         "and wall clutter cannot produce detections at all")
     p.add_argument("--court-margin", type=float, default=80.0,
                    help="px padding on the court mask (default 80)")
+    p.add_argument("--heat-threshold", type=float, default=0.5,
+                   help="a pixel counts as ball above this model confidence (default 0.5). "
+                        "Each detection's own peak confidence is still written to the Conf "
+                        "column, so a run at a lower value can be cut back to a higher one "
+                        "afterwards (src/ball_threshold.py).")
     args = p.parse_args()
     calib = None
     if args.calib:
         import json
         with open(args.calib) as f:
             calib = json.load(f)
-    run(args.video, args.model, args.output, calib=calib, margin_px=args.court_margin)
+    run(args.video, args.model, args.output, calib=calib, margin_px=args.court_margin,
+        heat_threshold=args.heat_threshold)
 
 
 if __name__ == "__main__":

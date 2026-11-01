@@ -622,3 +622,12 @@ def test_a_failed_pod_is_marked_done_too(monkeypatch, tmp_path):
 def _done_marker_in_tmp(monkeypatch, tmp_path):
     """No test ever reads or writes the real /workspace marker."""
     monkeypatch.setattr(pod_driver, "DONE_MARKER", str(tmp_path / "pod_driver_done"))
+
+
+def test_the_ball_detector_runs_at_the_low_threshold_and_is_then_cut_per_video():
+    # One inference pass at HEAT_LOW, then src/ball_threshold.py decides, per video, whether
+    # the strict value is kept (a venue that already detects well) or the low one is used.
+    assert pod_driver.HEAT_LOW < pod_driver.HEAT_HIGH
+    source = inspect.getsource(pod_driver.run)
+    assert '"--heat-threshold", str(HEAT_LOW)' in source
+    assert "apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH" in source

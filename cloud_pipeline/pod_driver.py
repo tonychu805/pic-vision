@@ -106,6 +106,7 @@ from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
 from scripts.top_rallies_reel import build_top_rallies  # noqa: E402
 from src.drift import drift_span, find_bumps  # noqa: E402
+from src.ball_threshold import apply_adaptive_threshold  # noqa: E402
 from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
@@ -115,8 +116,23 @@ WORKDIR = "/workspace/job"
 # rally is. Turning this on is the production change under review.
 OCCLUSION_BRIDGE = True
 
-WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
-WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
+# Ball detector: the k14 weights fine-tuned for two epochs on brickwall footage
+# with the wall randomly washed pale, so the far-side ball can be found against
+# a pale wall (PDSC Court 3 found no rallies on 2026-11-01; EXPERIMENTS.md
+# 2026-11-01). This swap is the change under review. The previous weights stay
+# in the bucket at weights/weights_k14_epoch19.tar; rolling back is reverting
+# these two lines and the three below.
+WEIGHTS_R2_KEY = "weights/pdsc_court3_ft_e2_20261101.tar"
+WEIGHTS_LOCAL = "/workspace/weights_pdsc_ft_e2"
+# pod_infer runs once at HEAT_LOW; src/ball_threshold.py then keeps the
+# HEAT_HIGH detections for a video that already detects the ball in at least
+# HEALTHY_DETECTION_RATE of its frames, and the HEAT_LOW ones otherwise. The
+# low value alone merges separate rallies on a venue that works (held-out
+# brickwall: 72 s and 45 s blobs); the strict value alone finds 3 rallies a
+# part on Court 3 where the low one finds 10.
+HEAT_LOW = 0.35
+HEAT_HIGH = 0.5
+HEALTHY_DETECTION_RATE = 0.25
 # Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
 # exported with the pod's Torch 2.1 runtime at 736x1280. The operator
 # selected the faster model after the staging replay, accepting possible
@@ -749,8 +765,13 @@ def run():
     csv_path = os.path.join(WORKDIR, "predictions.csv")
     infer_cmd = ["python3", os.path.join(REPO_ROOT, "scripts", "pod_infer.py"),
                  "--video", proxy_video, "--model", WEIGHTS_LOCAL,
-                 "--output", csv_path, "--calib", calib_path]
+                 "--output", csv_path, "--calib", calib_path,
+                 "--heat-threshold", str(HEAT_LOW)]
     _run_inference_streaming(infer_cmd)
+    choice = apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH, healthy_rate=HEALTHY_DETECTION_RATE)
+    _log(f"ball found in {choice['rate_at_high']:.1%} of frames at confidence {HEAT_HIGH} and "
+         f"{choice['rate_at_low']:.1%} at {HEAT_LOW}; using "
+         + (f"{HEAT_HIGH} (the venue already detects the ball well)" if choice["cut"] else f"{HEAT_LOW}"))
 
     # --- Cut, same as pod_cut.py did over SSH -- called directly now,
     # same functions, no subprocess/SSH round trip needed for something
