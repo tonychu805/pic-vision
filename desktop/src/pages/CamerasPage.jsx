@@ -38,6 +38,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   // raw-URL field as the last resort.
   const [phase, setPhase] = useState("form");
   const [rtspUrl, setRtspUrl] = useState("");
+  const [subRtspUrl, setSubRtspUrl] = useState("");
   // Which attempt `error` belongs to. Without this the ONVIF failure would
   // be reprinted under the stream-URL field as though the operator's own
   // URL had just been rejected, before they had typed anything.
@@ -167,7 +168,18 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     setError("");
     try {
       const parsed = await window.cameraAPI.parseRtspUrl(rtspUrl, form.username, form.password);
-      const camera = await window.cameraAPI.addRtsp({ label: form.label, ...parsed });
+      // A malformed secondary URL degrades to "no sub-stream", same as an
+      // unreachable one -- it must not block adding the camera on its
+      // already-verified primary URL.
+      let subParsed = null;
+      if (subRtspUrl) {
+        try {
+          subParsed = await window.cameraAPI.parseRtspUrl(subRtspUrl, form.username, form.password);
+        } catch {
+          subParsed = null;
+        }
+      }
+      const camera = await window.cameraAPI.addRtsp({ label: form.label, ...parsed, sub: subParsed });
       onAdded(camera);
     } catch (err) {
       setError(err);
@@ -284,6 +296,15 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
               placeholder="rtsp://192.168.1.42:554/..."
               required
               autoFocus
+            />
+          </div>
+          <div className="field">
+            <label>Secondary / sub-stream RTSP URL (optional)</label>
+            <input
+              className="input"
+              value={subRtspUrl}
+              onChange={(e) => setSubRtspUrl(e.target.value)}
+              placeholder="rtsp://192.168.1.42:554/..."
             />
           </div>
           {urlError && (
