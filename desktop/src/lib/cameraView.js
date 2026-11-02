@@ -28,6 +28,10 @@ export const STATE_META = {
   // perfectly fine -- which is exactly the case that made two cameras read
   // "Not answering" while live view played from both (2026-09-07).
   service: { label: "Settings unreachable", tagClass: "tag tag-warning" },
+  // The camera answered over HTTPS with a certificate we can't verify --
+  // same tier as `auth`/`service`: it isn't down, it's a decision, and the
+  // only place that decision gets made is the add-flow dialog, not here.
+  untrustedCert: { label: "Certificate not trusted", tagClass: "tag tag-warning" },
   // A sample clip whose file has been moved or deleted since it was added.
   missing: { label: "File missing", tagClass: "tag tag-danger" },
   // Two sweep-hit levels, distinct from `auth` (which means "we know this

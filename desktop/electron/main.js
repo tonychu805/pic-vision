@@ -142,7 +142,16 @@ function registerCameraHandlers() {
     return revealStreamUri(id);
   });
   ipcMain.handle("cameras:add", async (_event, config) => {
-    return publicCamera(await addCamera(config));
+    try {
+      return publicCamera(await addCamera(config));
+    } catch (err) {
+      // Resolves with a classification instead of rejecting, but only for
+      // this one state -- the renderer's RTSP fallback ladder depends on
+      // every other failure still rejecting exactly as before.
+      const { state, detail } = classifyProbeError(err, "onvif");
+      if (state === "untrustedCert") return { untrustedCert: true, detail };
+      throw err;
+    }
   });
   ipcMain.handle("cameras:remove", async (_event, id) => {
     return removeCamera(id);
