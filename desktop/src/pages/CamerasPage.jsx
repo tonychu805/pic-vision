@@ -168,7 +168,17 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     setError("");
     try {
       const parsed = await window.cameraAPI.parseRtspUrl(rtspUrl, form.username, form.password);
-      const subParsed = subRtspUrl ? await window.cameraAPI.parseRtspUrl(subRtspUrl, form.username, form.password) : null;
+      // A malformed secondary URL degrades to "no sub-stream", same as an
+      // unreachable one -- it must not block adding the camera on its
+      // already-verified primary URL.
+      let subParsed = null;
+      if (subRtspUrl) {
+        try {
+          subParsed = await window.cameraAPI.parseRtspUrl(subRtspUrl, form.username, form.password);
+        } catch {
+          subParsed = null;
+        }
+      }
       const camera = await window.cameraAPI.addRtsp({ label: form.label, ...parsed, sub: subParsed });
       onAdded(camera);
     } catch (err) {
