@@ -3,23 +3,9 @@
 // No real camera, stream or frame is involved (this project's standing rule).
 import assert from "node:assert/strict";
 import { test, after } from "node:test";
-import { createServer } from "node:net";
 import { addCameraViaRtsp, updateCameraAddress, listCameras, isDifferentCamera, ADDRESS_ERRORS } from "./store.js";
+import { fakeCamera, portOf, closed, servers } from "./fakeRtspServer.js";
 
-const servers = [];
-function fakeCamera() {
-  const server = createServer((socket) => {
-    socket.on("error", () => {});
-    socket.on("data", (chunk) => {
-      const cseq = /CSeq:\s*(\d+)/i.exec(chunk.toString())?.[1] ?? "1";
-      socket.write(`RTSP/1.0 200 OK\r\nCSeq: ${cseq}\r\nContent-Length: 0\r\n\r\n`);
-    });
-  });
-  servers.push(server);
-  return new Promise((resolve) => server.listen(0, "127.0.0.1", () => resolve(server)));
-}
-const portOf = (server) => server.address().port;
-const closed = (server) => new Promise((r) => server.close(r));
 after(() => servers.forEach((s) => s.close()));
 
 async function cameraAt(server, label) {

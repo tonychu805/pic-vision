@@ -769,35 +769,89 @@ export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
   };
 }
 
-export async function addCameraViaRtsp({ label, hostname, port, path, username, password }) {
+// Trusts what's actually measured over which URL the operator labeled
+// "secondary" (same ADR-087 philosophy already in this file for fps --
+// measure, don't trust the label) -- if the "sub" stream turns out to be
+// the higher-resolution one, swap roles so capture.js's sub slot always
+// carries the smaller stream. Unmeasured resolution on either side
+// (profile.width/height null) leaves roles as given -- there's nothing to
+// compare. Pure and synchronous: no IO here, see addCameraViaRtsp for the
+// probing/measuring this decides between.
+export function chooseStreamRoles(mainCandidate, subCandidate) {
+  if (!subCandidate) {
+    return { streamUri: mainCandidate.streamUri, profile: mainCandidate.profile, subStreamUri: null, subProfile: null };
+  }
+  const mainArea = resolutionArea(mainCandidate.profile);
+  const subArea = resolutionArea(subCandidate.profile);
+  const swap = mainArea != null && subArea != null && subArea > mainArea;
+  const finalMain = swap ? subCandidate : mainCandidate;
+  const finalSub = swap ? mainCandidate : subCandidate;
+  return {
+    streamUri: finalMain.streamUri,
+    profile: finalMain.profile,
+    subStreamUri: finalSub.streamUri,
+    subProfile: finalSub.profile,
+  };
+}
+
+function resolutionArea(profile) {
+  if (!profile || profile.width == null || profile.height == null) return null;
+  return profile.width * profile.height;
+}
+
+export async function addCameraViaRtsp({ label, hostname, port, path, username, password, sub = null }) {
   port = port || 554;
   const existing = existingSource({ hostname, port, path, connectionType: "rtsp" });
   if (existing) return existing;
   await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
   const streamUri = `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`;
+  // An RTSP-added camera never went through ONVIF, so nothing else knows
+  // its codec, resolution, frame rate or bitrate -- all of it comes from
+  // sampling the stream (ADR-087). Without this it would show nothing and
+  // skip the frame-rate guard entirely, which is how a venue ends up at
+  // 15fps unnoticed. `fps` deliberately stays null: this is what the
+  // camera is *sending*, not what it is *set* to, so the guard can't
+  // claim the settings are fine and blame the network instead.
+  const mainCandidate = { streamUri, profile: await rtspProfile(streamUri) };
+
+  let subCandidate = null;
+  let subPort = null;
+  // Different host means a different camera's stream, not this one's own
+  // second profile -- out of scope, so it's skipped rather than tracked.
+  if (sub && sub.hostname === hostname) {
+    subPort = sub.port || 554;
+    try {
+      await describeRtspStream({ hostname, port: subPort, path: sub.path, username: sub.username, password: sub.password });
+      const subStreamUri = `rtsp://${encodeURIComponent(sub.username)}:${encodeURIComponent(sub.password)}@${hostname}:${subPort}${sub.path}`;
+      subCandidate = { streamUri: subStreamUri, profile: await rtspProfile(subStreamUri) };
+    } catch {
+      // Same tolerance subStreamInfo() already has for an ONVIF sub
+      // profile that won't hand back a stream URI -- degrades to absent.
+    }
+  }
+
+  const roles = chooseStreamRoles(mainCandidate, subCandidate);
+  // Roles swapped: the operator's "sub" URL turned out to be the bigger
+  // stream, so it now carries camera.port/path/username/password too.
+  const swapped = Boolean(subCandidate) && roles.streamUri !== streamUri;
   const vendors = vendorsForIps([hostname]);
   const vendor = vendors[hostname] ?? null;
   const camera = {
     id: randomUUID(),
     label: label || (vendor ? `${vendor} camera` : "Camera"),
     hostname,
-    port,
-    path,
-    username,
-    password,
+    port: swapped ? subPort : port,
+    path: swapped ? sub.path : path,
+    username: swapped ? sub.username : username,
+    password: swapped ? sub.password : password,
     manufacturer: vendor,
     model: null,
     serialNumber: null,
     firmwareVersion: null,
-    streamUri: streamUri,
-    // An RTSP-added camera never went through ONVIF, so nothing else knows
-    // its codec, resolution, frame rate or bitrate -- all of it comes from
-    // sampling the stream (ADR-087). Without this it would show nothing and
-    // skip the frame-rate guard entirely, which is how a venue ends up at
-    // 15fps unnoticed. `fps` deliberately stays null: this is what the
-    // camera is *sending*, not what it is *set* to, so the guard can't
-    // claim the settings are fine and blame the network instead.
-    profile: await rtspProfile(streamUri),
+    streamUri: roles.streamUri,
+    profile: roles.profile,
+    subStreamUri: roles.subStreamUri,
+    subProfile: roles.subProfile,
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };
