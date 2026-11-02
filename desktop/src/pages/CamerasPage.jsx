@@ -42,6 +42,11 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   // be reprinted under the stream-URL field as though the operator's own
   // URL had just been rejected, before they had typed anything.
   const [urlAttempted, setUrlAttempted] = useState(false);
+  // The plain-language reason classifyProbeError gave for 'certWarning' --
+  // kept separate from `error` so it survives into the decline path, which
+  // needs it even after `error` has been reused for the RTSP ladder's own
+  // failure.
+  const [certDetail, setCertDetail] = useState("");
   const update = (field) => (e) => setForm({ ...form, [field]: e.target.value });
 
   const [clipLabel, setClipLabel] = useState("");
@@ -84,45 +89,76 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     }
   };
 
+  // Before giving up on ONVIF entirely, see if the camera has a real video
+  // stream anyway (a real case this session: ONVIF was completely switched
+  // off, but the stream itself worked the whole time at a common, guessable
+  // path). Shared by the ONVIF attempt's own failure and by declining the
+  // certificate prompt below -- both land here the same way.
+  const fallBackToRtspLadder = async (failureError) => {
+    setPhase("tryingRtsp");
+    try {
+      const found = await window.cameraAPI.probeRtspFallback({
+        hostname: form.hostname,
+        username: form.username,
+        password: form.password,
+      });
+      if (found) {
+        const camera = await window.cameraAPI.addRtsp({
+          label: form.label,
+          hostname: form.hostname,
+          port: 554,
+          path: found.path,
+          username: form.username,
+          password: form.password,
+        });
+        onAdded(camera);
+        return;
+      }
+    } catch {
+      // fall through to the manual RTSP-URL offer below
+    }
+    setPhase("rtspUrl");
+    setError(failureError);
+    setSaving(false);
+  };
+
   const submit = async (e) => {
     e.preventDefault();
     setSaving(true);
     setError("");
     try {
       const camera = await window.cameraAPI.add({ ...form, port: Number(form.port) || 80 });
-      onAdded(camera);
-      return;
-    } catch (onvifErr) {
-      // ONVIF failed -- before giving up, see if the camera has a real
-      // video stream anyway (a real case this session: ONVIF was
-      // completely switched off, but the stream itself worked the whole
-      // time at a common, guessable path).
-      setPhase("tryingRtsp");
-      try {
-        const found = await window.cameraAPI.probeRtspFallback({
-          hostname: form.hostname,
-          username: form.username,
-          password: form.password,
-        });
-        if (found) {
-          const camera = await window.cameraAPI.addRtsp({
-            label: form.label,
-            hostname: form.hostname,
-            port: 554,
-            path: found.path,
-            username: form.username,
-            password: form.password,
-          });
-          onAdded(camera);
-          return;
-        }
-      } catch {
-        // fall through to the manual RTSP-URL offer below
+      // A resolved value, not a thrown one -- cameras:add only takes this
+      // shape for the one state that needs a real decision rather than a
+      // fallback (main.js's handler).
+      if (camera?.untrustedCert) {
+        setCertDetail(camera.detail);
+        setPhase("certWarning");
+        setSaving(false);
+        return;
       }
-      setPhase("rtspUrl");
-      setError(onvifErr);
-      setSaving(false);
+      onAdded(camera);
+    } catch (onvifErr) {
+      await fallBackToRtspLadder(onvifErr);
     }
+  };
+
+  const acceptCert = async () => {
+    setSaving(true);
+    setError("");
+    try {
+      const camera = await window.cameraAPI.add({ ...form, port: Number(form.port) || 80, acceptUnverifiedCert: true });
+      onAdded(camera);
+    } catch (err) {
+      // Rare -- the operator already said yes to the certificate, so a
+      // failure here is something else entirely. Same ladder as any other
+      // ONVIF failure.
+      await fallBackToRtspLadder(err);
+    }
+  };
+
+  const declineCert = () => {
+    fallBackToRtspLadder(new Error(certDetail));
   };
 
   const submitRtspUrl = async (e) => {
@@ -139,6 +175,31 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
       setSaving(false);
     }
   };
+
+  if (phase === "certWarning") {
+    return (
+      <div className="dialog-backdrop">
+        <div className="dialog">
+          <div className="dialog-title">This camera's certificate isn't trusted</div>
+          <div className="dialog-body">
+            This camera only answered over a secure connection, with a certificate we can't verify — common for a
+            camera's own built-in HTTPS, which usually isn't signed by anyone your computer already trusts.
+            ({cleanIpcError(certDetail)}) You can trust it and continue — anyone who could intercept that connection
+            would already have to be on your own network — or skip it and we'll look for a plain video stream
+            instead.
+          </div>
+          <div className="dialog-actions">
+            <button type="button" className="btn btn-secondary" onClick={declineCert} disabled={saving}>
+              Use RTSP instead
+            </button>
+            <button type="button" className="btn btn-primary" onClick={acceptCert} disabled={saving}>
+              {saving ? "Connecting…" : "Trust this certificate"}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   if (phase === "tryingRtsp") {
     return (
