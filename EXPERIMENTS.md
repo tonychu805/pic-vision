@@ -2608,6 +2608,1785 @@ That means every "bad" number in this entry -- the recall collapse, the 57% more
 
 **Next, if ball-only work continues.** Label a small set of rallies by type on the pilot set (PIC-203/219), then test whether pace share / kitchen score / escalation separate *those* types, judged on playback (PIC-209).
 
+## 2026-10-12 (later) — Blind playback check of "fast exchange", and what it exposed: reflections and tosses scored as top rallies (PIC-226)
+
+**Why.** Follow-up to the entry above (ball-only features vs the grades). The grade is the wrong target for a *type* of highlight, so the operator watched 18 silent clips cut by pace share and judged each "fast exchange / not fast". Scripts: `scripts/make_blind_check.py` (4 graded dev videos, 10 clips) and `scripts/make_blind_check_field.py` (PGC field test 9/25-26, 8 clips); answer key in `cache/` (not committed). Clips contain third-party venue footage and are not committed.
+
+**Definition agreed (operator, PIC-203).** A *fast exchange* is a burst **inside** a rally of 3 or more quick hard hits in a row (not 1 or 2); "fast" = ball speed. A single fast ball is a *hard shot*. The first check measured the share of the **whole rally** with fast readings, the wrong shape for a burst.
+
+**Results.**
+- The operator called 2 of 18 clips fast (B, C). High-pace group 1 of 9, low-pace group 1 of 9: no separation. The four highest-pace clips (O, M, J, Q) were all "not fast".
+- **O and M were not rallies at all** (failed serves). O: most marked points were light reflections. M: a player tossed the ball across the net. Rescored on the 16 real rallies: high 1 of 7, low 1 of 9. A burst-shaped measure (most hard shots in any 3 s) puts B first of 16 (tied with I) and C near the middle; two examples, exploratory, not a result.
+- **The shipped scorer ranked O 87/100, 1st of 17 in its session and 6th of 187 field-test "rallies".** M 57/100, 7th of 13.
+
+**Why (all checked in code/data).**
+- `track_ball` rejects only jumps > 150 px; no trajectory check (PIC-3 open). TrackNet confidence is passed but unused and does **not** separate ball from reflection (median 0.58 on a real rally, 0.58 on O, 0.64 on M).
+- One detection per frame, so two balls are never marked at once, but the single pick can hop between objects.
+- Speed / hard shots use **every** in-court detection, not the tracked ball: O has 69 hard readings raw vs 9 tracked-only; median over 187 field rallies 12 vs 3.
+- On a real rally (Q) TrackNet detects the ball on ~20% of frames, 14% survive tracking; the court gate is not the cause (in-court share = detected share).
+- The detector is the production one: `src/rallies.detect_candidates` unchanged since 9/23, weights `weights_k14_epoch19`; harness and production give identical segments on both sessions.
+
+**Tracked-only speed vs the grades** (`scripts/validate_tracked_speed.py`, rule fixed before running; 90 graded rallies, four dev videos, IMG_7743 not read):
+
+| Variant | Pooled chance q1>q2 | q1 mean higher on |
+|---|---|---|
+| raw (as shipped) | 0.649 | 2 of 4 videos |
+| tracked-only, half-point 12 | 0.660 | 3 of 4 |
+| tracked-only, half-point 6 (re-scaled) | 0.660 | 3 of 4 |
+
+By the pre-registered rule (pooled not >0.03 worse **and** q1 higher on all 4) both tracked variants are "not acceptable" on criterion (b). **That rule was set too high: the shipped raw score itself meets only 2 of 4**, so it cannot be what decides. The fair reading: tracked-only is no worse and slightly better (0.660 vs 0.649, far inside noise at n=90), and partially fixes the symptom (O 87 -> 74, rank 1 -> 3 of 17). It is not a demonstrated improvement, and it does not remove O from the top three.
+
+**Conclusion.** Not shipped. Tracked-only speed is a low-risk, partial mitigation worth keeping on the list, but the failed-serve problem has three causes (reflections, tosses, low yield) and none is fixed by it alone. The earlier pace-share "no signal" used raw speeds and is unreliable; fast exchange is unresolved, not refuted. Needs: a second session, an ADR before any change to ADR-133's score, and contact information (players PIC-197 or audio PIC-225) for hit-vs-toss.
+
+**Next.** (1) Redo the fast-exchange check on tracked-only speeds; (2) decide whether to add a trajectory-smoothness constraint (PIC-3) and a minimum-segment filter (`track_ball`'s existing `min_seg_frames`/`min_seg_span`, off by default) and test them against O and M and the graded videos.
+
+## 2026-10-12 (later still) — Does masking fixed "scenery" squares fix false rallies? It removes the sunlight rally but also destroys real ones: FAIL
+
+**Why.** PIC-226. Clip O (a failed serve) was a "rally" built from sunlit spots the detector kept marking; the operator verified from close-ups that every one of the six busiest spots is sunlight or a bright dot, none the ball. A per-video scenery mask was the natural fix. `scripts/validate_scenery_mask.py`, offline only, nothing in the pipeline changes.
+
+**Mask.** Per video, from its own detections only (never the grades): 12x12 px squares; a square is scenery if it holds >= 20x the median count of touched squares; variant `ring1` also masks the 8 neighbours. Masked detections are dropped before tracking, crossing counting and speed. IMG_7743 not read.
+
+**Pass rule, written before running (all four required):** (a) zero of the hand-graded rallies lost; (b) clip O no longer detected as a rally; (c) the six field clips the operator watched and called real (K, L, N, P, Q, R) all still detected; (d) pooled chance quality:1 outscores quality:2 not more than 0.03 below the unmasked run.
+
+| | plain | ring1 |
+|---|---|---|
+| (a) graded rallies matched 90 -> | **74 (17 lost)** | **58 (34 lost)** |
+| (b) O removed | yes | yes |
+| (c) 6 real field clips kept | yes | yes |
+| (d) pooled chance q1>q2 0.650 -> | 0.603 | 0.606 |
+| field test, all detected rallies 187 -> | 167 | 167 |
+| **Verdict** | **FAIL** | **FAIL** |
+
+**What it did.** It does what it was built for (O disappears, the six real field clips survive) and it is **destructive on the graded set**: nearly all losses are in `brickwall_30fps`, where 53 squares (34% of all detections, a strip at the net) are "scenery" and masking removes 34% (plain) / 48% (ring1) of that video's in-court detections. `pb_draft_cup` also loses candidates (22 -> 15 segments). `IMG_7744` is untouched.
+
+**Why, honestly: not established.** Two readings fit and the data here cannot choose: (1) the strip is the net itself, and real rallies in that video were being counted partly *because of* detections on it; (2) real ball detections cross the same net squares often enough to trip the 20x rule. Either way the crossing line is exactly where a per-video square count cannot tell scenery from ball. Close-ups at three times (stills) cannot show a ball that passes through occasionally.
+
+**Conclusion.** A global per-video detection mask is **not safe** and is not to be built as specified. The failed-serve problem is real; this fix is the wrong shape. The rally-level alternative (flag a rally when one tiny square holds a large share of *its own* tracked points) flagged 0 of 89 graded real rallies and 0 of 31 unlabelled dev detections, and O at 48% (6 of 187 field rallies); it does not alter tracking. That is the next thing to verify, by watching the other 5 flagged field rallies, before any threshold is trusted (30% was chosen after seeing O).
+
+## 2026-10-12 (last) — Two alternatives to the failed mask: high-confidence-only and a trajectory check. Neither works
+
+**Why.** PIC-226. After the scenery mask failed, the operator asked what happens if we trust only high-confidence detections and add trajectory estimation. `scripts/validate_conf_and_trajectory.py`; same pass rule as the mask test, fixed before running: (a) zero graded rallies lost, (b) clip O gone, (c) the six real field clips kept, (d) pooled chance q1>q2 not >0.03 below unfiltered. IMG_7743 not read.
+
+| Variant | Graded rallies (90) | O | Real field clips kept | Pooled chance | Verdict |
+|---|---|---|---|---|---|
+| confidence >= 0.60 | **25 lost** | gone | **1 of 6** | 0.650 -> 0.601 | FAIL |
+| confidence >= 0.65 | **48 lost** | gone | **1 of 6** | 0.650 -> 0.462 | FAIL |
+| trajectory check (no jump-away-and-back-to-the-same-spot within 6 px / 1 s) | 0 lost | **still there** | 6 of 6 | 0.650 -> 0.657 | FAIL (b) |
+
+**Confidence.** There is a weak separation across a whole session: at >= 0.60, 30% of the sunlight detections survive vs 56-61% of the other detections, but the **real ball's confidence is low too** (only 56% of a real rally session's detections reach 0.60, 34% reach 0.65). Any cut-off that removes the sunlight removes most real detections and most real rallies. (This corrects an earlier statement that confidence "does not separate": it separates slightly, uselessly.)
+
+**Trajectory.** Harmless (0 graded lost, 6/6 real field clips kept, score marginally up) but **does not touch O**. Post-hoc sensitivity, labelled as such: tolerance 6 / 12 / 18 / 24 px; O is still there at every setting and a graded rally is lost from 18 px up. So O's crossings are not the simple "A, B, A" return this check assumes (the hops in O are spaced 5-29 frames apart and may not return within 1 s).
+
+**Conclusion.** Neither is the answer. A trajectory estimator in the sense PIC-3 intends (fit a ballistic arc and reject points off it) is not what was tested here and remains untried; the ball-trace experiment (2026-10-11) found arcs fit only long, clean flights. Next candidate: the rally-level flag (one tiny square holding a large share of a rally's own tracked points), verified by watching the 5 other flagged field rallies.
+
+## 2026-10-12 (final) — Blind playback of the rally-level "one tiny spot" flag: catches 4 of 5, wrongly flags 1 real rally, misses a false alarm
+
+**Why.** PIC-226. After the mask, confidence cut-off and simple trajectory check all failed, the rally-level flag (>= 30% of a rally's tracked points in one 12x12 px square; threshold chosen after seeing O at 48%) was the remaining low-risk idea. `scripts/make_flag_check.py`: the 5 other flagged field rallies plus 3 unflagged controls of similar length from the same sessions, shuffled, silent; the operator answered real rally / not a rally per clip. Key `cache/flag_check_key.csv` (not committed).
+
+| Group | n | Judged NOT a rally | Judged real |
+|---|---|---|---|
+| Flagged (30-39%) | 5 | **4** (shares 30, 32, 32, 39%) | **1** (31%, 18.8 s) |
+| Controls (5-10%) | 3 | **1** (10%, 9.5 s) | 2 |
+| Plus O (48%, failed serve), known | 1 | 1 | 0 |
+
+**Reading.**
+- The flag is right 5 of 6 times counting O, but **wrongly catches one real rally**, at 31%, one point above the line. The false alarms and the real rally overlap in the 30-32% zone, so no clean threshold exists.
+- It **misses a false alarm** (control V, 10%): false alarms are not only the sunlight kind, and one of three unflagged "rallies" was not a rally. n = 3 cannot give a rate, but it does say the unflagged pool is not clean.
+- One flagged clip was **1.9 s long** (6+ crossings in under 2 s, over 3 crossings/s), a cue the flag did not need: real graded rallies' fastest 3 s windows are around 2-3 crossings/s. Not tested.
+
+**Conclusion.** Not enough to build on. As an automatic drop it would cost a real rally for every ~4 false alarms removed; as a "review this" marker it is reasonable. The bigger finding is that **we do not know the false-alarm rate on real venue footage**: no field-test rallies are labelled. Next: label a random sample of field-test rallies (real / not a rally) to get a precision estimate before choosing any filter.
+
+## 2026-10-12 (precision) — What fraction of detected "rallies" on real venue footage are rallies? About 55%
+
+**Why / objective (fixed before cutting; PIC-226).** Detector precision on the PGC field test (9/25-9/26): of the rallies the production detector reports, what fraction are actually rallies. Only "is it a rally", never "is it a good one"; not recall. "Real rally" per LABELING v5 (PR #37): live ball, at least 3 contacts, until dead. "Very short" (serve + return only) is ticked separately and counted as NOT a rally.
+
+**Sample.** `scripts/make_precision_sample.py`: 40 clips, seeded, silent, 14 sessions; 20 random + 20 from the top 3 by shipped score in each session; the 16 clips already judged excluded. Pool 171 of the 187 detected rallies. Key `cache/precision_sample_key.csv` (not committed). Clips 33-40 failed to play on the operator's first attempt (files valid at my end; resent separately).
+
+**Decision rule, written before looking:** more than 10 false in 40 = first-order problem; 5-10 moderate; 4 or fewer fine.
+
+| Group | n | Real | Very short | Not a rally | Real % (95% interval) |
+|---|---|---|---|---|---|
+| All | 40 | 22 | 4 | 14 | **55%** (40-70%) |
+| Random | 20 | 9 | 3 | 8 | 45% (23-67%) |
+| Top 3 per session | 20 | 13 | 1 | 6 | 65% (44-86%) |
+
+**Rule: 18 not-real (14 under the strict reading), well past 10: first-order problem.** Under either reading the real rate is below 75%.
+
+**What the false alarms were (operator):**
+- **Ball-machine drills: 4** (clips 03, 21, 30, 36): a serving machine on one side, people returning. Real ball, real hitting, not a game rally.
+- **Warm-up: 2** (18, 24): two groups hitting back and forth. LABELING already excludes warm-up.
+- **Reason not yet given: 8** (09, 20, 26, 29, 31, 35, 37, 39).
+- **Very short (serve + return only): 4** (07, 14, 15, 40). The detector requires >= 6 net crossings, so these have spurious crossings.
+
+**Ranking does not hide them.** 6 of the 14 "not a rally" clips were top 3 in their session; the highest-scoring clip in the whole sample (clip 37, 98/100, 73 s, rank 1 in its session) was judged not a rally; clip 03 (a ball-machine drill) scored 92, rank 1.
+
+**Caveats.** n = 40 and one venue on two days: the interval is about +/-15 points. The top-3 group looking better than random (65% vs 45%) is inside that noise. The sample excludes the 16 clips already judged (which included known false alarms), so this is, if anything, a less pessimistic sample than the full pool. Recall (missed rallies) is not measured.
+
+**Conclusion.** Detection precision on real venue footage is a first-order problem. A large share of it is not tracker error but **context**: real hitting that is practice, not a game (machine drills, warm-up). A better ball detector would not fix those; context signals (session/booking info, number and arrangement of players, machine-regular serve timing) might. Needs the reasons for the 8 unexplained clips before choosing where to spend effort.
+
+## 2026-10-12 (precision, corrected) — Reasons for the unexplained clips change three verdicts; precision is about 60%, and two thirds of the false alarms are practice, not tracking
+
+**Correction to the entry above.** After the operator explained the eight clips left unexplained, three verdicts changed: **20** and **31** are real rallies (single players on a side: >= 3 contacts, so a rally under LABELING v5), and **35** is "can't tell" (the video cut out before the serve was returned). Nothing else was re-judged. The earlier entry is left as written; this supersedes its numbers.
+
+| Group | n | Real | Very short | Not a rally | Can't tell | Real % of decided (95%) |
+|---|---|---|---|---|---|---|
+| All | 40 | **24** | 4 | **11** | 1 | **62%** (46-77%) |
+| Random | 20 | 10 | 3 | 6 | 1 | 53% (30-75%) |
+| Top 3 per session | 20 | 14 | 1 | 5 | 0 | 70% (50-90%) |
+
+If "very short" is counted as real: 72% (58-86%) overall.
+
+**Decision rule (more than 10 false in 40):** not-real = 15 (strict "not a rally" only = 11). **Crossed under both readings, but only by one clip under the strict one.** The honest statement is "likely below the 75% bar, not firmly": under the lenient reading the interval straddles it.
+
+**What the 15 not-real clips were (operator):**
+- warm-up: **5** (18, 24, 26, 37, 39)
+- ball-machine drill: **4** (03, 21, 30, 36)
+- serve + return only: **4** (07, 14, 15, 40)
+- serve out of bounds (a fault): **1** (09)
+- feeding (far-side player hitting the ball back for the near side to serve): **1** (29)
+
+**10 of 15 are practice, not game play.** None of the 40 was a sunlight / reflection false alarm, as far as the operator's notes say. The earlier failed-serve cases (O, M) were excluded from the sample by design, so this does not mean they are rare in the pool, only that none turned up in 40 fresh clips.
+
+**Ranking.** 6 of the 15 not-real clips were top 3 in their session, scoring 82-98: **37 (warm-up, 98/100, 73 s, rank 1)**, 24 (warm-up, 89), 21 (machine, 86), 29 (feeding, 84), 30 (machine, 84), 14 (serve + return only, 82). The top-3 group is cleaner than random (70% vs 53%), but that gap is inside the noise.
+
+**Conclusion.** Detector precision on real venue footage is roughly 60%, probably under the 75% bar. The dominant cause is **practice activity that looks like play** (warm-up, ball-machine drills, feeding), not ball-tracking error. That is a context problem: the ball is real and the crossings are real. Candidate context signals (untested): session / booking information, player count and arrangement, machine-regular serve timing, the same people hitting before the session start. A second class is serve-and-return-only points the detector wrongly extends (4) and a serve fault (1). Needs: a LABELING row for ball-machine drills and feeding, and a decision on whether practice should be excluded from reels or merely ranked lower.
+
+## 2026-10-12 (rhythm) — Is practice more metronomic than a real rally? No: the opposite, and not usably so
+
+**Why.** PIC-226. Practice (warm-up, ball-machine drills, feeding) out-scored real rallies under the shipped score (median 84 vs 65) because it is continuous and fast. Hypothesis: practice is also more *steady* in its hitting rhythm, which would let a score demote it without any context. `scripts/validate_rhythm.py`, offline, crossing times only.
+
+**Setup.** 10 practice clips and 24 real clips from the operator's 40-clip precision sample (reasons given by the operator), plus 90 hand-graded real game rallies from the four dev videos. IMG_7743 not read. Features from the gaps between consecutive net crossings: `cv_gap`, `mad_ratio`, `frac_steady`, `longest_run`, `max_gap_ratio`.
+
+**Pre-registered rule (written before looking):** a feature is useful only if (1) AUC practice-vs-real >= 0.75 in the expected direction (more steady), (2) >= 0.70 within a length-matched subset (8-25 s), (3) at the practice median it flags <= 15% of the 90 graded game rallies.
+
+**Result: no feature passes, and the direction is reversed.**
+
+| Feature | Practice median | Real median | Dev median | AUC (expected: steadier) |
+|---|---|---|---|---|
+| cv_gap | 0.77 | 0.63 | 0.66 | 0.22 |
+| mad_ratio | 0.79 | 0.48 | 0.45 | 0.15 |
+| frac_steady | 0.21 | 0.35 | 0.33 | 0.28 |
+| longest_run | 0.08 | 0.15 | 0.14 | 0.37 |
+| max_gap_ratio | 3.62 | 2.53 | 2.64 | 0.24 |
+
+Practice is **less** regular than real rallies, not more.
+
+**Checks on why.**
+- Not a detection-dropout artefact: the ball is seen on **more** of a practice rally's frames (median 0.57 vs 0.44), and gap irregularity is uncorrelated with how often the ball was seen (rank correlation +0.06).
+- Reversed direction, **exploratory and not pre-registered**: AUC 0.78 (cv_gap) / 0.76 (max_gap_ratio), but at the practice median it flags 25% / 12% of real field rallies and **20% / 26% of graded dev game rallies**, over the 15% line. Not usable.
+
+**Conclusion.** Crossing rhythm cannot separate practice from real rallies at this sample size, and my hypothesis was wrong in direction. Untested reasons for the reversal: warm-ups and feeding include pick-ups, mishits and casual pauses; machine drills mix a regular serve with irregular returns. Next candidates need context rather than ball-path statistics: booking/session schedule, player count and arrangement (person boxes, PIC-197), time within a session.
+
+## 2026-10-12 (players) — Can an off-the-shelf person detector see the far-side players on real venue footage? Largely yes; count alone does not separate practice from play (PIC-197)
+
+**Why.** PIC-197 gate, agreed with the operator before any number: far-side players boxed on >= 80% of frames in >= 7 of 10 clips; false boxes in <= 10% of frames; judged on playback. `scripts/person_probe.py`: 10 clips from the 40-clip field sample, `yolov8x-pose.pt` (person class only, local weights, no download), imgsz 1280, 5 fps sampling, anonymous boxes, overlays drawn for the operator. Third-party venue footage; clips not committed.
+
+**A method error, caught before reporting.** The first automatic pass split near / far using the net-TAPE line in the image and reported far-side coverage in only 2 of 10 clips. The tape sits ~3 ft above the floor, so a far-side player near the kitchen has feet *below* the tape line and was filed as near. Rebuilt using each person's feet placed on the court through the calibration homography (0.17 ft RMSE): far-side person boxed on 100% of frames in 9 of 10 clips (85% and 32% in the two others). The first number was wrong because of the method, not the detector.
+
+**Operator's playback verdicts (10 clips):**
+- Far side boxed: always 5 (01, 20, 24, 31, 37), mostly 4 (02, 03, 04, 21), sometimes 1 (09, the out-of-bounds serve).
+- Boxes on non-people: none in 10 of 10.
+- People actually playing: 1-2 (20), 3 (31), 4 in the other eight.
+
+**Against the bars.** False boxes: **met** (10 of 10 none). Far side boxed: **depends on the word "mostly"**: strict (only "always" counts) 5 of 10, NOT met; lenient (mostly >= 80%) 9 of 10, met. Left to the operator to define.
+
+**People count.** The automatic median on court is within one person of the operator's count in all 10 clips (exactly equal in 6-7). Over-counts of one in 02 and 24, an under-count of one in 09 (the far side missed).
+
+**Count does not separate practice from play.** Games (01, 02, 04), machine drills (03, 21) and warm-ups (24, 37) all have 4 people. Descriptive arrangement numbers (n = 10 clips, **not a test**):
+
+| Kind | People far / near | Spread across court (ft) | Nearest person to net (ft) |
+|---|---|---|---|
+| Real doubles (3) | 2/2, 2/3, 2/2 | 10.5-11.6 | 8.1-11.1 |
+| Machine drill (2) | 2/2, 1/3 | **19.0-19.4** | **17.1-21.3** |
+| Warm-up (2) | 2/3, 2/2 | 12.6-14.4 | 7.6-7.7 |
+
+Machine drills look different (everyone far from the net, spread across nearly the full 20 ft width); warm-ups look like games by position. Two clips each; a lead, not a result.
+
+**Conclusion.** Person detection sees the players at our geometry (no false boxes; far side boxed always or mostly in 9 of 10), so tracks and player count are worth building for their own sake (kitchen presence, chase, funny moments). It will not, by count, tell practice from play; arrangement may catch machine drills but probably not warm-ups. Next: define "mostly" with the operator, then pre-register an arrangement test on the 34 judged field clips (24 real, 10 practice) before concluding anything.
+
+## 2026-10-12 (dwell) — Test A: dropping detections that keep reappearing in the same pixels. Costs real rallies about as fast as it removes false ones: FAIL
+
+**Why.** PIC-226. Idea from the operator: penalise a candidate that sits in the same pixels for many frames (a ball in flight does not; scenery does). Test A applies it to the single-candidate stream already cached, no GPU. `scripts/validate_dwell.py`. For each in-court detection, count earlier detections within R = 6 px in the previous 30 frames; drop it if the count is >= K, before tracking.
+
+**Fixed before running** (physics, not from clips O or M): R = 6 px, window 30 frames, K = 4 (primary) and K = 8 (conservative). **Pass rule:** (a) zero of the 90 graded dev rallies lost, (b) zero of the operator-judged real field clips lost, (c) clip O gone, (d) pooled chance q1>q2 not >0.03 worse. Judged field set: 55 clips (33 real, 22 not a rally; "very short" counted as not a rally per LABELING v5; clip 35 excluded as undecided). IMG_7743 not read.
+
+| K | Graded dev lost | Real field clips lost | Not-a-rally clips removed (of 22) | O gone | Verdict |
+|---|---|---|---|---|---|
+| 4 | 1 of 90 | **3** (T, X, 32) | 4 (O, U, V, 21) | yes | FAIL (a)(b) |
+| 8 | 0 of 90 | 0 | 1 (W) | **no** | FAIL (c) |
+
+**Exploratory sweep, not pre-registered:** K = 5: lose 2 real, remove 3 not-rally, O stays. K = 6: lose 1 real, remove 1. K = 7: nothing lost, nothing removed, O stays. No setting removes more false rallies than it loses real ones by any useful margin; the results are not even monotonic in K (removing detections changes how tracks and crossing clusters form), and the number of detected rallies in those sessions **rises** from 187 to 190-197, i.e. dropping detections also fragments some rallies.
+
+**Reading.** The rule is blunt in the same way as the scenery mask and the one-spot flag: real rallies can contain scenery (the real rally flagged T and the control X lose detections here and were also caught by the one-spot flag). A filter that drops detections can't distinguish "a real rally with a bright spot in the frame" from "a fake rally made of bright spots". Choosing the ball AMONG candidates in each frame (several blobs per frame plus motion consistency) is the idea this does not test.
+
+**Conclusion.** Not shipped. Test B (top 3 blobs per frame from the heatmap, GPU re-inference on the judged clips, candidate choice by expected motion plus a dwell penalty) is the remaining untested form of the idea. Before spending on it: the sunlight-type false alarm is a minority of the 22 not-a-rally clips (most are practice or very short points), so a perfect tracker fix would move precision by a few points, not to 90%.
+
+## 2026-10-12 (top of each session) — Precision where a reel is built from: 66% real, bar was 80%
+
+**Why.** PIC-226. The reel takes each session's top rallies by the shipped score (`build_top_rallies`, n=10), so the head of each session's ranking is what a player sees first. Question and bar fixed before cutting: of the top 5 clips per session, what share are real rallies (LABELING v5)? Bar: >= 80% real. `scripts/make_top_sample.py` (40 new clips, silent, shuffled, numbered 101-140; the 30 slots already judged in earlier samples were excluded), `scripts/summarise_top_sample.py`. 14 field sessions x 5 = 70 slots, all 70 judged by the operator.
+
+| | Count | Share |
+|---|---|---|
+| Real rally | 46 | **66%** (95% 55-77%) |
+| Very short (serve + return only) | 9 | 13% |
+| Not a rally | 15 | 21% |
+
+**Bar not met** (79% if very short were counted real).
+
+| Rank in session | Real |
+|---|---|
+| 1 | 11 of 14 (79%) |
+| 2 | 9 of 14 (64%) |
+| 3 | 10 of 14 (71%) |
+| 4 | 8 of 14 (57%) |
+| 5 | 8 of 14 (57%) |
+| ranks 1-3 | 30 of 42 (71%) |
+
+A weak downward trend (rank 1 is best); about 14 clips per row, so a lead, not a measurement.
+
+**What the 24 not-real clips were:** serve + return only 9, ball-machine drill 5, warm-up/practice 5, feeding 1, sunlight 1, reason not given 3. **Practice-type 11 of 24**; the sunlight failure that took most of the detector work is **1 of 70**.
+
+**"Cut off".** The operator flagged 7 real review clips as cut off. The source video had 3 to 9 minutes after each rally's end, so it was not the recording; the review clips used a 1 s tail while the reel pipeline pads 3 s each side (`PAD_SEC = 3.0`). Re-cut with 3 s: only clip 139 was reported as still cut off. Read as: mostly my review clips' padding, with at least one residual case (139) where the detector's end is early.
+
+**Conclusion.** Precision at the head of the ranking is about 2 in 3 and about 4 in 5 at rank 1. The largest single false class is very short points (a detector firing on 6 crossings where there were two shots), which is more mechanical than practice and is the next thing to look at. Reel quality for "great rallies only" is not available from the shipped score alone.
+
+## 2026-10-12 (very short) — Can duration or pace remove the "very short" false rallies? No: they are not short and have the same crossing pattern as real rallies
+
+**Why.** PIC-226. 9-10 of the not-real clips in the top-5 sample were "very short" points (serve + return only, which LABELING v5 does not count as a rally) that the detector reported because it counted >= 6 crossings. Hypothesis: they are short, so a minimum-duration or pace rule would remove most of them. `scripts/validate_short_rule.py`.
+
+**Bar, written before running (all three):** removes >= 60% of the very short field clips; loses <= 10% of judged real field clips; loses <= 5% of the 90 hand-graded dev rallies. Grid fixed up front: duration cut-offs 4-9 s, crossings/s cut-offs 2.0-3.5. In-sample, so a pass would only be a candidate for a fresh sample. IMG_7743 not read.
+
+**Result: hypothesis wrong, no rule passes.** Medians over the judged field clips matched to a detected rally:
+
+| | n | Duration (s) | Crossings | Crossings / s |
+|---|---|---|---|---|
+| Real | 60 | 10.1 | 10 | 1.05 |
+| Very short | 10 | **9.0** | **10** | 1.11 |
+| Not a rally | 25 | 14.1 | 14 | 1.15 |
+
+"Very short" refers to the PLAY, not the clip: these detected segments are as long as real rallies and carry the same number of crossings. Best duration rule (< 8 s) removes 4 of 10 very short but also 22 of 60 real field clips (37%) and 31 of 90 graded dev rallies (34%). Pace rules remove 0-1 of 10.
+
+**Follow-up (exploratory, formed after the failure, not pre-registered).** If the detector had counted an early burst, a pause, then unrelated activity, "<= 3-5 crossings, a pause >= 1.5-2 s, then >= 3 more" would flag the very short clips. It does not: the very short clips have a median of 8 crossings before their biggest pause (real: 4), and the rule flags 23 of 60 real field clips against 2 of 10 very short.
+
+**Conclusion.** No duration, pace or pause-structure rule on crossing times separates the operator's "very short" points from real rallies. The detector found about 10 crossings in about 9 s where the operator saw a serve and a return, so what produced the other crossings is unknown. Possibilities, untested: ball handling or courtesy returns after the point, another ball, or the ball bouncing over the net line in the picture. Next: look at what the detector actually followed in 2-3 of these clips (ball-path overlay) before choosing a fix.
+
+## 2026-10-12 (scenery verified) — Fixed bright spots are in 8 of 8 answered scenery-heavy clips, and they explain the mystery of some "very short" rallies
+
+**Why.** PIC-226. A fixed-spot measure (share of a rally's tracked points in squares re-detected >= 20x the median across the recording) flagged 9 judged not-real clips with >= 30% in such squares (3 "very short", 6 other not-a-rally), against 2 of 60 real rallies and 0 of 15 practice clips. The operator's own reasons had listed sunlight only once, so this needed checking by eye. `scripts/make_hotspot_check.py`: red rings on the fixed spots, green trail on the detector's path, 3 s padding as the reel, silent, 720p.
+
+**Operator's playback verdicts (9 clips, 201-209).**
+- What is inside the rings: **light, glare or bright dots in 8 of 8 answered** (206 not answered).
+- Real rally present: only a serve + return **3** (201, 202, 207); no rally at all **5** (203, 204, 205, 206, 209); a real rally **1** (208, glare also present).
+
+**What it explains.** The "very short" mystery (about 10 crossings in about 9 s where a person sees two shots, previous entry): for 3 of the 10 it is fixed bright spots hopping against the real serve and return. The other very short clips (and those below the 30% line) remain unexplained.
+
+**Scenery share of the false alarms.** Top-5 sample, 24 not-real slots: practice 11, **scenery verified 5**, serve + return only with no scenery found 6, other 2. Counting the earlier judged clips outside the top-5 slots (O, S, U, V, W, Z and others), scenery is at least 9 clips in total. The earlier "sunlight is 1 of 70" came from the operator's stated reasons and **understated it**.
+
+**Why every filter failed.** Scenery is present during real play too (208: a real rally with glare), which is why dropping detections (mask, dwell, confidence) cost real rallies.
+
+**Conclusion.** Scenery is the largest false-alarm class that is a TRACKING problem (practice is context). The remaining untested form is choosing the ball AMONG several candidates per frame instead of dropping points: write the top few blobs per frame from the heatmap (GPU re-inference), then choose by expected motion plus a dwell penalty (Test B). Needs a pre-registered bar before running.
+
+## 2026-10-12 (session context) — Practice is re-hit within seconds; real points are followed by a pause. A gap rule removes about half the practice at almost no cost: PASS
+
+**Why.** PIC-226. An external discussion on separating warm-up from match play (written mostly for badminton) suggested temporal structure instead of ball statistics: a real point is followed by a stoppage (players walk back, fetch the ball, reset); warm-up / drills re-hit immediately. Two ideas were testable offline: post-rally gaps, and speed variance. `scripts/validate_session_context.py`, GPU-free, production segments from `base.detect`.
+
+**Direction and bar fixed before running.** Gap before / gap after: practice SHORTER. Rallies within 60 s: practice HIGHER. Speed variability (std/mean of tracked-ball speed): practice LOWER. Bar per feature: AUC practice-vs-real >= 0.75 in the expected direction on the judged field clips AND, at the practice median, flags <= 15% of the 90 hand-graded dev rallies. IMG_7743 not read.
+
+| Feature (medians) | Real field (60) | Practice (15) | Very short (10) | Graded dev (90) | AUC | Flags dev at practice median | |
+|---|---|---|---|---|---|---|---|
+| Gap before the rally (s) | 18.6 | **4.1** | 23.7 | 14.9 | **0.86** | 3% | **PASS** |
+| Gap after the rally (s) | 23.7 | **3.9** | 8.8 | 15.0 | **0.87** | 2% | **PASS** |
+| Rallies within +/-60 s | 2 | 4 | 2 | 3 | 0.82 | 36% | fail |
+| Speed variability | 0.85 | **1.07** | 1.05 | 0.87 | 0.40 | 78% | fail (reversed) |
+
+**A rule from it (grid not pre-registered): flag as practice-like if the gap before AND the gap after are both <= T s.**
+
+| T | Practice caught (of 15) | Real field lost (of 60) | Graded dev lost (of 90) | Very short caught (of 10) | Other not-a-rally caught (of 10) |
+|---|---|---|---|---|---|
+| 4 s | 3 | 0 | 0 | 0 | 0 |
+| 5-6 s | **8 (53%)** | **1 (2%)** | **0 (0%)** | 0 | 0 |
+| 8 s | 8 | 3 (5%) | 0 | 0 | 0 |
+| 10 s | 8 | 5 (8%) | 4 (4%) | 0 | 0 |
+| 12 s | 8 | 7 (12%) | 8 (9%) | 2 | 1 |
+
+**Reading.** This is the first rally-level rule in this investigation that costs almost nothing: at T = 5-6 s it flags 8 of 15 practice clips, loses 1 of 60 real field clips and 0 of 90 graded dev rallies. It does NOT touch the other classes (very short 0 of 10; scenery / other not-a-rally 0 of 10), and it cannot judge a rally with no neighbour on one side (3 of 15 practice, 10 of 60 real). Speed variability is reversed again, consistent with the rhythm test: practice here is MORE variable, not less, so the suggested "low variance = warm-up" rule does not hold for this footage.
+
+**Caveats.** n = 15 practice clips, one venue, two days, in-sample; the T grid was read off the curve after the AUC bar was passed. Gaps are between DETECTED rallies, so detection misses (about 20% of frames seen) and false detections both move them. Not shipped. Needs a fresh session and an ADR before it touches ranking.
+
+**Conclusion.** Temporal context between rallies separates much of the practice that no ball-path statistic could. It is the strongest lead so far for the 11-of-24 practice class. Untested from the same discussion: serve-position stillness before a rally (needs person tracks), and score-calling by voice (pickleball-specific; audio is recorded; consent-gated).
+
+## 2026-10-13 (Test B) — Choosing the ball among the top 3 heatmap blobs per frame does not remove the scenery fakes: FAIL
+
+**Why.** PIC-226. Scenery (fixed bright spots) is the largest false-alarm class that is a tracking problem, and every filter that drops detections cost real rallies because real rallies contain scenery too (clip 208). The remaining form: give the tracker up to 3 blobs per frame and let it choose. Bar, variants and parameters were posted on PIC-226 before inference ran.
+
+**Setup.** Same model (`weights_k14_epoch19`), court mask, 0.5 threshold and 3-frame trios as production; only the post-processing writes the top 3 blobs per frame (`scripts/infer_topk.py`, run by `scripts/run_topk_windows.py`). Gate: rank 1 reproduces production predictions on the same frames: **100%** (600 of 600). 18 videos, 136 windows (8 s before, 3 s after every judged field clip and graded dev rally), 4140 s of video, about 33 fps. Evaluation `scripts/validate_topk.py`; tracker `scripts/track_choose.py` (6 tests). IMG_7743 not read.
+
+**Candidates are not scarce:** 12.1% of frames with any blob have two or more (5364 of 44158).
+
+**Result, all variants FAIL the pre-registered rule:**
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 |
+|---|---|---|---|---|---|
+| V0 production (top-1) | 0 | 0 | 0 | 0 | 0.615 |
+| V1 existing tracker, 3 candidates | 1 | 3 | 0 | 7 | 0.619 |
+| V2 choose (free 5, reject 15) | 1 | 3 | **1** (203) | 8 | 0.625 |
+| V2b choose (free 1, reject 4; density-adjusted, decided before results) | 1 | **5** | 1 (203) | 9 | 0.633 |
+
+Rule: zero graded lost, zero real field lost, >= 4 of 8 scenery fakes removed, score not worse, fragmentation <= 10%. V1/V2/V2b lose real rallies and remove 0-1 of the 8 scenery fakes.
+
+**Reproduction check.** V0 on the windows matches 83 of the 90 graded dev rallies that production matches over whole videos. All comparisons are made against V0 on the same windows (n = 83), but this is below clean reproduction: window boundaries (a cold tracker at each window start) account for the 7 differences, not the model, which agreed on every frame tested.
+
+**Why it did not work (untested reading).** Scenery fakes are made of the bright spots alone; the real ball is often not among the candidates at all (detected on about 20% of frames). With no ball among the candidates there is nothing to choose; a better chooser only picks a different spot. V2b's extra real losses come from the more aggressive dwell penalty also hitting real play with scenery in frame.
+
+**Conclusion.** Nine ball-path ideas have now failed against pre-registered bars (tracked-only speed, scenery mask, confidence, simple trajectory, one-spot flag, rhythm, dwell, minimum crossings/duration, and this). None is shipped. Practice, the larger class, was separated by temporal context instead (gaps between rallies, previous entry), not by anything in the ball path.
+
+## 2026-10-13 (fresh sessions) — The frozen pause rule flags 0 of 68 rallies on sessions it never saw: not scorable, and not evidence it works
+
+**Why.** PIC-226. The gap rule (flag a rally when the gap before AND the gap after are both <= 6.0 s) passed in-sample on 15 practice clips and was written down as needing a fresh session before it touches ranking (entry 2026-10-12 "session context"). T = 6.0 s and the both-neighbours requirement were frozen before these sessions were processed. Pre-registered check: of the clips the rule flags, at least 70% are not real play.
+
+**Setup.** 8 PGC segments from 2026-09-25/26 that were never read during the investigation (3 courts, 7 x 10-minute segments + one 173 s), production inference run locally (`scripts/run_fresh_inference.py`, k14 weights, court mask, about 67 fps), production detector (`base.detect`, gap_sec 3.0, min_crossings 6). `scripts/apply_pause_rule_fresh.py`. Segment lengths checked: 600 s each at 30 fps, matching 18000 frames.
+
+**Result.**
+- 68 detected rallies, 52 of them with a neighbour on both sides. **0 flagged.** The check has no flagged clips to score, so it is neither a pass nor a fail.
+- The gap code is not the reason: on the sessions the rule was fitted on it flags 15 of 159 interior rallies (about 9%).
+- Gaps are long here: median gap before/after 27.7 s (field clips in the fit: real 18.6 / 23.7 s). The shortest gaps are 3.2, 4.1, 4.1, 4.1, 4.9, then 6.1 s. 9 interior rallies have ONE side <= 6 s, but never both.
+- Looser T, read afterwards and NOT a result: both <= 8 s: 1; <= 10 s: 1; <= 12 s: 6; <= 15 s: 7 (of 52).
+
+**Reading.** Two explanations fit and this data cannot tell them apart: (a) these sessions contain little practice, so there was nothing to flag; (b) the rule has low recall out of sample (it caught 8 of 15 practice clips in-sample, and the threshold was read off the curve). Without the operator's judgement of what is in these 68 rallies, neither can be claimed. The earlier "strongest lead" wording stays accurate only as an in-sample lead.
+
+**Next.** 30-clip review sample cut (`scripts/cut_fresh_sample.py`): 10 rallies with one gap <= 6 s (exploratory, not part of the bar) + 20 random of the other unflagged rallies. If the 20 random contain few practice clips, (a) holds and the rule is inert for a boring reason; if they contain many, (b) holds and the rule does not generalise. Awaiting operator verdicts. IMG_7743 not read.
+
+**Caveats.** n = 68 rallies, one venue, one weekend. Rallies are detected ones, so detection misses move the gaps. Footage is third-party: clips are for internal review and are to be deleted afterwards.
+
+## 2026-10-13 (fresh sessions, verdicts) — The unflagged rallies are half not-real, and almost all of that is one camera. The pause rule is inert here, and the cause is not practice
+
+**Why.** Follow-up to the entry above (the frozen rule flagged 0 of 68). The 30-clip sample (`scripts/cut_fresh_sample.py`, playback, silent) was judged by the operator: 10 rallies with one gap <= 6 s (exploratory) and 20 random of the other unflagged rallies.
+
+**Result (operator verdicts, playback).**
+
+| Group | Clips | Real | Very short (serve + return) | Not a rally |
+|---|---|---|---|---|
+| one gap <= 6 s | 10 | 5 | 0 | 5 |
+| random unflagged | 20 | 10 | 2 | 8 |
+| All | 30 | 15 (50%) | 2 | 13 |
+
+- Pooled over the 68 detected rallies (random group weighted up) the real share is about 50%, with very wide error (n = 20 random; a 95% interval is roughly 28-72%). Treat it as "about half", not a measured precision. It is lower than the top-5-per-session figure (66%) because this pool is every detected rally, not the head of the ranking.
+- **The near-gap group is no different from the random group** (50% not real vs 50% not real or very short). A short gap on one side does not mark a false alarm here.
+- **Only 1 of the 13 not-real clips was named practice (319).** The operator gave no reason for the other 12, so what they were is unknown. Their gaps are long (typically 25-130 s on at least one side), which is isolated events, not drills. That is an inference from timing, not a verdict.
+- **12 of the 13 not-real clips are from one camera (court 1, `de3d1953`; 3 segments: 5 of 8, 1 of 2, 6 of 10).** The other courts: 1 of 9. n is small and a single day, so this shows concentration, not a cause.
+- Two real rallies (310, 327) are cut off at the clip end: the detected end is earlier than the real end.
+
+**Reading.**
+- Explanation (a) from the entry above ("these sessions contain little practice") is the closer one, but it is not the whole story: the sessions contain plenty of false alarms (about half of rallies), they are just not practice-shaped. The rule is aimed at practice and had nothing to catch.
+- The false alarms at court 1 are the open problem. Candidates, all UNVERIFIED: scenery / glare at that camera, failed serves and feeding (long gaps fit this), a different framing. The operator's reasons are what is missing.
+- The earlier claim that gap context is "the strongest lead for the practice class" stays true only as an in-sample lead. It did not transfer, because the fresh sessions' errors are a different class.
+
+**Not done / next.**
+- Reasons for the 12 unexplained not-real clips (especially 301, 304, 306, 311, 316 and the others from court 1).
+- Fixed-spot share for the 13 not-real vs the 17 other clips (GPU-free, existing script) — a check that scenery explains court 1; then verify by eye.
+- Nothing shipped. IMG_7743 not read. Clips are third-party: delete `clips/fresh_sample*` after the reasons are in.
+
+## 2026-10-13 (fresh sessions, reasons) — The false alarms are failed serves, and a single failed serve produces 5-12 "crossings"
+
+**Why.** The operator gave a reason for each not-real clip in the fresh sample (entry above). One verdict changed: 304 is serve + return only (the return touched the net), not "not a rally". Totals now: real 15, very short 3 (304, 305, 312), not a rally 12.
+
+**Reasons (operator, playback).**
+
+| Reason | Clips | n |
+|---|---|---|
+| Failed serve: net, wrong box, landed in the kitchen, out | 301, 302, 306, 308, 316 | 5 |
+| Ball hit the net (328 also: ball tossed back) | 324, 328 | 2 |
+| Only the serve was recorded, cut off | 320, 322 | 2 |
+| Not play: no serving action at all; ball tossed into the court | 311, 314 | 2 |
+| Practice | 319 | 1 |
+
+So 9 of the 12 not-real clips (and 304 of the short ones) are the first shot of a point failing: the serve, or a ball touching the net.
+
+**What the detector saw (GPU-free, `base.detect` crossings inside each clip, 27 clips).** A serve can cross the net at most once, yet these clips carry 5-12 crossings: 301 has 12 (a failed serve into the net), 306 has 7 in 2.8 s, 322 has 10 in 5.8 s. In several the closest two crossings are one frame apart (0.03 s), which no real ball can do. Medians: real 6 crossings (closest pair 0.27 s), not-real 8 (0.15 s), very short 8 (0.10 s). The counted "crossings" are the tracked point wobbling across the net line (ball dying at the net; scenery hops are not excluded), not the ball crossing the net. This is a reading of the numbers; the mechanism (net contact vs. fixed bright spots vs. both) is not verified.
+
+**Exploratory, not a result (not pre-registered, in-sample):** merging crossings closer than G seconds and requiring >= 6 left.
+
+| G | Fresh real kept (of 15) | Very short kept (of 3) | Not-real kept (of 12) |
+|---|---|---|---|
+| 0 | 13 | 3 | 11 |
+| 0.25 s | 10 | 3 | 8 |
+| 0.5 s | 8 | 2 | 7 |
+
+It removes real rallies and false alarms at the same rate (-3 and -3 at 0.25 s), so a simple spacing debounce is not a fix. Not pursued.
+
+**Short gaps fit serve retries.** Of the sampled rallies <= 6 s apart: real -> failed serve (303 -> 320, 309 -> 308), failed serve -> failed serve (301 -> 328), failed serve -> real (324 -> 327). A short gap is what a fault followed by a re-serve looks like, which is why gap context could not separate these.
+
+**Open / next.** Operator proposal: use ball landing placement and pickleball rules (service box, kitchen, net) as context. Earlier (2026-10-11) net-contact and bounce detection were weak from a behind-baseline camera, so a serve-landing test has to be narrow and pre-registered first; unprocessed fresh segments remain (64 in `cache/fresh_segments.json`) for a held-out check. Rule details (e.g. serve touching the net) need checking against the rulebook before anything is encoded. Nothing shipped.
+
+## 2026-10-13 (rules probe) — Can we detect net contact and serve faults (net / out / kitchen / wrong box) from the ball track? Not yet, and three of the four cannot be validated with the data we have
+
+**Why.** Operator proposal: encode pickleball rules and detect four dead-ball events: ball hits the net, serve out of bounds, serve into the kitchen, serve into the wrong (adjacent) box. Two GPU-free probes on the 30 judged fresh clips (all in-sample, exploratory, nothing pre-registered, nothing shipped).
+
+**Ground truth we have (operator reasons, playback).** net 4 (301, 306, 324, 328; 304 is a return), serve out 1 (316), kitchen 1 (308), wrong box 1 (302). Rules 2-4 have one example each.
+
+**Probe 1 — can the ball be seen during the serve, and is a landing recoverable?** Window = 1 s before to 3 s after the detected start; raw detections (not court-gated); image-to-court homography; bounce candidate = local maximum of image-y with >= 8 px prominence.
+- Ball seen in a median 49% of frames (real), 38% (not real), 18% (very short). Longest blind stretches 10-50 frames (0.3-1.7 s).
+- >= 1 bounce candidate: real 12 of 15, not real 9 of 12, very short 2 of 3. Not selective.
+- Several candidate "landings" project far outside the court (e.g. y = 49 ft, 67 ft in real clips), so the candidates include non-bounces. The one kitchen clip (308) has 12% coverage and no candidate; the other serve-only clips 320 and 328 have none either.
+- This crude detector is not a test of what is possible, but it is not close to calling a service box.
+
+**Probe 2 — is a burst of crossings at the net a net-contact signature?** Burst = 3 crossings within 0.5 s.
+- Fresh: not real 4 of 12, very short 1 of 3, real 2 of 15.
+- Graded dev rallies (quality 1-2, >= 3 crossings): **49 of 172 (28%)** have one.
+- A rule on it would cost more than a quarter of good rallies. Not selective. Rejected as a rule.
+
+**Ceiling.** Of the 12 not-real clips, 7 are covered by rules 1-4 (301, 302, 306, 308, 316, 324, 328). The other 5 (311 no serve, 314 tossed ball, 320 / 322 serve only cut off, 319 practice) are not. Even perfect detection takes this sample from 15 of 30 real (50%) to 15 of 23 (65%).
+
+**What blocks it.** (1) Ground truth: one example each for rules 2-4. (2) A calibration error of 0.17-0.39 ft (this camera's file: 0.39 ft) is larger than a pickleball (about 0.24 ft) when a serve lands near a line. (3) The "wrong box" rule needs to know which side the server stood on, which needs player positions at the serve (the person probe suggests this is possible, untested for this). (4) Bounce detection from a behind-baseline camera was already weak (2026-10-11).
+
+**Next, if pursued.** Collect labelled faults deliberately (own players, own court, calibrated camera, ~10 per fault type, intended outcome noted at the time), then pre-register the bar and fit. Not started.
+
+## 2026-10-13 (diagnosis) — Why the detector is worse than expected: it counts a dot crossing a pixel row, and nothing in it knows what a point is
+
+**Why.** Operator asked for a diagnosis: too much noise, or players / poses not detected? Four GPU-free checks on the 30 judged fresh clips plus the graded dev rallies. All in-sample, exploratory, nothing pre-registered, nothing shipped.
+
+**1. Scenery is not the cause on these sessions.** Same measure as 2026-10-12 (share of tracked points in squares re-detected >= 20x the recording median): 0 of 30 clips reach 30%; 0 hot squares in 7 of 8 recordings (1 in the eighth). The measure was built on 2-hour sessions; on 10-minute segments it only catches persistent spots, so brief glare is not excluded. Scenery is specific to a venue / day, not the general explanation (earlier sample: 5+ of 24 not-real).
+
+**2. The "crossings" in a failed serve are a real ball, counted wrongly.** `crossing_times` counts the tracked point passing the image ROW of the net line (`band=0`). Clip 306 (serve into the net, 2.8 s, 6 crossings by the clip's end): a smooth track with x almost constant (1081 to 960 px over 2 s) and y oscillating around the net row: one ball dropping and bouncing at the net, crossing the pixel row about every 0.3-0.6 s. Clip 301 (12 crossings): 4 come from smooth arcs, the others from isolated off-track points (a jump from x=1318 to 1194, a point 481 px below the net row). So: part real ball motion with the wrong meaning, part stray points.
+
+**3. The designed hysteresis (ADR-042 `band`) does not fix it.** Production and every validation script run `band=0.0`; ADR-042 said to tune 15-30 px per camera and no entry records that. Tested now, rallies kept with >= 6 crossings left:
+
+| Band (px) | Fresh real (of 15) | Very short (of 3) | Not-real (of 12) | Graded dev (of 104) |
+|---|---|---|---|---|
+| 0 | 13 | 3 | 11 | 104 |
+| 10 | 10 | 3 | 10 | 96 |
+| 20 | 10 | 3 | 10 | 81 |
+| 30 | 6 | 2 | 9 | 66 |
+| 45 | 5 | 2 | 6 | 44 |
+
+It removes good rallies faster than false ones. Same shape as the time debounce, the mask, dwell and confidence: both classes carry the same dot signature.
+
+**4. Players are detected; they are just unused.** From the 2026-10-12 person probe (10 clips, earlier footage): far-side players boxed on 100% of frames in 9 of 10 clips, no boxes on non-people in 10 of 10, count within one of the operator's in 10 of 10. Not re-run on fresh court 1. The 2026-08-22 "only 2 of 4" was a single-frame pose check that was superseded. Nothing in the rally detector reads player positions. Count alone does not separate practice from play (4 people in games, drills and warm-ups).
+
+**Conclusion.** The false alarms are not mainly noise and not a player-detector failure. The detector's unit is "N crossings of a pixel row within a gap", and failed serves, ball-machine drills and fault-then-re-serve all produce that pattern with a real ball. Twelve filters on the dot have now failed against pre-registered or exploratory bars with the same trade-off. The information that separates the classes (a serve happened from behind the baseline, a return, at least 3 contacts, who is where) is not in the dot. Candidate sources: player positions at the serve (available, untested for this), the rules, and scene-level facts from a vision model.
+
+## 2026-10-13 (Gemini head-to-head) — Gemini alone on brickwall: unstable timeline, fails both the replacement and the veto bar
+
+**Why.** PIC-226. Operator question: would going straight to Gemini (no TrackNet, no RunPod) with the right system prompt find rallies as well? The 2026-08-16 verifier (ADR-085) was never scored. `scripts/gemini_head_to_head.py`, bar and prompt frozen in its docstring before the first call (commit `ec7a320`).
+
+**Setup.** `gemini-3.8-flash` (pinned id), temperature 0, JSON output. First 900 s of `brickwall_30fps` (30 labels) and `brickwall-SEMI` (36 labels), LABELING v5 rules in the system prompt. Conditions: A original encode 1 fps; B re-encoded (crf 30) 1 fps; C original 5 fps. Scored at IoU >= 0.5, greedy one-to-one (`eval.harness.match_intervals`), against the shipped pipeline on the same excerpts. Raw responses in `cache/gemini/`. 6 calls: 59,681 prompt tokens per 1 fps call, 297,281 per 5 fps call.
+
+**Result (pooled over both excerpts).**
+
+| | Precision | Recall |
+|---|---|---|
+| Shipped pipeline | 73.3% (44/60) | 66.7% (44/66) |
+| Gemini A, 1 fps | 58.6% (34/58) | 51.5% (34/66) |
+| Gemini B, re-encoded, 1 fps | 47.5% (29/61) | 43.9% (29/66) |
+| Gemini C, 5 fps | 20.8% (11/53) | 16.7% (11/66) |
+
+| Excerpt | Pipeline P / R | A | B | C |
+|---|---|---|---|---|
+| brickwall_30fps | 69% / 67% | 19% / 17% | 75% / 70% | 26% / 17% |
+| brickwall-SEMI | 77% / 67% | 91% / 81% | 24% / 22% | 18% / 17% |
+
+**Bar.** Replacement: FAIL (A precision 58.6% < 73.3%; recall 51.5% < 61.7%; agreement A vs B 0.15 < 0.85). Veto: FAIL (removes 14 of 16 pipeline false positives, 88%, but loses 21 of 44 true positives, 48%, limit 10%). Condition C was reported, not gated.
+
+**What happened.** The same video with the same prompt gives completely different timelines under a different encode, which is ADR-085's failure reproduced and now scored. In the poor runs the reported times run past the end of the clip (last reported rally at 1438 s on a 900 s file; 1449 s and 1489 s on the 1298 s original) so the model lost the time axis. When the timeline held, the judgement was good: 91% / 81% on SEMI A (better than the pipeline) and 75% / 70% on 30fps B. A constant shift or scale does not rescue the poor runs (post hoc check: at most 9 of 30 matched). Sampling at 5 fps was worse, not better.
+
+**Reading, and what it does not show.** Gemini alone is not a replacement and not a safe veto in this form. The semantic judgement may be adequate; the time axis is not trustworthy. That second sentence is a hypothesis from two good runs. Two excerpts, one tournament stream, one model, one prompt, temperature 0; results may differ for other models, shorter chunks or timestamps visible in the picture.
+
+**Untested follow-up (needs its own bar).** Burn a readable clock into the frames and split into about 3-minute chunks so the model reads time instead of counting it.
+
+**Note.** The API key used was pasted into the session by the operator; revoke it after the work.
+
+## 2026-10-13 (corrections) — Numbers I stated earlier today that were wrong or overstated
+
+Found by re-checking against the files after the operator asked for a double-check. The entries above are left as written (append-only); read them with these corrections.
+
+1. **Court 1 vs the other courts (fresh sample).** After 304 was re-judged very short, the 30 clips split as: court 1 (`de3d1953`) 20 clips, 11 not a rally (55%), 2 serve + return only; other courts 10 clips, 1 not a rally (10%), 1 serve + return only. Earlier text said "12 of 13 from one camera" (before the 304 change) and "other courts 1 of 9" (should be 1 of 10). The concentration is real; court 1 is also two thirds of the sample (20 of 30).
+2. **"Players are detected on every frame in 9 of 10 clips"** (diagnosis entry, point 4) quoted the automatic measure only. The operator's playback verdicts in the 2026-10-12 (players) entry are: far side boxed always 5, mostly 4, sometimes 1 of 10. The PIC-197 bar depends on what "mostly" means and was never defined. The person count within one of the operator's in 10 of 10 stands. The detector is not in the rally pipeline and was only run on 10 clips.
+3. **Calibration error.** All 14 PGC calibration files report a reprojection RMSE of 0.38-0.49 ft (median 0.44). The 0.17 ft quoted in the person probe entry does not match any of them and is not reconciled; do not rely on it.
+4. **The 3D arc tool (`scripts/ball_court_map_3d.py`) is a diagnostic, not a pipeline component.** It was run on one rally (brickwall r24) and tuned there; 5-6 of 10-11 arcs passed its physical checks. Far-end depth (where a serve to the far side lands) is the part it reported as least reliable, so "a serve is its best case" was not supported.
+5. **Ball size at the network.** The detection blob width is a multiple of the resize factor (3.75 px for 1920-wide, 2.5 px for 1280-wide) and is 4 or 5 network pixels in the three files checked. This is the blob the detector reports, not a measured ball size. Prior art cited in ADR-006 (about 60% at 640 vs about 100% at 1280) is from the retired YOLO design, not TrackNet at 512 x 288.
+6. **Gemini token rate.** The docs say about 100 tokens per second of video at 1 fps; this model used 59,681 tokens for 900 s (about 66 per second) at 1 fps and 297,281 at 5 fps.
+7. **Brickwall baseline.** The pooled 73.3% / 66.7% (two excerpts) was compared in prose with the earlier brickwall-SEMI-only held-out figure (74% / 64%). Similar, not the same measurement.
+
+## 2026-10-13 (serve landing probe) — The 3D flight fit cannot tell a failed serve from a good one on these clips: FAIL
+
+**Why.** PIC-226. Operator's definition of a failed serve: out of bounds, net, or the adjacent box (plus the kitchen). Before building a serve detector, can the existing flight-fitting tool (`scripts/ball_court_map_3d.py`: camera pose from the calibration, a ballistic arc per flight segment) recover a serve's landing? It had only been tried on one brickwall rally. `scripts/serve_landing_probe.py`; rules and bar fixed in its docstring and committed (`ae572c1`) before the run. One glue-code bug (return-shape mismatch) was fixed after the first crash without touching the rules.
+
+**Set.** 25 eligible of the 30 judged fresh clips: 18 good serves (real 15, serve + return only 3), 7 faults with a stated cause (301 net, 302 adjacent, 306 net, 308 kitchen, 316 out, 324 net, 328 net). Excluded: 311, 314, 319, 320, 322. All 8 calibrations recovered a camera pose (cameras 15-18 ft behind the baseline, 9-13 ft up, f 1090-1529 px) and passed the net-post check.
+
+**Result against the bar.**
+
+| | Result | Bar |
+|---|---|---|
+| (1) Estimate produced | 7 of 25 (28%) | >= 60% |
+| (2) True faults called a fault | 0 of 1 | >= 50% |
+| (2) Good serves called a fault | 5 of 6 (83%) | <= 25% |
+| **Overall** | **FAIL** | |
+
+**Where the 25 went.** No valid flight segment in the window at all: 5 (304, 308, 309, 312, 316). Segments, but none a serve flight (>= 10 ft of travel): 7 (302, 305, 307, 317, 325, 328, 330). Server side unknown (fitted start in the middle of the court): 4 (306, 310, 321, 326). Landing within 2 ft of a boundary: 2 (301, 327). Estimates: 7: 303 OUT (x=24, y=20), 313 OUT (y=-14), 315 OUT (y=79), 329 OUT (y=85), 323 NET, 318 IN, 324 IN (a net hit called in).
+
+**Reading.** Of the 7 estimates, 4 land 10-40 ft outside any plausible serve position (y = 79 and 85 ft on a 44 ft court): the fit is extrapolating a poorly determined arc, not recovering physics. The one estimate on a true fault (324, net) is wrong. On these clips the tool cannot tell a failed serve from a good one. It does not show the idea is impossible: windows are tied to the detected rally start, which can fall after the serve; the fit was built for one rally; and the far end (where half of all serves land) is the part its own entry reported as near-degenerate. It does show that this tool, as built, is not a base for a serve-fault detector.
+
+**Stop rule applied.** Not building a serve detector or a landing-based rule engine on this. Next candidates (not started): crop-to-court detection test, players at the serve, mining faults for labelled examples, delivery-format changes.
+
+## 2026-10-13 (serve bounce probe) — Finding the serve's first ground contact directly with the calibration also fails, mainly because the ball is not tracked at the moment it lands: FAIL
+
+**Why.** After the 3D arc fit failed, the operator pointed out the goal is simply where the ball lands at the serve. The calibration homography is exact for a ball on the floor, so the direct route is: find the first bounce after the serve in the image and project it. `scripts/serve_bounce_probe.py`; rules and bar fixed in its docstring and committed (`65dd16b`) before the run. Same 25 eligible clips and verdicts, same bar as the arc probe.
+
+**Result.**
+
+| | Result | Bar |
+|---|---|---|
+| (1) Estimate produced | 9 of 25 (36%) | >= 60% |
+| (2) True faults called a fault | 1 of 1 | >= 50% |
+| (2) Good serves called a fault | 5 of 8 (62%) | <= 25% |
+| **Overall** | **FAIL** | |
+
+13 of the 25 clips had no bounce candidate at all; 1 had the server side unknown; 2 landed near the centre line. The one fault with an estimate (301, net) was called correctly; the other six had none. Four of the five good serves "called a fault" are "lands on the server's half" with the landing at y = 30-34 ft, which most likely means the first tracked point in the window was not the serve (the serve itself was not tracked), so the server's side was assigned wrongly. That is an inference, not checked clip by clip.
+
+**Why there are so few candidates (descriptive, not part of the bar).** In the 4.5 s serve window the tracker confirmed the ball on a median of 32 of 135 frames (24%); 3 of 25 clips had fewer than 10 tracked frames. A bounce candidate needs tracked points on both sides within 0.2 s. Post hoc, with a much looser rule (span 8 frames, 4 px, 1 point per side) 19 of 25 clips have at least one bounce-like point, but a looser rule also admits more non-bounces and was not tested for accuracy; it is not a result.
+
+**Reading.** Two different routes to the landing (a fitted arc, and a direct bounce) fail for the same reason on these clips: the ball is not tracked densely enough around the serve and its landing. Whether the ball can be seen more often at the network is the question that gates any landing work.
+
+**Stop rule applied.** No serve detector or landing rule engine from this camera at 30 fps on current detections. Next, if pursued, is the crop-to-court test, with ball visibility inside serve windows as its first measure.
+
+## 2026-10-13 (pose coverage) — Body points on the venue clips: the far side is far better than the near side, because near players are cut off by the frame edge
+
+**Why.** Operator proposal (2026-10-13): start using player position and pose around the serve; a failed serve has no return, and a return shows up as a swing even when the ball is not tracked. Before building that, measure what the pose model (`yolov8x-pose`, on disk) gives on this footage. `scripts/pose_coverage_probe.py`; decision rule fixed in its docstring and committed (`2aebb11`) before the run. Descriptive; no pass/fail bar on rallies.
+
+**Set.** The 30 judged fresh clips, window rally start - 3 s to + 2 s, 10 fps (50 frames per clip, 1500 frames), imgsz 1280, person class, conf >= 0.25. Persons placed on the court by the box bottom-centre through the calibration homography; on-court = within 6 ft of the court. Keypoint counted as usable at confidence >= 0.5. Raw body points saved in `cache/pose/` (local, not committed).
+
+**Result (30 clips pooled; one row per person detection).**
+
+| Side | Person detections | Median usable body points (of 17) | Both wrists usable | Shoulders + hips usable | Frames with >= 2 persons |
+|---|---|---|---|---|---|
+| Near the camera (court y < 22) | 3258 | 13 | 53% | 96% | 96% |
+| Far side (y >= 22) | 2936 | 16 | 91% | 100% | 72% |
+
+Decision rule (>= 60% with both wrists AND >= 2 persons in >= 70% of frames): near NOT usable (wrists 53%), far usable. The opposite of what I had assumed.
+
+**Why the near side is worse (post hoc, from the saved points).** Near-side players stand at or behind the near baseline (court y median -1 ft) and are large in the frame (median box 334 px tall); **36% of their boxes touch the bottom edge of the frame**, so their feet, and often wrists, are partly out of view. Far-side players are 134 px tall, never cut. Mean wrist confidence: near 0.71-0.73, far 0.90-0.91.
+
+**What this does not show.** These are the model's own confidence numbers, not correctness. A wrist reported at 0.9 on a 134 px person is a few pixels wide and may be in the wrong place. The CLAUDE.md rule (playback, not numbers) applies: nothing here has been watched yet. The near-side feet positions are unreliable for the 36% that are cut off, so the near/far split by feet is itself approximate for those. Also not measured: whether swings can be detected from these points, and whether the person on the far side is a player (spectators within 6 ft of the court are counted).
+
+**Next.** Overlay of body points on a few clips for the operator to judge in playback (swing visible? points on the right body parts?), before any swing logic is written.
+
+## 2026-10-13 (swing count) — Counting arm swings from body points flags most non-rallies as rallies: FAIL
+
+**Why.** Operator proposal: use player position and pose around the serve. Gate first: the operator judged 7 body-point overlays in playback (`scripts/make_pose_review.py`): points on the right body parts near side 7 of 7, far side 7 of 7; swings clearly visible in 5 of 7 (all 4 real rallies; 1 of the 3 faults: 316 out and 306 net showed none, 301 net showed swings). Then `scripts/swing_count_probe.py`: count arm swings by side instead of ball crossings (a rally = at least 3 contacts, LABELING v5). Rules and bar committed (`39c404c`) before the run.
+
+**Rules (fixed before running).** Pose at 30 fps over the clip as the operator saw it (start - 1 s to end + 1 s); players inside x -2..22 ft, y -6..50 ft; a swing = wrist moving >= 4.0 torso lengths per second relative to the mid-shoulder for >= 3 consecutive frames; same-side swings within 0.5 s merged; RALLY = >= 3 swings with >= 2 changes of side.
+
+**Result (30 judged fresh clips).**
+
+| Verdict | n | RALLY | EXCHANGE | ONE_SIDE | NONE |
+|---|---|---|---|---|---|
+| Real | 15 | 12 | 2 | 1 | 0 |
+| Serve + return only | 3 | 2 | 1 | 0 | 0 |
+| Not a rally | 12 | 8 | 1 | 2 | 1 |
+
+Bar: RALLY on >= 60% of real (80%, 12 of 15: met) AND on <= 20% of the 15 non-rally clips (67%, 10 of 15: **not met**). **FAIL.** Of the failed serves with a stated cause, 301 was EXCHANGE, 302, 308, 316, 320, 322, 324 and 328 were RALLY and only 306 was NONE.
+
+**Why (post hoc, descriptive; the bar was already scored).** Players move their arms constantly, and a speed threshold cannot tell a hit from other arm movement (picking up balls, walking, adjusting): at 4.0 the median is 7 swings per real clip and 5 per non-rally clip, in clips of 3-16 s. The count separates weakly (AUC 0.64; swings per second 0.73). Raising the threshold removes real clips faster than non-real ones (at 8.0 the real median is 0 swings). Not tuned further: the 30 clips are the test set.
+
+**Reading.** Body points are good enough to draw (7 of 7), and a swing is visible to a person looking at the dots, but swing counting by speed alone is not a contact counter. To tell a hit from other arm movement the check needs to know whether the ball was there, which brings back the ball-visibility problem (tracked on about 24% of frames around a serve). A pose-only route to "was there a return" is not shown to work.
+
+**Stop rule applied.** Not building a pose-based rally or serve detector on this. Open: crop-to-court test for ball visibility; delivery-format change; mining faults for labelled examples.
+
+## 2026-10-13 (serve motion) — A "still at the baseline, then strike below the waist" serve template is found in only 8% of real rally starts: FAIL
+
+**Why.** Operator pasted a description of detecting the mechanical sequence of a serve with pose (stationary at the baseline, paddle drawn back, forward strike below the waist) as an anchor for rally starts and a way to drop no-serve clips. Not a rally detector: failed serves have a perfect serve motion. `scripts/serve_motion_probe.py`; rules and bar committed (`7625d12`) before the run. One crash (a frame where only one wrist was valid) was fixed without touching the rules.
+
+**Set.** Positives 88 (fresh: real 15 + serve-and-return only 3; earlier judged sessions: real + very short 70). Negatives 18 (fresh 311, 314, 319; earlier practice / machine / feeding / warm-up 15). 9 fresh fault or cut-off clips reported, not scored. Window rally start - 4 s to + 0.5 s, pose at 30 fps.
+
+**Rule (fixed before running).** Set phase: >= 0.5 s with both wrists slow (< 1.5 torso lengths/s), feet still (< 1.5 ft) and within 4 ft of a baseline; strike: within 1.5 s a wrist at >= 4.0 torso lengths/s for >= 3 frames with the wrist at or below the hip line.
+
+**Result.**
+
+| | Found | Bar |
+|---|---|---|
+| Positives (88) | 7 (8%) | >= 70% |
+| Negatives (18) | 0 (0%) | <= 25% |
+| Fresh faults and cut-off (9, not scored) | 1 (11%) | |
+
+**FAIL.** The negatives passing is not evidence: the rule almost never fires on anything. Where found: near 5, far 2.
+
+**Why (post hoc, descriptive; the bar was already scored).** Stage by stage on the 88 positives: a player at a baseline 92%; and still >= 0.5 s with both wrists valid 52%; a fast arm burst by a baseline player at some point 67%; the full sequence in order (still, then a strike within 1.5 s, below the hip line, feet still) 8%. The individual pieces exist about half the time; requiring them in sequence together almost never holds. Not tuned further: these clips are the test set. The cheapest explanations (unverified): wrists are not confidently seen for half a second in a row, servers are cut off at the near edge, and the sequence is not as regular as the template.
+
+**Reading.** A serve-motion anchor is not available from this pose output with a template this strict, and loosening it by hand on the same clips would not be a fair test. It would not remove failed serves in any case.
+
+**Stop rule applied.** Not building a serve-motion anchor. Open: crop-to-court test for ball visibility; delivery-format change.
+
+## 2026-10-13 (zoom / tile test) — Giving k14 a 1.7x larger ball makes it see the ball far more often, but rally precision falls: does not clear the bar
+
+**Why.** PIC-226. Nothing based on the ball's position around a serve worked because the ball is tracked on only about a quarter of the frames there. The detector sees every frame resized to 512 x 288, so the ball is 4-5 px wide at its input (blob widths are multiples of the resize factor). Does a larger ball help? `scripts/infer_tile_k14.py`, `scripts/eval_detector_arms.py`; rule and bar committed before the run (`215fe03`).
+
+**A first arm was dropped.** The registered arm was a crop to the court. Its own log showed the crop was 99% of the frame width on pb_draft_cup (the court corners span 82-85% of the width on both test videos, 55% on brickwall_30fps), so it zoomed nothing. It was stopped before finishing and not scored; replaced by two overlapping tiles (each 60% of the width, 16:9 over the court band plus airspace, resized to 512 x 288, about 1.7x more pixels on the ball). The bar did not change. One scoring run printed numbers from a still-being-written tile file; they were an artifact and discarded, and the scorer now skips incomplete files. A 'tracked' column (tracker-confirmed positions) was added before any complete result was read; reported, not gated.
+
+**Set.** First 600 s of `pb_draft_cup_30fps` (32 labels) and `brickwall-SEMI` (23 labels), 1080p. Same weights (k14), same court mask, same blob picking, same downstream pipeline; the best blob across the two tiles per frame.
+
+**Result.**
+
+| Arm | Video | Ball seen in real rallies | Tracker-confirmed | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| base | pb_draft_cup | 43% | 37% | 22 | 19 | 86% | 59% |
+| base | brickwall-SEMI | 46% | 41% | 21 | 18 | 86% | 78% |
+| tile | pb_draft_cup | 68% | 54% | 26 | 17 | 65% | 53% |
+| tile | brickwall-SEMI | 59% | 52% | 24 | 20 | 83% | 87% |
+| **base pooled** | | **45%** | **39%** | 43 | 37 | **86%** | **67%** |
+| **tile pooled** | | **63% (+19)** | **53% (+13)** | 50 | 37 | **74% (-12)** | **67% (+0)** |
+
+Bar (seen +10 points AND precision and recall each within 3 points AND one up 5): the first part is met, **precision fell 12 points, so the arm does not help.** Speed 22 fps vs 58, about 2.6x the GPU time.
+
+**Reading.** The ball is seen on far more frames (45% to 63%, tracker-confirmed 39% to 53%), so the ball being small at the network input is a real part of the problem. The extra visibility did not turn into better rallies: on pb_draft_cup the tile arm added false rallies (26 predicted, 17 matched; precision 86% to 65%, recall 59% to 53%), while on brickwall-SEMI recall rose (78% to 87%) at a small precision cost (86% to 83%). One video each way; two excerpts of one footage style. Not verified: whether the extra detections are the ball (no per-frame ball truth exists; playback check not done). A ball seen more often may also mean more hallucinations at the larger scale.
+
+**Next.** The modern-YOLO arm (`scripts/infer_yolo_ball.py`, rule committed `6c35209`) is running on the same excerpts. If a tile-like view is pursued, the question becomes tuning the downstream filters for the extra detections, not seeing the ball.
+
+## 2026-10-13 (60 fps vs 30 fps) — Running k14 at the recording's native 60 fps does not make the ball more visible or the rallies better: does not clear the bar
+
+**Why.** PIC-22 ("is the missed-ball problem a camera problem?") had one half untested: does inference at native 60 fps help, since the ball moves half as far between frames. SwingVision's founder says the bounce is not visible without 60 fps (vendor interview). Our venue cameras and all our footage are 30 fps. `scripts/infer_k14_stride.py`, `scripts/eval_fps_arms.py`; rule and bar committed (`3bb7c27`) before the run.
+
+**Set.** One recording (brickwall, 1280x720): `brickwall_pro_series_finals.mp4` at 59.94 fps, same content as `brickwall_30fps.mp4` (same duration, pixel difference 0.6-2.5). First 900 s, 30 labels (end <= 900 s) of 49. Control = every second frame of the same 60 fps file (exactly 30 fps from the same encode). Same weights, mask, blob picking; downstream frame-rate aware (max_jump = 4500 px/s / fps, reset 0.5 s, gap 3.0 s, min 6 crossings), IoU >= 0.5.
+
+**Result.**
+
+| Arm | fps | Ball tracked in real rallies | Median longest blind stretch | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| 30fps_shipped (cached, 30 fps file) | 30 | 40% | 1.42 s | 29 | 20 | 69% | 67% |
+| 30fps_src (control) | 30 | 40% | 1.47 s | 30 | 23 | 77% | 77% |
+| 60fps | 59.9 | 33% | 1.48 s | 31 | 24 | 77% | 80% |
+
+Against the control: tracked -6 points, precision +1, recall +3 (24 vs 23 matched of 30), blind +0.02 s. **Does not help** (bar needed tracked +10 and a 5-point gain in precision or recall).
+
+**Reading.** On this recording and with k14, doubling the frame rate did not make the ball more visible; the tracked share fell slightly and the blind stretches (about 1.5 s) are unchanged. Rally-level results are within noise (one more rally matched). So the missed-ball problem is not simply "too few frames per second" for this model. Caveats: the weights were trained for about 30 fps, so a 3-frame window at 60 fps spans half the time and may be worse for the model than the frame rate is good for the ball; one recording, 30 labels, 720p tournament footage; a model trained at 60 fps was not tested; the cached 30 fps run and the control differ by 3 matched rallies, which is the size of the noise here.
+
+**Consequence.** Do not require 60 fps at venues on this evidence. PIC-22's open half is answered for k14. Frame rate stays a question only for a differently trained model.
+
+## 2026-10-13 (modern YOLO vs k14) — yolo11x zero-shot is cleaner but finds fewer rallies; it does not clear the bar, and it complements k14
+
+**Why.** PIC-228. ADR-046 retired YOLO in August on one rally window and a zero-shot yolov8x. No current YOLO had been compared with k14 on the labelled videos. `scripts/infer_yolo_ball.py` (rule committed `6c35209` before the run), scored with `scripts/eval_detector_arms.py` on the same two 600 s excerpts and the same downstream pipeline as the tile arm.
+
+**Rule.** `yolo11x.pt` (Ultralytics release, downloaded by the operator; this machine has no outbound network), zero-shot, class 'sports ball', imgsz 1280, conf >= 0.10, the highest-confidence box per frame, the same court mask as k14, calibration-resolution coordinates. 18 fps on 1080p was not reached: about 7-8 fps (32 min per excerpt).
+
+**Result.**
+
+| Arm | Video | Seen | Tracked | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| base k14 | pb_draft_cup | 43% | 37% | 22 | 19 | 86% | 59% |
+| base k14 | brickwall-SEMI | 46% | 41% | 21 | 18 | 86% | 78% |
+| yolo11x | pb_draft_cup | 45% | 41% | 14 | 13 | 93% | 41% |
+| yolo11x | brickwall-SEMI | 51% | 50% | 21 | 19 | 90% | 83% |
+| **base pooled** | | **45%** | **39%** | 43 | 37 | **86%** | **67%** |
+| **yolo pooled** | | **48% (+4)** | **46% (+7)** | 35 | 32 | **91% (+5)** | **58% (-9)** |
+
+Bar (seen +10 points, precision and recall each within 3, one up 5): **does not help**. Seen rose only 4 points and recall fell 9.
+
+**Reading.**
+- The detections are cleaner: 96% of YOLO's seen frames were tracker-confirmed vs 87% for k14 and 84% for the tile arm, and precision is higher in both videos (93% and 90%).
+- It is video dependent: on brickwall-SEMI it beat k14 on precision and recall (90% / 83% vs 86% / 78%); on pb_draft_cup it lost most of the rallies (recall 41% vs 59%).
+- Zero-shot, single frame, one box per frame, untuned confidence: not a ceiling. No fine-tuning, no multi-candidate input.
+
+**Post hoc, descriptive (not part of the bar): do the two find the ball on the same frames?** Inside labelled rallies, share of frames where:
+
+| Video | k14 only | yolo only | both, positions agree (<= 25 px) | both, disagree | neither | either |
+|---|---|---|---|---|---|---|
+| pb_draft_cup | 16% | 18% | 25% | 3% | 39% | 61% |
+| brickwall-SEMI | 8% | 14% | 36% | 2% | 40% | 60% |
+
+When both detect, they agree 89-95% of the time. They find different frames (complementary), and a union reaches 60-61%. About 40% of in-rally frames get no detection from either, with different architectures and input sizes: that part may be truly hard or hidden (occlusion, blur, out of frame), which is not shown here.
+
+**Next.** A multi-candidate arm (both detectors' blobs offered to the tracker per frame) is a cheap test with no GPU: the tracker already accepts a candidate list. Not run. Fine-tuning either model needs frame-level ball labels (PIC-228).
+
+## 2026-10-13 (union arm) — Offering both detectors' blobs to the tracker raises tracked frames from 39% to 54% but not rally recall: does not clear the bar, and it shows visibility is not the recall bottleneck
+
+**Why.** PIC-228. After the YOLO arm, k14 and yolo11x were found to see different frames inside real rallies (k14 only 8-16%, yolo only 14-18%, both agreeing 25-36%, neither about 40%). Does offering both to the tracker (it already accepts a candidate list) turn that into better rallies? `scripts/eval_union_arm.py`; rule and bar committed (`8364950`) before the run; no GPU.
+
+**Rule.** Per frame: the court-gated k14 blob and the court-gated yolo11x blob; if both exist within 25 px, only k14's is offered. Downstream unchanged (track_ball 150 px / 15 frames, crossings, gap 3.0 s, min 6, IoU >= 0.5). Same two 600 s excerpts, 55 labels. Bar: recall +5 points AND precision no worse than -3.
+
+**Result (pooled).**
+
+| Arm | Tracked in real rallies | Predicted | Matched | Precision | Recall |
+|---|---|---|---|---|---|
+| k14 (base) | 39% | 43 | 37 | 86% | 67% |
+| yolo11x | 46% | 35 | 32 | 91% | 58% |
+| union | **54%** | 40 | 35 | 88% | 64% |
+
+Union vs k14: recall -4 points, precision +1: **does not help**. By video: pb_draft_cup precision 84% / recall 50% (k14 86% / 59%); brickwall-SEMI 90% / 83% (k14 86% / 78%).
+
+**Post hoc, descriptive (not part of the bar): why more tracked frames did not give more rallies.** For the labelled rallies each arm misses:
+
+| Arm | Missed | A segment overlaps but IoU < 0.5 | Fewer than 6 net crossings in the window | >= 6 crossings but no segment |
+|---|---|---|---|---|
+| k14 | 18 | 6 | 12 | 0 |
+| union | 20 | 5 | 14 | 1 |
+
+Two thirds or more of the misses are rallies with fewer than 6 net crossings in them, so the min_crossings = 6 rule cannot form a segment however many ball frames are tracked. Across every arm so far, tracked share ranged from 39% to 54% (k14, yolo, tile, union) while pooled recall stayed between 58% and 67%, with no relationship between the two.
+
+**Reading.** On these two excerpts, rally-level recall is limited by the crossing-count rule (most plausibly dink and kitchen rallies, where the ball hovers near the net line and image-row crossings are few; compare PIC-48 and the 2026-08-21 entry), not by how often the ball is seen. More detections change which rallies are found only at the margin and cost precision or GPU time. Caveat: two excerpts, 55 labels, in-sample; "few crossings" may include rallies that are not obvious on playback, and this was not watched.
+
+**Consequence.** Detector comparison (PIC-228) has not produced a win on rally-level metrics; the better lever for recall is how a rally is formed from the tracked ball (a different rally-evidence signal than image-row crossings), not more detections.
+
+## 2026-10-13 (background suppression) — Stopped before any result: the registered mask was wrong, and the "fixed spots" are mostly not reflections
+
+**Why.** Operator observation: brickwall footage has no dots or reflections, the PGC footage does; can the picture be cleaned before the model sees it (NVIDIA libraries asked about)? `scripts/infer_k14_suppress.py` and `scripts/eval_suppress.py`, rule and bar committed (`dcfd7f1`) before the run: a per-pixel temporal-median background, white top-hat (31 x 31) at 30 grey levels, components of 12-1500 px that are not elongated, inpainted in every frame before the court mask and inference.
+
+**Stopped, not scored.** The mask image (written at the start of the first run) showed the rule was defective independent of any result: on session 7ace7db9 it covered 69,520 px, 18,956 of them inside the court area, and it flagged the net mesh (a row of blotches exactly on the net line the crossing counter uses), ceiling lights, a window, equipment, plant pots and fence fragments, not floor glare. It would have erased the net. The two runs were killed; their partial outputs deleted; no detection result was read.
+
+**What the fixed spots are (visual, two sessions, one frame each; not a systematic count).** Hot squares from the detector's own re-detections (>= 20x median count) are 14 in 7ace7db9 and 17 in 34fab44c, in about four places: near a far-side player's upper body and clothing; on the kitchen line near its centre-line junction; near the left of the near court; and just beyond the net. In the 34fab44c frame several of these coincide with small yellow-white blobs that look like pickleballs lying on the court. If so, they are real balls at rest (balls lying around during drills), not reflections, and no brightness preprocessing should remove them. Player clothing is the other recurring one. This is a reading of two frames and needs a proper check on playback.
+
+**Consequence.**
+- The premise "static bright reflections that preprocessing can erase" is not supported by what the detector fires on, and the NVIDIA-library question does not arise (they would only run the preprocessing faster).
+- The existing lever is in `track_ball`: `min_seg_frames` / `min_seg_span` drop a confirmed run that is too short or does not move (its docstring names "a ball resting on the floor" and a sparsely visible adjacent-court ball). Off by default, never tested (mentioned as a next step in the 2026-10-12 diagnosis). A segment-level filter differs from the dwell test that failed (that dropped individual detections at re-fired pixels).
+- Not run. A candidate test: the nine hotspot-check clips plus the judged real clips in those two sessions, and the four graded videos for the cost side, with a bar fixed first.
+
+## 2026-10-13 (missed rallies, playback) — The rallies k14 misses are mostly ordinary short rallies, not dinks, and the tracked dot follows the ball: the "6 crossings" rule is cutting real rallies
+
+**Why.** The union arm showed rally recall does not follow ball visibility; 12 of the 18 labelled rallies k14 misses had fewer than 6 net crossings. Operator judged all 18 on playback (`scripts/make_missed_rallies_review.py`, clips 501-518, yellow net row, green tracked dot, crossing counter drawn on; categories hidden).
+
+**What they are (operator).** Normal rally 14, fast exchange 2, slow dinks 1, serve and return only 1. **The tracked dot follows the ball: yes 12, partly 6, no 0.** The hypothesis "the misses are dink / kitchen rallies where the ball hovers at the net" is not supported: 1 of 18.
+
+| Category (hidden) | Clips | Normal | Fast | Dink | Serve + return | Dot yes / partly |
+|---|---|---|---|---|---|---|
+| Fewer than 6 crossings in the window | 12 | 9 | 1 | 1 | 1 | 7 / 5 |
+| A segment overlaps, IoU < 0.5 | 6 | 5 | 1 | 0 | 0 | 5 / 1 |
+
+**Descriptive (from the tracked path, same clips vs the 37 rallies k14 does find):**
+
+| | Duration | Tracked share | Longest blind stretch | Switches of side of the net row |
+|---|---|---|---|---|
+| Found (37) | 10.0 s | 40% | 1.1 s | 9 |
+| Missed (18) | 7.1 s | 36% | 1.2 s | 4 |
+
+The missed rallies are about as visible as the found ones (tracked 36% vs 40%, blind stretch 1.2 vs 1.1 s). What differs is length: 7 s against 10 s, and half as many net-row switches. Typical missed clip: 4-8 s, 2-4 crossings, labelled a normal rally, dot following the ball.
+
+**Reading.**
+- Ball visibility is not why these are missed. A 4-8 s rally with 4 crossings has at least the 3 contacts that LABELING v5 requires, but the pipeline demands 6 crossings.
+- Crossing count is not a measure of how much real play happened: the same entries show a failed serve (no exchange at all) producing 5-12 crossings from a ball bouncing at the net, while real 4-contact rallies produce 3-4. At this range the count does not rank real above fake; raising or lowering min_crossings trades one for the other.
+- 6 clips are fragmentation or boundary problems (IoU < 0.5), the known ADR-072 / PIC-55 class.
+
+**Caveats.** Two excerpts of public tournament footage, 18 clips, all judged by one person, in-sample; the dot being "partly" on 6 means tracking is not always clean. The counted crossings are the image-row crossings the pipeline uses, which is what is under test.
+
+**Next.** A different rally-evidence signal than image-row crossing count, with a bar fixed first, scored on these excerpts plus the failed-serve clips (false-alarm side) and the graded dev videos (cost side).
+
+## 2026-10-13 (why yolo11x loses rallies) — It sees them as often as k14 does, but almost only on the near-camera side of the net row, so its crossings do not accumulate
+
+**Why.** Operator asked why yolo11x lost rallies (pb_draft_cup recall 41% vs k14 59%). Descriptive analysis of the labelled rallies in the two 600 s excerpts, by which arm finds them (both 29, k14 only 8, yolo only 3, neither 15). All 8 "k14 only" rallies are in pb_draft_cup.
+
+| Group | n | Median length | Ball seen: k14 / yolo | Tracked: k14 / yolo | Net crossings: k14 / yolo | Tracked points above the net row: k14 / yolo |
+|---|---|---|---|---|---|---|
+| Both find | 29 | 11.1 s | 45% / 50% | 40% / 48% | 10 / 10 | 66% / 49% |
+| k14 only (yolo loses) | 8 | 7.2 s | 42% / 50% | 39% / 47% | 5 / 3 | 68% / 31% |
+| yolo only | 3 | 7.7 s | 49% / 46% | 37% / 39% | 6 / 6 | 84% / 69% |
+| Neither | 15 | 7.0 s | 41% / 37% | 33% / 36% | 4 / 4 | 78% / 52% |
+
+**Reading.** YOLO does not lose these rallies by seeing the ball less: on the 8 it loses it sees and tracks the ball more often than k14 (50% vs 42% seen, 47% vs 39% tracked). It loses them because its tracked positions sit mostly below the net row (31% above vs 68% for k14), so there are fewer switches of side and the crossing count stays at 3 against k14's 5. "Above the net row" in the image is the far court plus high balls. The likely mechanism, not verified: a small far-court or high ball at 1280 input is the part a single-frame detector misses, and YOLO does well on the larger, near-camera ball. Caveats: 8 rallies, one video; the effect also shows in the "both" group (49% vs 66%), so it is a general lean, not just these eight.
+
+**Consequence.** YOLO's cleaner detections are not a drop-in for k14 under a crossing-count rule; its blind half is the half the rule needs. Tiled or higher-resolution YOLO, or YOLO's detections used only where it is strong, are untested.
+
+## 2026-10-14 (rally formation) — Lowering the crossing threshold or adding a band recovers 5 of 18 missed rallies but costs 17 points of precision; the segment filters were mis-specified for sparse tracks
+
+**Why.** PIC-228 / PIC-48. The missed rallies are ordinary 4-8 s rallies with 2-4 image-row crossings that the "at least 6 crossings" rule cuts, and a failed serve gets 5-12 jitter crossings from a bouncing ball (2026-10-13 entries). Is there a better rule for forming a rally from the same tracked ball? `scripts/eval_rally_formation.py`; arms, sets and bar committed (`d9ae1d0`) before the run; CPU only.
+
+**Arms (fixed before running).** R0 current (band 0, min 6); E1 band 30 px, min 4; E2 band 15 px, min 4; S1 R0 + the tracker's `min_seg_frames` 8 / `min_seg_span` 60 px; S2 E1 + the same filters; A1 k14-and-yolo11x agreement-only frames, min 4 (brickwall excerpts only, not gated).
+
+**Sets.** MISSED: the 18 labelled rallies R0 misses (two 600 s excerpts). PGC: the 30 judged fresh clips (15 real, 12 not a rally, 3 serve-and-return). DEV: the four graded videos pooled (precision and recall at IoU >= 0.5).
+
+**Bar.** HELPS only if: recovers >= 6 of 18; loses at most 1 of the 15 real PGC clips; DEV recall >= R0 - 0.02 and precision >= R0 - 0.03.
+
+| Arm | Missed recovered (of 18) | PGC real kept (of 15) | PGC non-rally removed (of 15) | DEV precision | DEV recall |
+|---|---|---|---|---|---|
+| R0 | 0 | 15 | 0 | 74.2% | 45.9% |
+| E1 (band 30, min 4) | 5 | 11 | 1 | 41.3% | 25.8% |
+| E2 (band 15, min 4) | 5 | 15 | 0 | 57.4% | 47.9% |
+| S1 (R0 + segment filters) | 0 | 2 | 13 | 31.4% | 5.7% |
+| S2 (E1 + filters) | 2 | 3 | 14 | 24.4% | 5.2% |
+| A1 (agreement only) | 0 | | | | |
+
+**Result: no arm helps.** E2 comes closest and shows the trade: it recovers 5 of 18 and keeps every real PGC clip, but pooled DEV precision falls 74.2% to 57.4% (bar: not below 71.2%) and it removes none of the non-rally clips. E1's band costs real rallies (4 of 15 lost, DEV recall 26%).
+
+**S1 and S2 were mis-specified, so they say nothing about resting balls.** `track_ball`'s segment filters act on maximal runs of consecutive accepted frames. With the ball accepted on about 40% of frames, runs are short: on brickwall-SEMI's first 600 s the median run is 3 frames and only 21% of the 1044 runs reach 8 frames, so `min_seg_frames` 8 deletes most of the track. A usable "ball at rest" filter would need to bridge gaps, which the existing code does not. Not re-run with other values: these sets are the test.
+
+**A1** recovered nothing: agreement frames are sparse (25-36% of in-rally frames).
+
+**Reading.** On these sets, forming rallies from image-row crossings has a fixed trade: every variant that recovers more of the short rallies adds false rallies in proportion. That matches the earlier finding that the count is not informative at the 3-6 range. Whatever evidence of a rally replaces it must carry information the net-row crossings do not (real travel between the ends of the court in court coordinates, or contacts), not a different threshold on the same counter.
+
+**Caveats.** DEV baseline here is the four graded videos pooled over their whole length (R0 recall 45.9%), not the 600 s excerpts used elsewhere (67%); comparisons are within this table. PGC clips are by construction all detected by R0.
+
+## 2026-10-14 (ship-only-the-best guardrail) — On PGC field footage the shipped 0-100 score and per-session top-N do not separate real rallies from false ones; precision stays near 50% at every cut-off
+
+**Why.** The operator wants a reliable guardrail against false positives before the data exists for a learned model, and asked whether "9 in 10 shipped clips are real" is realistic. That number had no evidence behind it; this run measures what score-based selection actually delivers on field footage. Public footage (brickwall etc.) is stronger play and flatters the 73% / 67% figures.
+
+**Method.** `scripts/eval_topn_precision.py`. The 30 judged PGC clips (15 real, 3 serve-and-return only, 12 not a rally; verdicts from playback). Every rally detected in the 8 fresh segments (68 total) is scored with the shipped fixed 0-100 score (`score_segments`); detection is the shipped rule (gap 3.0 s, min 6 crossings). Precision of what is kept at each score cut-off and at each per-session top-N. Descriptive, no pass/fail bar (the point was to learn what bar is realistic).
+
+| Score >= | Kept of 30 | Real kept (of 15) | Precision (real only) | Precision (serve+return counted) |
+|---|---|---|---|---|
+| 0 | 30 | 15 | 50% | 60% |
+| 40 | 29 | 14 | 48% | 59% |
+| 50 | 21 | 9 | 43% | 57% |
+| 55 | 16 | 6 | 38% | 56% |
+| 60 | 8 | 4 | 50% | 50% |
+
+| Per-session top-N | Kept | Real kept (of 15) | Precision (real only) |
+|---|---|---|---|
+| 1 | 2 | 1 | 50% |
+| 2 | 7 | 4 | 57% |
+| 3 | 9 | 5 | 56% |
+| 5 | 15 | 6 | 40% |
+| 8 | 22 | 10 | 45% |
+
+**Result.** Raising the cut-off throws away real clips about as fast as false ones. Precision does not climb above roughly 50-57% at any setting, and 4 of the top 8 judged clips by score are not rallies (failed serves score high: long, fast bouncing crossings). The score ranks highlights among real rallies (ADR-063/133, validated on graded public footage); it is not a rally-vs-not-rally filter on this footage.
+
+**Consequence.** A score cut-off or top-N is not a guardrail for field footage. What is left before a learned model exists: human review of each clip before delivery, which also produces the labels. A "9 in 10" bar is not supported by anything measured.
+
+**Caveats.** 30 judged clips, one venue, a sample ("near" and "rand" groups) of the 68 detected rallies, so every percentage above has a wide interval (one clip is 3 points). Verdicts are one operator's; agreement on what counts as a rally was about one in three in earlier labelling (project_labeling_noise_floor).
+
+## 2026-10-14 (ship-only-the-best, public footage) — The same score cut-off and top-N reach 92-95% precision on the four graded public videos, against about 50% on PGC field footage
+
+**Why.** Companion to the PGC run directly above: is the score a usable filter on the footage it was validated on?
+
+**Method.** `scripts/eval_topn_precision_public.py`: the four graded videos (brickwall_30fps, pb_draft_cup, IMG_7744, brickwall-SEMI first 900 s), shipped detection, fixed 0-100 score, a detection counts as real when it matches a hand label at IoU >= 0.5. Pooled: 120 detections, 89 real (74%), 194 labelled rallies.
+
+| Score >= | Kept | Precision | Recall (of 194 labelled) |
+|---|---|---|---|
+| 0 | 120 | 74% | 46% |
+| 50 | 96 | 81% | 40% |
+| 55 | 78 | 82% | 33% |
+| 60 | 65 | 86% | 29% |
+| 65 | 53 | 89% | 24% |
+
+Top-N per video: top 3 = 92% (12 clips), top 5 = 95% (20), top 8 = 94% (32), top 12 = 94% (48).
+
+**Reading.** Here the score does work as a filter: cutting low scorers raises precision steadily, and the top few per video are almost all real. On PGC the same rule left precision at 38-57% (previous entry). The difference is the footage: stronger players, long rallies, and failed serves are rarer, so the long-fast-bouncing look is mostly real rallies.
+
+**Caveats.** Videos are 20-40 detections each; PGC sessions are 2-17, so per-video top-N is not the same quantity as per-session top-N. Public videos are also where the score's constants were tuned (ADR-133), so the margin is optimistic. Recall on IMG_7744 is low by construction (75 labelled, 23 detected).
+
+## 2026-10-14 (bounce check, no labels) — On the 38 pilot clips the bounce finder yields about 0.26 candidates per net crossing on both PGC and public footage; the ball is tracked on about 43% of frames
+
+**Why.** Before spending an hour hand-labelling bounces, look at what the system produces on the clips that would be labelled. Proxy only: with no ground truth this cannot give recall or precision.
+
+**Method.** `scripts/check_bounce_candidates.py` on `eval/labels/bounces/sample.json` (18 PGC, 20 public). Per clip: tracked share of frames, longest blind stretch, bounce candidates from `serve_bounce_probe.candidates` (rules unchanged), candidates inside the court +-3 ft, and net crossings.
+
+| Set | Clips | Mean tracked share | Mean longest blind | Candidates (on court) | Crossings | Candidates per crossing |
+|---|---|---|---|---|---|---|
+| PGC | 18 | 43% | 1.0 s | 35 (35) | 135 | 0.26 |
+| Public | 20 | 42% | 1.2 s | 57 (48) | 209 | 0.27 |
+
+**Reading.** A rally that crosses the net N times has about N flights, and most end in a bounce, though volleys (common at the kitchen) end in none and crossings include jitter. Even allowing for that, 0.26 per crossing says the finder sees only a fraction of the bounces; the 1-1.2 s longest blind stretch is as long as a typical flight, so a bounce can sit entirely inside a gap. PGC is no worse than public on these proxies, which fits the earlier finding that it is the ball not being tracked, not the player level, that limits this. Every PGC candidate is on court; 9 of 57 public candidates are not, so the finder also produces some noise on public footage.
+
+**Does not show.** How many real bounces exist, how many candidates are real, or the court error. Those need the hand labels (`label_bounce_web.py`).
+
+## 2026-10-15 (bounce pilot, PGC, hand labels) — The bounce finder recovers 14% of 42 hand-labelled bounces on 18 PGC clips against a 40% bar; the ball is tracked at 74% of them, so the loss is in the finder, mostly because too few tracked points surround the bounce
+
+**Why.** The pilot's question: is a zone-level landing map a near-term feature? The pass bar was fixed in `scripts/eval_bounce_recovery.py` before any label existed: tracked >= 50%, found >= 40%, near-half median court error <= 1.5 ft.
+
+**Method.** The 18 PGC clips of `eval/labels/bounces/sample.json`, cut to `clips/bounce_pilot/` (re-encoded, 30 fps) and labelled blind in a local CVAT (points, one per bounce; replaces `label_bounce_web.py` for this run). 42 bounces, 2.3 per clip. Completeness is the operator's word: no clip was re-checked by a second pass, and a spot-check of the two sparsest clips (pgc-303, pgc-327) added nothing. Labels read straight from CVAT's database (`scripts/cvat_to_bounce_labels.py`), clip frame -> source frame = ceil(start x 30) + i. Scored with `eval_bounce_recovery.py` (+-3 frames, 15 px; IoU is not involved). Detections: the k14 `cache/fresh/*.csv` of the PGC sample, default finder rules.
+
+| Group | n | seen | tracked | found | median court error (found) |
+|---|---|---|---|---|---|
+| PGC all | 42 | 81% | 74% | **14%** (6) | 0.28 ft |
+| near half | 15 | 73% | 67% | 7% (1) | n=1, not meaningful |
+| far half | 27 | 85% | 78% | 19% (5) | 0.93 ft |
+
+**BAR (PGC): tracked 74% (pass), found 14% (FAIL), near-half error not assessable (1 found).** The finder also emitted 35 candidates inside these clips; 6 match a label.
+
+**Why the 36 misses.** For each, the first rule that rejected it (`serve_bounce_probe.candidates`: needs >= 2 tracked points in each of the 6 frames before and after, the point to be the lowest in that window, and an 8 px dip):
+
+| Reason | Bounces |
+|---|---|
+| Ball not tracked within 3 frames of the bounce | 11 |
+| Tracked, but fewer than 2 tracked points before or after within 6 frames | 16 |
+| Tracked, but not the lowest point in +-6 frames (track keeps going down) | 8 |
+| Dip under 8 px | 1 |
+
+The reading is not "the finder is bad on tracked bounces": tracked-at-the-bounce is 74%, but the rule also needs a short run of tracked points on both sides, and the ball is tracked on only about 43% of frames, so gaps around the bounce kill 16 more. Detection density, not the rule's shape, is the main cause.
+
+**Exploratory: loosening the rule (tuned on the same labels, not shipped).**
+
+| span (frames) | min points each side | min dip (px) | found / 42 | candidates | matching a label |
+|---|---|---|---|---|---|
+| 6 | 2 | 8 | 6 (14%) | 35 | 6 (17%) |
+| 6 | 1 | 8 | 8 (19%) | 46 | 8 (17%) |
+| 10 | 1 | 8 | 9 (21%) | 44 | 9 (20%) |
+| 10 | 1 | 4 | 10 (24%) | 47 | 10 (21%) |
+| 15 | 1 | 4 | 9 (21%) | 50 | 9 (18%) |
+
+No setting gets near 40%, and about four in five candidates match no label, so loosening trades a little recall for no precision. This is optimistic by construction (parameters chosen against the scoring labels).
+
+**Unselected cross-check (one 3-minute PGC chunk, eda301d9 2026-09-25 08:21 session-000, 33 bounces, not a pilot clip).** Camera calibration borrowed from the same camera's 10:01 recording (`365c798c`), so court-error figures there are weak. Seen 55%, tracked 48%, found 15%; 7 of 18 candidates match a label. Tracked coverage at bounces is 74% in the curated pilot clips versus 48% here: the selection effect, since the pilot clips are rallies the system had already flagged and a person judged real.
+
+**Caveats.** 42 bounces, 18 clips, one venue, default rules, single labeller. Labels not independently re-marked, so the "unmatched candidates" may include unmarked bounces. Paddle contacts also reverse the ball in image y; whether the unmatched candidates are mostly hits was not checked. Court errors for 6 matches are not an estimate of anything.
+
+**Does not show.** Whether a better tracker (denser detections) would clear the bar, how many unmatched candidates are real bounces, or line-call accuracy.
+
+## 2026-10-15 (bounce pilot, tile arm) — Running k14 on two zoomed tiles finds 19 of 42 hand-labelled PGC bounces (45%) against 8 (19%) for the whole frame: clears the 40% bar, driven by the far half of the court
+
+**Why.** The entry above found the loss was mostly thin tracking around the bounce, not the finder's rule. `infer_tile_k14.py` (2026-10-13) made k14 see the ball more often on public excerpts but hurt rally precision there; nobody had tried it on bounces. Rule and bar were committed before the run (`ff40b10`): clears the bar at >= 17 of 42 found, informative gain at >= 12, no help below.
+
+**Method.** Both arms run on the 18 cut clips in `clips/bounce_pilot/` (so like for like, not the cached full-session detections): `base` = `scripts/pod_infer.py`, whole frame, court mask; `tile` = `scripts/infer_tile_k14.py`, two 60%-width overlapping tiles, rule unchanged. Same k14 weights, same per-clip calibration, same tracker and finder rules. Same 42 labels, +-3 frames and 15 px. `scripts/eval_bounce_tile.py`.
+
+| Arm | Frames with a detection | Seen | Tracked | Found | Candidates in clips | Matching a label | Median court error (found) |
+|---|---|---|---|---|---|---|---|
+| base | 36% | 86% | 64% | **8 (19%)** | 17 | 10 | 1.12 ft |
+| tile | 37% | 86% | 83% | **19 (45%)** | 28 | 20 | 0.71 ft |
+
+**VERDICT: clears the bar** (>= 40%).
+
+**How robust.** Of the 42 bounces: found by both 5, tile only 14, base only 3, neither 20 (the discordant 14 vs 3 is unlikely to be chance, sign test p about 0.01). By half of the court: far 7 -> 16 of 27, near 1 -> 3 of 15. By clip: tile finds more in 7, fewer in 3, the same in 8.
+
+**Reading.** The raw detection rate barely moves (36% -> 37%, "seen" 86% in both), but the detections the tile arm makes are the ones the tracker accepts: tracked at the bounce rises 64% -> 83%, and the far half of the court, where the ball is smallest, gains most. So more consecutive usable points around a bounce, not more detections overall, is what the finder needed. Zooming is the cheapest lever found so far; a longer frame stack (retraining) was not tested.
+
+**Caveats.** Same 42 labels and 18 clips that motivated the hypothesis, one venue, one labeller (completeness is the operator's word); the arm itself was not tuned on them. The base arm here (19% found, 17 candidates) is not the same run as the cached full-session detections in the entry above (14% found, 35 candidates), because the clips are re-encoded and the tracker starts fresh at each clip; the two arms here are comparable with each other, not with that number. The tile arm costs two network passes per frame, and on public footage it raised false rallies (2026-10-13), so it is a candidate for a bounce pass over already-detected rallies only, not a drop-in replacement for the shipped detector. Near-half evidence is 15 bounces. Court error is measured only on the found ones (8 and 19).
+
+**Does not show.** Whether it holds on unselected stretches or a second camera, whether the unmatched candidates (8 of 28) are real bounces or paddle contacts, line-call accuracy, or the cost and latency in production.
+
+## 2026-10-15 (bounce pilot, tile arm, unselected chunk) — On one continuous 3-minute PGC chunk the tile arm finds 14 of 33 hand-labelled bounces (42%) against 5 (15%) for the whole frame: the gain holds, at the bar's edge
+
+**Why.** The 18 pilot clips are rallies the system had already flagged and a person judged real, and they are where the tile hypothesis came from (entry above). One continuous stretch, with every bounce the operator saw marked, is not selected that way.
+
+**Method.** `eda301d9` 2026-09-25 08:21 `session-000.mkv`, 5,390 frames, 33 bounces labelled in CVAT (the first labelled video, `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json`). Base = the existing `pod_infer.py` detections of the same video; tile = `infer_tile_k14.py`, rule unchanged. Calibration borrowed from the same camera's 10:01 recording (`365c798c`), used for the court mask and gate in both arms. Rule and bar committed before the run (`da66c31`): holds at >= 14 of 33. `scripts/eval_bounce_tile_chunk.py`.
+
+| Arm | Seen | Tracked | Found | Candidates | Matching a label | Median court error (found) |
+|---|---|---|---|---|---|---|
+| base | 55% | 48% | **5 (15%)** | 18 | 7 | 0.20 ft |
+| tile | 88% | 85% | **14 (42%)** | 37 | 17 | 0.20 ft |
+
+**VERDICT: holds** (>= 40%), by one bounce: 14 is the bar's minimum.
+
+**How robust.** Found by both 5, tile only 9, base only 0. Across the video in thirds: 5 / 5 / 4 found by the tile arm against 4 / 1 / 0 for base, so it is not one stretch. Unlike the pilot clips, here the tile arm also lifts how often the ball is seen at all (55% -> 88%): this footage is harder for the whole-frame detector.
+
+**Caveats.** Single chunk, single camera, single labeller; the result sits exactly at the bar, so a count of 13 would have read "partly holds". The calibration is borrowed, so court error is weak and the mask could clip the ball if the camera moved between recordings (it affects both arms alike). 20 of 37 tile candidates match no label: unmarked bounces, paddle contacts or noise, not separated. The two bounce tests were designed by the person who saw the first.
+
+**Does not show.** A second camera or venue, unlabelled-bounce rate (completeness is the operator's word), runtime cost, or what the extra candidates are.
+
+## 2026-10-15 (bounce pilot, review of the tile arm's unmatched candidates) — Of the 20 tile candidates that matched no label, 6 were real bounces the operator had not marked and 13 were paddle hits; the finder cannot tell the two apart, and the labels were about 85% complete
+
+**Why.** The tile arm on the unselected chunk (entry above) had 37 candidates and 20 matched no label. Unmatched could mean unmarked bounces, hits, or noise, which changes both precision and the labels' completeness.
+
+**Method.** Each of the 20 was cut to a 3 s clip (`clips/candidate_review/`, git-ignored) with a red box on the candidate for 3 frames, loaded as CVAT tasks, and tagged by the operator after watching it: `bounce`, `paddle_hit`, `not_ball`, `unsure`, one tag on the box's frame. Not blind by design: the box shows the finder's guess. Tags read from CVAT's database. Candidate list and clip frames in `cache/bounce_pilot/candidate_review.json`.
+
+| Operator's tag | Candidates | Which |
+|---|---|---|
+| bounce | 6 | 9, 12, 13, 14, 18, 20 |
+| paddle_hit | 13 | 1-6 (all the first 300 frames, before any labelled bounce), 7, 8, 10, 11, 16, 17, 19 |
+| not_ball | 1 | 15 |
+
+**What it changes.**
+- **Labels were incomplete by at least 6**: 33 marked + 6 found = 39, so the operator marked about 85% of what was there (a floor: only tile candidates were reviewed).
+- **The tile arm's precision is higher than 17 of 37**: counting the 17 matched ones as bounces, 23 of 37 candidates (62%) are real bounces. 13 of 37 (35%) are paddle hits, which reverse the ball in image y like a bounce does. Whether any of the 17 matched ones are hits was not reviewed.
+- **Recall on the augmented set**: tile 20 of 39 (51%), whole frame 6 of 39 (15%; it also had candidate 20). This is biased toward the tile arm by construction (the 6 were added because the tile arm produced them), so the pre-registered result stays 14 of 33 on the original labels.
+
+**Reading.** The finder's main precision problem is hits, not noise: only 1 of 20 was not the ball (clip 7 was tagged after the first tally: paddle_hit). A bounce needs a different cue from "ball lowest in the window" (a paddle in contact, or the ball's speed change, or a player nearby) to be told from a hit.
+
+**Caveats.** One operator, one chunk, judged by playback at the box; the "bounce" calls were not repeated or second-checked.
+
+**Does not show.** How many of the 17 matched candidates are hits, whether a hit/bounce separator is feasible, or the labelled-bounce completeness on the 18 pilot clips (not reviewed).
+
+## 2026-10-15 (audio check, bounce vs paddle hit) — The recording's audio does not separate a bounce from a paddle hit: only 32% of the 19 tagged events show a sound above the hall noise (random times: 24%), and no feature separates the classes
+
+**Why.** The ball track cannot tell a bounce from a paddle hit (candidate review above: 6 bounces, 13 hits). The PGC recording has a 16 kHz mono audio track (`pcm_mulaw`), and impact sounds need no ball track.
+
+**Method.** `scripts/eval_audio_hit_vs_bounce.py`, rule and bar committed before the run (`21c5566`). For each of the 19 tagged candidate events (6 bounce, 13 paddle_hit; the not_ball excluded): audio high-passed at 300 Hz, 10 ms RMS envelope; R = peak envelope in +-0.15 s of the candidate time over the median envelope in +-1.5 s; "has a sound" if R >= 4. Spectral centroid and high-frequency share at the peak. The 17 matched candidates were held out and not read.
+
+| | Result | Bar |
+|---|---|---|
+| Events with a sound (R >= 4) | 32% | >= 80% |
+| Random times with R >= 4 | 24% | <= 40% (passes) |
+| Best single feature (centroid) AUC, bounce vs hit | 0.60 | >= 0.85 or <= 0.15 |
+| Median distance of the envelope peak from the candidate | 98 ms (about the window's edge) | n/a |
+
+**FAIL on (a) and (b).** The held-out confirmation (c) was not run.
+
+**Diagnostics after the fail (exploratory, not part of the bar).**
+- The audio is loud and not silent: RMS 0.16, 99th-percentile envelope 0.59. It is dominated by hall noise, not by impacts.
+- A lag scan from -0.6 to +0.8 s around the **33 original bounce labels** (independent of the 19 tags) shows no onset at any lag: R >= 4 for at most 27% of labels (13% at random times), and below random at +0.1 to +0.3 s. So a ball bouncing on the floor is not audible in this recording, and there is no constant audio/video offset that would rescue it.
+- On the 19 tagged events, a mild rise appears at +0.1 to +0.4 s (31% with R >= 4 for hits, 17-33% for bounces, against 12-16% at random), but it is the same for both classes and n is 13 and 6, so it does not separate them.
+
+**Reading.** Audio from this camera is not a usable cue for bounces, and not a bounce/hit separator. The microphone is far from the court and the hall is loud. Venue audio was not tested at any other distance or with a mic near the court.
+
+**Caveats.** One chunk, one camera, 19 events; audio/video sync from the container (start times 0) not independently verified, though the lag scan above found nothing at any lag. A better microphone, or per-frequency-band noise reduction, was not tried.
+
+**Does not show.** That audio could never work, only that this recording does not carry it.
+
+## 2026-10-15 (motion check, bounce vs paddle hit) — Speed after the event divided by speed before separates 23 bounces from 13 hits (AUC 0.88, leave-one-out accuracy 83%); passes the registered bar, with no held-out data
+
+**Why.** The tile arm's candidates are a mix of bounces and hits that the ball track alone cannot tell apart (and the audio could not: entry above). The operator tagged all 37 candidates in CVAT: 23 bounce (17 matched to labels, 6 unmarked), 13 paddle_hit, 1 not_ball. A bounce loses energy; a paddle usually adds it.
+
+**Method.** `scripts/eval_motion_hit_vs_bounce.py`, features and bar committed before the run (`2f40f7b`). Tile-arm tracked points of the unselected chunk (eda301d9 2026-09-25 08:21 session-000); at each candidate, a line fitted to the 8 frames before and after gives (vx, vy) per side; four features. Bar: features computable for >= 80%, best feature AUC >= 0.85 or <= 0.15, label-shuffle p < 0.01 (the shuffle covers picking the best of four).
+
+| Feature | Bounce median | Hit median | AUC (bounce > hit) |
+|---|---|---|---|
+| speed_ratio (speed out / speed in) | 0.72 | 1.13 | **0.12** |
+| side_change | 0.12 | 0.33 | 0.29 |
+| speed_out | 6.34 | 7.54 | 0.48 |
+| turn_deg | 133 | 151 | 0.45 |
+
+Coverage 36 of 36. Best feature `speed_ratio`, shuffle p = 0.0008. **All three parts of the bar pass.**
+
+**What it looks like as a classifier** (exploratory; threshold not part of the bar). Leave-one-out accuracy 30 of 36 (83%; always saying "bounce" scores 64%). A single threshold at 0.95 catches 11 of 13 hits and keeps 20 of 23 bounces. The bounces above the line are 0.97, 1.39 and 2.46; the hits below it 0.75 and 0.84.
+
+**Reading.** A hit makes the ball leave faster than it arrived (median ratio 1.13, up to 6.9); a bounce loses a quarter to a half of its speed (median 0.72). The ratio is a within-event quantity, which cancels most of the perspective effect on pixel speed. With it, the tile arm's 37 candidates would be pruned to roughly 20 bounces plus 2 hits plus 1 not-a-ball.
+
+**Caveats.** All 36 events come from one 3-minute chunk of one camera and one court, tagged by one operator who also watched the clips knowing the box was the finder's guess. n is 23 vs 13, and the threshold and the "best of four" are chosen on the same events (the leave-one-out and the shuffle test reduce but do not remove that). Speeds come from the same tracked points whose gaps limited the finder, so events with thin tracking around them are underrepresented by construction (36 of 36 had at least 3 points each side only because candidates require them).
+
+**Does not show.** Whether it holds on a second chunk, camera or venue; how it behaves on hits by a ball near the net or volleys; what happens to bounces that the finder did not reach in the first place (14 of 33 found).
+
+## 2026-10-15 (Test C) — A lower-threshold candidate pool chosen by a confidence + physics score loses most real rallies: FAIL, and the choice rule is not what changed the result
+
+**Why.** PIC-226 / PIC-228. Test B gave the tracker 3 blobs cut at heatmap 0.5 and the real ball was often not among them. The operator's design: lower the cut so mid-confidence candidates exist, then choose by confidence x weight + proximity to the predicted path, imposter rejection, short coasting.
+
+**Method.** Same 136 windows / 18 videos as Test B, re-inferred at threshold 0.25, up to 5 blobs (`scripts/infer_topk.py --thresh`, `run_topk_windows.py`, `cache/topk_t25/`). Variants and the pass rule were committed before the run (`c664dfb`, `scripts/validate_topk_c.py`, `scripts/track_associate.py`): C0 production; C1 pool + existing `track_ball`; C2 pool + score 0.5 confidence + 0.5 proximity; C3 C2 + constant-velocity Kalman, coast 3 frames.
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 | Segments |
+|---|---|---|---|---|---|---|
+| C0 production | 0 | 0 | 0 | 0 | 0.615 | 184 |
+| C1 pool, existing tracker | 20 | 38 | 4 | 25 | 0.562 | 176 |
+| C2 + combined score | 19 | 39 | 4 | 25 | 0.563 | 176 |
+| C3 + Kalman, coast 3 | 21 | 40 | 4 | 25 | 0.579 | 177 |
+
+**Result: all FAIL** (rule: zero graded or real field clips lost, >= 4 of 8 scenery fakes removed, score not worse, fragmentation <= 10%). C0 reproduces Test B's V0 exactly (184 segments, 0 lost).
+
+**What the pool looks like.** At 0.25 there are blobs in 89,091 frames against 44,158 at 0.5: 45k extra frames hold only a weak blob. 50% of blob frames have 2+ blobs (12% at 0.5). Rank 1 is unchanged for 93% of the frames that had a 0.5 blob (median shift 2 px).
+
+**Reading (not verified clip by clip).** The three variants lose almost the same clips, so the choice rule (nearest, score, Kalman) is not what separates them from production; the pool is. Weak blobs on frames where the ball is absent give the tracker something to accept, and the extra accepted points change the crossing pattern enough that real rallies no longer match at IoU 0.5. It removes 4 of the 8 scenery fakes (202, 203, 207, 209) but at a cost of most real rallies.
+
+**Does not show.** Whether a pool between 0.5 and 0.25 (say 0.4), or the association with a minimum-confidence floor per frame, would keep the real rallies; whether the lost clips are merged, shortened or split (not inspected); anything about bounces (the 18 bounce clips were not run).
+
+## 2026-10-15 (Test D) — Whole-track scoring over 1.5 s windows removes all 8 scenery fakes and 28 of 35 not-real clips, but loses 25 of 60 real field clips and 33 of 83 graded rallies: FAIL
+
+**Why.** PIC-226. Operator's idea: judge the track, not the dot. Fakes are pixel-locked or crawl; a real ball flies. Windows of 45 frames (step 15), flight pieces (>= 5 points, quadratic fit RMS <= 6 px, >= 80 px path, median >= 4 px/frame), a window is ball-like when >= 50% of its points are in flight pieces; points are dropped when every scored window holding them is not ball-like. Rules and bar committed before the run (`scripts/track_score_windows.py`, `scripts/validate_topk_d.py`); nothing tuned.
+
+**Method.** Production top-1 at 0.5 tracked with `track_ball`, then window scoring; same 136 windows, 18 videos and pass rule as Tests B and C.
+
+| Variant | Graded dev lost (of 83) | Real field clips lost (of 60) | Scenery fakes removed (of 8) | Not-real removed (of 35) | Chance q1>q2 | Segments |
+|---|---|---|---|---|---|---|
+| C0 production | 0 | 0 | 0 | 0 | 0.615 | 184 |
+| D1 window scoring | 33 | 25 | **8** | **28** | **0.707** | 129 |
+
+**Result: FAIL** (rules 1 and 2). It passes (3) scenery fakes, (4) score quality, (5) fragmentation.
+
+**Reading.** First filter in this series that separates the fakes: all 8 scenery clips and 28 of 35 not-real clips go, and the surviving rallies rank better (0.615 -> 0.707). But it also removes about 40% of real rallies. Not checked: why. A likely cause (unverified) is that the ball is accepted on only about 40% of frames, so real flights often lack 5 close points and fail the "flight piece" test; the rule then treats a sparse real ball like a fake.
+
+**Does not show.** Which of the five thresholds drives the real losses; whether looser pieces (more gap, fewer points) keep the real rallies and still drop the fakes; whether it holds out of sample. Changing the rules now would be tuning on the same windows, so any second version needs its own registered bar and a held-out set.
+
+## 2026-10-15 (Test D2/D3) — Tuned window track scoring, cross-validated by session: loses 12 of 60 real field clips (was 25), removes 7 of 8 scenery fakes and 18 of 35 not-real clips: FAIL on the real-clip bar
+
+**Why.** Test D1 separated the fakes but lost 40% of real rallies. Diagnosis of the dropped real rallies (points failing the flight test): poor quadratic fit 37%, fewer than 5 points in the piece 38%, short path 24%, speed 0% (never binds).
+
+**Method.** Grid, split, selection rule and bar committed before each run. D2 (`scripts/tune_window_scoring.py`): tune on the 4 dev videos + 2 field sessions, test on 13 held-out field sessions. D3 (`scripts/tune_window_scoring_cv.py`): 14 field sessions in 5 folds by session; config chosen on dev + the other folds, scored on the held fold. 72 configs: fit RMS {6, 8, 12, 16} px, minimum piece {3, 4, 5} points, minimum path {40, 60, 80} px, ball-like share {0.3, 0.5}.
+
+**D2 (flawed split).** The tune half held only 2 real field clips. Chosen (16, 4, 40, 0.3): dev losses 33 -> 3 of 83, but held-out field lost 12 of 58 real clips (D1: 25), fakes 2 of 2, not-real 11 of 27. Fail; the split let dev videos dominate the choice.
+
+**D3 (cross-validated).** The same config, (RMS 16 px, piece >= 4 points, path >= 40 px, share 0.3), was chosen in all 5 folds.
+
+| Held-out, summed over folds | Result | D3 bar |
+|---|---|---|
+| Real field clips lost | 12 of 60 | <= 3: FAIL |
+| Graded dev rallies lost | 3 of 83 | <= 5: pass |
+| Scenery fakes removed | 7 of 8 | >= 60%: pass |
+| Not-real clips removed | 18 of 35 (51%) | >= 50%: pass |
+| Segments | 98 -> 79 | |
+
+**Result: FAIL** on real field clips. Loosening the flight test cut real field losses from 25 to 12 and kept most of the separation, but one real field clip in five is still removed.
+
+**Does not show.** Which real clips are lost and whether they share a cause (not inspected); whether the config transfers to a second venue; whether any config can reach zero losses (the grid's best on tuning data still lost some). Fold sizes are small (0-5 fakes per fold), so the fakes figure is a count of 8, not a rate.
+
+## 2026-10-15 (Test D4) — Scoring whole rallies instead of deleting points loses 1 of 60 real field clips and 0 of 83 graded rallies while removing 5 of 8 scenery fakes; fails the registered bar only on not-real removal (5 of 35)
+
+**Why.** Point deletion (D1-D3) fragments real rallies: best cross-validated result lost 12 of 60 real field clips. D4 leaves tracking untouched and drops a detected rally whole when its flight score is low.
+
+**Method.** `scripts/tune_rally_scoring_cv.py`, grid (72 configs), 5 session folds, selection rule and bar committed before the run. Flight score: mean over windows of the share of tracked points in flight pieces; drop when below T.
+
+| Held-out, summed over 5 folds | Result | Bar |
+|---|---|---|
+| Real field clips lost | **1 of 60** | <= 3: pass |
+| Graded dev rallies lost | **0 of 83** | <= 5: pass |
+| Scenery fakes removed | **5 of 8** (62%) | >= 60%: pass |
+| Not-real clips removed | **5 of 35** (14%) | >= 50%: **FAIL** |
+| Rallies | 98 -> 92 | |
+
+Config (W 45, gap 3, RMS 8 px, min piece 3 points, T 0.15) chosen in 4 of 5 folds; fold 1 chose W 90, gap 6.
+
+**Result: FAIL on the registered bar** (not-real removal). Reading it honestly: the not-real criterion was inherited from D3 and counts failed serves, practice and serve-and-return clips, which contain a real ball in real flights; a dot filter was not built to remove them and does not. On the dot/light question (the 8 scenery fakes) with almost no real loss it is the best result in this series. That reading was made after seeing the result, so it is not a pass.
+
+**Selection note.** The rule "fewest real lost" drives T to its minimum (0.15), the most conservative drop; the data cannot say whether a higher T would remove more fakes at similar cost because the selection never preferred it.
+
+**Does not show.** Why the 3 unremoved scenery fakes survive; generalisation to a second venue (one venue, 14 sessions, 8 fakes, 3 of them in one fold); that it helps reels, since dots are a minority of the false rallies.
+
+## 2026-10-16 (D4 at scale) — The frozen D4 filter drops 12 of 329 rallies on 36 new PGC sessions; 3 of the 12 are real rallies on the operator's final verdict (pass, exactly at the limit), 5 on the first pass (fail)
+
+**Why.** PIC-226. D4 was tuned on 14 sessions with labelled fakes. Before turning it on, check on sessions it never saw that what it throws away is junk. Pre-registered in `scripts/scale_rally_scoring.py` (`8ee9cf8`) before inference ran.
+
+**Method.** Frozen D4 config (W 45, gap 3, RMS 8 px, min piece 3, T 0.15), production detection (gap 3.0 s, >= 6 crossings, court wedge, `track_ball`). 37 new PGC sessions planned (every 2026-09-26 session + every 2026-09-25 session of camera de3d1953, `scripts/scale_plan.py`), 36 with a calibration match; 15 failed the 98% decode guard and were re-encoded to CFR first (`scripts/reencode_scale.py`). Every dropped rally (12, under the sample-40 cap) was cut to a clip and tagged by the operator from playback in local CVAT (project `scale-dropped-review`, `scripts/cvat_make_scale_review.py`). Verdicts: `eval/labels/scale_dropped_review.jsonl`.
+
+**Bar.** Of the tagged dropped rallies (excluding unsure), >= 70% not_a_rally AND <= 3 real_rally (3 > 10% of 12). Drop rate > 25% = aggressive.
+
+| | First pass | Final verdict |
+|---|---|---|
+| Not a rally | 6 | **9** (75%) |
+| Real rally | 5 (d-03, 05, 07, 09, 11) | **3** (d-03, 05, 09) |
+| Mixed / unclear | 1 (d-12, both tags) | 0 |
+| Bar | **FAIL** (5 real; 55% junk) | **pass, at the limit** (3 real) |
+
+Drop rate **4%** (12 of 329): not aggressive.
+
+**The revision.** d-07, d-11 and d-12 were moved to not_a_rally on a second look, *after* the operator was told the first pass failed. The operator described them as "barely a rally" on the first pass too. The pass therefore rests on a post-result revision and sits exactly on the limit; it is not a comfortable pass.
+
+**Flight score does not separate the two.** Real: 0.0, 0.087, 0.064. Not-a-rally: seven at 0.0-0.023 plus 0.100, 0.111, 0.120. A lower threshold would not have saved the real ones (d-03 scored 0.0). A post-hoc "cut at 0.05" reading floated on the first-pass tags disappears on the final ones.
+
+**Does not show.** How many fakes D4 keeps (kept rallies were not reviewed), so nothing about whether it removes enough junk to matter in a reel; a second venue (all PGC); a second reviewer (one operator, and `project_labeling_noise_floor` says agreement on "is this a rally" is low).
+
+**Conclusion.** On new sessions D4 is gentle (4% dropped) and what it drops is mostly junk, but it does drop real rallies at about the rate the bar allows (3 of 12, 3 of 329 detected, about 1%). Not enough on its own to switch on; no ADR.
+
+## 2026-10-16 (bounce chunk 2) — On a second camera the tile arm finds 4 of 36 hand-labelled bounces (11%): DOES NOT HOLD; the track is captured by fixed glints on the court
+
+**Why.** Chunk 1 (eda301d9, 3 min) cleared the 40% finding bar exactly (14 of 33) and gave the speed-ratio lead. A second camera/day was the registered next step before any ADR.
+
+**Method.** `scripts/eval_bounce_chunk2.py find`, bar committed before scoring (`0be1848`). Chunk: c199a97c 2026-09-26 05:38 `session-002.mkv`, whole file (7,438 frames, 4.1 min), not chosen for rallies (the choice looked at its detected rallies only to check it had play). 36 bounces labelled by the operator in CVAT project `bounce-chunk2-pgc` (9 jobs of 900 frames), all jobs gone through; `eval/labels/bounces/cvat_c199a97c_0926T0538_s002.json`. Calibration borrowed from the same camera's recording 34fab44c (image-match 0.020).
+
+| Arm | Seen | Tracked | Found | Candidates | Matching a label (frame) |
+|---|---|---|---|---|---|
+| base (whole frame) | 83% | 67% | 2 (6%) | 9 | 2 |
+| tile (two zoomed halves) | 100% | 94% | **4 (11%)** | 20 | 7 |
+
+**Result: DOES NOT HOLD** (bar: >= 40%; partly: 25-40% and more than base).
+
+**Why (diagnosed after the result; a lead from track statistics plus one still frame, not confirmed by playback).** The "tracked" figure is inflated: it counts any tracked point within +-3 frames, and the tracker spends most of its time on fixed spots. Tile arm: about 1,270 of 2,306 tracked points sit within ~20 px of (925, 652), a pale streak on the court surface (likely a ceiling-light reflection), and 132 more at (1067, 553), another glint; 5 of the 20 candidates are at those spots. Base arm: 850 of 1,899 tracked points at (1080, 280), a white object on the back shutter. At the labelled bounce frames themselves a tracked point exists for only 15 of 36, median 110 px from the label. Where a candidate does sit at a real bounce, it agrees with the label within 5-20 px, so this is not a label alignment error.
+
+**Reading.** On chunk 1 the limiter was sparse detection; here it is scenery capture, the PIC-226 failure class (fixed bright spots) that no ball-path filter has fixed for rallies either. The chunk 1 pass was one camera's result and does not transfer to this one. The speed-ratio check (Part B) is not run yet: 20 candidates, a quarter of them glints, are unlikely to give the >= 8 hits it needs.
+
+**Does not show.** Whether removing fixed spots (a per-camera static-spot mask) would restore finding here; past scenery masks cost real rallies (the ball passes through masked areas), and for bounces the glint sits on the court, where bounces happen. Third camera (de3d1953) untested.
+
+## 2026-10-16 (discarded ball points) — On bounce chunk 2 the tracker throws away the ball near 9 of 36 bounces (25%): WEAK case for "tracklets before commitment"; the bigger loss is downstream of the tracker
+
+**Why.** Operator proposal: build short tracklets from all detections, drop stationary ones, judge ~1 s of trajectory, and only then commit (instead of `track_ball` committing frame by frame). That can only help where the detector saw the ball and the tracker discarded it. `scripts/check_discarded_ball_points.py`, definitions and bar committed before the run (`c3f36de`).
+
+| Arm | Raw detections | Held by static cells (>= 100 hits in one 20 px cell) | Ball visible near a bounce (>= 3 non-static raw points, +-8 frames, 100 px) | Visible but discarded by the tracker |
+|---|---|---|---|---|
+| tile | 4,607 | 2,870 in 4 cells (62%) | 27 of 36 (75%) | **9 of 36 (25%)** |
+| base | 2,825 | 1,731 in 6 cells (61%) | 16 of 36 (44%) | 4 of 36 (11%) |
+
+**Result: WEAK** (bar: >= 30% worth building, 15-30% weak, < 15% no).
+
+**Reading.** On this camera the zoomed detector does see the ball near three quarters of the bounces, and three fifths of everything it reports sits in four fixed spots. Tracklets-first could at most give back the 9 bounces the tracker discarded. For 18 bounces the tracker already held >= 3 ball points nearby, yet the finder found only 4 bounces in total: most of the loss is in the bounce finder working on that track, not in the tracker's choice. A plausible but unverified cause is the track interleaving glint points with ball points around the bounce, which breaks the local-low-point rule.
+
+**Does not show.** Whether the 18 "tracked but not found" bounces fail because of glint points mixed into the track or for the chunk-1 reasons (too few points at the bounce itself, no local low point); not inspected.
+
+## 2026-10-16 (overlay review) — Of 14 bounces the tracker held but the finder missed, glare sits in the track within +-10 frames of the bounce for 7, more than once for 2; the operator tagged 13 "glare_mixed" on a looser reading
+
+**Why.** Entry above: for most chunk-2 bounces the tracker held ball points nearby and the finder still missed. Question: is the track interleaving glint points with ball points around the bounce (would favour tracklets-first), or is it sparse at the bounce, or fine?
+
+**Method.** `scripts/make_bounce_overlay_review.py` (`96b7731`). The 14 chunk-2 bounces that were visible, not discarded and not found; 3-s clips with the tile-arm tracked point drawn per frame (green, red when in a static cell), a 6-frame trail and the labelled point. A mechanical call was locked before review (sha256 in the commit): glare_mixed >= 2 static tracked points within +-8 frames; sparse < 2 tracked points within +-3; else tracked_fine. Operator tagged each clip in CVAT project `bounce-chunk2-overlay`.
+
+| | glare_mixed | tracked_fine | sparse | wrong_object |
+|---|---|---|---|---|
+| Operator | 13 | 1 | 0 | 0 |
+| Mechanical (locked) | 2 | 11 | 1 | 0 |
+
+Agreement 3 of 14.
+
+**Why they disagree (counts from the same track).** Red (static) tracked frames within +-10 of the bounce: 0 in 7 clips, 1 in 4, 2-3 in 2 (b-01, b-10), plus b-13 with one at +9. Red anywhere in the 3-s clip: 13 of 14. The operator tagged on red anywhere in the clip; the instructions given during the review drifted ("any red" before "within +-10"), so the looser reading is the instructions' fault, not the reviewer's. The playback does confirm that the red spots are stationary floor dots and reflections, not the ball.
+
+**Reading.** Glare is in nearly every 3-s stretch around these bounces, but the tracker sits on it within +-10 frames of the bounce in only half of them, usually for a single frame among 5-15 ball frames. That can explain at most half of these misses (and only if one outlier point is enough to break the finder's low-point rule); the other 7 have no glare near the bounce and still failed, so a second cause is in the finder itself.
+
+**Does not show.** Whether one glint point near the bounce is in fact what breaks the finder; testable directly by removing static-cell points from the track and re-running the finder (not run).
+
+## 2026-10-16 (glare removed before tracking) — Dropping the 4 fixed glare cells before the tracker lifts chunk-2 bounces found from 4 to 10 of 36: glare is a main cause (exactly at the bar), and still short of the 40% finding bar
+
+**Method.** `scripts/check_static_removed_bounces.py`, bar committed before the run (`fd4b836`). Raw detections in static cells (20 px cells with >= 100 detections over the chunk; 4 cells on the tile arm) removed before `track_ball`; everything else unchanged. Bar on the tile arm: >= 10 found = main cause, 6-9 minor, <= 5 not the cause.
+
+| Arm | Glare in: found | Glare removed: found | Candidates (in -> removed) | Candidates matching a label |
+|---|---|---|---|---|
+| tile | 4 of 36 | **10 of 36 (28%)** | 20 -> 27 | 7 -> 12 |
+| base | 2 of 36 | 2 of 36 | 9 -> 8 | 2 -> 2 |
+
+None of the 36 labelled bounces lies in a static cell, so the removal cost no labelled bounce here. "Glare in" reproduces the earlier 4 of 36.
+
+**Result: MAIN CAUSE** (10, exactly at the line). The whole-frame arm does not move: it rarely sees the ball near these bounces (16 of 36), so there is little to unblock.
+
+**Reading.** On this camera the glints were hiding real ball points from the tracker and corrupting the track near the bounce; removing them gives back 6 bounces. 26 are still missed, and 15 of 27 candidates match no label (hits or noise, not reviewed): the finder itself is the next limit, and the speed-ratio check would be the tool for the extra candidates. For rallies a similar pixel mask failed (2026-10-12: real rallies pass through masked spots); for bounces on this chunk no labelled bounce sat on a glint, but a bounce landing on a reflection would be lost by construction, and the 100-hit cell rule needs a whole session to find the spots.
+
+**Does not show.** A second camera with glare; whether the same removal costs real rallies on this footage (the rally question is separate and has failed before in mask form); whether a dynamic version (drop a tracklet only while it is stationary, the operator's tracklets-first design) recovers as much without the by-construction loss.
+
+## 2026-10-16 (Test E) — Tracklets-first still-site removal: bounces chunk 2 4 -> 6 of 36 (bar 10), chunk 1 unchanged 14; rallies lose 4 of 60 real field clips (bar 3) while removing 6 of 8 scenery fakes: FAIL, narrowly, and the glare mostly survives
+
+**Why.** PIC-226. Operator's design: build short tracklets from all detections, drop stationary ones, then let the existing tracker choose. Unlike the fixed mask (entry above) it never drops points of a moving tracklet, so a ball flying over a reflection survives.
+
+**Method.** `scripts/tracklets_first.py` (`drop_still`, 4 unit tests), `scripts/eval_tracklets_first.py`; one config fixed a priori (link 40 px/frame capped at 150, gap <= 5 frames; moving = tracklet diagonal > 12 px; a non-moving point is dropped when >= 5 other non-moving points lie within 12 px within +-90 frames), committed with the bar before scoring (`1f748dd`).
+
+| | Production | Tracklets-first | Bar |
+|---|---|---|---|
+| Bounces chunk 2 (tile), found of 36 | 4 | **6** | >= 10: FAIL |
+| Bounces chunk 1 (tile), found of 33 | 14 | 14 | >= 13: pass |
+| Real field clips lost (of 60) | - | **4** | <= 3: FAIL |
+| Graded dev rallies lost (of 83) | - | 2 | <= 5: pass |
+| Scenery fakes removed (of 8) | - | 6 | reported |
+| Not-real clips removed (of 35) | - | 11 | reported |
+| Rallies | 184 | 176 | |
+
+**Result: FAIL** on both parts, each by a small margin.
+
+**Why it under-delivers on bounces (diagnosed after the result).** On chunk 2 the 4 static cells hold 2,870 detections before and 1,685 after: it removes only 41% of the glare. 1,599 of the 1,685 survivors sit in tracklets classed as moving: with glare on about half the frames, linking (nearest open tracklet within up to 150 px) chains glare points to ball and other points, the chain's extent exceeds 12 px, and the whole chain is exempt. The fixed mask removed all of it (4 -> 10). The flaw is in the per-tracklet "moving" exemption, not the idea of judging stillness dynamically.
+
+**Rallies, read against D4** (reading after the result, so not a pass): D4 lost 1 of 60 real, removed 5 of 8 fakes and 5 of 35 not-real; Test E loses 4, removes 6 and 11. More removed, at a higher real cost, with only ~40% of the glare touched on the chunk inspected.
+
+**Does not show.** A version that judges stillness per point or splits tracklets at still sites (the obvious fix) has not been run; it would need its own pre-registration, and chunk 2 has now been used for diagnosis, so its bounce number would no longer be clean: a third camera (de3d1953) would be the honest test.
+
+## 2026-10-16 (Test E2) — Per-point still-site removal (v2): kills 87% of chunk-2 glare and all 8 scenery fakes, but costs 4 of 98 bounces on clean held-out footage (bar: at most 1) and 4 of 60 real field rallies (bar 3): FAIL
+
+**Why.** PIC-226, the fix named in Test E: judge stillness per point, with no tracklet exemption; a glare-site point survives only on a straight moving path between neighbours 1-3 frames either side (`drop_still_v2`, 7 unit tests). Pre-registered at `bb8cf50` with bars; chunk 3 amended twice before any label or score (`a5145e2`, `20bf9e3`: multi-ball practice, then the Tapo camera's frame drops). Final chunk 3 = eda301d9 2026-09-26 05:38 session-000, minutes 2:00-6:00, calib 7358ef3f, CVAT project `bounce-chunk3c-pgc` (task 146), labelled exhaustively by the operator.
+
+**Label export.** 99 point labels; one bounce was labelled twice across the 5-frame job overlap (frames 6268/6269, 2 px apart) and is kept once (rule added to the export after labelling, before scoring; any outcome of that pair moves the chunk-3 gap by at most 1 and cannot flip the verdict). 98 bounces, `eval/labels/bounces/cvat_eda301d9_0926T0538_s000_120-360.json`.
+
+| | Production | v2 | Fixed mask | Bar |
+|---|---|---|---|---|
+| Chunk 3 (tile, held out), found of 98 | 34 | **30** | 34 | v2 >= production - 1 = 33: **FAIL** |
+| Chunk 1 (tile), found of 33 | 14 | 13 | 14 | >= 13: pass |
+| Chunk 2 (tile, used for diagnosis), found of 36 | 4 | 6 | 10 | reported |
+| Real field clips lost (of 60) | - | **4** | | <= 3: **FAIL** |
+| Graded dev rallies lost (of 83) | - | 5 | | <= 5: pass (at the limit) |
+| Scenery fakes removed (of 8) | - | 8 | | reported |
+| Not-real clips removed (of 35) | - | 13 | | reported |
+| Rallies | 184 | 166 | | |
+
+Static-cell share (20 px cells with >= 100 hits): chunk 3 0%, chunk 1 0%, chunk 2 62% (v2 removes 87% of it, vs 41% for v1). As stated in advance, with no glare chunk 3 is only a no-harm check, and v2 fails it.
+
+**Result: FAIL** (chunk-3 no-harm and real field rallies).
+
+**Why it harms on clean footage (diagnosed after the result).** On chunk 3 v2 drops 182 of 2,648 in-wedge detections (7%) with no glare present. All 4 lost bounces are slow, small ones: two soft bounces 12 frames apart near the kitchen at about (935, 468), a ball at (784, 475) and a ball dribbling at (1725, 945). The ball stays within ~12 px often enough over +-90 frames to count as a still site, and its neighbours are too close (span <= 12 px) to qualify as a moving path. The still-site test cannot tell a slow ball from a glint with these constants.
+
+**Also seen.** Production finds 34 of 98 (35%) on this glare-free 9/26 stretch of eda301d9, against 14 of 33 (42%) on its 9/25 stretch and 4 of 36 on the glare-heavy c199a97c court: without glare, the existing finder is near the 40% finding bar.
+
+**Does not show.** Whether a site-level test (a glint holds one spot for minutes; a slow ball for a second) would separate them; that would need its own pre-registration, and chunks 1-3 have now all been looked at. Not switched on; no ADR.
+
+**Follow-up (same day, after the result; diagnosis, not a re-score).** All 4 real field clips v2 loses are on one glare court, 34fab44c (36% static-cell detections; it lost all 4 of its real clips). Clean field courts (13 sessions, 0% static) lost none; the dev losses are brickwall_30fps 1 (40% static), pb_draft_cup 2 (12%), IMG_7744 2 (0%). Inside the 4 lost clips v2 drops 369 of 794 detections, ~80% of them on fixed glare cells (back-shutter object near (1070, 290), court reflection near (930, 670)). Per clip: 69-75 s survives shifted (filter segment 65.4-74.1 s, IoU at the 0.5 edge); 350-355 s vanishes although only 18% of today's path there is glare (unexplained); 451-470 s and 494-521 s vanish, and 44% of today's path in each is on glare cells, i.e. production found them partly by following glare. Operator playback of 451-470 s (overlay video `clips/lost_rallies/34fab44c_lost4.mp4`): "half of the time the ring focuses on the wrong object", consistent with the 44%. Reading: on this court the real ball is weakly detected, and two of production's real rallies were found for the wrong reason; removing glare exposes that rather than cutting the ball.
+
+## 2026-10-17 (Test J) — Jev (TypeSafe jev-1.14, image + Box) as a single-frame ball finder: matches k14 on the clean court (17 vs 18 of 33) but loses on the glare court (6 vs 13 of 36): FAIL
+
+**Why.** PIC-226. Operator's idea: Jev gained image input and a Box (where-is-it) question on 2026-10-14; can it find the ball, and does it avoid the glare that captures k14? Pre-registered at `94c09f7` (`scripts/eval_jev_ball.py`) before any call. Images and Box are labelled prototype-grade by TypeSafe. Frames were sent to TypeSafe by the operator's own run (Claude Code's safety check blocked the agent from sending footage; the operator approved and ran it).
+
+**Method.** Ground truth: the operator's hand-labelled bounce positions (ball visible at that frame). Chunk 2 (c199a97c 9/26 s002, heavy glare): all 36; chunk 3c (eda301d9 9/26 s000, no glare): every 3rd label, 33. Arms on the same frames: k14 tile-arm top-1; jev-A whole frame at 1568 px wide (Noul visible + Box); jev-B the frame in 4 full-resolution quarter tiles, a Choice picks the tile, then a Box on that tile. Hit = centre within 15 px of the label. Bar: the Jev arm with more total hits must reach k14 on chunk 2 and be within 10 points of k14 on chunk 3c.
+
+| | k14 | jev-A (whole frame) | jev-B (tile, then box) |
+|---|---|---|---|
+| Chunk 2 (glare), hits of 36 | **13** | 1 | 6 |
+| Chunk 3c (clean), hits of 33 | 18 | 4 | **17** |
+| Chunk 2: picks on the 4 glare cells | 13 | 1 | 1 |
+| Median miss distance, chunk 2 / 3c (px) | | 210 / 39 | 201 / 14 |
+
+**Result: FAIL** (jev-B, the better arm: chunk 2 6 < 13; chunk 3c 17 vs 18 passes its half).
+
+**What it shows.**
+- On a clean court, Jev on single still frames, with no motion, finds the ball about as often as k14 does with three frames (17 vs 18). The whole-frame arm is far worse (4): the ball is too small at 1568 px; cutting into tiles is what works.
+- Jev is not fooled by the court reflection that captures k14 (1 pick on glare cells vs 13), but it is fooled by other still, ball-like objects: 8 chunk-2 misses land on a lime-green disc lying near the near baseline and 8 on a sign/object on the back shutter (checked on a frame with all picks drawn). Same failure class as k14 (static look-alikes), different objects.
+- Its Box confidence does not separate hits from misses (misses at 0.76-0.91 confidence exist on both chunks); its "ball visible" answer is ~0.94 almost everywhere.
+- Cost and speed: jev-B ~8,400 input tokens and 0.6 s per frame (~$0.00035). A 2-hour session at 30 fps (216k frames) would be ~$76 and ~36 h sequential: not usable per frame, usable for sparse checks.
+
+**Does not show.** Jev as a checker of k14's candidates (crop around each k14 detection: "is this the ball?"): k14 and Jev fail on different objects, so a vote could remove both kinds of look-alike. Not tested; would need its own pre-registration and fresh frames.
+
+## 2026-10-17 (Test K) — Jev as a rally guardrail on 125 operator-judged clips: flags 17 of 37 not-real (bar 19) at the cost of 6 of 75 real (bar 3): FAIL narrowly; catches every ball-machine clip, none of the warm-ups
+
+**Why.** PIC-226, operator's idea: use Jev (TypeSafe jev-1.14, image input) as a guardrail on detected rallies, "real point or practice?". Pre-registered at `1ac446f` (`scripts/eval_jev_rally.py`) before any call; Jev had never seen these clips. Run by the operator (frames go to TypeSafe).
+
+**Method.** 125 PGC clips with playback verdicts (75 real, 37 not real, 13 serve + return only; the one "unsure" excluded). One call per clip: a contact sheet of 6 frames evenly spaced over the detected rally (2 x 3, 784 x 441 each). Noul "is this a real point of a game ...?" plus a Choice of kind (real point / practice / ball machine / failed serve / not play). Rule fixed in advance: flag when the Noul < 0.5. Bar: real flagged <= 3 of 75 and not-real flagged >= 19 of 37.
+
+| | Flagged |
+|---|---|
+| Real (of 75) | **6** (bar <= 3) |
+| Not real (of 37) | **17** (bar >= 19) |
+| Serve + return only (of 13) | 0 (reported) |
+
+**Result: FAIL**, narrowly on both halves.
+
+**By reason (not-real flagged / total):** ball machine 6/6, not play 2/2, ball hit the net 2/2, feeding 1/1, serve out 1/1, serve only cut off 1/2, failed serve 1/5, not given 3/7, warm-up 0/5, warm-up/practice 0/3, practice 0/1, sunlight 0/1, tossed ball 0/1.
+
+**Reading.**
+- Strong where the scene itself shows it is not a game: all 6 ball-machine clips get 0.06-0.25 (basket and loose balls visible). Caveat: all 6 come from one session (c6a9136a).
+- Blind to warm-ups: all 8 score 0.53-0.68, "real point". From six stills a warm-up rally looks like a point.
+- Failed serves mostly missed (1 of 5), as expected: the difference is motion at the net, not visible in stills.
+- 4 of the 6 real clips flagged sit at 0.47-0.49: the Noul's answers are compressed into roughly 0.4-0.7, so the 0.5 cut sits in a crowded band.
+- Its Choice answer adds little: "not real point" flags real 4 / not-real 18, also short of the bar.
+- Cost: ~6,000 input tokens and 0.4 s per clip, about $0.00025; well under $0.10 per session.
+
+**Descriptive only (in-sample, cut-offs read after the result, not a pass):** at 0.4 it flags 1 of 75 real and 13 of 37 not-real (35%); at 0.3, 1 and 8.
+
+**Does not show.** Whether a lower cut (e.g. 0.4) holds on clips it has not seen: needs fresh verdicts and its own pre-registration. Whether a ball-machine-only rule (scene shows a ball machine / basket) generalises beyond one session.
+
+## 2026-10-17 (Test L) — Jev guardrail (real < 0.4) on 40 fresh, never-judged top-2 rallies: loses 0 of 23 real but removes only 5 of 13 not-real (bar half): FAIL; safe, but catches about a third
+
+**Why.** PIC-226. Test K's in-sample curve suggested a 0.4 cut (1 of 75 real, 13 of 37 not-real); this is the held-out check, combined with the frozen pause rule. Pre-registered at `07ad81e` (`scripts/eval_guardrail_fresh.py`) after building the sample (key sha256 b00aad41...) and before any verdict or Jev call. The operator judged blind on the usual page; then ran Jev.
+
+**Sample.** The 36 D4-scale sessions (no prior verdicts; the 12 D4-dropped rallies excluded). Per recording, the top 2 rallies by the shipped score (what a reel opens with): pool 60, seed-fixed random 40. Cameras: de3d1953 (Tapo) 23, eda301d9 12, c199a97c 5. Verdicts (`eval/labels/guardrail_fresh_verdicts.jsonl`): real 23, not a rally 13, very short 4. Clip 411 is "real" with the note "warming up", scored as given.
+
+| | Real flagged (of 23) | Not-real flagged (of 13) | Very short flagged (of 4) |
+|---|---|---|---|
+| Jev < 0.4 | 0 | 5 | 1 |
+| Pause rule | 0 | 1 | 0 |
+| **Guardrail (either)** | **0** (limit 1: pass) | **5** (need 7: FAIL) | 1 |
+
+**Result: FAIL** on the not-real half.
+
+**By reason (flagged / total):** practice 2/2, coaching session 1/1, two failed serves 1/1, failed serve + ball toss 1/1; missed: warm-ups 0/5 (incl. "5 people on court, 3 talking", "random people on the court"), ball toss 0/1, failed serve + very short 0/1, only the serve 0/1.
+
+**Reading.**
+- Across Tests K and L the 0.4 cut is safe: 1 of 98 real clips flagged. It removes about a third of the junk (13 of 37 in-sample, 5 of 13 held out).
+- Warm-ups are the blind spot again (0 of 13 across both tests): in six stills a warm-up looks like a point.
+- Jev's scores are compressed: real 0.48-0.76, not-real 0.22-0.68 here. The classes overlap in 0.45-0.68, so no cut-off separates them well.
+- The pause rule flagged 1 of 40, as stated in advance; it was not usefully tested.
+
+**Does not show.** The effect on reels: if the top picks are ~34% junk (2026-10-12 top-5 check) and a third of it goes at ~1% real cost, the share of real clips would rise to roughly 74%. That is arithmetic, not a measurement.
+
+## 2026-10-18 (Zone test) — Coarse bounce court map: found bounces land in the right zone (kitchen or deep, per side) 23 of 23 near, 28 of 29 far: PASS; but only 52 of 167 bounces are found and ~43% of finder picks are not bounces
+
+**Why.** PIC-226, operator's question after the detection showcase page: can a 2D court map show bounce points? Ball flight is out of scope (a ball in the air cannot be placed on the floor from one camera). Coarse zones first, at the operator's choice. Pre-registered at `e2ca224` (`scripts/eval_bounce_zones.py`, 2 unit tests) before any zone result; finding counts and chunk-3c court errors were already known.
+
+**Method.** Zones per side: deep (y < 15 / >= 29 ft) or kitchen (15-22 / 22-29 ft), x ignored, out-of-bounds counts as deep. Data: the three exhaustively labelled non-Tapo CVAT chunks (chunk 1 eda301d9 9/25, chunk 2 c199a97c 9/26 glare court, chunk 3c eda301d9 9/26), 167 marked bounces; the tiled k14 detections already used for them (not production); matching unchanged (+-3 frames, 15 px). Bar per side, pooled: right zone >= 80% of found bounces, >= 10 found.
+
+| | marked | found | right zone |
+|---|---|---|---|
+| chunk 1 near | 33 | 14 | 14 |
+| chunk 2 near / far | 15 / 21 | 0 / 4 | - / 4 |
+| chunk 3c near / far | 51 / 47 | 9 / 25 | 9 / 24 |
+| **pooled near** | 99 | **23** | **23 (100%), usable** |
+| **pooled far** | 68 | **29** | **28 (97%), usable** |
+
+Candidate precision (a pick within +-3 frames of any mark): chunk 1 17/37, chunk 2 7/20, chunk 3c 45/65; pooled 69/122 (57%). The one wrong zone: far deep marked, placed in far kitchen. Marks within 1 ft of a kitchen line or the net: 15 of 167 (9%). No far-kitchen bounce was found (chunk 1 labels are all near-side).
+
+**Reading, and why the pass is weak.** "Found" already requires the pick to be within 15 px of the operator's mark, so a found bounce can only change zone when it sits within a few px of a line (on the far half 15 px is a few feet). With 9% of marks near a line, a high zone score was close to guaranteed by construction. The test confirms the court mapping adds no gross error; it says nothing new about the two real limits: (1) finding, 23% near and 43% far, below the 40% landing-map bar on the near half; (2) false picks, ~43% of finder candidates are not bounces, and those would appear on a map as dots with no real bounce behind them (their zones were not measured). Tiled detections, not production, two cameras, one venue.
+
+**Next, if pursued.** A demo map is honest only with those two limits shown. The test that matters for a product map is precision of the dots on the map (operator judges each mapped dot from playback), not zone accuracy.
+
+## 2026-10-17/18 (hand keypoint probe) — RTMPose whole-body puts hand points on the hand on 31 of 33 near and 36 of 36 far crops: PASS as registered; MediaPipe Hands finds almost nothing (7 of 40 near, 0 of 36 far): FAIL. Blinding was broken by RTM drawing every point, and far "on" says where the hand is, not its shape
+
+**Why.** PIC-226, operator's idea: infer the paddle from hand keypoints (body is easy to find, the paddle is not). Pre-registered at `26be2b5` (`scripts/hand_keypoint_probe.py`) before any hand model ran. Expectation written in advance: far hands too small, near hands often cut off.
+
+**Method.** 20 frames (1/3 and 2/3 of 10 seed-picked Test L real clips, no Tapo), 76 on-court players (yolov8x-pose boxes; 40 near, 36 far; median box height 240 px near, 114 px far). Per player a zoomed crop, RTMPose whole-body (rtmw-dw-x-l, hand points 91-132, drawn at score >= 0.3) and MediaPipe Hand Landmarker side by side, A/B shuffled. Operator judged each panel on / off / none / hid on a click page (answers in `cache/hand_probe/verdicts.txt`). Bar: "on" >= 70% of judged (not hid) per method per side, >= 8 judged.
+
+| | judged | on | off | none | hid | verdict |
+|---|---|---|---|---|---|---|
+| RTM near | 33 | 31 (94%) | 2 | 0 | 7 | usable |
+| RTM far | 36 | **36 (100%)** | 0 | 0 | 0 | usable |
+| MP near | 40 | 7 (18%) | 0 | 33 | 0 | not usable |
+| MP far | 36 | 0 | 1 | 35 | 0 | not usable |
+
+**Caveats that limit the pass (stated before reading the result where marked).**
+- *Blinding broken (disclosed before the review):* RTM scores run ~3-6, not 0-1, so the 0.3 cut draws all 42 points on every crop. The operator could tell which panel was RTM, and RTM can never score "none".
+- *What "on" means on the far side:* far hands are about 8-10 px. 21 points on a hand that size form one blob at the hand; "on" there confirms the hand's location, not finger or wrist orientation. The body model already gives a wrist point, so the far-side pass may add little that is new.
+- One operator, single frames, 76 players from 10 clips at one venue on two cameras. The hid counts differ between methods on the same crops (RTM near 7 hid, MP near 0), so "hid" was applied unevenly.
+
+**Reading.** Expectation partly disproved: RTM finds near-side hands reliably and lands on far-side hands too. MediaPipe Hands, a hand-only model expecting large hands, is not usable at this camera distance. Whether hand points tell us anything about the paddle (angle, contact) was not tested: that is the next question, and on the far side the answer is likely limited by pixel count, not by the model.
+
+## 2026-10-18 (hand-ball proximity) — A hand near the ball separates paddle hits from bounces on the 36 tagged events (AUC 0.95, p = 0.0001): PASS in-sample; the body model's wrist does as well (AUC 0.97), so hand points add nothing here
+
+**Why.** PIC-226, operator: can we detect paddle hits? After the hand keypoint probe passed, the simplest use of hand points: is a hand close to the ball when the ball changes direction? Pre-registered at `00bbfd2` (`scripts/eval_hand_hit_vs_bounce.py`) before any hand or wrist point was computed on these events.
+
+**Method.** The 36 operator-tagged finder candidates of chunk 1 (eda301d9 9/25 08:21 s000; 23 bounce, 13 paddle_hit), the same events as the speed-ratio check (whose result was known). Frames g-3..g+3; ball = tile-arm tracked point; on-court yolov8x-pose players; RTMPose whole-body hand points (all 42). hand_dist = min over frames and players of ball-to-nearest-hand distance / box height. wrist_dist (reported) = the same with yolov8x-pose wrists. Bar: coverage >= 80%, AUC(bounce > hit) >= 0.85, shuffle p < 0.01.
+
+| | coverage | bounce median | hit median | AUC (bounce > hit) |
+|---|---|---|---|---|
+| **hand_dist** | 36/36 | 0.35 | 0.09 | **0.95** (p = 0.0001): PASS |
+| wrist_dist (reported) | 36/36 | 0.35 | 0.15 | 0.97 |
+
+Overlap on hand_dist: hits 0.00-0.15; bounces 0.06-0.97, with 4 bounces at or below 0.15. The speed-ratio cut (0.95) is wrong on 5 of these events; a mid-class cut on hand_dist (0.22) gets 3 of those 5 right (descriptive).
+
+**Reading.** At a direction change, a hit has a player's hand within about a tenth of a body height of the ball; a bounce usually does not. The wrist point from the body model already gives this, so the hand model is not needed for hit detection at this level; the extra model only matters if paddle angle or contact detail is wanted later. Ball motion (speed ratio) and player proximity are separate cues and partly fix each other's errors.
+
+**Caveats.** In-sample: one 3-minute chunk, one camera, one operator, 23 vs 13. Bounces close to a hand in the image (a ball landing next to a player's feet on the far side, where a body is short) are the expected failure; 4 bounces sit inside the hit range. Covers only direction changes the finder already found: hits the tracker never sees are not counted, and hit recall was never measured.
+
+**Next.** Held-out confirmation for both cues: the 28 untagged events in CVAT project 5 (pre-registered transfer test `ce54d9a` for the speed ratio; the same events serve this cue).
+
+## 2026-10-18 (hit transfer tests) — Sorting the bounce finder's 25 new candidates into hit or bounce: the wrist rule keeps its signal (AUC 0.83) but misses the pre-set bar (72% correct = the always-"bounce" rate, 3 of 7 hits; bar 75%, 60%): FAIL; speed ratio has no signal (AUC 0.47): FAIL. Finding hits was not tested (there is no hit finder)
+
+**Why.** PIC-226, can we detect paddle hits. Both cues passed in-sample on chunk 1's 36 events (speed ratio AUC 0.12 i.e. 0.88, 2026-10-15; wrist/hand proximity AUC 0.97/0.95, earlier today). Held-out check on the 28 tile-arm candidates of the 18 PGC pilot clips (CVAT project 5). Speed ratio: pre-registered 2026-10-15 at `ce54d9a` (`scripts/eval_motion_transfer.py`). Proximity: pre-registered at `87e767d` (`scripts/eval_proximity_transfer.py`, cut 0.25 fixed from chunk 1, wrist primary), predictions frozen before tagging (`9ef466a`, sha256 b14120af..., verified unchanged at scoring).
+
+**Tags (operator, after watching each clip):** bounce 18, paddle_hit 7, not_ball 3, unsure 0. All 3 not_ball are the 3 events from camera de3d1953, so the primary (no Tapo) and all-28 sets have the same 25 bounce/hit events.
+
+| | computable | correct | hits caught | bounces kept | AUC (bounce > hit) | verdict |
+|---|---|---|---|---|---|---|
+| **wrist < 0.25** (primary) | 25/25 | 72% (bar 75%) | 3/7 (bar 60%) | 15/18 | 0.83 (bar 0.75) | **FAIL** |
+| hand < 0.22 (reported) | 25/25 | 68% | 3/7 | 14/18 | 0.79 | - |
+| **speed ratio >= 0.95** | 22/25 | 64% (always "bounce": 77% of the 22) | 1/5 | 13/17 | **0.47** (bar <= 0.25; 0.5 = chance) | **FAIL** |
+
+Cues together: they agree on 13 of 22 events, and are right on 10 of those 13.
+
+**Reading.**
+- The speed ratio does not transfer at all (AUC 0.47 = chance). The 2026-10-15 in-sample result (AUC 0.88 on one 3-minute chunk) was not a property of hits and bounces in general. Retire it as a hit cue.
+- Proximity keeps its direction (AUC 0.83: hits are still nearer a wrist than bounces) but the fixed cut misses 4 of 7 hits, all at wrist distance 0.36-0.39, and 3 bounces fall below it (0.11, 0.18, 0.23; two in clip pgc-329). A weaker, real signal; not usable as a rule at this cut, and moving the cut now would be fitting to this sample.
+- Why the 4 hits sit at 0.36-0.39 was not inspected (candidate frame offset from the contact, the hitting arm's wrist not the nearest point, or the paddle head being a body-height fraction from the wrist are possibilities, none checked).
+
+**Caveats.** 7 hits is small; n = 25 from 18 short clips on two cameras; one operator who saw the finder's box. The candidates are only direction changes the finder found; hit recall is still unmeasured.
+
+## 2026-10-18 (hit visibility, minute 1) — Of 22 paddle hits the operator marked in one minute, the detector sees the ball at 11, the tracker holds 9, and the bounce finder boxes 3; near-side hits are mostly invisible (4 of 11 seen)
+
+**Why.** PIC-226. The hit-sorting tests only ever saw hits the bounce finder happened to box. First exhaustive hit marks, to measure how much of the hit problem is visible at all. Descriptive measurement, no bar.
+
+**Method.** CVAT project 13 / task 147 (`scripts/cvat_make_hit_chunk.py`): chunk 3c (eda301d9 2026-09-26 05:38 s000), source 2:00-4:00, where every bounce is already marked. Operator marked every hit (serves included; ball clicked at contact, paddle if hidden). Minute 1 (task frames 0-1799) read and saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_120-180.json`; minute 2 (jobs 181-183) held back unread for a finder test (only its per-job mark counts were seen: 12, 10, 0). Against the tile-arm detections of chunk 3c: seen = a raw detection within +-3 frames and 30 px of the mark; tracked = a tracker point there; both sides = >= 3 tracked points in the 8 frames before and after; boxed = a bounce-finder candidate there. Side: mark below the net line in the image = near.
+
+| | hits | seen (raw) | tracked | tracked both sides | boxed by bounce finder |
+|---|---|---|---|---|---|
+| near | 11 | 4 | 3 | 2 | 2 |
+| far | 11 | 7 | 6 | 6 | 1 |
+| **all** | **22** | **11** | **9** | **8** | **3** |
+
+Same minute: 24 marked bounces, 20 finder boxes.
+
+**Reading.**
+- The bounce finder boxes 3 of 22 hits (14%). Every earlier hit test drew from that sliver.
+- Far side: the ball is tracked through 6 of 11 hits, but only 1 is boxed, consistent with the reasoning that a far hit turns the ball down the screen, the opposite of the dip the finder looks for (consistent, not proven). A finder for any sharp direction change could reach up to ~6 of 11 here.
+- Near side: the ball is detected at only 4 of 11 hits. Near the camera the ball is fast, blurred and next to the player's body; this is a detection ceiling, which no hit rule built on the ball track can get past. A ball-free cue (arm swing timing) is the only route for these, and it is untested.
+- Overall ceiling for any track-based hit finder on this minute: about 8 of 22 (tracked on both sides).
+
+**Caveats.** One minute, 22 hits, one camera, tile-arm detections (not production). Near/far by the image net line is approximate for a ball in the air.
+
+## 2026-10-19 (hit turn finder, held-out minute 2) — A hit finder built on the ball track (sharp turns and speed-ups, not dips) found 2 of 22 hits on new play, with 2 of 27 picks right: FAIL
+
+**Why.** PIC-226. The bounce finder boxes a hit only when it looks like a dip (3 of 22 in minute 1). Next step from the hit visibility entry: flag any sharp change in the tracked ball's path and see how many hits that reaches.
+
+**Method.** Pre-registered in `scripts/eval_hit_turn_finder.py` (`9f04a56`), rule fixed on minute 1, before minute 2's marks were read. At each tracked frame: incoming and outgoing velocity over 3 frames (4 or 5 if missing), both >= 2 px/frame; pick if the turn is >= 30 deg or the ball speeds up >= 1.8x; drop it if it is a dip (down then up, no sideways reversal); picks within 5 frames merge. Matching: +-3 frames and 30 px. Reachable = >= 3 tracked points in the 8 frames before and after the mark. Held-out data: minute 2 of CVAT task 147 (task frames 1800-3599), 22 hits, saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_180-240.json`.
+
+| | minute 1 (developed on) | minute 2 (held out) |
+|---|---|---|
+| hits marked (near / far) | 22 (11 / 11) | 22 (9 / 13) |
+| reachable (near / far) | 8 (2 / 6) | 7 (0 / 7) |
+| found by the turn finder | 7 | **2** |
+| found, of reachable | 6 of 8 | **2 of 7** (bar 50%: FAIL) |
+| boxed by the bounce finder | 3 | 1 (beats: PASS) |
+| picks / on a hit / on a bounce | 32 / 7 / 5 | 27 / **2** (7%, bar 15%: FAIL) / 4 |
+
+**Verdict: FAIL** (reach 2/7, precision 7%).
+
+**Why the 5 reachable minute-2 hits were missed** (looked at after scoring, descriptive):
+- 1822, 3305: the finder fired on the turn, but 5 and 2 frames early and about 50 px from the mark. The ball was moving 16-23 px a frame, so the 30 px window is about 1.5 frames wide for a fast ball. A wider window would also have changed minute 1; this was not pre-registered and does not change the verdict.
+- 3037: a far-side hit that looked like a dip (down, then up the screen), so the bounce-shape filter threw it out.
+- 2369: a gentle turn (22 deg, below 30).
+- 3325: no tracked ball within 3 frames of contact.
+
+**Reading.**
+- Minute 1's 7 of 22 was fitted to those 22 hits. On new play the same rule found 2, so the finder did not transfer.
+- Even with looser matching, precision stays poor (3 of 27 picks within 8 frames of a hit). Most picks are wobble in the track: segment ends, the ball slowing after a bounce, and tracker jumps.
+- Near side: 0 of 9 hits were reachable in minute 2 (2 of 11 in minute 1). This confirms the detection ceiling: near-camera hits are mostly invisible to the ball detector.
+- The bottleneck is the track around contact, not the rule. The ball is lost or jumps exactly where the paddle meets it. Finding hits needs either better ball tracking near the players or a cue that doesn't need the ball (wrist or arm swing).
+
+**Caveats.** Two minutes, one camera, one court, tile-arm detections (not production); 7 reachable held-out hits is a small denominator.
+
+## 2026-10-19 (arm-swing hit finder, held-out minute 2) — Peaks in a player's wrist speed found 12 of 22 hits on new play, including 4 of 9 near-side hits the ball tracker can't see; 22% of swings were hits, 4x chance: PASS (narrowly on every check)
+
+**Why.** PIC-226, after ADR-156 (no hit finding from the ball track). A hit is a fast arm movement by the player next to the ball; pose sees it whether or not the ball is visible.
+
+**Method.** Pre-registered in `scripts/eval_arm_swing_hits.py` (`2731988`), rule fixed on minute 1 and committed before running on minute 2. yolov8x-pose on every frame of chunk 3c 0-3599 (on-court players, cached in `cache/arm_swing/`), players linked frame to frame by feet position. Wrist speed = largest move of either wrist over 2 frames, per frame, in box heights. Swing = speed >= 0.06 and the peak within +-10 frames. A hit is found if a swing is within +-5 frames and the hit mark is inside that player's box grown by half a box height. Chance = the same swings shifted by +-15..150 frames. Minute 2's hit marks had already been read for the ball-track test, but this rule was not looked at against them before scoring.
+
+| | minute 1 (developed on) | minute 2 (held out) | bar |
+|---|---|---|---|
+| hits found | 16 / 22 (73%) | **12 / 22 (55%)** | >= 50% PASS |
+| near-side hits found | 7 / 11 | **4 / 9 (44%)** | >= 40% PASS |
+| far-side hits found | 9 / 11 | 8 / 13 | |
+| swings on a hit | 16 / 55 (29%) | **12 / 54 (22%)** | >= 20% PASS |
+| hits found by time-shifted swings (chance) | 3.0 | 2.9 | real >= 3x: PASS (4.1x) |
+| cut-off 0.08 (reported) | 12 found, 38% precise | 8 found, 35% | |
+| cut-off 0.10 (reported) | 9 found, 47% | 7 found, 41% | |
+
+**Verdict: PASS**, close to the line on every check (one hit fewer on either side would have failed found or near).
+
+**Reading.**
+- This is the first hit cue that reaches near-side hits: 4 of 9 on new play, against 0 of 9 for anything built on the ball track.
+- Recall dropped from 16 to 12 on new play; precision dropped from 29% to 22%. Expect numbers like minute 2, not minute 1.
+- About 3 in 4 swings are not hits: ready-position moves, practice swings, a player reacting without touching the ball, and swings assigned to the wrong player. It is a candidate generator, not a hit counter. The obvious next step is to combine it with the ball (a swing when the ball is near that player, or the ball changing direction just after), measured against the same 44 marks.
+- Ball-track and swing cues fail in different places: the ball is visible mainly on the far side, swings show on both sides.
+
+**Caveats.** Two minutes, 44 hits, one camera, one court, one operator. A narrow pass on 22 held-out hits; a third minute (or another court) is needed before relying on it.
+
+## 2026-10-19 (swing + ball hit rule, held-out minute 3) — Arm swings kept only when the ball is in play and not far from the swinger found 18 of 27 new hits (near 7 of 12), and 56% of its picks were hits: PASS on all five checks; the swing rule alone also replicated (19/27, 37%)
+
+**Why.** PIC-226. The swing rule passed narrowly on minute 2, but about 3 in 4 swings were not hits. The ball track can't find hits (ADR-156), but it can tell whether the ball is in play and whether it is far from the swinging player.
+
+**Method.** Pre-registered in `scripts/eval_swing_ball_hits.py` (`8eaa84b`), rule fixed on minutes 1-2. It was committed, and the minute-3 poses computed, before the operator marked any minute-3 hit (CVAT task 148 had 0 marks at commit). Swings are as in `eval_arm_swing_hits.py`. A swing is kept if there are >= 3 tracked ball points within +-15 frames (in play), unless >= 2 tracked ball points within +-5 frames are all more than 0.5 box heights outside the player's box (ball far). A ball not seen near the swing does not veto. Matching: +-5 frames, mark inside the player box grown by half a box height. New data: chunk 3c minute 3 (source 4:00-5:00), 27 hits, saved to `eval/labels/hits/cvat_eda301d9_0926T0538_s000_240-300.json`.
+
+| | minutes 1-2 (developed on) | **minute 3 (held out)** | bar |
+|---|---|---|---|
+| hits marked (near) | 44 (20) | 27 (12) | |
+| swing + ball: hits found | 27 (61%) | **18 (67%)** | >= 45% PASS |
+| swing + ball: near-side found | 11 / 20 | **7 / 12 (58%)** | >= 35% PASS |
+| swing + ball: picks on a hit | 27 / 70 (39%) | **18 / 32 (56%)** | >= 30% PASS |
+| swing alone: found / on a hit | 28 / 109 (26%) | 19 / 52 (37%) | better: PASS (loses 1 hit) |
+| chance (time-shifted picks) | | 1.8 hits | real >= 3x: PASS (10x) |
+
+**Replication.** The swing rule alone, against its own bar (found >= 50%, near >= 40%, precision >= 20%, >= 3x chance), passes on minute 3: 19/27 (70%), near 8/12, 37%, chance 2.4.
+
+**Reading.**
+- On new play, the system flags about two-thirds of hits (near side included), and more than half of what it flags is a real hit. That beats every earlier hit result by a wide margin, including the near side, which no ball-based rule reached.
+- The ball check removes about 40% of the false swings (52 -> 32 picks) and costs 1 hit.
+- Minute 3 came out better than minutes 1-2 on every count; that is likely variation in play (or a busier rally minute), not a reason to expect 56% everywhere. Minutes 1-3 together: 45 of 71 hits, 45 of 102 picks (44%).
+- About 1 in 3 hits is still missed and about 4 in 9 picks are wrong. It is a hit candidate generator, good enough to drive a hit count or shot timeline with visible error, not a referee.
+
+**Caveats.** One camera, one court, one session, three consecutive minutes, one operator. Tile-arm ball detections, not production. Nothing tested yet on the glare court or another venue.
+
+## 2026-10-19 (swing + ball hit rule, production detections) — The frozen rule (ADR-157) run on the production ball track instead of the tile-arm one finds 36 of 71 hits (51%, down from 63%); precision holds at 45%
+
+**Why.** The swing + ball rule was developed and tested on the sharper tile-arm detections (`cache/bounce_pilot/*.tile.csv`), not the pipeline's. Robustness check before relying on it: same frozen rule and params (`scripts/eval_swing_ball_hits.py`), same 71 hit marks (minutes 1-3), only the ball track swapped to the production scale pass (`cache/scale/eda301d9_2026-09-26T05-38-19_session-000.csv`, source-frame indexed, shifted by 3600 to chunk frames). Swings (pose) are identical; only the "ball in play / not far" gate sees a different ball track.
+
+| all 3 minutes (71 hits, 32 near) | tile-arm | production |
+|---|---|---|
+| hits found | 45 (63%) | **36 (51%)** |
+| near-side found | 18 / 32 | 16 / 32 |
+| picks on a hit | 45 / 102 (44%) | 36 / 80 (45%) |
+| tracked ball points, chunk 0-5399 | 1839 | 1146 |
+| per minute (found) | 15 / 12 / 18 | 13 / 7 / 16 |
+
+**Reading.**
+- The rule degrades but does not break with the production detector: recall 63% -> 51%, precision unchanged (~45%). The loss is almost all recall, from the production track holding the ball through ~40% fewer frames, so the "in play" gate (>= 3 tracked points within +-15 frames) passes less often.
+- Minute 2 fell most (12 -> 7); minute 3 held and even gained a near-side hit (7 -> 8). Variation by minute is large on these denominators.
+- Precision holding means the gate still removes the right swings; it is recall that depends on detector quality.
+
+**Caveats.** Same single court/session/operator as the tile result; this only swaps the detector. A better production ball track (or the tile-arm pass in the pipeline) would recover recall. Not pre-registered: a frozen-rule robustness check on existing labels, reported as such.
+
+## 2026-10-19 (swing + ball hit rule, second court / glare) — The frozen rule (ADR-157) on a different camera and court finds 16 of 29 hits (55%, near 5/10), 33% of flags real, 7.6x chance: PASS on all four pre-registered checks
+
+**Why.** The rule was built and tested entirely on the clean court (eda301d9). First run on a second camera and court: the glare court c199a97c 2026-09-26 05:38 session-002, where glare is the main cause of lost ball tracking (ADR-154). Tests whether the method is a quirk of one court.
+
+**Method.** Pre-registered in `scripts/eval_swing_ball_glare.py` (`a5f0e4b`), committed while CVAT task 149 had 0 marks; rule and every parameter imported unchanged from `eval_arm_swing_hits.py` / `eval_swing_ball_hits.py`. Operator marked minutes 0-1 (session frames 0-3599, the two busiest; 25 marked bounces already present). 29 hits (13 + 16). Poses `cache/arm_swing/poses_chunk2_glare_0-3599.json`, computed before any mark existed. Scored on the tile-arm track (the detector the rule was tuned on); production track reported.
+
+| glare court, minutes 0-1 (29 hits, 10 near) | tile-arm (gated) | production (reported) |
+|---|---|---|
+| swing + ball: hits found | **16 (55%)** | 15 (52%) |
+| near-side found | 5 / 10 | 5 / 10 |
+| picks on a hit | 17 / 51 (33%) | 17 / 57 (30%) |
+| chance (time-shifted) | 2.1 (7.6x) | 2.1 |
+| swing alone: found / precision | 21 / 29, 23 / 109 (21%) | — |
+
+**Verdict: PASS** (found 55%, near 50%, precision 33%, 7.6x chance).
+
+**Reading.**
+- The method is not a quirk of the clean court: on a second camera and the harder glare court it lands in the same band (clean court held-out minute 3: 67% found, 56% precise; pooled clean court: 63%, 44%). Glare pulls recall and precision down a little, as expected, but every check clears.
+- Pose makes more, shorter player tracks here (47 vs 27 on the clean court) from glare and occlusion; the finder still holds because swings are scored per track and gated by the ball.
+- Production vs tile-arm is a smaller gap than on the clean court (15 vs 16), because on the glare court even the tile-arm ball track is already degraded.
+- Both open checks from ADR-157 (another court, production detections) are now answered and passed.
+
+**Caveats.** Still one venue, two courts, three sessions, one operator. The two courts share lighting and camera model; a different venue is untested. Hit marking remains the only ground truth.
+
+## 2026-10-19 (hit accuracy levers, exploration) — The cheap precision lever (ball velocity-change at the swing) has no signal; wrist-speed magnitude AUC 0.68; ball-distance signal already consumed by the gate
+
+**Why.** Before investing in a better hit finder, check whether accuracy can be raised by combining existing signals. Exploration only: pooled over all five already-scored minutes (clean minutes 1-3 + glare minutes 0-1, 153 kept swings, 62 on hits), not pre-registered, not a scored claim — the point is to avoid re-exploring dead levers.
+
+**Findings (on kept swings, i.e. after the ball-in-play/not-far gate).**
+- **Ball velocity-change at the swing: no signal.** A direction change (angle >= 30/45/60/90 deg) appears at the same rate in hit-swings and non-hit-swings (~15% vs ~15%), and is computable for only ~28% of swings — the ball is lost at contact. Same root cause as ADR-156. A ball-at-contact confirmation cannot work until the ball track survives contact.
+- **Wrist-speed magnitude: AUC 0.68** (hit median 0.108 vs 0.075 box heights/frame). Modest, already exploited by the 0.06 threshold; raising it trades recall for precision monotonically (no free lunch).
+- **Ball distance at the swing: AUC 0.50** among kept swings — the "not far" gate already consumed this signal; no residual.
+- **The imprecise group is near-side, ball-unseen swings** (34 kept, 29% precision, 24 near-side) — and that is exactly the group giving near-side recall, which nothing else reaches. It cannot be tightened without discarding the method's one advantage.
+
+**Reading.** Rule-tuning on current data is spent. Real accuracy gains need either (1) a ball track that survives contact near players (lifts recall and revives the ball-confirmation cue) — detector work, or (2) a learned classifier on pose features with more labeled hits than the current ~100 (several minutes, ideally a second venue). Recorded so these dead levers are not re-run.
+
+## 2026-10-19 (highlight signals: do movement / swing activity help rank reels?) — Swing-activity rate adds ~+0.08 AUC over rally duration for picking highlight-worthy rallies (LEAD); player movement does not
+
+**Why.** PIC-226. Hits are not a production counter (39% precise), but ranking highlights needs rank-correlation, not per-event accuracy. The quality rubric (LABELING.md) marks highlights by length/intensity, momentum swing (scrambling), and sustained tension (dinking); the shipped ranker (src/select.py) uses duration + peak crossing-rate + velocity and has no movement measure. Test whether the new pose signals separate graded rallies.
+
+**Method.** Pre-registered `scripts/eval_highlight_signals.py` (`1eccc17`), committed before pose ran. brickwall_30fps (dev, not the locked eval), 49 hand-graded rallies (13 grade-1, 36 grade-2). yolov8x-pose over the 49 rally windows (14m39s of play; sequential decode + imgsz 960 on the local RTX 2000 Ada). Features per rally, rate-normalised: duration, crossing_rate, move_rate (court-feet/s travelled by players), peak_speed (5-frame court speed), swing_rate (wrist-speed peaks/s). Target: grade 1 vs 2. Metric: single-feature AUC and leave-one-out logistic AUC.
+
+| feature | AUC(1>2) | median g1 | median g2 |
+|---|---|---|---|
+| duration | 0.82 | 20.7 s | 11.5 s |
+| **swing_rate** | **0.70** | 1.04/s | 0.83/s |
+| move_rate | 0.61 | 9.9 | 9.2 |
+| peak_speed | 0.61 | 22.7 | 21.5 |
+| crossing_rate | 0.52 | 0.19/s | 0.24/s |
+
+Leave-one-out logistic AUC: duration alone 0.76; **duration + swing_rate 0.84 (+0.08)**; duration + move_rate 0.77 (+0.01); duration + peak_speed 0.70 (worse). Pre-registered bar (own AUC >= 0.65 AND +0.03 LOO over the {duration, crossing_rate} baseline of 0.73): **swing_rate PASS (+0.09)**; move_rate, peak_speed FAIL.
+
+**Reading.**
+- **swing_rate is a lead:** the pose swing detector — too noisy to count hits — is a useful rally-intensity feature for reel ranking, adding ~+0.08 AUC over duration. Ranking needs correlation, not per-event precision, so the "unusable counter" is still usable here.
+- **Player movement failed its hypothesis:** move_rate and peak_speed barely separate and add nothing over duration; "scrambling = highlight" did not hold on this data.
+- **Concentrated value:** within already-long rallies (dur > median) swing_rate's AUC falls to 0.54 — it mostly helps among shorter/medium rallies, and is a correlated-but-distinct flavour of intensity, not independent of length.
+- crossing_rate (per second) was flat here; note the shipped ranker uses *peak* crossing-rate, not this, so this is not a verdict on the ranker's own feature.
+
+**Caveats.** One video, 49 rallies, grade-1 n=13. The grade rubric is first-draft and never consistency-checked (LABELING.md), so this is a lead to validate on held-out graded footage, not a ranker change. Movement computed from a single-camera homography (feet are floor points, reliable).
+
+## 2026-10-19 (highlight signals, replication on pb_draft_cup) — The brickwall swing_rate lead did NOT replicate: swing and movement each help on one video and not the other; only duration is consistent
+
+**Why.** The brickwall test flagged swing_rate as a +0.08-AUC lead for ranking highlight rallies. A lead on one video with a soft grade rubric needs replication before belief. Same frozen features and bar (`scripts/eval_highlight_signals.py`), new video.
+
+**Method.** pb_draft_cup_30fps (dev), 34 graded rallies (10 grade-1, 24 grade-2). Identical pipeline (pose over rally windows, same features). `--score pbdc`.
+
+| feature | AUC(1>2) pbdc | (brickwall) |
+|---|---|---|
+| duration | 0.77 | 0.82 |
+| move_rate | 0.68 | 0.61 |
+| crossing_rate | 0.64 | 0.52 |
+| swing_rate | 0.61 | 0.70 |
+| peak_speed | 0.49 | 0.61 |
+
+Leave-one-out AUC over **duration alone** (0.72 pbdc): + swing_rate 0.67 (**-0.05**), + move_rate 0.76 (**+0.04**), + peak_speed worse. On brickwall the signs were reversed: + swing_rate +0.08, + move_rate +0.01.
+
+**Reading.**
+- **No replication.** swing_rate helped on brickwall and hurt on pb_draft_cup; move_rate did the opposite. A signal that flips sign across two videos is not a reliable ranking feature — the brickwall swing_rate lead was overfitting to one video's grades.
+- **Duration is the only consistent strong feature** (0.77-0.82), as the shipped ranker already uses.
+- Root cause is likely the target: tiny graded sets (n=34, 49; 10-13 grade-1) and a grade rubric that was never consistency-checked (LABELING.md). With a noisy target, single-video AUC gains of ~0.08 are within noise.
+
+**Conclusion.** Do not wire swing_rate or movement into src/select.py. The new pose signals do not add a reliable highlight-ranking gain over duration on the available graded footage. Revisit only with a consistency-checked grade set (or more graded videos); the signals themselves are cheap to recompute if that target improves.
+
+**Caveats.** Two dev videos, soft grades. This tests ranking value only; it does not change the court-map / bounce / player-position findings.
+
+## 2026-10-19 (highlight signals, CORRECTION) — Tested on top of the REAL production ranker features, swing_rate adds a small positive on BOTH videos (+0.06, +0.03); the prior "did not replicate" used a wrong baseline
+
+**Why this corrects the entry above.** The replication entry compared swing_rate against *duration alone* with a crude crossing feature (whole-rally crossings/sec, AUC 0.52/0.64) and no ball-velocity feature. The shipped ranker (src/select.py rank_segments) actually uses **duration + peak_crossing_rate (busiest 3 s window) + ball-velocity spikes**. Operator asked whether swing was combined with crossing-counting and the production detector — it was not, properly. Redone with the real features.
+
+**Method.** Same two graded videos. Production features per rally computed with src.select (`peak_rate`, `frame_speeds`, `spike_threshold`) from the k14 ball predictions; swing_rate from the cached pose. Leave-one-out logistic AUC.
+
+| per-feature AUC(1>2) | brickwall | pbdc |
+|---|---|---|
+| duration | 0.82 | 0.77 |
+| peak_crossing_rate | 0.73 | 0.79 |
+| ball-velocity spikes/s | 0.31 | 0.49 |
+| swing_rate | 0.70 | 0.61 |
+
+Leave-one-out AUC: production 3-feature baseline 0.72 (brickwall) / 0.73 (pbdc); **+ swing_rate 0.78 (+0.06) / 0.76 (+0.03)** — positive on both.
+
+**Corrected reading.**
+- Against the *actual* production ranker, swing_rate is a small **consistent-sign** positive, not the sign-flip the prior entry reported. That earlier negative was an artifact of a weak baseline (bad crossing feature, no velocity, duration-only comparison).
+- The real **peak_crossing_rate** is a strong feature (0.73/0.79); the crude crossing-rate I first used was not — the lesson is to test against the shipped features, not a re-derived proxy.
+- The ranker's **ball-velocity-spike** feature looks weak-to-useless on both videos (0.31/0.49) — a separate flag worth revisiting in src/select.py weighting.
+
+**Verdict.** Upgrade from "no" to "small (+0.03 to +0.06), consistent-sign gain on top of the production ranker — worth a proper validation, not a ship." Blocker is still the target: 34-49 rallies, 10-13 grade-1, grade rubric never consistency-checked (LABELING.md); 4 features on that few positives is noise-prone. Do not change src/select.py until swing_rate is validated on a larger, consistency-checked grade set.
+
+**Caveats.** Two dev videos, soft grades, small n. This supersedes the "do not wire into ranker" line of the entry above only in the sense that the earlier *reason* (sign-flip) was wrong; the practical recommendation (validate before shipping) is unchanged.
+
+## 2026-10-19 (E2E: reel pipeline + Jev guardrail, dry run) — Wiring the Jev guardrail into selection lifts the reel's real-share from 66% to 71% (75% to 83% among non-short), removing 6 junk clips for 1 real clip lost, across 14 PGC sessions
+
+**Why.** Operator is implementing Jev for validation and asked to test the pipeline end to end. No integrated pipeline existed (Jev was standalone eval scripts; src/select.py never called it). This runs the real selection path (validate_absolute_ranking.detect -> src.select.score_segments -> top-5/session) with a Jev guardrail applied in selection, using the already-saved Jev scores (`cache/jev_rally/results.jsonl`) so NO footage is sent to TypeSafe. `scripts/eval_reel_guardrail_e2e.py`.
+
+**Rule.** Drop a top-N candidate when its saved Jev "real" score < 0.4 (frozen Test L cut); keep candidates with no Jev score. Truth = operator playback verdicts. 70 candidates (top-5 of 14 sessions), all Jev-scored, all verdict-decided.
+
+| | clips | real | short | not | real among non-short |
+|---|---|---|---|---|---|
+| before guardrail | 70 | 46 (66%) | 9 | 15 | 75% |
+| after guardrail (Jev >= 0.4) | 63 | 45 (71%) | 9 | 9 | **83%** |
+
+Dropped 7: 6 not-real, 1 real (a point Jev read as not_play, 34fab44c @493.5, score 0.22), 0 short. One session (c6a9136a) had all 5 top picks judged not-real (practice/not_play); the guardrail removed 4 of them.
+
+**Reading.**
+- The integrated pipeline runs end to end and the guardrail does what Tests K/L predicted: a safe, modest clean-up — +5 pp real-share overall, +8 pp among non-short clips, 6 junk removed for 1 real lost.
+- Biggest value is sessions that are mostly non-game (a warm-up/practice court): the guardrail stops a reel being built from them.
+- Residual junk after the guardrail is mostly warm-ups and serve+return-only clips, which Jev cannot see in still frames (consistent with Tests K/L).
+
+**Caveats.** Dry run on saved Jev scores (a live run re-sends footage, operator-only). 70 clips, one venue. Not a held-out test — Jev scores and verdicts were already known; this measures the integrated effect, not a new guardrail claim. The live API path (Jev called inside the pipeline) is built but unexercised here.
+
+## 2026-10-19 (highlight-type detection, cross-video consistency) — Of the feasible types, only "long rally" is consistent across both videos; kitchen-war and fast-dink separate highlights on brickwall but collapse on pb_draft_cup
+
+**Why.** Operator wants every highlight type that is feasible (from signals we measure) AND highly consistent. Pre-registered `scripts/highlight_types.py` (`8f17e88`): type definitions + the bar (AUC(grade-1>grade-2) >= 0.65 on BOTH graded videos) committed before pb_draft_cup was scored on the new types. Contact-dependent types (serve/put-away) excluded as not feasible (ball-at-contact, ADR-156).
+
+| type (reliable-signal definition) | brickwall (49) | pb_draft_cup (34) | verdict |
+|---|---|---|---|
+| long_rally (duration) | 0.82 | 0.77 | KEEP |
+| kitchen_war (both kitchen lines occupied, fraction of rally) | 0.70 | 0.55 | drop |
+| fast_dink (swings/s during kitchen posture) | 0.81 | 0.48 | drop |
+
+**Reading.**
+- Only **long_rally** clears the cross-video bar. kitchen_war and fast_dink looked strong on brickwall (0.70, 0.81) and fell to chance/below on pb_draft_cup (0.55, 0.48) — single-video artifacts, the same failure mode as the 2026-10-19 swing-rate lead. The pre-registered both-videos bar is what caught them.
+- **Caveat on the test itself:** grade-separation is an imperfect proxy for type-detector quality. A kitchen-war signature could correctly flag kitchen wars yet not predict the (soft) highlight grade — especially if the two courts differ in style or calibration. So "drop" here means "not confirmed as a consistent highlight *predictor*", not "the geometry is wrong". Confirming kitchen_war/fast_dink as valid *type* detectors needs typed labels (is this clip a kitchen war? y/n) across both courts, which do not exist.
+- Root blocker is again the ground truth: 34-49 rallies, ~10 grade-1, grades never consistency-checked (LABELING.md).
+
+**Produced.** Per-rally type manifests `cache/highlight_types/{brickwall,pbdc}.json` (scores + flags + primary type) for eyeballing / reel assembly.
+
+**Conclusion.** The only highlight type that is both feasible and highly consistent on current evidence is **long rally**. kitchen_war / fast_dink are plausible and geometrically sound but unproven across courts; they need typed, consistency-checked labels (or a cross-court clip-review) before shipping. Do not add them to selection on grade-correlation alone.
+
+### Follow-up (same day): the type distributions explain much of the "drop"
+
+Per-rally primary-type counts from the manifests: brickwall = kitchen_war 15 / fast_dink 10 / long_rally 4 (dink-heavy);
+pb_draft_cup = long_rally 12 / kitchen_war 2 (rally-heavy, almost no kitchen wars). So kitchen_war/fast_dink likely fail
+the grade bar on pb_draft_cup partly because that game *has* few kitchen wars, not because the signature is broken. This
+is strong evidence the grade-separation bar is the wrong instrument for a *type detector* (it penalises a type that is
+rare in a video) and that the right validation is typed labels or a cross-court clip review. long_rally stays the only
+type confirmed consistent; kitchen_war/fast_dink are unvalidated-not-refuted.
+
+### Follow-up 2: does adding a net-cross / swing "exchange" gate to kitchen_war help? No.
+Tested kitchen_war gated on >=2 net-crosses or >=3 swings during the posture, and the raw rates, on both videos.
+brickwall: posture 0.70, +net-cross 0.59, +swing 0.72, cross-rate 0.65, swing-rate 0.74. pb_draft_cup: every variant
+0.50-0.55 (chance). Two findings: (1) if an exchange gate is wanted, swings beat net-crosses (the tracker loses soft
+dinks), vindicating leaving net-cross out; (2) no variant rescues pb_draft_cup because that game has ~no kitchen wars
+(2 flagged) -- the grade-AUC bar cannot validate a type on a court that lacks it. Confirms the blocker is typed labels /
+clip review, not the kitchen_war definition.
+
+### Follow-up 3: fast_dink clip review (operator) + refractory test
+Cut two brickwall fast_dink clips (r5 19.7s, r38 12.7s) with each detected swing flashed (near/far) and a running count.
+Operator eyeball: "not all but close" -- most flashes are real hits, a minority are not. A same-side refractory (drop a
+second same-side swing within 7 frames) barely changed the counts (r5 30->28, r38 13->13), so the over-count is NOT rapid
+double-detection; it is the swing detector's ordinary false-positive rate (flashes on some non-hit arm motion). The
+true near<->far ALTERNATION count is robust to the refractory (r5 17, r38 8) and is the most meaningful exchange measure.
+Reading: fast_dink's counts slightly overstate but track reality -- adequate as a tempo/intensity signal (not an exact
+shot tally), and eyeball-confirmed as a sound fast-exchange detector on a dink-heavy court. Consistency across courts
+still unconfirmed because pb_draft_cup lacks kitchen wars; needs a SECOND dink-heavy court, not more tuning.
+
+## 2026-10-19 (long_rally robustness: real play vs padding) — Duration tracks real exchange (corr 0.73 with net-crossings) and long rallies' activity spans the whole clip; the padding-proof form is active-span + min_crossings, equally predictive (AUC 0.81 vs 0.82)
+
+**Why.** Operator asked how we ensure long_rally isn't just long footage / dead time / tosses rather than a genuinely long exchange. Checked on the 49 brickwall labelled rallies (duration = hand label, start ~0-3s pre-serve, end ball-dead).
+
+**Findings.**
+- corr(labelled duration, # detected net-crossings) = **+0.73** — long rallies really contain more exchanges.
+- Active span (first detected crossing -> last) is a median **53%** of the labelled span (the rest is the lead-in + crossings the tracker misses), but for the longest rallies the active span covers almost the whole clip (56.3s rally -> 51.6s active), i.e. activity throughout, not trailing dead time.
+- AUC(grade-1>grade-2): raw duration 0.82, **active span 0.81**, crossing count 0.78. Active span is as predictive as raw duration.
+- Low crossing density on long rallies (~0.16/s) is the tracker missing soft crossings, not slow play — so crossing *count* is noisy; active *span* (needs only first+last crossing) is the robust form.
+
+**Production safeguards against "long = padded/dead/toss".** (1) Shipped `min_crossings >= 6` means a toss/dead stretch never becomes a rally. (2) The Jev guardrail removes practice/not-play. (3) Define long_rally as active-play span (first-to-last crossing) under the min_crossings gate, NOT raw segment bounds — padding- and merge-proof, equally predictive. Validation used clean hand labels, so its 0.82 is honest; production should use active span.
+
+**Caveat.** One court; crossing detection is noisy on soft play, so active span can under-read a dink-heavy rally's length (it still needs some crossings).
+
+### Follow-up 4: v2 type definitions (robust forms)
+Refined each type after scrutiny: long_rally = active-play span (first->last net crossing, >=2 crossings) not raw
+duration; kitchen_war = fraction of rally in kitchen posture gated on a swing within +-0.5s (active exchange, not
+standing); fast_dink = near<->far alternations/sec during the posture (robust to swing false positives), not raw
+swings/sec. Consistency (AUC grade-1>grade-2, both videos): long_rally 0.81/0.70 KEEP (now padding-proof AND
+consistent); kitchen_war 0.74/0.51 (brickwall improved with the exchange gate; pbdc still chance); fast_dink 0.81/0.50.
+kitchen_war/fast_dink still drop only because pb_draft_cup lacks the type -- definition is now defensible; the gate is
+a second dink-heavy graded court, not more tuning.
+
+### Follow-up 5: long_exchange (shot count) is a 2nd consistent type
+Added long_exchange = net crossings in the rally (shot count), a different axis from long_rally (time): in the
+rally-heavy pb_draft_cup, shot count and duration are nearly uncorrelated (corr 0.11; brickwall 0.75). Consistency
+AUC(grade-1>grade-2): net crossings 0.78/0.77 -> KEEP on BOTH courts (total pose swings higher at 0.85/0.75 but
+over-count; alternations 0.85/0.65 borderline). Unlike kitchen_war/fast_dink, a long shot exchange occurs in both
+baseline and net styles, so both courts have the type and it passes. Two consistent types now: long_rally (time span)
+and long_exchange (shot count). kitchen_war/fast_dink remain defined-but-unconfirmed (need a 2nd dink-heavy court).
+
+### Follow-up 6: third court (IMG_7743) + prevalence-aware consistency
+Added IMG_7743 (33 rallies, 11 grade-1; locked eval set, used read-only for a frozen-definition consistency check, no
+tuning) and made the bar prevalence-aware (a type is judged only on courts where it is prevalent, >=20% of rallies; a
+court lacking the type is N/A). Three-court AUC(grade-1>grade-2), with prevalence:
+  long_rally    0.81(61%) / 0.70(56%) / 0.67(67%)  -> KEEP on all three.
+  long_exchange 0.78(82%) / 0.77(76%) / 0.64(70%)  -> borderline: 2 strong, IMG_7743 just under 0.65 (soft grades, n=33).
+  kitchen_war   0.74(65%) / 0.51(6%)  / 0.61(18%)  -> only brickwall prevalent; still 1 dink court.
+  fast_dink     0.81(47%) / 0.50(0%)  / 0.50(0%)   -> only brickwall prevalent.
+KEY: IMG_7743 is NOT dink-heavy (18% kitchen prevalence, 0% fast dinks); all three graded videos are baseline/rally-
+heavy, only brickwall has real dink play. So kitchen_war/fast_dink are NOT dropped -- the blocker is a confirmed footage
+gap (no second dink-heavy graded session exists in our set), not a broken detector. long_rally confirmed on 3 courts;
+long_exchange holds on 2 and is marginal on the 3rd.
+
+## 2026-10-19 (fourth court, brickwall-SEMI) — No highlight-type metric is consistent across all four courts; the earlier "long_rally KEEP" was a 3-court artifact. Root blocker confirmed: soft, session-varying grades + variable ball-track quality
+
+**Why.** Operator asked to test another brickwall session (the one dink-heavy source) as a second dink court for kitchen_war/fast_dink. Added brickwall-SEMI (38 rallies, 18 grade-1; semifinal, same tournament as brickwall). It IS dink-heavy (kitchen 55%, fast_dink 39% prevalent).
+
+**Result — four-court AUC(grade-1>grade-2):**
+
+| court | raw duration | active span (long_rally v2) | crossings (long_exchange) |
+|---|---|---|---|
+| brickwall | 0.82 | 0.81 | 0.78 |
+| pb_draft_cup | 0.77 | 0.70 | 0.77 |
+| img7743 | 0.57 | 0.67 | 0.64 |
+| brickwall-SEMI | 0.66 | 0.50 | 0.40 |
+
+**Findings.**
+- NO metric clears 0.65 on all four courts. raw duration fails img7743 (0.57); active span fails brickwall-SEMI (0.50); crossings fail img7743 (0.64) and brickwall-SEMI (0.40). Each works on 2-3, fails a different one. The earlier two-/three-court KEEPs (long_rally, long_exchange) do NOT survive the fourth court.
+- The active-span change (v2 long_rally) was a mistake: it made long_rally ball-tracker-dependent, and on brickwall-SEMI (poor ball track: 12/38 rallies with <2 crossings, active spans ~1/3 of real durations) it collapsed to 0.50 while raw labelled duration held (0.66). Anti-padding belongs in the upstream min_crossings>=6 gate, not in active-span. Recommend reverting long_rally to raw duration.
+- brickwall-SEMI is 47% grade-1 (vs 27-33% elsewhere): a semifinal where nearly every rally is elite, so grade-1 vs grade-2 is a very fine, likely ill-defined distinction -- consistent with nothing separating them. Grades were never consistency-checked (LABELING.md).
+
+**Conclusion.** Do not claim any highlight type as cross-court consistent -- not even long_rally. The practical status quo stands: the shipped ranker (duration + peak crossing-rate + velocity) plus the Jev guardrail for junk. Validating ANY type (length or dink) now has a hard prerequisite: a consistency-checked, comparably-graded set across multiple courts. This supersedes the "two consistent types" and "long_rally KEEP" lines in the entries above.
+
+**Caveat.** 4 courts, soft grades, small n. kitchen_war/fast_dink still only truly testable on dink-heavy courts (brickwall 0.74/0.81, brickwall-SEMI 0.61/0.55) -- both are from the same tournament, so not independent, and neither clears the bar on SEMI. Not refuted, not confirmed.
+
+## 2026-10-19 (reframe: cross-court grade-consistency is the WRONG bar for type detectors) — operator
+
+**Insight (operator).** Each session/court produces different highlight TYPES depending on players and level of play: a dinking match has dink highlights, a banger match has long-shot highlights. The most variable input is the players. So demanding a type separate grade-1 from grade-2 on EVERY court (the bar used in the entries above) is the wrong test -- it penalises a dink detector for a session with no dinks. A type detector's job is to faithfully find its type WHEN PRESENT, not to predict highlights uniformly.
+
+**Supporting evidence (already in the tag manifests).** Per-session dominant detected types: brickwall = kitchen_war 18 / fast_dink 6 (a dinking match); pb_draft_cup = long_rally 9 / long_exchange 7 (a grinding match); IMG_7743 = baseline-heavy. The detectors correctly report each session's character -- the "inconsistency" across courts is the sport, not a detector fault.
+
+**Revised evaluation.** (1) Validate each type as a DETECTOR by its precision ("of what it flags as a kitchen war, how many are real kitchen wars?"), pooled over footage that HAS the type -- court-independent, via clip review / type labels. NOT by grade-AUC across all courts. (2) The reel adapts per session: detect all types, surface the best instances of whichever types that session is rich in; per-session percentile flagging already handles level. (3) This un-blocks kitchen_war/fast_dink -- they need precision-on-their-type (clip-confirmed "close" on brickwall), not a pass on banger courts.
+
+**Supersedes** the "no type is consistent across 4 courts / none shippable" conclusion of the brickwall-SEMI entry: that used grade-consistency, the wrong instrument. The grade-AUC numbers stay as a weak within-session sanity check, not a gate. Next: type-precision validation via clips/type-labels, and a per-session adaptive type-selection for reel assembly.
 ## 2026-10-23 — First far-side serve ground truth: are the proposer's far-serve candidates real, and does a court-depth floor fix the false ones? Precision 19% → ~47%, recall still unmeasured
 
 **Why.** Serve detection is not in production and far-side serves are the hard case (server small and distant). Before tuning, get a *trustworthy, traceable* far-serve set a human can confirm, replacing the orphaned `cache/pose_serve` set (no videos, no producer, unverifiable). Harness: `scripts/propose_serves.py` anchors to each shipped-detector rally start (`gap_sec=3`, `min_crossings=6`) and takes the earliest self-normalized "deep" arm-swing in `[start-4, start+1]` as the proposed server. 187 rallies → 184 serve proposals (147 near, **37 far**), 3 no-serve. The 37 far clips were cut (`scripts/cut_serve_clips.py`) and reviewed in CVAT.

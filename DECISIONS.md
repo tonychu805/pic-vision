@@ -3393,6 +3393,66 @@ The desktop reports an aggregate per-camera local-source state over its existing
 
 **Verification.** Desktop lint, renderer production build, and focused system/network-sweep tests pass (9 tests). Still required before release: an installed-artifact scan on a machine with both wired and Wi-Fi venue networks, including a camera on each subnet.
 
+## ADR-154 — Fixed glare is the main cause of lost ball tracking on glare courts; the still-site filter (v2) stays off until a glare-gated, longer-dwell version passes on fresh footage
+
+**Date:** 2026-10-17 · **Status:** decided; nothing switched on · **Project:** pic-vision (PIC-226)
+
+**Context.** Bounce finding passed on its first court (14 of 33 hand-labelled bounces, 42%) and collapsed on a second (c199a97c 9/26 s002: 4 of 36). On 2026-10-16 a chain of pre-registered tests asked why and whether a filter fixes it. All are in `EXPERIMENTS.md` 2026-10-16 (bounce chunk 2, discarded ball points, overlay review, glare removed before tracking, Test E, Test E2 and its follow-up).
+
+**What was learned.**
+1. **Fixed glare captures the tracker.** On the second court, four 20 px cells (a court reflection near (925, 652) and a white object on the back shutter near (1080, 280)) hold ~60% of all detections. Removing just those cells before tracking lifts bounces found from 4 to 10 of 36, with no labelled bounce on a removed cell.
+2. **Without glare the current finder is near the bar.** A third, exhaustively labelled stretch (eda301d9 9/26 s000 min 2-6, 98 bounces, 0% glare) gives 34 of 98 (35%) against the 40% bar. The second court's failure was mainly glare, not zoom or the bounce rule.
+3. **Glare can be removed dynamically, but slow balls look like glare.** Test E (tracklet-level stillness) removed only 41% of the glare because glare chained into "moving" tracklets. Test E2 (per-point stillness: >= 6 points within 12 px in +-90 frames, kept only on a straight moving path) removed 87% of it and all 8 known glare fake rallies, but also dropped 7% of detections on glare-free footage: soft bounces near the kitchen and a ball dribbling to rest. It failed its pre-registered bars: chunk 3 30 vs 34 (allowed 33), real field rallies lost 4 of 60 (allowed 3).
+4. **On the worst glare court, part of today's rally recall is luck.** All 4 lost real rallies are on glare court 34fab44c (it lost all 4 of its real clips). In two, 44% of today's tracked path is glare; operator playback agrees ("half of the time the ring focuses on the wrong object"). One survives shifted to the IoU edge; one is unexplained. Clean field courts lost none.
+5. **Method lessons.** Pre-register before labels exist and amend only before scoring (chunk 3 was amended twice: multi-ball practice, then the Tapo C200 camera de3d1953, which drops frames). Keep instructions to a reviewer fixed for the whole pass (the overlay review's 3-of-14 agreement came from wording drift). Labels across overlapping CVAT jobs can be duplicated; dedupe across job boundaries only.
+
+**Decision.**
+- `drop_still_v2` is **not** switched on, and neither is the fixed static mask. Production detection is unchanged.
+- The glare finding is accepted as a main cause, and the slow-ball failure as the known weakness of a short-window still-site rule.
+- The next version (Linear PIC-231), if pursued, must (a) apply only where glare is measured (static-cell share; 0% on 13 clean field courts vs 26-40% on glare courts), and (b) require a site to stay lit for minutes, not seconds, so a slow ball cannot qualify. It must be pre-registered and scored on footage not used in this work: all three labelled bounce stretches have now been used for diagnosis.
+- Weak ball detection on court 34fab44c is a separate problem (detector yield), not something a glare filter can fix.
+
+**Data kept.** Hand labels: `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json` (33), `cvat_c199a97c_0926T0538_s002.json` (36), `cvat_eda301d9_0926T0538_s000_120-360.json` (98). Code: `scripts/tracklets_first.py` (+ tests), `scripts/eval_tracklets_first.py`, `scripts/eval_tracklets_first_v2.py`, `scripts/check_static_removed_bounces.py`.
+
+## ADR-155 — The Tapo C200 at PGC court 1 (camera de3d1953) is excluded from all new evaluation samples
+
+**Date:** 2026-10-17 · **Status:** decided (operator) · **Project:** pic-vision (PIC-226)
+
+**Context.** Across the two fresh, operator-judged samples (`EXPERIMENTS.md` 2026-10-13 fresh sessions, verdicts; 2026-10-17 Test L), 22 of 43 clips from de3d1953 were not rallies, against 3 of 27 on the other two cameras (eda301d9 1 of 17, c199a97c 2 of 10). de3d1953 has no fixed glare (0% static-cell share on all 22 scale sessions), so detector noise from glare does not explain it. The camera is also the one that drops frames (it failed the decode guard and had to be re-encoded, which duplicates frames and distorts speed; bounce chunk 3b was abandoned for this) and has no manual shutter control (ADR-002 context). The operator's reasons for its bad clips were mostly real play that is not a point: warm-ups, practice, failed serves.
+
+**Decision (operator).** No new test sample, labelling chunk or tuning pool uses footage from de3d1953. New sampling scripts filter sessions through `scripts/footage_rules.py` `usable()` (tests in `tests/test_footage_rules.py`).
+
+**What this does not change.**
+- Past experiments keep the footage they were registered with; their recorded numbers are not re-scored without it. Any "without the Tapo" re-reading of an old result is post-hoc and must say so.
+- Production is untouched: if PGC keeps recording court 1 on this camera, its sessions still get reels, and their quality is no longer measured by our tests.
+
+**Caveat.** Camera and day are confounded: every judged de3d1953 clip is from 2026-09-25 and every other judged clip from 2026-09-26. Part of the junk may be that day's play (more warm-ups and practice) rather than the camera. Removing the camera also removes most 09-25 footage from future samples, so warm-up and practice clips will be rarer in tests than they may be in real use.
+
+## ADR-156 — Paddle hits are not found from the ball track alone; a track-turn hit finder is not pursued further at the current track quality
+
+**Date:** 2026-10-19 · **Status:** decided (from a pre-registered test) · **Project:** pic-vision (PIC-226)
+
+**Context.** The first exhaustive hit marks (two minutes of PGC chunk 3c, 44 hits) showed that the ball detector sees about half the hits at contact, and almost none on the near side. A finder for sharp turns and speed-ups in the tracked path, developed on minute 1 (7 of 22 hits), found 2 of 22 on the held-out minute 2, with 2 of 27 picks right (`EXPERIMENTS.md` 2026-10-19 hit turn finder).
+
+**Decision.** No more tuning of rules on the ball track to find hits. Hit finding is reopened only through (a) a better ball track near contact (the ball is lost or jumps exactly where the paddle meets it), or (b) a player cue that doesn't need the ball (wrist position, arm-swing timing), tested against the exhaustive hit marks in `eval/labels/hits/`.
+
+**What this does not change.** The bounce finder and the court-zone result (`EXPERIMENTS.md` 2026-10-18 zone test) are unaffected. Wrist proximity stays a live but weak cue for sorting hit from bounce (AUC 0.83, below its bar).
+
+**Caveat.** Two minutes of one camera, tile-arm detections. A better detector could change the ceiling; this decision is about rules on today's track.
+
+## ADR-157 — Paddle-hit candidates come from arm swings (pose wrist speed), checked against the ball track
+
+**Date:** 2026-10-19 · **Status:** decided (from pre-registered tests) · **Project:** pic-vision (PIC-226)
+
+**Context.** Hits can't be found from the ball track (ADR-156). A wrist-speed swing rule passed on held-out minute 2 (narrowly) and replicated on minute 3. Adding a ball check (ball in play, ball not seen far from the swinger) passed all five checks on held-out minute 3: 18 of 27 hits, near side 7 of 12, 56% of picks real (`EXPERIMENTS.md` 2026-10-19 arm-swing and swing + ball entries).
+
+**Decision.** The hit finder is `scripts/eval_swing_ball_hits.py`'s rule: yolov8x-pose wrist-speed swings, kept when the ball is in play and not far from the swinging player. Further hit work (hit counts, shot timelines, hit-vs-bounce sorting) starts from these candidates, not from the bounce finder's boxes or ball-track turns.
+
+**What this does not change.** It is still a research rule (scripts/), not in the reel pipeline. Wrist proximity for sorting bounce boxes (2026-10-18) is superseded as the main route but not retested.
+
+**Caveat.** One court, one session, three minutes, one operator, tile-arm detections. Running full-frame pose on every frame costs GPU time not yet measured against the reel budget. Next checks: another court (glare court c199a97c) and production detections.
+
+**Update 2026-10-19.** Both next checks done and passed (`EXPERIMENTS.md` 2026-10-19 production-detections and second-court/glare entries): production detector 36/71 hits (51%, precision held); glare court 16/29 (55%), all four pre-registered checks. The finder generalizes across both courts at this venue; recall tracks detector quality. Still one venue; a different venue is untested.
 ## ADR-158 — Exclude the frame-dropping Tapo court-1 camera and coaching/drill sessions from serve/eval samples (consolidates and extends ADR-155)
 
 **Date.** 2026-10-23
