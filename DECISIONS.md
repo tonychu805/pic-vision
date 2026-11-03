@@ -3453,3 +3453,185 @@ The desktop reports an aggregate per-camera local-source state over its existing
 **Caveat.** One court, one session, three minutes, one operator, tile-arm detections. Running full-frame pose on every frame costs GPU time not yet measured against the reel budget. Next checks: another court (glare court c199a97c) and production detections.
 
 **Update 2026-10-19.** Both next checks done and passed (`EXPERIMENTS.md` 2026-10-19 production-detections and second-court/glare entries): production detector 36/71 hits (51%, precision held); glare court 16/29 (55%), all four pre-registered checks. The finder generalizes across both courts at this venue; recall tracks detector quality. Still one venue; a different venue is untested.
+## ADR-158 — Exclude the frame-dropping Tapo court-1 camera and coaching/drill sessions from serve/eval samples (consolidates and extends ADR-155)
+
+**Date.** 2026-10-23
+
+**Context.** The first near-side serve-review pass (CVAT project 17) was built from
+three PGC sessions and two turned out to be unusable footage that no filter caught:
+- `c6a9136a` ("PGC - Court 2") is a **coaching / ball-feeding drill** — balls
+  scattered across the court, a coach feeding from a cart, no real serves.
+  Confirmed by eye and by Jev (11/13 of its clips scored practice/not_play,
+  mean "real" 0.12 vs >0.5 for games sessions).
+- `499ed4b8` ("PGC - court 1") is the **Tapo C200**, which drops ~1/3 of its
+  frames (frozen/duplicated to hold 30fps CFR), so the serve is unwatchable. A
+  frame-drop audit (mpdecimate on a 30s mid-slice) then showed **all three
+  "PGC - court 1" recordings** — `499ed4b8`, `52f4de24`, `72852da9` — have the
+  same 32–33% frozen-frame signature; every other PGC camera measures 0%. They
+  are the same camera, different recordings.
+
+ADR-155 already decided to exclude this Tapo ("drops frames, no shutter control")
+but (a) named only one recording of it, `de3d1953`, missing the three above, and
+(b) **was never merged** — it is stranded on the local `feature/bounce-labelling`
+branch, so `footage_rules.py` was absent from the active tree and nothing was
+enforced. That is the direct cause of both leaks.
+
+**Decision.** Bring `footage_rules.py` onto the active branch and extend its
+exclusion set to the complete Tapo court-1 recording list plus the drill session
+(`EXCLUDED_CAMERAS` ∪ `EXCLUDED_TAPO` ∪ `EXCLUDED_DRILL`), and **wire `usable()`
+into `propose_serves.py`** so excluded footage can never become a serve
+candidate. `usable()` stays a pure string match (no video I/O) so it is cheap
+per candidate. New footage is vetted before entering a sample by the frame-drop
+audit (>15% frozen ⇒ Tapo-class) and a games-vs-drill check (Jev or a quick
+watch). This supersedes and consolidates ADR-155; when `feature/bounce-labelling`
+is reconciled, its `footage_rules.py` is the subset and this one wins.
+
+**Consequences.** The near-serve set was rebuilt on clean games sessions
+(`7358ef3f`, `3e1caf84`, `a96cbae3`). Note the **far**-serve ground truth
+(EXPERIMENTS 2026-10-23) was partly on this Tapo: far serves 13/15 (`499ed4b8`)
+and 27/28 (`72852da9`), and the whole `52f4de24` not-serve cluster — those
+numbers carry a frame-drop caveat (the clean session `365c798c` showed the same
+depth pattern independently, so the depth-floor finding itself stands). Other
+sample-builders (`eval_*`, labelling-chunk scripts) should route their session
+lists through `usable()` too; this change only wires the serve proposer.
+
+**Verification.** `tests/test_footage_rules.py` asserts the Tapo court-1 and
+drill prefixes are excluded and clean games sessions pass; `make test` green.
+Re-running `propose_serves.py` drops `c6a9136a`/`499ed4b8`/`52f4de24`/`72852da9`
+from the candidate set.
+
+## ADR-159 — The ball-detection bottleneck is input resolution + fps (pipeline downscaling), not the detector; fix the input, keep TrackNet
+
+**Context.** Far serves and the 2nd shot (serve return) are missed because the ball
+blacks out at its fastest, deepest moment. We investigated whether this is a detector
+limit, an fps limit, a resolution limit, or an optics wall (EXPERIMENTS.md 2026-10-25).
+
+**Findings / decision.**
+- **Keep TrackNet.** Its multi-frame motion model is why the ball is findable at all;
+  TrackNetV3 (fabricates trajectory, [[project_tracknetv3_evaluated_not_adopted]]) and
+  single-frame YOLO (retired to `archive/`) are both worse. The detector is not the problem.
+- **The bottleneck is the pipeline's own downscaling**, in two independent stages:
+  - *temporal* — `CFR_FPS=30` (pod_driver.py) discards half of the 60fps capture; the
+    fast-ball blackout happens at the fps we throw away.
+  - *spatial* — the full 1920-wide frame is downscaled to TrackNet's 512 input (3.75×),
+    shrinking the far ball from ~9px native to ~2.4px, below reliable detection.
+- **Not an optics wall for the median far ball:** measured ~9px native at 1080p. The
+  signal is at the sensor; inference destroys it. (Sub-5px fastest balls ARE a residual floor.)
+- **Fix at the input stage, not the detector:** (a) aspect-correct far-court tiling
+  (SAHI done right — a naive non-16:9 crop distorts and *hurt*, 5% vs 18%), and/or
+  (b) retrain TrackNet at a higher input resolution (keeps 9px as 9px); plus (c) stop
+  forcing 30fps where it matters.
+- **Recommended next increment:** aspect-correct far tile + 60fps on serve/rally-start
+  windows only (~10% cost), with a **gated merge** (only-when-full-frame-blank +
+  trajectory-continuity + drop-above-baseline) — NOT a blind union, which adds ~30%
+  stand phantoms during near play.
+
+**Consequence.** Far-serve / 2nd-shot recovery is a **pipeline change** (`pod_infer.py`
+input handling + `pod_driver.py` fps), not a camera change or detector swap. Scoped,
+not built. Links EXPERIMENTS.md 2026-10-25.
+
+**⚠ Correction (2026-10-26) — footage provenance + the fps leg.** The "PGC 1080p@60" footage
+cited in this ADR and its EXPERIMENTS entry was actually **a pro match downloaded off YouTube**
+(`sample-clip.mp4`), not the PGC camera (verified: Google/Lavf download signature; the real PGC
+recordings are 30fps 1080p `.mkv`). Two consequences: (1) **the fps/temporal leg is downgraded** —
+PGC records 30fps natively, so "the pipeline throws away 60→30fps" is not a production reality; the
+fps gain needs a camera actually capturing >30fps, which PGC does not. The ADR's **spatial**
+(1920→512 resolution) leg is unaffected and remains the load-bearing finding, validated on brickwall
+(a real camera). (2) **The far-tile is NOT yet validated on real PGC footage** — only on brickwall
+(720p) and the downloaded 1080p match; the behind-baseline PGC camera (30fps) is untested. The
+decision (fix the input resolution, keep TrackNet) stands; "fps" in the headline should be read as
+"only where the camera captures >30fps." See EXPERIMENTS.md 2026-10-26.
+
+**Scope note (end-to-end check, 2026-10-25).** The merged (full + far-tile) track was run
+through the real downstream crossing logic: it adds far-side track points but **no new
+net-crossing** — the 2nd shot's crossing already comes from the near-side ball, so the
+coarse rally detector was never actually missing it. The "missed 2nd shot" is an
+**overlay / hit-attribution** gap (the marker needs the ball AT the far contact). So this
+fix buys serve/analytics/**per-shot-overlay** quality, with **zero value to the core reel**
+— build only when serve-based features are scheduled. (EXPERIMENTS.md 2026-10-25, "End-to-end check".)
+
+## ADR-160 — Opt-in occlusion bridge: hold a rally open across near-kitchen ball occlusion
+
+**Date.** 2026-10-26
+
+**Context.** Clips that open mid-rally (serve cut off) were traced, by chart and operator playback, to the near-side
+ball being hidden by the near players at the kitchen during dinks. The tracked ball is only ever seen on the far side,
+no crossing is counted, the 3 s gap (ADR-048) expires, and the serve's crossings become a sub-6 group that is dropped.
+Tried and rejected the same day (EXPERIMENTS.md 2026-10-26): re-attaching dropped fragments (playback 4 better / 12
+worse), a pose swing-based serve anchor (6/17 vs today 10/17), a broad "ball seen moving" keep-alive (merged points,
+2 → 9), and trimming slow bridged pieces (cost real points to fix a cosmetic toss tail).
+
+**Decision.** Add `src.ball.occlusion_keepalive_times` and a separate `cluster_crossings_keepalive`. The original
+`cluster_crossings` is untouched, so the flag-off path runs unchanged code. This matters because merging to `main`
+ships pod code to production via `pod-deps.yml`, with no staging step. A keep-alive
+fires when the ball was last seen on the far side within 80 px (at 1920 px wide, scaled by frame width) of the net
+line, moving toward it, is unseen for 0.2-2.0 s, and reappears on the far side. Keep-alives hold a burst open across
+the gap but never count as crossings, never set a rally's start or end, and never form a rally alone. Exposed as
+`detect_candidates(..., occlusion_bridge=False)` and `scripts/rank_and_reel.py --occlusion-bridge`. **Default off**;
+the cloud pod path is unchanged.
+
+**Evidence.**
+- Held-out PGC (7 clean sessions, rule frozen before running): 12 clips changed. Operator playback: 4 serves recovered,
+  6 real points that today's version drops, 1 correct merge, 1 bad (a 12.7 s backward move that pulled in a prior point).
+- Labeled non-PGC at IoU≥0.5, production entry point:
+  - brickwall 0.70/0.63 → 0.86/0.73
+  - brickwall-SEMI 0.77/0.63 → 0.84/0.71
+  - pb_draft_cup 0.86/0.56 → 0.82/0.53 (one rally gains a 6 s toss-back tail and falls under IoU 0.5)
+  - IMG_7744 0.65/0.20 → 0.61/0.23
+  - IMG_7743 eval (pre-bump, prototype run) recall 0.74 → 0.79, quality-1 7/10 → 9/10
+
+**Consequences / not decided.**
+- Known costs: an occasional toss-back tail on a clip's end, and rare backward over-reach.
+- A backward-move cap was considered and left out: the only evidence is one bad case (12.7 s) against a good one
+  (10.6 s, eda r17), too thin to pick a number.
+- Top-10 reel picks change by 0-3 per video without adding highlight-worthy rallies, so the ranker, not detection,
+  is now the limit on reel quality.
+- Turning it on in the pod path is a separate decision (needs a reel-level watch on new sessions).
+
+## ADR-161 — Keep badge pose inference batch size at 8
+
+**Date.** 2026-10-30
+
+**Context.** Production pose/badge work takes roughly 2:40 per 5-minute part. Since inference dominates and the RTX 2000 Ada had spare VRAM, larger inference batches looked like a low-risk way to shorten that stage.
+
+**Decision.** Keep `src.pose.pose_video` at batch size 8. Do not raise it to 16 or 32 as a speed optimization: on the production RTX 2000 Ada, batch 16 was indistinguishable from batch 8 in throughput, while batch 32 was slower and changed one detection on the measured rally windows.
+
+**Evidence.** Three repeated runs per batch size on the production TorchScript model and a 2,353-frame blind rally-window sample: batch 8 averaged 22.96 fps; batch 16 averaged 23.00 fps (0.2% faster, within run variation; same badge summary); batch 32 averaged 22.21 fps (3.4% slower; one frame's person count and the badge output hash changed). See `EXPERIMENTS.md`, 2026-10-30 “Pose inference batch size”. This is limited to the tested GPU, model, footage, and current 736×1280 input shape.
+
+**Consequences.** Batch-size tuning is not a useful route to lower pose time on this card. The remaining untested compute lever is reducing pose input resolution; because this affects detections and badge measures, evaluate it against the blind badge set before changing production.
+
+## ADR-162 — Keep production pose weights and input size pending blind badge validation
+
+**Date.** 2026-10-30
+
+**Context.** The production pose stage takes about 2:40 per 5-minute part. ADR-161 ruled out a batch-size increase. This experiment measured a reduced input size and a smaller pose model on the same RTX 2000 Ada.
+
+**Decision.** Keep the production YOLOv8x-pose at 736×1280 for now. Do not deploy the faster variants until the full blind brickwall badge comparison passes. Treat YOLOv8x at 640×1120 as the leading candidate for that check: it was 1.36× faster on the sample. Do not select YOLOv8n on this evidence; its much larger speed gain came with substantial pose-output and badge-measure drift.
+
+**Evidence.** On seven blind-labeled IMG_7743 rallies (2,353 posed frames), x at 640×1120 reduced mean time from 102.6 s to 75.6 s, while matched keypoints shifted 2.44 px on average and the raw measures changed (63 vs 62 swings, 6 vs 7 serve windows). YOLOv8n at 736×1280 was 4.26× faster but shifted matched keypoints 6.46 px on average, produced 60 swings, and changed the kitchen-share measurements; at 640×1120 it produced 57 swings and nearly erased two kitchen-share measurements. No variant produced an award candidate on this small sample, so award parity was not tested. Full details are in `EXPERIMENTS.md`, 2026-10-30 “Lower pose input and smaller model”.
+
+**Follow-up.** Re-run the full blind brickwall badge evaluation for x at 640×1120, including the final session-level `decide()` output. Keep the current production path unless that held-out run shows acceptable pose and badge results.
+
+## ADR-163 — Keep badge pose input at 736×1280; reject 640×1120
+
+**Date.** 2026-10-30
+
+**Context.** ADR-162 left reduced-resolution YOLOv8x as a candidate pending full-session badge validation, because the seven-rally speed sample had no award candidates.
+
+**Decision.** Keep the production YOLOv8x-pose model at 736×1280 and batch 8 for badge inference. Do not deploy the 640×1120 variant: it changes session-level badge results despite running about 27% faster.
+
+**Evidence.** On the complete blind brickwall session, both conditions processed the same 27,329 frames across 42 detected rallies. Production took 1,187.3 s and awarded three badges. The reduced-size variant took approximately 868 s and awarded four; only Quick Hands remained at the same rally, while Hardest Swing and Kitchen War moved to different rallies and a new Killer Shot appeared. Kitchen-share measurements also changed materially. The candidate time is estimated from its final progress sample; its exact terminal timing was not retained. Full results and limitations are in `EXPERIMENTS.md`, “Full blind brickwall badge comparison: YOLOv8x at 640×1120”.
+
+**Consequences.** The 640×1120 speedup is not acceptable for the current badge behavior. Further pose-time reductions must preserve full-session award locations on blind footage, or change the product's badge-quality requirement explicitly before deployment.
+
+## ADR-164 — Select YOLOv8n for a speed-first production rollout
+
+**Date.** 2026-10-31
+
+**Context.** ADR-162 and ADR-163 kept the production YOLOv8x model because smaller variants change pose measurements and may change badges. The operator has since made player wait time the priority and explicitly requested YOLOv8n for production after reviewing the staging replay with audio.
+
+**Decision.** Use YOLOv8n-pose at 736×1280, batch 8, for production badge measurement. This supersedes ADR-162's model choice and ADR-163's requirement to retain YOLOv8x, while keeping the 736×1280 input shape. Badge behavior may differ from the previous model; do not present the rollout as badge-equivalent.
+
+**Evidence.** On the seven-rally blind sample, YOLOv8n was 4.26× faster in pose inference than YOLOv8x but changed keypoints and raw badge measurements (ADR-162). The staged five-part shared-session replay completed all ten vertical highlights with audio 1:52 after footage ended. All five parts completed without retries, but that one replay is not a controlled production latency or badge-parity study; see `EXPERIMENTS.md`, 2026-10-31 audio replay.
+
+**Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.

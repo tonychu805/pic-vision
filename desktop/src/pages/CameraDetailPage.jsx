@@ -358,7 +358,7 @@ function CloudJobRow({ camera, recording }) {
 // status row per part already sent, instead of the whole recording's single
 // Send button -- sending the whole recording as well would process every
 // part twice. While recording, "Send what's recorded so far" sends every
-// finished 10-minute piece now, for when the session is about to end.
+// finished piece now, for when the session is about to end.
 function PartedRecording({ camera, recording, onChanged }) {
   const [splitMinutes, setSplitMinutes] = useState(0);
   const [sending, setSending] = useState(false);
@@ -371,7 +371,7 @@ function PartedRecording({ camera, recording, onChanged }) {
     setNote("");
     try {
       const { sent } = await window.autoSplitAPI.sendNow(camera.id);
-      setNote(sent.length ? `Sent ${sent.join(", ")}` : "Nothing finished to send yet -- the current 10 minutes is still recording");
+      setNote(sent.length ? `Sent ${sent.join(", ")}` : "Nothing finished to send yet -- the current piece is still recording");
       onChanged?.();
     } catch (err) {
       setNote(cleanIpcError(err));

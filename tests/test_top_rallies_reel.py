@@ -108,3 +108,21 @@ def test_build_top_rallies_returns_all_when_fewer_than_n_qualify(monkeypatch, tm
         session_id="test", n=10)
 
     assert len(result["manifest"]) == 3  # no padding to 10
+
+
+def test_n_none_cuts_every_rally_each_carrying_its_own_unpadded_times(monkeypatch, tmp_path):
+    # Badges are decided later across the whole session (src/badges.py
+    # decide()), so with badges on the pod clips every rally, and each clip
+    # must say which rally it is.
+    monkeypatch.setattr(rallies, "load_predictions", lambda csv, fps: _fake_track(3))
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(top_rallies_reel, "cut_clips", lambda video, chosen, out_dir, **kw: [
+        {"file": "x.mp4", "score": s["score"], "start": s["start"] - 3.0, "end": s["end"] + 3.0,
+         "rally_start": s["rally_start"], "rally_end": s["rally_end"]} for s in chosen])
+    calib_path = tmp_path / "calib.json"
+    calib_path.write_text(json.dumps({}))
+    segments = rallies.detect_candidates("v", "p", str(calib_path))["segments"]
+    result = top_rallies_reel.build_top_rallies("v", "p", str(calib_path), str(tmp_path), session_id="t", n=None)
+    assert len(result["manifest"]) == len(segments) == 3
+    assert sorted(c["rally_start"] for c in result["manifest"]) == sorted(s["start"] for s in segments)

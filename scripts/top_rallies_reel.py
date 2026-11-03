@@ -28,7 +28,7 @@ DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       pad_sec=PAD_SEC, logo_path=None):
+                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -43,8 +43,12 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     (start-time) order for its own manifest.json bookkeeping, which is not
     the order this function's callers want. stats is
     {"n_candidates", "n_chosen"}.
+
+    n=None cuts every rally. Each clip also carries its rally's own unpadded
+    'rally_start'/'rally_end', which is how a badge decided later, across a
+    whole session (src/badges.py decide()), finds the clip of its rally.
     """
-    cand = detect_candidates(video, csv, calib_path)
+    cand = detect_candidates(video, csv, calib_path, occlusion_bridge=occlusion_bridge)
     segments, times_crossed, speeds = cand["segments"], cand["times_crossed"], cand["speeds"]
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
 
@@ -54,9 +58,8 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
         print("calibration has no net end points: scoring on length and pace only",
               file=sys.stderr)
     ranked = score_segments(segments, times_crossed, speeds, net_px)
-    chosen = ranked[:n]
-    print(f"chose top {len(chosen)}/{len(ranked)} rallies by score (n={n})",
-          file=sys.stderr)
+    chosen = [dict(seg, rally_start=seg["start"], rally_end=seg["end"]) for seg in ranked[:n]]
+    print(f"chose {len(chosen)}/{len(ranked)} rallies (n={n})", file=sys.stderr)
 
     manifest = cut_clips(video, chosen, out_dir, court_id=session_id,
                           session_id=session_id, pad_sec=pad_sec, logo_path=logo_path)

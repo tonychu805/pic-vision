@@ -2,8 +2,8 @@
 // recording, so the reels for everything but the last part are ready by the
 // time the session ends (2026-09-23, for in-person delivery at a venue test).
 //
-// It regroups files that already exist. capture.js has always written a
-// recording as 10-minute segments (session-000.mkv, session-001.mkv, ...)
+// It regroups files that already exist. capture.js writes a recording as
+// SEGMENT_MINUTES-long segments (session-000.mkv, session-001.mkv, ...)
 // and keeps recording across them, so a part is just a set of FINISHED
 // segments: no stopping the camera, no footage lost at a split. Each part is
 // a folder of hard links to its segments (<recording>/parts/part-01/), which
@@ -22,7 +22,11 @@ import path from "node:path";
 
 export const SEGMENT_RE = /^session-\d+\.mkv$/;
 const PART_RE = /^part-(\d+)$/;
-export const SEGMENT_MINUTES = 10; // capture.js: -segment_time 600
+// 5, not 10, since 2026-10-27: the last part of a game is what players wait
+// for after it ends, and a 5-minute part halves that wait (staging replay:
+// clips final ~13 min after a game with 10-minute parts). capture.js's
+// -segment_time is derived from this, so the two can't drift.
+export const SEGMENT_MINUTES = 5;
 
 // A segment ffmpeg has moved past is finished; this guards the moment right
 // after the switch, before the old file's last write has landed.
@@ -30,7 +34,7 @@ export const SETTLE_MS = 15_000;
 
 const store = new Store({ name: "autoSplit", configFileMode: 0o600 });
 
-/** Part length in minutes; 0 = off. Rounded to whole 10-minute segments. */
+/** Part length in minutes; 0 = off. Rounded to whole SEGMENT_MINUTES segments. */
 export function getAutoSplitMinutes() {
   const v = store.get("minutes", 0);
   return Number.isFinite(v) && v > 0 ? v : 0;
@@ -217,4 +221,16 @@ export function sessionFieldsFor(dir, fileNames) {
   const first = [...fileNames].map((f) => path.basename(f)).filter((f) => SEGMENT_RE.test(f)).sort()[0];
   const segIndex = first ? Number(/\d+/.exec(first)[0]) : 0;
   return { recordingSessionId, partIndex: Number(partMatch[1]), partOffsetSec: segIndex * SEGMENT_MINUTES * 60 };
+}
+
+/**
+ * What the console is told once a recording has stopped and its last part
+ * has been cut (2026-10-27): the session and how many parts it was sent in,
+ * so its waiting GPUs can be let go as soon as they all arrive. Null for a
+ * recording outside any session.
+ */
+export function sessionEndReport(recordingDir) {
+  const recordingSessionId = readSessionMeta(recordingDir)?.recordingSessionId ?? null;
+  if (!recordingSessionId) return null;
+  return { recordingSessionId, partCount: listParts(recordingDir).length };
 }

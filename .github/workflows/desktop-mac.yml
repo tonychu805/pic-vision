@@ -185,8 +185,28 @@ jobs:
           name: exe-x64
           path: desktop/release/*.exe
 
+  # Dependency vulnerability gate for the shipped app. Runs on cheap Linux
+  # (no Mac/Windows runner needed) off the lockfile alone. Scoped to runtime
+  # deps -- the dev/build-only advisories (electron-builder subtree) are
+  # tracked and accepted in sbom/VULNERABILITIES.md, so --omit=dev keeps this
+  # on what actually ships; fails on high+ severity. NOTE: this does NOT cover
+  # the Node/Chromium binaries Electron bundles (npm audit sees npm packages
+  # only) -- those are tracked separately in sbom/VULNERABILITIES.md.
+  audit:
+    name: npm audit (runtime)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Audit shipped (runtime) dependencies
+        working-directory: desktop
+        run: npm audit --omit=dev --audit-level=high --package-lock-only
+
   release:
-    needs: [build, build-windows]
+    needs: [build, build-windows, audit]
     if: startsWith(github.ref, 'refs/tags/desktop-v')
     runs-on: ubuntu-latest
     timeout-minutes: 10

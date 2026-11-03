@@ -4387,3 +4387,1212 @@ long_exchange holds on 2 and is marginal on the 3rd.
 **Revised evaluation.** (1) Validate each type as a DETECTOR by its precision ("of what it flags as a kitchen war, how many are real kitchen wars?"), pooled over footage that HAS the type -- court-independent, via clip review / type labels. NOT by grade-AUC across all courts. (2) The reel adapts per session: detect all types, surface the best instances of whichever types that session is rich in; per-session percentile flagging already handles level. (3) This un-blocks kitchen_war/fast_dink -- they need precision-on-their-type (clip-confirmed "close" on brickwall), not a pass on banger courts.
 
 **Supersedes** the "no type is consistent across 4 courts / none shippable" conclusion of the brickwall-SEMI entry: that used grade-consistency, the wrong instrument. The grade-AUC numbers stay as a weak within-session sanity check, not a gate. Next: type-precision validation via clips/type-labels, and a per-session adaptive type-selection for reel assembly.
+## 2026-10-23 — First far-side serve ground truth: are the proposer's far-serve candidates real, and does a court-depth floor fix the false ones? Precision 19% → ~47%, recall still unmeasured
+
+**Why.** Serve detection is not in production and far-side serves are the hard case (server small and distant). Before tuning, get a *trustworthy, traceable* far-serve set a human can confirm, replacing the orphaned `cache/pose_serve` set (no videos, no producer, unverifiable). Harness: `scripts/propose_serves.py` anchors to each shipped-detector rally start (`gap_sec=3`, `min_crossings=6`) and takes the earliest self-normalized "deep" arm-swing in `[start-4, start+1]` as the proposed server. 187 rallies → 184 serve proposals (147 near, **37 far**), 3 no-serve. The 37 far clips were cut (`scripts/cut_serve_clips.py`) and reviewed in CVAT.
+
+**Setup.** CVAT project 16 `serve-review-far`, one task per clip, labels `serve_contact` (points, ball at contact), `not_serve`, `wrong_side` (real serve but near-side), `unsure` (tags). Clips first cut at serve_t−3…+5 (8 s); re-cut to serve_t−4…+9 (**13 s**) after the operator hit serves developing late and falling off the tail (clip 34's real contact was ~3.7 s after the proposer's estimate — the estimate runs early). Operator labelled all 37 on the 13 s clips. This scores serve-event classification, not rally intervals, so the IoU≥0.5 rally rule does not apply.
+
+**Results.**
+
+| Verdict | Count |
+|---|---|
+| `serve` (real far serve) | 7 |
+| `not_serve` | 27 |
+| `wrong_side` (real serve, near-side) | 2 |
+| `unsure` | 1 |
+
+- **Far-serve proposal precision = 7/36 ≈ 19%** (excluding the 1 unsure). Four in five "far serve" proposals are not far serves.
+- **Clean cause — depth.** Real far serves sit at court_y 34.7–44.0 (calibrated feet; net=22, far baseline=44). False proposals sit mostly at court_y 28.6–33 — shallow players the self-normalized `DEEP_FRAC` far-cut wrongly classed "far". Two compressed-court sessions (`365c798c`, `52f4de24`) alone produced 20 of 27 false flags and **zero** real serves: nobody reaches the far baseline there, so the per-session far-cut collapses.
+- **Fix — a far-depth floor derived from the court's calibrated geometry** (not a hand-tuned constant). court_y is calibrated feet (net=22, far baseline=2*net=44, far kitchen line=net+7=29); the floor is the back `BACKCOURT_SERVE_FRAC=0.33` of the far backcourt behind the kitchen line → `geom_floor = 29 + 0.33*(44-29) = 33.95`, and `far_cut = max(self_norm, geom_floor)`. Deriving it from the court lines (not from where players stood) is what fixes the collapse, and it moves with the calibration instead of being pinned to these cameras. (A first version used an absolute `FAR_DEPTH_MIN=34.0` fit to the shallowest real serve here; replaced because court_y at the far end is itself the unreliable quantity, so a number fit to 7 points on one camera set was the wrong thing to trust.) Re-running the proposer: far proposals **37 → 17** (near 147→159, no-serve 3→11). Against these verdicts, **all 7 real serves survive as far (zero lost)**; new far set composition 7 serve / 6 not_serve / 2 wrong_side / 1 unsure / 1 new. **Precision 19% → ~47% (7/15), no serve recall-of-proposals lost.**
+
+**What this does and does not say.**
+- This is **precision of the far-serve proposals, not recall.** It does not measure how many real far serves exist in the footage or how many we catch. Recall needs an independent exhaustive far-serve pass over ≥1 full session (not done).
+- **A recall gap is likely.** Serving alternates sides, so ~half of all serves should originate far; the proposer called only 37/184 (20%) far pre-floor (17/176 post). Far serves are probably under-*detected*, not rare — the operator's "not a lot of far-side serve" read.
+- The 6 surviving `not_serve`s after the floor are **deep rally shots, not serves** — depth is necessary, not sufficient. A **"first shot of the rally" timing cue was tested and rejected**: `serve_t − rally_start` is ~0.00 for serves and not_serves alike (the proposer already pins the candidate to the rally start = first net crossing), so timing can't separate a real serve from a deep rally shot. Separating the remaining deep false positives needs a genuinely serve-specific signal (serve-motion classifier, or ball starting from rest on the serving side), not another position/timing threshold.
+
+**Serve TIMING — crossing-anchor beats the pose swing (big win).** The operator re-reviewed the 6 surviving false alarms: 3 were mid-rally grabs ("match already started", = rally fragmentation), 2 contained a real serve at a *different* frame than proposed (mis-timed), 1 was wrong-side. That exposed timing, not just precision, as a problem. A serve is struck ~0.5s before the rally's first net crossing, so serve time was re-anchored to `rally_start - 0.5` (rally_start already = the burst's first crossing) instead of the pose swing. On the 7 known serves, **median timing error fell from 3.7s (pose swing) to 0.2s (crossing anchor)** — 6/7 within 0.5s. Shipped into `propose_serves.py`; the deep swing is still used for side/depth gating, only the reported moment changed.
+
+**Cues tested against the 13 labeled clips and REJECTED (so we don't re-test):**
+- *Serve-motion shape from pose* — untestable: the `cache/arm_swing` pose is only 16–72% dense (built for swing *speed*, not shape), and 3 of 7 serves fall in frame gaps entirely.
+- *Held ball near the hand before the swing* — detectable on only 5/7, and too sparse (1–4 of 35 frames) to confirm "still"; fails as a hard gate.
+- *Ball "put into play" (no crossings before the serve)* — crossings too noisy: serves showed 0–3 before, false alarms 0–1, fully overlapping.
+- *Quiet-gap-before-rally = true serve-start* — overlapping: real serves 3.0–7.9s, mid-rally false alarms 3.1/3.1/5.7s. Gap length is driven by ball-tracker dropouts, not real dead-ball time.
+- *Serve side read from the ball before the first crossing* — only 3/7 correct, failures all where the far-side ball had 0–2 detections.
+The common thread: every cue works where the far-side ball/player is detected and fails where it isn't. The limiter is far-side detection quality, not serve logic.
+
+**Conclusion.** First trustworthy far-serve ground truth established (37 clips, CVAT project 16). The far-serve proposer was 19% precise; an absolute court-depth floor (`FAR_DEPTH_MIN=34.0`) raises it to ~47% with zero loss of the 7 known serves, and is physically principled. Serve detection remains **not production-ready**: precision is still ~50% and true far-serve recall is unmeasured. Tooling (`propose_serves.py` with the floor, `cut_serve_clips.py`, `cvat_make_serve_review.py`) is internal/uncommitted; verdict export in session scratchpad. Next: (1) a serve-specific signal (serve-motion classifier or ball-from-rest) for the remaining deep false positives — the first-shot timing cue was tested and does not separate them; (2) exhaustively label all far serves in 1–2 sessions for the first real recall number.
+
+### 2026-10-23 (later) — TrackNet on far-court CROPS: detection solved, discrimination not yet
+
+Tested the one untested lever from the serve-precision effort: run the ball
+detector on a **crop of the far court** instead of the full frame, so the far
+ball (~13px in 1080p) isn't destroyed by TrackNet's fixed 512×288 resize. k14
+weights, local RTX 2000 Ada (`/mnt/fast_scratch/tf215_env`), far-court crop box
+derived per session from the calibration homography (net→far-baseline, +180px
+upward airspace, +60px sides). Scored against the 13 labeled clips (7 serve /
+6 not_serve) with hand-marked ball-at-contact px for the 7 serves.
+
+- **Q1 — detection (WIN).** Crop TrackNet recovers the ball at **7/7** known
+  serve contacts (2–18px from the hand-marked ball, conf 0.59–0.68, blob 5–8px).
+  **Full-frame k14 gets only 4/7**, and the 3 it misses (clips 30, 32, 37) are
+  the deepest serves, where full-frame finds nothing within 500+px. So cropping
+  genuinely recovers the far serve ball that full-frame loses — the "ball put
+  into play from the hand" cue, declared undetectable after the color-detector
+  failure, **is detectable** with a crop. (Overall visible-% is lower on the
+  crop only because the crop excludes the rest of the court where full-frame
+  still sees the in-flight ball — not a detection deficit.)
+- **Q2 — signature visible by eye.** Anchored to the true contact, every serve
+  shows a *held/tossed ball → launch*: the ball sits near-stationary for ~0.2–0.5s
+  (clip 32 pinned at x=760 for 3f then launches to x=973; clip 13 holds at
+  ~(1140,111) for 6f then strikes), then accelerates. False alarms show either
+  **no ball** at the flagged moment (clips 1, 33, 34), a ball in **monotonic
+  flight** (clip 12: x 990→1113 steady; clip 31), or **jitter** (clip 35).
+- **Q3 — blind discriminator FAILS.** A production-style whole-clip scan for a
+  "held-ball run (≥5 frames, x-band ≤14px) + launch" fires on **4/7 serves and
+  6/6 false alarms**. 13-second clips contain stationary-ball clusters from
+  tracker jitter and between-rally rest; and the tossed serve ball drifts >14px
+  so 3 serves' real held runs are missed. Tightening thresholds to separate 13
+  clips would be overfitting to tiny ground truth (cf. the swing-magnitude
+  camera confound, same effort).
+
+**Conclusion.** TrackNet-on-crops **solves the far-ball detection half** (7/7 vs
+4/7) — a real, bankable capability finding that overturns "the held ball is
+undetectable". It does **not** by itself raise far-serve precision: turning the
+now-visible ball into a serve-vs-rally gate needs the ball track **fused with the
+event anchor** (launch-from-rest that *starts* the point, i.e. the first far→near
+crossing originating at the server) plus more labels — a real serve-event model,
+not a blind scan. Scripts in session scratchpad (`tn_crop.py`, `eval_q1/q2/q3.py`),
+crop CSVs in `scratchpad/tn_out/`. Not committed (exploratory).
+
+### 2026-10-24 — Brickwall serves: the far gap is pose COVERAGE, not the camera; and the ball-based side fix does NOT generalize
+
+Two questions, on brickwall_30fps (a different, more-elevated camera) + a re-check on PGC.
+
+**1. Does posing the SERVE MOMENT (not just rallies) recover far serves? YES.** The `poses_*_rallies.json` caches cover kitchen play but miss the far server standing back at the baseline before the point. Running dense yolov8x-pose@1280 on just the 44 pre-serve windows ([S-4.5,S+1.5]) lifted pre-serve deep-player coverage **4/44 → 26/44** and far-serve proposals **2 → 13** (servers captured at court_y 44–51, right at the far baseline). Critically, **depth is NOT compressed**: far players reach court_y 37–43 during rallies (18/44) — a deep player maps correctly. This **overturns the earlier "far is camera-geometry-limited" read** (2026-10-23): the far gap was that we weren't posing the serve.
+
+**2. Brickwall serve-review (CVAT project 18, 42 clips = 29 near + 13 far), operator-labelled.** Near 29/29 real serves (**100%**); far 8/13 real serves (**62%**; the 5 misses are dead-time/mid-rally deep swings, not side errors). Of 37 real serves, **7 (19%) got the wrong side** (6 far serves called near, 1 near called far) — side-assignment is the main residual error, confirming the near-side pattern (PGC project 17: 24 serve / 8 wrong_side, ~81% side-correct).
+
+**3. Ball-based side-assignment — looked perfect on brickwall, FAILED on PGC. Do not ship.**
+- Rule: the server's side = where the serve ball first appears clearly on one side (|court_y−22|>8) in the serve window (serve originates deep on server's end).
+- Brickwall: **37/37 = 100%** (fixed all 7 pose side errors). PGC near: **17/32 = 53%** — worse than pose (75%) and near coin-flip.
+- A confidence gate (trust ball only when clear-side detections are dense + coherent) did **not** rescue it: on PGC the gate fired 11× and was right only 3× — the PGC ball at serve time is **coherently on the wrong side** (ball-track noise / timing), so there is no ball-only signal that flags the untrustworthy cases.
+- **Conclusion: the ball tells the serving side only where the ball track is clean (brickwall), and misleads where it isn't (PGC), undetectably. Side-assignment stays on pose (~75–81%); not reliably improvable by the ball. Parked** — side only matters for future per-player stats, not the serve gate. This is the 2nd "great on one video, fails on the next" result the cross-venue check killed this session (cf. swing-magnitude camera confound, 2026-10-23).
+
+**Net serve status after two weeks:** near-side detection works (~97–100%); far-side detection is recoverable in software by posing the serve moment (not blocked on a camera); the leftover errors are (a) serve-vs-deep-rally-shot discrimination and (b) side-assignment — both still open, neither solved by any cue tested. Recall still unmeasured on both sides. Footage hygiene enforced (ADR-158). See [[project_far_serve_pose_coverage]].
+
+### 2026-10-25 — The ball-detection bottleneck is input resolution + fps (the pipeline's own downscaling), not TrackNet; far ball is ~9px native, recoverable in software
+
+> ⚠ **CORRECTION 2026-10-26 (see entry at end of this day's block):** every "PGC 60fps / 1080p"
+> measurement below (the 60-vs-30 A/B, density 13–18%, native 9px ball, the far-tile 2.7×, and the
+> "PGC 1080p generalization") was run on **a pro match downloaded off YouTube** (`sample-clip.mp4`),
+> NOT PGC footage. Real PGC records **30fps**. The SPATIAL (resolution) findings and the brickwall
+> validations stand; the fps leg and all "PGC"/"production" labels below do not. Details at end.
+
+Chased "the far serve / 2nd shot (return) is missed" to its root across four scored
+runs (local, TF2.15 k14; PGC 60fps raw = `pgc-fieldtest-sept2026/4699a817…`,
+`brickwall_30fps`). Scratchpad: `far_crop_test.py`, 60-vs-30 analysis,
+`pose60.py`/`render_420.py`, native ball-size measure.
+
+**1. Where the ball blacks out = the return/2nd shot.** On brickwall, at the
+serve-return moment (src 27891–27903, 929.7–930.1s) TrackNet loses the ball for
+~0.5s; the only full-frame detections in that window are adjacent-court phantoms
+(x≈1010). Both cues fail at once — the far wrist never wins fastest-swing and one
+far player drops out of pose — so the 2nd shot is unidentifiable with current signals.
+
+**2. Far-crop (SAHI) recovers the far ball, but a blind union adds phantoms.** k14
+on a far-court bbox over the return window recovered **5/13** blackout frames,
+visually on the far returner (vs full-frame's adjacent-court phantoms). BUT on a
+near-play window (946–949s) the far crop fired 46/91 frames, **27 in the spectator
+stands** → ~30% phantom rate when the ball is near. Cannot union; needs gating
+(only-when-full-blank + trajectory-continuity + drop-above-baseline). Camera-dependent, like court_mask.
+
+**3. 60fps vs 30fps, SAME footage — the pipeline downsamples 60→30 (`CFR_FPS=30`).**
+PGC raw is 1080p@60; CFR-convert forces 30fps before TrackNet. On a 25s segment,
+overall density is similar (60fps 17% / 30fps 18%), but on the FAST shots 30fps goes
+blind where 60fps holds: t=23.08s (15,523 px/s) **60fps 8 vs 30fps 1**; t=9.88s **6 vs 0**;
+t=4.63s **17 vs 4**. Normalized for the 2× frame count, 60fps's per-frame rate on fast
+shots is **~2–4× higher** → each 60fps frame is individually more detectable (less
+blur/displacement). Gaps>0.3s: 30fps 19 vs 60fps 15. The pipeline *creates* the
+fast-ball blackout by downsampling.
+
+**4. On production (1080p) footage the binding constraint is the spatial downscale,
+not fps.** Ball-present density: brickwall (1280×720) **33%**; PGC (1920×1080@60) only
+**13–18%** — half, despite higher res + 60fps. TrackNet downscales every frame to
+512 wide: 1280→512 = 2.5×, 1920→512 = **3.75×**, so the 1080p ball is SMALLER in the
+network than the 720p one (confirms "720p≈1080p, resolution-not-gated" from the other
+side). A naive full-court crop made it WORSE (**5%**) — a 2.3:1 box squashed into
+512×288 distorts the ball (the old pod_infer x/y-ratio trap); **crops must be aspect-correct (16:9).**
+
+**5. Native far-ball size = ~9px → downscale problem, not optics wall.** HSV ball-blob
+measurement in native 1080p (PGC): FAR ball median **9px** (3–13px, n=179), NEAR ~29px.
+After the 1920→512 downscale, 9px → **~2.4px** (detection edge); the 3–6px fastest balls
+→ sub-pixel → gone. Caveat: measured on *detected* balls, so the undetected blackout
+balls are likely smaller/blurrier — 9px is the detectable-subset median.
+
+**Conclusion.** The detector is not the problem (TrackNetV3 was worse; single-frame
+YOLO retired). The failure is self-inflicted downscaling — temporal (`CFR_FPS=30`) +
+spatial (1920→512). Both recoverable in software for the median (9px) far ball without
+a camera change: **aspect-correct far tile** (keeps 9px at ~4.8px) and/or **higher-res
+TrackNet retrain** (keeps 9px), plus **60fps** on serve windows. Sub-5px fastest balls
+remain a residual floor (optics). Not built. See ADR-159,
+[[project_far_serve_pose_coverage]], [[project_frame_rate_requirement]].
+
+**Validation (same day) — aspect-correct far tile recovers the far ball (the ADR-159 fix).**
+Redid the crop as a true 16:9 tile (740×416 = 1.78:1, 1.45× downscale vs full 3.75×)
+on the PGC 60fps window. In the far court over 18s: full-frame **44** far-ball
+detections, aspect-correct tile **95**, **merged ≈120 (2.7×)** — the tile recovered
+**76 far balls full-frame missed**. Stand phantoms (tile detections above the far
+baseline) were **26/137 (19%)**, all removable by a drop-above-baseline gate. Confirms
+the naive 5% result was pure aspect distortion. This validates ball-DETECTION recovery
+only; turning it into end-to-end serve/2nd-shot detection (downstream crossing/event
+logic on the merged track) and pipeline integration (pod_infer tile+merge, pod_driver
+60fps-on-serve-windows, re-score for near-side non-regression) are not yet done.
+
+**End-to-end check (same day) — the far tile adds far-side TRACK, not a new crossing; the "missed 2nd shot" is an overlay/hit-attribution gap, not a rally-detection miss.**
+Fed the merged (gated full-frame + aspect-correct far tile) track into the downstream
+crossing logic (`src/ball.crossing_times`, net_y 303.5) on the brickwall return window
+(929.5–930.3s), to test whether the recovered far ball makes the 2nd shot *detectable*:
+
+| track | pts | far-side pts | net-crossings in window |
+|---|---|---|---|
+| full-frame RAW (phantoms in) | 45 | 7 | 6 — `[929.2, 929.8, 930.17, 930.3, 930.7, 930.9]` |
+| full-frame GATED (off-court phantoms removed) | 29 | 4 | **2** `[929.2, 930.1]` |
+| MERGED (gated full + far tile) | 31 | 6 | **2** `[929.2, 930.1]` |
+
+Two findings. (a) **Full-frame's "6 crossings" were mostly phantom noise** — gating the
+adjacent-court detections (x≈1010) drops it to 2, so raw full-frame never cleanly
+"detected" these shots. (b) **The far tile adds real far-side track (4→6 pts) but NOT a
+new crossing.** The return's crossing (930.1, far→near) is already present from the
+*near-side* ball; the extra far points reinforce the far side, which a crossing does not
+need. net_y (303.5) and the far baseline (296.8) are only ~7px apart (extreme perspective
+compression), so crossing detection in the far court is inherently noisy.
+
+**Conclusion (refines ADR-159's "not load-bearing" caveat, does not overturn the bottleneck
+finding).** The coarse rally/crossing detector already has the 2nd shot via the near-side
+ball; the far-tile recovery is NOT load-bearing even for 2nd-shot *crossing* detection. Its
+value is at the finer layers: (1) far-ball TRACK completeness, (2) the hit/serve OVERLAY,
+which needs the ball *at the far contact* to place the marker on the far player (the
+original "return/third shot are wrong" complaint), (3) far-serve side. I.e. the far-tile +
+60fps build is a **serve/analytics/overlay feature enabler with zero value to the core
+reel** — worth building only if serve-based features are on the near-term roadmap. Running
+pipeline integration before that decision is not warranted.
+
+**Hit-capture mechanism check (same day) — far-hit capture is blocked by the far-court SWING signal, not the ball; the far tile fixes the wrong leg.**
+Question (reframed by operator): not the overlay, but *how precisely can we capture
+hits*. Ran the ADR-157 v6 gate (swing-peak + ball at the swinger's OWN wrist) on the
+brickwall return hit, full-frame ball vs merged (full + far-crop, gated on-court):
+- **Leg 1 (ball): recoverable.** Through the full-frame blackout the far crop restores a
+  ball; closest approach to the far returner's wrist = **34px** (one frame).
+- **Leg 2 (swing): absent — the binding constraint.** The far returner's wrist peaks at
+  **234 px/s** across the whole window vs the gate's **1600**; even a 4×-loosened far
+  threshold (400 px/s) is never met. Far player ≈100px tall (vs ~350 near) so a real
+  swing is a few px of wrist travel, and far pose is low-confidence (one wrist 0.38).
+- **Result:** the hit gate does NOT fire with the ball recovered — there is no swing peak
+  to gate on. Recovering the far ball fixes the leg that was not binding.
+
+**Conclusion.** Hit-capture splits by court: NEAR works (ADR-157 ~half/half; improvable by
+association/threshold tuning + 60fps timing); FAR is blocked by the pose/swing signal at
+depth — the SAME wall as far-serve ([[project_far_serve_pose_coverage]]), not the ball or
+the detector. **The aspect-correct far-tile + 60fps pipeline work would NOT improve far-hit
+capture** (it addresses ball recall, which is leg 1 of 3; leg 2 stays broken). Far-hit
+precision needs a better far swing signal first — higher-res far pose and/or a
+perspective-normalized swing metric (thresholds scaled by player image-height) — pose
+first, ball second. n=1 far hit (mechanism, not a rate), consistent with the far-pose
+bottleneck. Scratchpad: `hit_recover_test.py`.
+
+**Far-POSE tile recovers the far swing (same day) — far-court hit capture is a resolution problem, not a floor; partially reverses the prior entry.**
+The prior check found the far swing crushed to 234 px/s on full-frame pose. Mirroring the
+far-BALL tile for the pose leg: ran yolov8x-pose@1280 on the far-court crop
+([359,114,952,426]) upscaled 2.4×, mapped wrists back, recomputed far swing on the same
+brickwall return window. Scratchpad: `far_pose_tile.py`.
+- **Swing recovered 7×.** Peak far swing **234 → 1626 px/s** (clears the 1600 gate), at
+  src 27918 / 930.60s, with the ball **6px** from the wrist → the ADR-157 gate FIRES a HIT.
+  A second contact at 930.80s (900 px/s, ball **3px**). Verified real (ball co-located with
+  the swing peak, not pose jitter; 121/121 frames had far wrists, 4 stable).
+- **⇒ The far court's hit-capture bottleneck is pose RESOLUTION, the same starvation as the
+  ball**: full frames → fixed-input nets shrink the far player (~100px) below what pose
+  resolves. An upscaled far tile fixes BOTH legs (ball + pose) for DRIVEN far shots. This
+  reverses "the far tile fixes the wrong leg" — a far tile *with pose* is the lever.
+- **Residual (not resolution): the soft 2nd-shot return itself.** At 929.7–930.1 (the
+  original return) the tile swing stays <182 px/s — a soft reset return with almost no wrist
+  motion. A swing gate can't catch it at any resolution; ball-trajectory cues for it already
+  failed (ADR-156). Soft far returns are a SHOT-TYPE floor, needing a non-swing cue.
+
+**Conclusion.** Far-court hit capture: driven shots are **recoverable** via an upscaled far
+tile (ball + pose together); soft/blocked returns remain a floor for a swing gate. Near
+works already (ADR-157). Next: a hit-labeled set to turn this mechanism into a precision
+number, and a repeat on PGC 1080p (far player even smaller → larger upscale). n=1 rally, 2
+recovered contacts (mechanism, not a rate). See [[project_far_serve_pose_coverage]], ADR-159.
+
+**PGC 1080p generalization (same day) — the far-pose tile transfers to production footage: +70% ball-validated far hits.**
+Repeated the far-pose-tile check on PGC `scan_420.mp4` (1920×1080@60fps, the production
+camera), full-frame pose (`pose420.json`) vs yolov8x-pose on the aspect-correct far tile
+[560,380,1300,796] upscaled 2×. Scratchpad: `far_pose_tile_pgc.py`.
+- **Gated far hits** (ADR-157 gate: far swing peak with the ball ≤60px of the wrist):
+  **full-frame pose 7 → far-pose tile 12** (same 7 + 5 new), **~1.7×**.
+- **Smaller lift than brickwall, which confirms the resolution thesis.** On brickwall (720p)
+  full-frame pose caught ≈0 far hits (swing 234); the tile was the whole fix. On PGC (1080p)
+  the far player has more native pixels, so full-frame pose is less starved (already 7) and
+  the tile adds the rest. More native res → less starvation → exactly as predicted. Third
+  independent angle, same conclusion (ADR-159).
+- **Jitter is gated, not shipped.** Full-frame pose's apparent peak (18494 px/s) was an
+  ID-swap spike with the ball 144px away (not a hit); both pose paths throw such spikes, and
+  the ball-at-wrist gate removes them — why ADR-157 pairs swing WITH ball. Precision protected.
+- **Caveats:** gate firings at ADR-157's ~half-precise rate, NOT verified contacts; not yet
+  watched (numbers≠verdict until playback). The transferable signal is the ratio, not the 12.
+
+**Decision gate result:** far-pose/ball tile RECOVERS far-court hits on both 720p and 1080p
+→ mechanism validated. Remaining before any build: (1) operator decision whether hit-level
+capture is on the near-term roadmap (the reel does not need it), (2) a hand-labeled hit set
+for a real precision/recall number. See [[project_far_serve_pose_coverage]], ADR-159.
+
+### 2026-10-26 — CORRECTION: this session's "PGC 60fps/1080p" footage was a downloaded pro match, not PGC
+
+Operator flagged that the `pgc-fieldtest-sept2026/*/sample-clip.mp4` files (4699a817 "Court 4",
+etc.) are **a pro pickleball match downloaded off YouTube**, not PGC-camera footage. Verified:
+`ffprobe` shows `handler_name=ISO Media file produced by Google Inc.` + `encoder=Lavf…` (a
+download/remux signature), and these sessions have **no raw `.mkv`** beside them. The **real PGC
+field-test recordings are the 30fps 1080p `.mkv` continuous files** (eda301d9 / c199a97c /
+de3d1953[Tapo, excluded]) — all 30fps, no 60fps anywhere in the real capture.
+
+**What this corrects in the 2026-10-25 entry and ADR-159:**
+- "PGC raw is 1080p@60", "production (1080p) footage", "PGC density 13–18%", "native 9px far ball
+  (PGC)" → all the **downloaded 1080p match**, not PGC. Relabel accordingly.
+- **The temporal/fps leg is downgraded.** "The pipeline downsamples 60→30 (`CFR_FPS=30`) and throws
+  away half the capture" is FALSE for PGC — PGC **records 30fps natively**, nothing is discarded.
+  The 60-vs-30 A/B was me downsampling the downloaded 60fps clip; the benefit only exists if a
+  camera actually captures >30fps, which PGC does not. 60fps is a camera-config question, not a
+  free pipeline flag.
+- **The "PGC 1080p generalization (+70% far hits, 7→12)" is RETRACTED** as a PGC result — it ran on
+  the downloaded match. It remains a valid second data point on a different real 1080p source, but
+  says little about PGC's behind-baseline camera.
+
+**What STANDS (unaffected):**
+- The **spatial downscaling** finding: 1920→512 (3.75×) starves the far ball (~9px→~2.4px) and the
+  far pose/swing. The math is general and was also shown on **brickwall (a real 720p camera)**.
+- **The far-tile fix** (aspect-correct upscaled crop) recovers far ball + far swing → far-hit
+  capture — validated on **brickwall (real)** and the downloaded match. Mechanism holds.
+- Far-hit capture = resolution problem, recoverable; soft/no-swing returns are the residual floor
+  (brickwall). Near works (ADR-157). The reel does not need any of this (near ball carries crossings).
+
+**Net:** the far-tile is validated on a real camera (brickwall) + a downloaded match, **NOT on the
+actual PGC production camera (30fps, behind-baseline)** — that generalization is still open. Keep
+TrackNet (ADR-159 unchanged on the detector). See [[project_detection_downscaling_bottleneck]],
+[[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Hit-capture exploration on a real brickwall rally: the gate is a DRIVE detector, not an all-contact detector
+
+Combined near-court gate (full-frame ball+pose, ADR-157) + far-POSE tile (upscaled far crop
+for the swing) over the real brickwall rally 928.8–958.5s (29.8s). Full-frame ball used for
+the gate (far-ball tile deferred). Scratchpad: `hit_explore_bw.py`, frames in `hit_frames/`.
+- **21 hits fired: 2 near, 19 far** (full-frame 12, far-pose tile ADDED 9 far). Verified 4
+  frames by eye (project rule): 952.07 far (ball 5px, black player mid-drive), 938.7/939.2 far
+  (ball at far players in a fast exchange), 946.53 near (white player deep dig) — **all real
+  forceful contacts; the detector is not firing on empty air.**
+- **The 2/19 split is shot-type, not a bug:** the far team drives (hard swing → captured), the
+  near team mostly digs/resets softly (swing <1600 → missed). ⇒ **our hit capture is a
+  DRIVE / hard-swing detector**, systematically catching drives/putaways/speedups and missing
+  soft dinks/blocks/resets (no swing signal; ball cues for them failed, ADR-156).
+- **Far-tile works** (9 real far drives recovered on a real camera). 
+- **Open precision risk (not clearable from stills):** a few far hits cluster ~0.4s apart —
+  possibly ball flybys past a far wrist during a firefight, not contacts. Needs full-video /
+  labeled-set confirmation. ⇒ next: pick the hit taxonomy (hard shots vs all contacts), which
+  decides whether the soft-shot gap matters, then build a hit-labeled set for real P/R.
+
+### 2026-10-26 — Tile vs baseline for "every contact": the far-tile half-lifts the ADR-156 wall, doesn't clear it (real PGC + real hit labels)
+
+Tests whether better contact-time ball tracking (this session's far-tile) revives ball-based
+contact detection where ADR-156 failed. Real PGC footage (eda301d9 clean court, chunk3c
+min1-2, 44 hand-labeled hits recovered from git: `eval/labels/hits/` in history). Ran k14
+full-frame vs far-tile [600,390,1140,694] on the clip; measured **ball visible at the labeled
+contact** (±3 frames, 45px). Scratchpad: `hit_vis_infer.py`, `hit_vis_score.py`.
+
+| | baseline full-frame | + far-tile |
+|---|---|---|
+| FAR (24) | 9/24 (37%) | **13/24 (54%)** (+4 recovered) |
+| NEAR (20) | 9/20 (45%) | 10/20 (tile doesn't reach near) |
+| ALL (44) | 18/44 (41%) | **23/44 (52%)** |
+
+- **Tile delivers reopening-condition (a) partially:** far contact-time ball visibility 37%→54%
+  on real PGC. The resolution lever is real here, not just brickwall.
+- **But not enough for "every contact":** even maxed, the ball is visible at only ~52% of
+  contacts → a ball-track contact finder stays half-blind (ADR-156 wall half-lifted, not cleared).
+- **Near court unmoved (9→10)** — near-contact ball loss is occlusion/motion-blur at the paddle
+  (near ball is big, ~29px), NOT resolution; no crop fixes it, and near is ~half the contacts.
+- 45px/±3f is a generous "seen" bar, so ~52% is an optimistic ceiling.
+
+**Conclusion.** The far-tile is genuinely useful for far drive/contact RECALL, but **ball-track
+"every contact" detection remains blocked even with it.** Complete-rally contact capture
+realistically needs reopening-condition (b): a learned classifier on pose+ball+hands over the
+existing ~100 labels + more — a model project, not a heuristic. "Hard shots only" (ADR-157) is
+what's reachable today. See [[project_paddle_hit_finder]], [[project_detection_downscaling_bottleneck]].
+
+### 2026-10-26 — Hit capture end-to-end P/R vs "every contact" (test A): REPRODUCED the frozen eval = 61% recall / 39% precision
+
+Reproduced the pre-registered ADR-157 evaluator (`scripts/eval_swing_ball_hits.py`, recovered from
+git commit 8eaa84b with its deps) in `--dev` on the eda301d9 chunk3c clip (min1-2, 44 hand-labeled
+contacts). The real gate: swings = wrist speed >= **0.06 box-heights/frame** (size-relative, ~500 px/s
+near / ~110 px/s far), **kept** when the tile-tracked ball is in play (>=3 pts within +-15f) and not
+clearly outside the player's box; a ball not seen near the swing does NOT veto. Ball track =
+`cache/bounce_pilot/chunk3c_eda301d9_0538_s000.tile.csv` (the far-tile track). Correct calib
+(`cache/pgc_fieldtest/7358ef3f...calib.json`, the eda session).
+
+| | recall | precision | near-rec | far-rec |
+|---|---|---|---|---|
+| min1 | 15/22 | 15/37 (41%) | 7/11 | 8/11 |
+| min2 | 12/22 | 12/33 (36%) | 4/9 | 8/13 |
+| **min1-2** | **27/44 (61%)** | **27/70 (39%)** | **11/20 (55%)** | **16/24 (67%)** |
+
+Matches the pre-registered committed figure (27/44, 39%). Candidate generator: good recall,
+moderate precision — not a shot counter (operator's 2026-10-19 not-production-ready call stands on
+the 39% precision). Far recall 67% already uses the far-tile ball track.
+
+**CORRECTION of an earlier same-day draft of this entry.** A first reconstruction hand-rolled the
+gate with an ABSOLUTE 1600 px/s swing threshold + a mandatory ball-within-60px-of-wrist veto and
+reported 16% recall / a "25% ceiling" / "only 36% of contacts have a swing" / "far tile adds ~1
+hit." That was WRONG — the absolute threshold is ~3x too high near and ~15x too high far, and the
+veto is not in the real gate. The size-relative gate catches far+soft swings the absolute one
+misses, so the "most contacts are soft / physics wall at 25%" framing does not hold; the real
+recall is 61% (far 67%). The honest limit is PRECISION (39%, candidate-not-counter), not recall.
+For the narrowed scope (rally-level intensity ranking signal), 61%/39% is usable. See
+[[project_paddle_hit_finder]].
+
+### 2026-10-26 — Serve side-assignment is a measured hard-wall (~62%), not a quick heuristic fix
+
+GT serves derived free from the hit labels (first hit of each rally cluster, >3s gap; side by
+image-y, calib-free) = 26 serves (15 far, 11 near) across eda chunk3c + c199 glare. Scored 4
+server-ID rules using the pose caches' correct cached court field (sidesteps the pgc_court_b calib,
+which — separate finding — does NOT fit the eda301d9 clip: maps on-court points off-court).
+Scratchpad: `serveGT2.py`.
+
+| rule | ALL | FAR | NEAR |
+|---|---|---|---|
+| fastest swing (current) | 62% | 67% | 55% |
+| earliest swing | 58% | 53% | 64% |
+| deepest player (position) | 62% | 73% | 45% |
+| ball-origin (track direction) | 35% | 33% | 36% |
+
+- **Base rate is 58%** (always-guess-far). Every rule is barely above it — side-assignment does NOT
+  work with simple signals, and it's not a threshold-tuning problem (4 different signals all ~55-73%).
+- **Structural reason (same wall ×3):** at a serve both players are deep (position symmetric), the far
+  serve swing is compression-crushed (swing grabs the near returner), and the far serve ball is
+  invisible (ball-origin unavailable, resolves only 14/26).
+
+**Conclusion / redirect.** Serve *side* is a hard problem here, not a quick win — park it unless a
+feature needs serve side. The serve **gate** (rally-precision guardrail, drops warmup FPs) only needs
+serve *detection* (serve-happened yes/no), where side is irrelevant — redirect far-serve effort there.
+See [[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Serve-review label audit: CVAT is the source of truth; brickwall far-serve precision 54-62%; new far set cut for the current proposer
+
+Audited all serve-review labels before building anything on them. Scratchpad: `cvat_serve_verdicts_now.txt`
+(read straight from the CVAT DB), `cut_far_hd.py`, `cvat_far_hd.py`.
+
+- **The scratchpad verdict JSONs (`serve_verdicts_p16/full`, `serve_review_verdicts_p15`) are stale snapshots,
+  not ground truth.** All predate both proposal CSVs (verdicts Oct 23 13:19-14:04; `serve_candidates_prefloor`
+  15:33; `serve_candidates_HD` Oct 24). The same 8 far clips (proj 16 #30-37, confirmed via
+  `cache/serve_review/far/review.csv` timestamps) carry different verdicts in each, because labels were revised
+  and **11 CVAT tasks hold two contradictory labels** (e.g. `not_serve` + `wrong_side`) that each export
+  collapsed differently. A "~20% serve precision" read off these files during this session was withdrawn (never logged).
+- **CVAT current state:** proj 16 serve-review-far (old list, 37): 8 serve_contact / 4 wrong_side / 24 not_serve
+  / 1 unsure. **Proj 18 serve-review-brickwall (42, fully labeled): far 7-8/13 (54-62%), near 29/29 (100%)** —
+  the first trustworthy far-serve precision (range = task #6 labeled both `wrong_side` and `serve_contact`).
+- **The current HD proposer was effectively unreviewed:** only 4 of its 22 far proposals match a proj-16 clip
+  (session + serve_t within 2s): 2 serve, 2 not. HD covers only the 8 sessions with HD pose (499ed4b8, 52f4de24,
+  72852da9 have none).
+- **New review set:** `cache/serve_review/far_hd/` (22 clips, serve_t-4..+9s, timestamped names; manifest
+  column `prior_proj16_idx` marks the 4 re-labeled overlaps as a consistency check) -> **CVAT project 19
+  `serve-review-far-hd`** (tasks 322-343). Labeling rule: exactly one verdict per clip.
+
+**Conclusion.** Far-serve precision on brickwall is ~54-62% (near is solved). The current PGC proposer's far
+precision is unmeasured until project 19 is labeled. Any context-gate (dead-time / follow-on rally) work waits
+for that clean set. See [[project_far_serve_pose_coverage]].
+
+### 2026-10-26 — Missed clip starts: the serve is detected, then thrown away (fragmentation); "re-attach the opening" fixes most
+
+Shipped clips run [first crossing - 3s, last crossing + 3s] (`src/render.py`, `pad_sec=3.0`) and sometimes cut
+off the serve. Measured with production `rally_segments_from_predictions` (shipped settings: calib net line +
+`court_wedge`, gap_sec=3.0, min_crossings=6) on full-session preds (`cache/scale/eda301d9_...session-000`,
+`c199a97c_...session-002`) against real serve times = first hit of each hit-label rally (>3s gap). Scratchpad:
+`start_miss.py`, `start_miss2.py`, `start_reattach.py`, `start_reattach_cap.py`.
+
+- **Today, 8/17 serves are inside their clip** with >=0.5s lead-in (17 = serves whose point was detected; 8 more
+  are short points that never form a rally, by design). Missed starts hit **near and far alike** (near 3/6,
+  far 6/11), so the earlier "far serve ball invisible" hypothesis is wrong.
+- **Cause (verified):** in 7/9 misses the serve crossing IS detected (a 1-4 crossing cluster at +0.1..+1.9s),
+  then the ball goes undetected for 3-8s, the 3s split cuts the opening off, and min_crossings=6 drops it. 2/9
+  have no crossings for 5-9s after the serve. Bigger pre-pad barely helps (5s: 9/17, 6s: 10/17, 8s: 12/17);
+  `gap_sec=6` catches some but glues the previous rally on (starts 14-41s early) — consistent with not raising gap_sec.
+- **Re-attach rule:** walk back from each kept rally, attaching dropped fragments (<6 crossings) that end within 8s
+  of the current start and come after the previous kept rally, with a **cap on total move**. Matched against
+  today's rallies (same points every variant):
+
+| rule | in-sample (17) | held-out eda min3 (5) | start moves |
+|---|---|---|---|
+| today | 8 | 3 | — |
+| re-attach, cap 10s | 13 | 4 | <=9.6s |
+| re-attach, cap 12s | 13 | 5 | <=11.1s |
+| re-attach, no cap | 14 | 5 | up to 47s (dead air) |
+
+- Caveats: tiny n (22 points, one clip pair); rule designed on the in-sample points; the cap was chosen after
+  seeing the all-rally move distribution (held-out only scored serves); a first held-out read of "6/6" matched
+  against the extended starts and was flattering — superseded by the fixed-matching table above. Some clips now
+  open with 6-11s before the serve (setup, not dead air). Needs playback review before any ship decision.
+
+**Conclusion.** Most missed starts are a clustering problem, not a detection problem: the serve is seen and then
+discarded. A capped re-attach (~10-12s) fixes most of them using only the ball track — no pose model, no extra GPU.
+Next: before/after playback review of the moved clips; if it holds, a `src/` change behind a flag with tests.
+
+### 2026-10-26 — Re-attach playback review: REJECTED (4 better / 1 same / 12 worse or wrong); why junk counts as a rally
+
+Operator watched all 17 before/after pairs (cap-12s re-attach vs today; clips cut at detected start + 10s, so this
+judges openings). Scratchpad: `render_start_review.py`, `why_rally.py`, `why_rally2.py`.
+
+| verdict | n | clips |
+|---|---|---|
+| new start better (catches the real serve) | 4 | eda r04, r13, r17, r19 (r17/r19: today opened mid-rally) |
+| same | 1 | eda r09 |
+| today better: the re-attached piece is a toss or a failed serve | 7 | eda r02, r05, r07, r10, r15; c199 r02, r03 |
+| new clip swallows a separate earlier point/rally | 4 | eda r11, r14, r21; c199 r01 |
+| not a rally at all (today too) | 1 | eda r01 |
+
+- **Why the numbers lied:** the earlier table scored "a labeled serve falls inside the clip". The fragments being
+  re-attached are mostly ball-feeding tosses, failed serves, or the *previous* point, and those can contain a
+  labeled serve too, just not *this* rally's. Inclusion is not the same as opening on the right serve. A
+  start-quality metric must check that the clip opens on the serve that begins the point it contains.
+- **The miss is real** (r13/r17/r19 opened mid-rally today), but a ball-track fragment can't tell "this point's
+  opening" from "a toss / the previous point". Re-attach is not shipped.
+
+**Why eda r01 (48.9-62.0s) passes as a rally.** 11 crossings, score **48.9**, *above* the session median (46.4,
+range 32.0-64.4), so it would rank in the top half of the reel. Crossing gaps are
+[2.0, 2.6, 0.63, 2.63, 0.2, 0.23, 2.3, 0.33, 0.97, 1.23] s. Two things inflate it:
+1. **Net-line jitter:** crossing pairs 0.1-0.35s apart with the ball only 20-35px past the net line. No shot
+   crosses and comes back that fast. The same pattern appears in r07 (6 → 4 after dropping such pairs) and in
+   `c199` 34.5s (11 → 9).
+2. **Tosses genuinely cross the net:** after removing jitter, r01 still has 7 slow (~2-2.6s) crossings, i.e. the
+   ball being fed back and forth. Crossing count alone cannot separate this from play.
+- Jitter de-bounce (drop a cross/re-cross pair < 0.4s) checked against hit labels in the labeled windows
+  (eda 120-300s, c199 0-120s): it drops r07 (3-hit point, fine) but also eda 244.1s (a real 7-hit rally, 7 → 5)
+  and does not drop r01. **Not a fix on its own.**
+
+**Conclusion.** Rejected: the capped re-attach. Root cause of the r01-type junk: tosses plus net-line jitter pad
+the crossing count. Candidate guardrails, untested: the serve/depth gate (built for warmup misses) on r01, and
+crossing *cadence*, since tosses run ~2-2.6s per crossing and play runs ~0.6-1.5s.
+
+### 2026-10-26 — Serve/depth gate on eda r01: does NOT catch it; drops 3 real rallies, exactly the mid-rally starts
+
+Ran `scripts/tune_web.compute()` with and without `serve_gate` (net 22 ft, min depth 18 ft, window [start-1s,
+start+3s]) on eda301d9 (`cache/pgc_fieldtest/7358ef3f-...csv`, the same footage and frame count as
+`cache/scale/eda301d9_...session-000`; pose `cache/arm_swing/poses_pgc_7358ef3f.json`). Rally numbering
+matches the playback review. Scratchpad: `gate_r01.py`.
+
+- **r01 (toss junk) is kept:** depth 25.7 ft. Someone stands deep while the ball is fed, so the gate can't see it.
+- **Dropped: r13 (17.1), r17 (13.4), r19 (16.7).** Playback (previous entry) confirmed all three are real rallies
+  where today's clip starts **mid-rally**, with players already at the kitchen. So on this session the gate
+  catches 0 junk and drops 3 real rallies. Every other rally reads 23-28 ft (r02 is borderline at 18.8).
+- **Lead (in-sample, n=17, not validated):** low depth at the detected start marks a *late* start. Re-attaching
+  only when depth < 18 ft would have changed exactly r13/r17/r19, all three judged "new better", with no
+  "worse". It misses r04 (23.5 ft, also judged better). The rule was picked after seeing the verdicts, so it
+  needs fresh playback on other sessions before anyone believes it.
+- The `c199` pose-paired CSV (`34fab44c`) is a different recording from the `c199` session-002 used in the
+  review, so it is not comparable and is skipped here.
+
+**Conclusion.** The depth gate is not a guardrail against toss/feeding junk. Run as a rally filter here, it
+removes real rallies whose start was detected late. Its useful reading may be the inverse: a flag that a clip's
+start is late.
+
+### 2026-10-26 — CVAT project 19 (far-serve review, current HD proposer, 22 clips): labeled
+
+Operator labeled all 22 clips (13 s each at 30 fps; the proposed far serve sits at frame 120, i.e. 4.0 s). Pulled
+via the API with the token minted and deleted per house rule. Scratchpad: `pull_p19.py`, `p19_labels.json`.
+Four clips carry `wrong_side` plus a contact point; they are counted as wrong_side.
+
+| verdict | n |
+|---|---|
+| far serve_contact | 15 |
+| wrong_side (near serve) | 4 |
+| not_serve | 3 |
+
+- **Loose precision (a far serve somewhere in the clip): 15/22 = 68%.** Brickwall was 54-62%.
+- **Timing (contact point vs the proposed moment):** only 5 marks are within ±1 s and 7 within ±2 s, so **strict
+  precision is 7/22 = 32%**. The rest are 2.7-4.9 s off (two at frame 0, so possibly even earlier).
+- **Swing strength separates on-time from off-time.**
+  - Strong-swing proposals (≥4000 px/s, 11 clips): 7 on-time far serves (±2 s), 1 far serve at +2.7 s, 2 wrong_side, 1 not_serve.
+  - Weak-swing proposals (<300 px/s, 11 clips; below the ADR-157 swing level): **0 on time**. There are 7 far serves elsewhere in the clip, 2 not_serve and 2 wrong_side.
+  - A weak-swing proposal is effectively "a rally started near here", not a detected serve contact.
+- **Overlap with the clip-start review:** the 7358ef3f proposals at 48/101/152/335/385/426/463 s are the review's
+  rallies r01/r02/r04/r13/r15/r17/r19. A far serve was marked 3-4 s *before* the detected start on r04, r13 and r19,
+  which agrees with the playback verdict that those clips start late. r01 has a far serve marked at about +4.8 s,
+  which conflicts with the playback verdict "only a toss". This is unresolved.
+- **Repeat-clip consistency vs project 16 (4 clips): 3/4 agree.** #10 is `not_serve` in p16 and serve at frame 0
+  in p19. p16 used 8 s clips with the moment at 3 s, so the earlier serve may simply have fallen outside its clip.
+
+**Caveat.** Labels were made just after the operator asked whether to mark "any serve". So off-time marks may be
+"a far serve exists in the clip" rather than "the proposal is right". The loose and strict numbers bound the truth.
+
+### 2026-10-26 — Project 20: longer lead-in re-cut of 5 p19 clips; slow-swing proposals have no consistent offset
+
+Re-cut p19 #04/#12/#19 (not_serve) and #07/#10 (serve marked at frame 0) with a 10 s lead-in (19 s clips, proposal
+at frame 300) → `cache/serve_review/far_hd_ext/`, CVAT project 20 (tasks 344-348). The operator marked the serve
+that starts the point. Scratchpad: `cut_far_hd_ext.py`, `pull_p20.py`, `p20_labels.json`.
+
+- Offsets vs the proposal: #04 **-5.4 s**, #07 **-3.9 s**, #10 **-4.4 s**, #12 **-9.6 s**; #19 still has no serve.
+  #07 and #10 agree with their p19 frame-0 marks, i.e. the serve was just before the old clip start, which is a
+  consistency check that passed.
+- **Loose far-serve precision rises to 17/22 = 77%** (2 of 3 "not_serve" had the serve before the clip began).
+- **The slow-swing proposals have no fixed offset:** -9.6, -5.4, -4.4, -3.9, -3.1, -2.8, +3.4, +4.8, +4.9 s.
+  Shifting them by a constant can't fix them. They mark "rally activity near here", not a contact.
+- **Clip-start ground truth for eda (the 7358ef3f proposals = the review's rally starts):**
+
+  | rally | far serve vs detected start | today's clip (start-3 s) | playback verdict |
+  |---|---|---|---|
+  | r01 | +4.8 s | serve inside, tosses before it | "only a toss" |
+  | r02 | -2.8 s | serve 0.2 s after clip start | today better |
+  | r04 | -3.9 s | **cut off** | new better |
+  | r13 | -4.4 s | **cut off** | new better |
+  | r15 | +3.4 s | serve inside, tosses before it | today better |
+  | r17 | -9.6 s | **cut off** | new start captures it |
+  | r19 | -3.1 s | **cut off** (by 0.1 s) | new start captures it |
+
+  The labeled serves agree with every playback verdict except r01. There, a serve at ~52.8 s follows the toss
+  crossings that open the detected rally.
+
+### 2026-10-26 — Stage 1 serve-anchored clip start: FAILS the pre-set bar (worse than today)
+
+Proposed: start each clip 1.5 s before the last confident serve found in [previous rally end, sustained-play
+crossing - 0.2 s]. Confident serve = a deep-player wrist swing ≥1600 px/s (`propose_serves.deep_swings`); the anchor
+is the start of the last swing burst. If no serve is found, keep today's start and flag "no serve". Rules and bar were
+frozen in `score.py` before results. Pose: yolov8x-pose@1280, dense, on every window
+(eda 11,299 frames, c199 2,883, 365c 4,588). Scratchpad: `anchor/common.py`, `pose_windows.py`, `score.py`,
+`score_rows.json`.
+
+Ground truth = the serve of each rally's own point: the first hit of its hit-label point (eda 120-300 s, c199
+0-120 s), or the operator's p19/p20 serve mark (eda r01/r02/r13/r15/r17/r19). Bar: ≥80% open 0.5-3.0 s before
+their own serve; 0 swallowed points; "no serve" on most warmups and ≤~10% of real points.
+
+| | today (first crossing - 3 s) | serve anchor |
+|---|---|---|
+| opens 0.5-3 s before own serve (17 points) | **10/17** | **6/17** |
+| serve cut off (<0.5 s) | 4 | 7 |
+| too long (>3 s) | 3 | 4 |
+| swallowed an earlier point | 0 | 1 (eda r04, anchored 8 s early) |
+| "no serve" flag: real points | — | 0/17 |
+| "no serve" flag: presumed warmups (365c depth-gate drops, not individually watched) | — | 0/16 |
+
+- **Why:** "deep player + fast swing" is not serve-specific. eda has 865 qualifying frames in ~376 s of windows,
+  about 2.3/s (returns, ball chasing, walking, pose jitter). So "last swing before play" lands on the return
+  (r08, +3 s), on a mid-rally swing (r13, +6 s) or on the previous point (r04), and some swing is always present,
+  so the no-serve flag never fires. Fast-swing far proposals were on time in p19 only because they were already
+  pinned to a rally start.
+- **Cost (measured):** posing these windows took ~14 min for eda's 9.5 min of video (~1.5× realtime, local
+  RTX 2000 Ada), because the [previous rally end, play] windows cover ~2/3 of the session.
+- Note: today's start scores 10/17 under this own-serve ground truth, versus 8/17 in the earlier
+  serve-in-clip measure.
+
+**Conclusion.** Rejected: the swing-only serve anchor, both as a start fix and as a warmup signal. Not re-tuned on
+this data, which is now spent for design. Untested next candidate, to be judged on a fresh session: require the
+swing to be followed within ~1 s by a ball crossing heading away from the swinger's side.
+
+**Addendum (same day): part of the Stage 1 failure is an implementation gap, not the idea.** `deep_swings` filters
+players only by depth (court-y), never by court width. Of the ≥1600 px/s "serve" swings, **274/865 (32%) on eda and
+50/244 (20%) on c199 come from people outside our court's width** (court-x outside -2..22 ft: the neighbouring court,
+bystanders). Pose sees a median of 5-7 people per frame (max 11). The other 591/194 swings are on our court
+(~1.6/s), so the swing signal stays non-specific even with the filter. Read Stage 1 as "this implementation
+failed", not "serve anchoring cannot work". Unchecked suspicion: pose identity jumps (a wrist "moving" because
+a different person was matched between frames) may inflate speeds further.
+
+### 2026-10-26 — Why serves split off: the near-side ball is hidden by players at the kitchen (playback-confirmed)
+
+Chart + overlay playback of eda r17 (414-432 s) and r13 (329-343 s), with tracked ball, image net line and counted
+crossings drawn (scratchpad `anchor/timeline.py`, `anchor/overlay_clips.py`; served at `:8451/timeline/`). In both,
+the ball reads FAR for long stretches mid-point (r17 418-426 s, r13 332-336 s). It is a real moving ball: x
+830-1110 px, y 410-500 px against a net line at 512 px. It is not a static phantom.
+
+- **Operator playback verdict:** the ball does come back to the near side, about 3 times in r17 and twice in r13
+  (hovering in the near kitchen). It is **occluded by the near players standing at the kitchen**, so it is never
+  detected there.
+- **Effect:** the tracked side never flips, so no crossings are counted. The 3 s gap expires and the serve's crossings
+  form a small group that min_crossings=6 drops. This is the mechanism behind the cut-off clip starts (r13, r17).
+- Checked in passing: the phantom/scenery defences in place are `court_wedge` and `track_ball` (teleport rejection,
+  2-candidate re-acquisition). The stationary-segment filter (`track_ball(min_seg_span=...)`) and the size/confidence
+  floors exist but are off everywhere. None of them is the cause here.
+
+**Conclusion.** Cut-off starts come from near-kitchen occlusion during dinks, not from the image-net-line geometry.
+A fix should treat "ball still in play" (seen moving on the far side, disappearing near the net and reappearing)
+as keeping the rally alive, rather than requiring counted crossings.
+
+### 2026-10-26 — Bridge rally gaps with "ball seen moving": recovers cut-off serves but merges points (fails bar)
+
+The 3 s gap is measured from the last *moving* tracked-ball frame (≥3 px/frame, within 2 frames) as well as from
+crossings; rally = ≥6 crossings; start = first crossing. eda + c199, same own-serve ground truth as Stage 1.
+Scratchpad `anchor/bridge.py`. Bar (set before running): merged points ≤ today, and ≥ half of today's cut-off
+serves recovered.
+
+| | today | bridged |
+|---|---|---|
+| opens 0.5-3 s before own serve | 10/18 | 6/16 |
+| serve cut off | 5 | **1** |
+| more than 3 s of lead-in | 3 | 9 |
+| extra labeled points merged into a rally | 2 | **9** |
+
+- It does what occlusion bridging should: r13 (+2.9 s), r17 (+3.6 s) and eda 283 s (+2.3 s) now keep their serve.
+- But between-point ball movement (tosses, bounces, pickups) keeps clusters alive too, so neighbouring points merge
+  and clips open long before the serve. **Fails the bar** (merges 9 > 2).
+
+**Conclusion.** "Ball moving" is too broad a keep-alive signal. Untested next step: bridge only the occlusion signature,
+where the ball is last seen moving toward the net and reappears on the far side within ~2 s.
+
+### 2026-10-26 — Narrow occlusion bridge: no new merges, 2 of 5 cut-off serves recovered (misses the recovery bar by one)
+
+Keep-alive only on the occlusion signature: the ball was last seen on the far side within 80 px of the net line,
+moving toward the net, then is unseen for 0.2-2.0 s, then reappears on the far side. Constants were set before
+running. Scratchpad `anchor/bridge2.py`. Signatures found: 22 on eda, 8 on c199.
+
+| | today | narrow bridge |
+|---|---|---|
+| opens 0.5-3 s before own serve | 10/18 | 10/18 |
+| serve cut off | 5 | **3** |
+| more than 3 s of lead-in | 3 | 5 |
+| extra labeled points merged | 2 | **2** |
+
+- Changed starts: r13 331 s (-1.9 → +2.9 s, serve recovered), r17 416 s (-7.1 → +3.6 s, serve recovered), eda 242 s
+  (+0.5 → +3.6 s, the serve was barely in and is now comfortably in). No other point moved, and there were no new merges.
+- Still cut off: eda 283 s (-8.8), r02 98 s (+0.3), r19 460 s (-0.7). Their gaps don't show the signature.
+- **Bar:** merges ≤ today, pass. Recover ≥3 of 5 cut-offs, **fail (2/5)**.
+- Metric caveat found here: with today's 3 s pad, a clip starting exactly on the serve crossing (~0.5 s after contact)
+  scores lead ≈3.5 s and counts as "long" under the 0.5-3.0 s window. Both +3.6 s cases are that. Separately,
+  today's good starts sit at leads of 2.2-2.8 s, i.e. the first crossing is stamped ~0.2-0.8 s *before* the
+  labeled serve contact. That is physically odd and suggests a hit-label time offset or a toss crossing just before
+  the serve. Unresolved; it does not change which clips recovered.
+
+**Conclusion.** The narrow bridge is safe on this data (no merges, nothing worse), but it only fixes 2-3 clips.
+In-sample only; a fresh session (a96cbae3) with playback is needed before any ship decision.
+
+### 2026-10-26 — Narrow occlusion bridge on fresh sessions: 11/12 changed clips judged good by playback
+
+The `bridge2.py` rule was applied unchanged to every clean PGC session not used in its design: 1974ac52, 3e1caf84,
+46fe3011, 7ace7db9, 81b38167, 85919543, a96cbae3. Excluded: eda/c199 (design), 365c798c (presumed warmup),
+and Tapo/drill sessions via `footage_rules.usable`. The rule changed 12 rallies across 7 sessions; a96cbae3 and
+7ace7db9 had no change. Operator watched all 12 (scratchpad `anchor/render_bridge_review.py`,
+`:8451/bridge_review/`).
+
+| change | n | operator verdict |
+|---|---|---|
+| start moved earlier | 5 | **4 captured the serve** (1974ac52 185s, 46fe3011 562s, 85919543 3s, 88s); 1 swallowed a prior rally (1974ac52 204s, moved 12.7 s) |
+| two of today's clips merged | 1 | one good point (85919543 298s) |
+| new rally (today has no clip) | 6 | **6/6 good points** (3e1caf84 354s, 46fe3011 280s, 81b38167 113s, 455s, 85919543 176s, 187s) |
+
+- Unchanged rallies are identical to today, so there is no regression elsewhere.
+- Not measured: cut-off serves the rule failed to recover on these sessions (only changed clips were reviewed).
+- The new-rally gain is recall: points whose crossings were split by occlusion into groups under 6, now held
+  together past 6.
+- 365c798c (excluded): the rule glued 4 pairs of presumed-warmup segments, which shows it can merge.
+
+**Conclusion.** On held-out footage the narrow occlusion bridge is net positive: +6 real points, 4 serves recovered,
+1 good merge, and 1 bad move (a 12.7 s jump that pulled in a previous point). Candidate for a `src/` change behind a
+flag, with a guard against long backward jumps.
+
+### 2026-10-26 — Narrow occlusion bridge on the hand-labeled non-PGC videos (IoU≥0.5)
+
+The `bridge2.py` rule, unchanged except that the 80 px near-net zone is scaled by frame height (80 px at 1080p,
+53 px at 720p; decided before running). Scored with `eval.harness.match_intervals` at IoU≥0.5 against full label
+files. IMG_7743 uses the pre-bump half (0-2900 s, pre-bump calib); it is the locked eval set and was only checked,
+never tuned on. Scratchpad `anchor/bridge_labeled.py`.
+
+| video | version | rallies | precision | recall | quality-1 recall | median start error |
+|---|---|---|---|---|---|---|
+| brickwall_30fps | today | 44 | 0.70 | 0.63 | 12/13 | 1.52 s |
+| | bridge | 43 | **0.86** | **0.76** | **13/13** | 1.44 s |
+| brickwall-SEMI | today | 31 | 0.77 | 0.63 | 12/18 | 1.50 s |
+| | bridge | 32 | **0.84** | **0.71** | **13/18** | 1.61 s |
+| pb_draft_cup | today | 22 | 0.86 | 0.56 | 7/10 | 1.50 s |
+| | bridge | 22 | 0.82 | 0.53 | 6/10 | 1.45 s |
+| IMG_7744 | today | 23 | 0.65 | 0.20 | 2/3 | 1.17 s |
+| | bridge | 28 | 0.61 | 0.23 | 2/3 | 1.08 s |
+| IMG_7743 eval (pre-bump) | today | 69 | 0.45 | 0.74 | 7/10 | 1.06 s |
+| | bridge | 71 | 0.46 | **0.79** | **9/10** | 1.16 s |
+
+- Large gains on both brickwall videos (doubles tournament, same venue as each other, different from PGC): precision
+  +0.07 to +0.16, recall +0.08 to +0.13, quality-1 recall +1 each.
+- Eval set: recall +0.05, quality-1 recall 7/10 → 9/10, precision flat.
+- pb_draft_cup (singles): small loss (-0.04 precision, -0.03 recall, quality-1 7 → 6). IMG_7744: +5 rallies,
+  precision -0.04, recall +0.03.
+- Median start error is unchanged (about ±0.1 s), so the gain is whole rallies held together, not sharper starts.
+
+**Conclusion.** The bridge generalizes beyond PGC: clear wins on brickwall ×2 and the eval set, small losses on
+pb_draft_cup and IMG_7744 precision. The pb_draft_cup quality-1 loss is not yet diagnosed (playback needed).
+
+**Follow-ups (same day).**
+- **pb_draft_cup "lost" quality-1 rally (label 450.5-458.2 s) is not dropped:** the bridge extended its end from
+  457.4 s to 463.8 s, so IoU fell from 0.67 to 0.45. The next labeled rally starts at 467.1 s, so nothing merged.
+  This single tail extension accounts for all of pb_draft_cup's precision and recall loss. Playback of the tail is
+  pending (`:8451/pb_review/`).
+- **Reel ranking (`src/select.score_segments`, top 10).** The bridge swaps 0-3 of the top 10 per video
+  (brickwall 2, SEMI 3, pb 0, IMG_7744 2, IMG_7743 1). Quality-1 rallies in the top 10, counted at IoU≥0.3 coverage:
+  unchanged on four videos (5/13, 6/18, 5/10, 1/3); IMG_7743 eval drops 1/10 → 0/10. Better detection did not
+  translate into more highlight-worthy clips in the top 10 here, which points at the ranker (see ADR-063's
+  velocity-feature note), not the detector.
+- **pb tail playback (operator):** the extra 6.4 s is the ball being tossed back. The bridge fired on a toss-back
+  after the point.
+- **Trimming slow bridge-attached pieces (no consecutive crossings <1.5 s apart), tested and rejected.**
+  - Both ends: fixes pb (back to 0.86/0.56, 7/10) but undoes 4 of the 11 good held-out PGC changes (two recovered
+    serves, two new points) and doesn't fix the bad one. Some real serve openings are slow too.
+  - End only: still fixes pb and keeps all recovered serves, but loses 2 of the 6 new PGC points (46fe3011 280 s,
+    81b38167 113 s) and part of the brickwall gain (recall 0.76 → 0.73, SEMI 0.71 → 0.66).
+  - The harm it prevents (a 6 s toss tail on a clip that still contains its point) is smaller than the harm it causes
+    (losing whole real points). Keep the untrimmed bridge; treat toss tails as a known cosmetic cost.
+
+### 2026-10-26 — Highlight badges with the occlusion bridge: Marathon shifts most; occlusion rate is a partial ball-only Kitchen War signal
+
+8 clean PGC sessions (pose caches `cache/arm_swing/poses_pgc_*.json`), rallies built with `cluster_crossings_keepalive`.
+
+- **Marathon (longest) and Firefight (most crossings), top 3 per session.** The bridge changes 10/24 Marathon picks
+  and 4/24 Firefight picks. Longest rally grows in 4 sessions (e.g. 1974ac52 16 → 23 s, 85919543 15 → 21 s). The
+  1974ac52 23 s rally is the held-out bad case (a 12.7 s backward move that swallowed a prior point), so Marathon is
+  the badge most exposed to merge errors.
+- **Kitchen War from the ball alone.** Occlusion-keepalive rate per rally vs the pose kitchen-posture share
+  (players at both kitchen lines; `pgc_types.in_kitchen_posture`, without the swing gate), 106 rallies with pose
+  coverage:
+  - Spearman **+0.26** (p=0.007). Crossing rate +0.03, duration +0.15.
+  - Top-20% kitchen rallies: median occlusion rate 0.10/s, others 0.00/s.
+  - Top-20% by occlusion that are also top-20% kitchen: **9/21** (chance ~4.2).
+
+**Conclusion.** The occlusion rate carries real Kitchen War signal for free (about 2× chance) but is too weak to award
+a badge alone, where precision is the bar. Use it as a cheap candidate filter before pose, or as a tiebreak. The
+bridge makes the ball-only badges measure whole rallies, but Marathon needs a merge guard before it can be trusted.
+## 2026-10-27 — Badges on a full 25-minute YouTube session through the pod's own code: pose cost, and why badges must be decided per session, not per part
+
+**Why.** Before badges go anywhere near production, the operator asked for a full-length session, not just the 5-15 minute clips used so far. Also: is a part's "typical swing" stable enough for each pod to award badges on its own?
+
+**Setup.** `videos/brickwall_30fps.mp4` (YouTube, 1280×720 30 fps, 1513 s — the substream's resolution), cached k14 predictions, occlusion bridge on. Run locally through the same functions the staging pod calls after inference (scratchpad `fullrun/run.py`): `detect_candidates` → `src/pose.py` (yolov8x-pose TorchScript, fp16, batch 8) on rally windows → `src/badges.py` → full / burst / top-10 reels. RTX 2000 Ada (the staging pod's GPU type), local torch 2.13 rather than the pod's 2.1 (same TorchScript file). Code: `staging/badges` 1605a4f (before the measure/decide split; the split reproduces it exactly).
+
+**Cost.**
+
+| step | time | note |
+|---|---|---|
+| rally detection | 0.4 s | 42 rallies |
+| pose | **1394 s (23.2 min)** | 27,329 of 45,396 frames (60%), steady 19.7 fps |
+| badges | 3.7 s | 685 swing peaks |
+| cut (full + burst + 10 clips) | 31 s | |
+
+- **Pose runs at 0.92× real time on this pro footage**: a 25-minute session adds about 23 minutes of pod time on top of TrackNet. Rec play has more dead time between rallies, so a smaller share of frames. Not yet measured on rec footage or on an L4.
+
+**Badges (whole video as one part).** Typical swing 1.95. 15 candidates: 10 Kitchen War (margins 1.06-1.55), 5 Quick Hands (1.00-1.25; five rallies exactly at the 4-fast-swing bar). Awarded: **Kitchen War 929.2 s, Quick Hands 554.4 s**. No Hardest Swing, First Strike or Killer Shot. Both badged rallies are in the top 10 by score (ranks 3 and 5).
+
+**Per part vs per session (same poses, split by time).**
+
+| split | typical swing per part | badges if each part decides | badges decided per session |
+|---|---|---|---|
+| 10-min parts (3) | 1.96 / 2.00 / **1.73** | **7** (3 Kitchen War, 3 Quick Hands, 1 First Strike) | 2: Kitchen War 929.2, Quick Hands 1063.6 |
+| 15-min parts (2) | 1.95 / 1.95 | 4 | 2: Kitchen War 929.2, Quick Hands 554.4 |
+
+- **Per-part awarding breaks "one per session" outright** (7 badges where the session earns 2), and the last 10-minute part's typical swing was 11% lower, which is what let a First Strike through there.
+- Decided per session, the result matches the whole-video run, except Quick Hands with 10-minute parts: the 554.4 s rally crosses the 600 s split, so each half saw fewer fast swings, and the tie-equal 1063.6 s rally won. Real parts split at the same kind of boundary.
+
+**Conclusion.** Badges are decided per session by the console from every part's measurements (pods measure only), which became `feature/pod-badges` ee01dda + console `feature/session-badges`. Pose cost (~0.9× real time on dense play) is the open cost question; measure it on staging with real parts.
+
+## 2026-10-27 — 9:16 framing: ball only vs ball + players vs + serve start (brickwall full run, PGC Court B)
+
+**Why.** The 09-28 ball-following crop cut players out in doubles. The pod now poses every rally (badges), so the window can keep the ball and as many players as fit (`src/framing.py`). The operator also asked whether badges should be known before cropping.
+
+**Setup.** `scripts/vertical_framing_eval.py` on the 10 top clips of two runs, with the poses each run produced: brickwall_30fps (25-min full run, 720p, behind the baseline) and PGC Court B `46fe3011` (1080p, side-on, local only). Ball = the tracked x detection uses; players = on-court pose boxes. Measures from detections, not from watching. Three rules: ball only (09-28), ball + players (the window keeps the ball 0.1 window-widths inside the edge and, within that, shows the most player width, the player nearest the ball counting double; applied on every frame, the ball's unseen frames filled by interpolation), and + serve start (frame the server, the baseline swing `badges.serve_peak` finds, until 0.3 s past the first net crossing).
+
+| | Brickwall: ball / +players / +serve | Court B: ball / +players / +serve |
+|---|---|---|
+| Swings shown (wrist in window at each swing peak) | 91% / 93% / 94% | 88% / 90% / 87% |
+| Players fully in window | 80% / 89% / 90% | 69% / 74% / 73% |
+| Ball inside window (frames tracked) | 100% / 99% / 98% | 100% / 100% / 97% |
+| All kitchen players in window, during stand-offs | 66% / 97% / 97% | 81% / 97% / 97% |
+| Server fully in window at serve contact | 2/9 / 2/9 / 8/9 | 6/10 / 6/10 / 10/10 |
+
+The actual Kitchen War clip: all kitchen players in 65% (ball) vs 99%; Quick Hands 63% vs 97%. Hold past the crossing swept 0 / 0.3 / 0.6 / 1.0 s: brickwall server 5→8→9→9 of 9; Court B swings shown 85→87→84→83% (the return right after the serve is the cost). Applying the player rule only on frames with the ball seen (first try) gave Court B 84% swings shown, since the ball is tracked in few frames there.
+
+**Conclusion.** The player rule is what matters; it fixes the kitchen stand-off, which ball-only cuts in a third of frames. Badge-aware framing would add little: Kitchen War / Quick Hands are already 97–99%, the hardest and last swings' hitters 8–10 of 10, and First Strike is covered by the serve start, which applies to every clip. So framing can be decided before badges; when to crop is a practical choice (only delivered clips, high-res source). Side-on four-player spreads remain the limit (Court B players fully shown ~73%).
+
+**Caveats.** 20 clips, two cameras, two real badged rallies; "first swing" was a poor stand-in for the serve (the serve check above uses the detected serve). Not yet watched — the vertical and side-by-side clips are local (scratchpad `vertical/`).
+
+## 2026-10-27 — Staging: a full live-replayed session with badges on (Lifetime Fall Classic, 3 parts)
+
+**Why.** Players leave ~10-15 min after a game ends (operator), so clips AND badges must be final by then. First multi-part staging session with badges on, on the cloud GPUs.
+
+**Setup.** "Lifetime Fall Classic.mp4" (YouTube, fixed behind-baseline camera, 1080p60, 21.7 min), re-encoded to camera-like 1080p30 parts of 600 / 600 / 102.7 s. Calibration marked by hand from a still (`calib/lifetime_fall_classic_calib.json`, 11 points, RMSE 0.28 ft, overlay checked). Replayed on the game clock: each part uploaded (29-30 s for 10 min) and queued when it would have finished recording. Staging console 76da4fa (badges re-decided when each part's job finishes), staging pod code 11d3934 (BADGES on, clip every rally).
+
+| part | queued after recording ends | GPU | machine start | ball detection | badge pose | done | after game end (06:50:15) |
+|---|---|---|---|---|---|---|---|
+| 1 (0-10 min) | 1.3 min | RTX 2000 Ada | 1.0 min | 6.8 min | 6.4 min (6,670 frames, 17 fps) | 06:57:22 | +7.1 min |
+| 2 (10-20 min) | 0.9 min | RTX 4000 Ada | 1.3 min | 6.1 min | 2.4 min (3,269 frames) | 07:02:11 | **+11.9 min** |
+| 3 (20-21.7 min) | 0.6 min | L4 | 2.0 min | 0.7 min | 0.4 min | 06:54:42 | +4.5 min |
+
+A 10-minute part took 13.6-17.4 min from end of recording to done. Badges were re-decided 10 s after part 1 finished and 7 s after part 2 (final at 07:02:18, +12.1 min): Killer Shot (part 1, score 37, rank 18) and Kitchen War (part 2, score 60). 28 rally clips, 10 delivered (badged + best by score).
+
+**Findings.**
+- **The deadline is the last full part's processing**, not badges: clips and badges were final 12 min after the game. A game ending exactly on a part boundary puts the last full part at ~14-17 min after the end -- past 10-15 min. Ball detection (6-7 min per 10-min part) is the larger share; pose is 2.4 min on an RTX 4000 Ada but 6.4 min on an RTX 2000 Ada.
+- **No clip carried a framing path**: `src/framing.py` was missing from `pod_deps.POD_DEPS_FILES`, the lazy import failed on the pod, and the best-effort step swallowed it. Fixed (dc5661c) with a test over the pod's whole import closure.
+- **Pod leak reproduced**: all three pods were still RUNNING 3-10 min after their parts finished; only the L4 was the session's legitimate warm pod. Terminated by id.
+- The L4 billed $0.59/hr against the $0.50 cap.
+
+**Caveats.** One session; GPU type is whatever the orchestrator rented. My first read of part 2 ("8 minutes to start") was wrong -- the job's message field lags the stage; stage timestamps showed a 1.3 min start.
+
+## 2026-10-27 (later) — Staging replay #2: framing fixed, sharp + vertical delivered for a sample session
+
+**Setup.** Same Lifetime Fall Classic 3-part replay on the game clock, staging pod code d0539a9 (framing module shipped). Then `desktop/scripts/sample-high-res.mjs` played the venue desktop: heartbeat as the staging agent, trim each offered clip from the original 1080p60 file, crop + upload through the app's own `deliverHighRes`.
+
+**Result.** Game end 07:41:46. Parts done +4.8 min (part 3, RTX 4000 Ada), +9.0 (part 1, RTX 2000 Ada), +13.2 (part 2, RTX 4000 Ada); badges final 07:55:00 (+13.2): Kitchen War (part 2) and Killer Shot (part 1) again. 28/28 rally clips carry a framing path. The console offered exactly the 10 delivered clips; each was trimmed, cropped to 9:16 (608x1080, no upscale) and uploaded in 9.5-17 s (~2 min for all 10, starting 07:59). The share API returned 10 vertical links and `/r/<share>/test` served 200. Pods terminated by id right after (3 were still RUNNING).
+
+**Caveats.** The stand-in desktop ran after the session finished, not alongside it; on a venue Mac clips would sharpen as each part lands. Vertical framing not yet judged by watching. Console deploy of c354bad (video/mp4 override) blocked by a Netlify-GitHub clone failure, so the sharp/vertical files are still served as application/octet-stream on staging.
+
+## 2026-10-27 (evening) — Staging replay #3: 5-min parts + warm machine + GPU order + faster cutting
+
+**Setup.** Lifetime Fall Classic replayed as 5 parts (4 x 300 s + 102.7 s) through the real desktop agent API (create job -> presigned PUT -> complete) on the game clock; recording started 10:17:56 UTC, game end 10:39:38. Staging pod code 138f660, console 8ba1144, orchestrator with the reordered GPU list + live $0.50 cap and the warm-job tick. Stand-in desktop (`desktop/scripts/sample-high-res.mjs --camera`) running alongside. (Part 1 went ~1.5 min late: my driver sent `size` instead of `sizeBytes`.)
+
+| part | machine | queued -> done |
+|---|---|---|
+| warm job | RTX 4000 Ada, rented 10:20:01, waiting 10:21:49 | — |
+| 1 | warm machine | 10:23:39 -> 10:30:18 (6.6 min, 0 s pickup) |
+| 2 | new RTX 2000 Ada (no faster card free) | 10:28:15 -> 10:38:13 (10.0 min incl. 0.75 min pickup) |
+| 3 | warm (RTX 4000 Ada) | 10:33:15 -> 10:38:58 (5.7 min) |
+| 4 | warm (the RTX 2000 Ada, reused) | 10:38:15 -> 10:43:49 (5.6 min) |
+| 5 | warm (RTX 4000 Ada) | 10:39:50 -> 10:41:50 (2.0 min) |
+
+**Result.** All clips done **+4.2 min** after the game (13.2 min in replay #2); badges final +4.3 min (Kitchen War part 3, Killer Shot part 1); all 10 shown clips sharp + vertical +4.6 min (10:44:11). Uploads 16-17 s per 5-min part. 19 vertical crops made over the session (clips that were top-10 at the time; some later dropped out).
+
+**Findings.** The warm job queued exactly at part length - 3 min and the machine was waiting before part 1. With 5-minute parts a part takes longer to process (5.6-10 min) than to record, so one warm machine can't keep up: part 2 rented a fresh machine and got the slow RTX 2000 Ada (faster cards out of stock). A second warm machine during play would close that. Two pods were still RUNNING after the session (one is the session's legitimate 12-min waiter).
+
+## 2026-10-27 (night) — Staging replays #4 and #5: idle machines after a session
+
+**#4 (session-end report only).** The console recorded the session's end (5 parts) and told both pods "stop" at ~11:33, but both stayed RUNNING with uptime -7/-9 s and 0% CPU ten minutes later: RunPod restarts a pod's container when pod_driver exits, so a finished pod never shows EXITED -- the only state the orchestrator terminated on. Since PIC-138 removed the pod's own RunPod key, finished pods billed until the 3-hour job deadline (production too). Terminated by id.
+
+**#5 (fix: console `pods/<id>/needed` + orchestrator terminates after two "not needed" polls; done marker; warm pod registers before prefetching).** Recording 11:52:34, game end 12:14:17; warm job 11:55:01 (RTX A5000), part 2 on a fresh RTX 2000 Ada at 12:03.
+
+| | last part done | pod gone (20 s watch) | idle after its last part |
+|---|---|---|---|
+| RTX A5000 (warm; parts 1, 3, 5) | 12:16:01 | by 12:17:57 | ~1.9 min |
+| RTX 2000 Ada (parts 2, 4) | 12:18:35 | by 12:20:44 | ~2.1 min |
+
+All clips +4.3 min after the game, badges final 12:18:40 (Killer Shot, Kitchen War), all 10 shown clips sharp + vertical by 12:19:03. GPU ~ $0.17 for the 21.7-min game (A5000 ~22.6 min, RTX 2000 ~17.7 min), against ~$0.22 for replay #3 cut short by hand and ~$0.27 left alone. After-session idle ~4 machine-minutes (was 13-24). Remaining idle: the warm machine's ~2.5 min head start and short gaps between parts.
+
+## 2026-10-27 (night) — Faster ball detection: cheaper court mask + float16 + XLA (local RTX 2000 Ada)
+
+**Why.** Ball detection was ~3.5 min of each 5-min part on the cloud cards, so one machine couldn't keep up with play. Profiled `scripts/pod_infer.py` (`scripts/profile_pod_infer.py`, 600 trios of a real 1080p30 part): decode 5.1 ms/trio, **CPU prep 37.7**, **GPU model 38.9**, post 0.8. The court mask was a numpy multiply over every full 1080p frame.
+
+**Changes, each measured on 1080p frames (CPU limited to 4 cores to resemble a pod):**
+- Mask with `cv2.bitwise_and` (0/255 mask) instead of `img * mask`: prep 40.8 -> 15.1 ms/trio, **bit-identical** model input. (Resizing before masking: 14.3 ms but changes the input -- rejected.)
+- Model in float16 (layers rebuilt from config; the saved model pins float32): 40.3 -> 19.6 ms/trio. XLA (`jit_compile`): 24.4 fp32, **13.3 fp16+XLA**. On 1,800 frames all three kept every detection (shifts <= 0.5 px at 512 wide).
+
+**End to end** (`pod_infer.py`, defaults now fp16 + XLA + bitwise mask; `PIC_VISION_INFER_FP16=0` / `_XLA=0` restore):
+- LFC 5-min part (9,000 frames, 4 cores): 144 s -> 61 s wall (65 -> 169 fps); 8,997/9,000 detections identical; **the same 8 rallies to the hundredth of a second**.
+- brickwall_30fps (45,396 frames, labelled): old 73.8 fps (16 cores) vs new 230 fps (4 cores); 120 frames (0.26%) differ, 12 found/not-found. Scored at IoU>=0.5: old 44 rallies, 31/49 matched, recall 0.633, 5.16 FP/10 min; new 45 rallies, 31/49, **recall 0.633**, 5.55 FP/10 min, boundary 1.42 -> 1.43 s.
+- fp32 + XLA alone (119.8 fps): 32 frames differ and **the same extra 45th rally** -- so it is a borderline stretch that flips with any change in arithmetic order, not a float16 effect; float16 + XLA costs nothing more and is faster.
+
+**Not yet measured on the cloud cards** (fewer/slower CPU cores, A5000/RTX 4000 GPUs); next is a staging replay.
+
+## 2026-10-27 (late) — Staging replay #6: faster ball detection on the cloud; orchestrator blind after ~50 requests
+
+**Setup.** Same 5-part replay, pod code 9eccc2f (float16 + XLA + cheaper mask). RunPod had none of the faster cards: every pod was an RTX 2000 Ada. The warm job was claimed at 15:30:00 but its pod only appeared at 15:34:36 (capacity retries), so part 1 rented its own pod at 15:33.
+
+**Result.** Game end 15:48:53; all clips done **15:50:42 (+1.8 min)**. Ball detection ("inference" stage) per 5-min part on the RTX 2000: 68 s, 46 s, 62 s, 44 s (was ~3.5 min). Part totals from claim: part 2 6.3 min (10.0 in replay #3 on the same card), part 3 4.9, part 4 3.2, part 5 1.5 -- under the 5-min real-time line from part 3 on, so one machine keeps up even on the slow card.
+
+**Finding.** Both pods were still RUNNING (restart loop) 9 min after their last part although the console answered `needed: false`. The orchestrator's Workflow instances had every read fail from 15:47:30 (job state, RunPod pod state and needed all null) after ~15 successful polls: Cloudflare Workers **Free** caps a Workflow instance at **50 external subrequests** (Paid: 10,000). Each poll makes 3 (2 before the needed check), so a job Workflow goes blind ~15-25 min in -- no cancel, no finished-pod detection -- and pods run to the 3-hour deadline (enforced from the Workflow's own clock). Replay #5's termination worked only because its instance happened to restart partway. Applies to production too. Pods terminated by id.
+
+## 2026-10-28 (00:30 TW) — Staging replay #7: once-a-minute cleanup removes every machine on its own
+
+**Setup.** Same 5-part replay; console 59f10f6 (GET /api/runner/pods) and the staging orchestrator with the cron cleanup (machines handed off at check-in; cleanup terminates not-needed machines idle 90 s+, past the deadline, or vanished). No manual termination.
+
+**Result.** Game end 16:53:43; all clips 16:55:59 (+2.3 min), badges 16:56:03. Machines: A4500 (warm; parts 2-3) last part 16:51:39 -> gone by 16:54:13; RTX 2000 (parts 1, 4) and a fresh A4500 (part 5) last parts 16:55:51 / 16:55:59 -> RunPod empty at 16:58:20. ~35 machine-minutes, ~$0.14 (~$0.40 per hour of play).
+
+**Seen.** RunPod had no capacity at 16:34 and 16:35 for any card on the list ("There are no instances currently available"); the warm job's third try (after a 3-min backoff) got an A4500 at 16:38, after part 1 (16:37) had been claimed -- part 1's own pod also waited ~4 min for capacity. When the A4500 finished part 3 (16:51:39) another machine was the session's waiter and nothing was uploading, so warm_pod_next told it to stop; the last part (16:53:52) then needed a fresh machine. Next: retry a warm job every ~30 s, start it a little earlier, and keep a second machine for one part length while the session is recording.
+
+## 2026-10-28 (09:30 TW) — Staging replay #8: warm machine rented at recording start; part 1 held for it
+
+**Setup.** Same 5-part replay; console 0b3a4ec (PREWARM_LEAD_SEC 180 -> 360, so with 5-min parts the warm job is queued on the first tick after recording starts; claim_next_job holds a queued part while its session's warm job is queued/starting and < 8 min old).
+
+**Result.** Recording 01:07:52 UTC, game end 01:29:45. Warm job queued 01:08:00, RTX 4000 Ada ($0.28/h) on the first try, checked in 01:09:09; it took part 1 at 01:13:23 (12 s after upload) and parts 2-4 (each 3.1-4.9 min from claim). Part 5 (01:29:36) arrived while it was on part 4, so a fresh RTX 2000 Ada was rented (01:30:00 -> done 01:33:01). All clips done 01:33:01 (**+3.3 min**), badges 01:33:05; all 10 shown clips sharp + vertical by 01:31:54. Machines gone 01:33:07 and 01:35:04 (cleanup, no manual action). ~30 machine-minutes (25 + 5), **~$0.14** (~$0.37 per hour of play).
+
+**Seen.** The hold never had to act (the warm machine was ready 4 min before part 1); idle was the warm machine's 4.2-min wait for part 1, ~2.2 min of gaps between parts, and ~1.5 + ~2 min after each machine's last part. Finish time was set by the end of the session: part 4 (queued 01:27:54) finished 01:31:32 and part 5 needed a machine of its own; replay #7's +2.3 had a faster part 4/5 pair. **Correction to my 10-28 reading of replay #7:** its 5.6-min warm start was RunPod capacity retries (logged in the #7 entry above), not an image download; machine-minutes count from pod creation, so #7's ~35 min / ~$0.14 stands.
+
+## 2026-10-28 (11:00 TW) — Staging replay #9: 720p uploads (the dual-stream design); a stuck machine start nobody caught
+
+**Setup.** Same game and 5-min parts, but the desktop driver uploaded **720p30 ~2 Mbps** copies (cut from the original 1080p60 once, like a camera's sub-stream); the stand-in desktop cut sharp + vertical clips from the 1080p original, as the venue machine does from the main stream. Console 0b3a4ec.
+
+**Detection, 720p vs replay #8's 1080p (parts 1-4; same rally = IoU >= 0.5 within the part).** 1080p 26 rallies, 720p 27; **18 matched** (+1 at 1080p 120-132 vs 720p 115-127, IoU 0.41); 7 found only at 1080p, 8 only at 720p. Of the 10 shown clips, 6 are the same moments. Kitchen War: same rally (p3). Killer Shot: different rally (1080p p1 120-132, 720p p4 268-290). 720p scores generally lower. Part 5: 1 rally each. No collapse here, unlike the 10-27 PGC harness (13 -> 4-6 rallies) -- but this is a YouTube pro match, not a venue camera, and there are no labels to say which list is better. Upload time unchanged (17-19 s per part): the 720p copies' 2 Mbps matches the 1080p copies' ~1.9 Mbps.
+
+**Timing.** Recording 02:31:05 UTC, game end 02:52:58. Warm RTX A5000 ($0.27/h) up 02:32:23, parts 1-4 (3.4-3.6 min each from claim). Part 5 (queued 02:52:5x) got a fresh RTX 4000 Ada in Iceland at 02:53:06 whose container **did not start for 10.2 min** (runtime null until ~03:03:20; a host without our image). Part 5 done 03:04:16, badges final 03:04:19 (**+11.4 min**); the 10 shown clips were sharp + vertical by 02:55:35 (+2.6), and part 5 changed none of them. Machines gone 02:57 and 03:06:10. ~37 machine-minutes, ~$0.17.
+
+**Bug.** The orchestrator's 8-minute stuck-start retry (ADR-101) never fired: `reelJob.ts` treats any change to the job's `updated_at` as the pod checking in, and its own `record-gpu` PATCH (gpu + podId, right after creating the pod) changes `updated_at`, so the first poll a minute later reads "checked in" and hands the pod to the cleanup -- which keeps it because the job is running on it. Same comparison and PATCH on origin/main (production's `checkedIn` path), so a container that never starts is not retried there either; here the job would have hung until the 3-hour deadline had the container never started.
+
+## 2026-10-28 (12:00 TW) — Staging replay #10: 720p, all of today's fixes; one machine for the whole session
+
+**Setup.** Same 720p parts as replay #9 (cloud gets 720p30 ~2 Mbps; stand-in cuts sharp + vertical from 1080p). Console 1befc3c: warm machine at recording start, part held for a starting machine, **part held for a machine finishing the session's previous part** (stage inference or later), staging orchestrator c97c73d0 (check-in = stage moves; stuck start replaced after 4 min).
+
+**Result.** Recording 03:21:10 UTC, game end 03:43:03. One RTX 2000 Ada ($0.24/h, Iceland) rented 03:22:02, started 03:23:15 (1.2 min). It took every part: 1-4 at 4:02-4:16 each from claim; part 5 (queued 03:42:55, while part 4 was at badges) was held and taken by the same machine 5 s after part 4 finished (03:45:53 -> 03:47:03). Final list (badges) 03:47:07, **+4.1 min**; 10 shown clips sharp + vertical by 03:46:40 (+3.6). Machine gone ~03:49:00 (cleanup). **~27 machine-minutes, ~$0.11** (~$0.30 per hour of play).
+
+**Per 5-min part on the RTX 2000 Ada:** prep ~20 s, ball detection ~45 s, **badges (pose) ~2:15-2:35**, cut + upload ~35 s. Badges are now ~60% of each part.
+
+**Seen.** 29 rallies (replay #9, same 720p files on an A5000: 28). Kitchen War is the same rally as #8-#9 (p3 215-232). Killer Shot moved again: p2 23-46 here, p4 268-290 in #9, p1 120-132 at 1080p in #8. So it is not stable across GPU types even on identical input (float16 + XLA arithmetic differs by card); worth checking how close the Killer Shot candidates' measures are.
+
+### 2026-10-27 — Production-faithful harness: 720p input loses ~30% of ball detections on PGC footage (contradicts 08-28 "720p ≈ 1080p")
+
+Built a harness that copies the dual-stream production input (scratchpad `prodtest/harness.py`):
+1. Substream copy: 1280×720, 30 fps, 2048 kbps (the camera's VE_1 sub-stream setting).
+2. The pod's own 30 fps CFR re-encode (crf 20).
+3. `scripts/pod_infer.py` with the production k14 weights and `--calib`, with `calibration_resolution` set, as the console writes it.
+4. `src.rallies.detect_candidates` (production rally code, bridge off).
+5. Pose on the 720p frames, scaled back to calibration coordinates.
+
+Footage: PGC 7ace7db9 (real camera model, 1920×1080 source, 10 min). The court mask in `pod_infer.py` builds at calibration resolution and resizes, so it is correct at 720p; coordinate ranges match between runs.
+
+| input | ball detected in | rallies |
+|---|---|---|
+| 1080p, cached pod run (09-28) | 27.1% of frames | 17 |
+| 1080p, local harness (control) | 25.6% | 13 |
+| 720p, high quality (crf 16) | 18.1% | 4 |
+| 720p, 2 Mbps (substream copy) | 17.7% | 6 |
+
+- **Resolution, not compression, is the cause.** High-quality 720p is no better than 2 Mbps. The local 1080p control nearly reproduces the cached pod result, so the harness is sound.
+- **This contradicts the 2026-08-28 finding "720p detects as well as 1080p"**, the basis for sending the 720p sub-stream to the cloud (dual-stream architecture).
+- **Likely mechanism (unverified):** `pod_infer` resizes every frame to 512×288 with `cv2.resize`. From 1080p that keeps the small far ball sharp; from an already-smoothed 720p frame (ffmpeg here; the camera's scaler in production) the ball may be softened below detection.
+- **Not yet tested on a REAL camera sub-stream.** None exists on this machine (the last 720p file is a Sept cloud-job proxy). The copy starts from an already-compressed 1080p file, so it may be harsher than reality.
+- **Badge consequence:** the same session's badges at 720p are entirely different rallies than at 1080p, because rally detection changed.
+
+**Conclusion.** Production detection on the 720p sub-stream may be finding far fewer rallies than the 1080p field test. **Needs a real sub-stream recording before the 2026-11-01 Pickleday test.** If confirmed, options include sending a 1080p sub-stream (camera allows 1080p only at 15 fps on these units; ADR-131 floor is 25 fps) or changing pod_infer's resize.
+
+**Follow-up (same day): the shrink step in `pod_infer.py` explains part of the 720p loss.** Same 720p 2 Mbps copy, with only the 1280×720 → 512×288 resize in a scratch copy of `pod_infer.py` changed (scratchpad `resize/`). Rallies compared against the local 1080p control (13).
+
+| resize | detections | rallies | 1080p rallies overlapped | rallies not at 1080p |
+|---|---|---|---|---|
+| linear (today) | 17.7% | 6 | 4/13 | 3 |
+| **nearest** | **21.8%** | 11 | **8/13** | 2 |
+| sharpen (unsharp 1.8/-0.8) + linear | 19.9% | 12 | 6/13 | 7 |
+| cubic up to 1920×1080, then linear | 18.6% | 8 | — | — |
+| area | 15.8% | 4 | — | — |
+| 1080p linear (control) | 25.6% | 12 | — | — |
+
+- The ordering confirms the softening mechanism: more smoothing hurts, none helps.
+- **Nearest recovers about half the gap** with few extra rallies. Sharpen adds spurious rallies.
+- About 4/13 rallies are still lost, so 720p also loses real information.
+- Before any change: (1) a real camera sub-stream recording; (2) a no-regression check of nearest on the labeled videos; (3) `pod_infer` behind a setting, through pipeline staging.
+
+**Staging parity (same day): the local harness reproduces the staging pipeline.** A 5-min brickwall-SEMI window was made into a 720p, 2 Mbps sub-stream copy, then run as a real staging reel job (staging code d6f2fcf, bridge on; job 1127d709, RTX 2000 Ada pod) and locally with the pod's exact steps.
+- Staging: 11 rally candidates, 10 top-rally clips.
+- Local, re-encoded with **h264_nvenc p4 cq20** (the pod's encoder): 11 rallies, and all 10 staging clips match a local rally within 1 s (whole-second rounding). The 11th local rally is simply not in the top 10.
+- With the local re-encode on libx264 crf20 instead, two rally starts shifted by 3-4.5 s, so the encoder matters at boundaries.
+- The harness now uses NVENC. Local harness results can stand in for staging for experiments; staging remains the final check before production.
+
+### 2026-10-29 — Badge pose with decode/letterbox prefetch: x1.2 on RTX 2000 Ada, identical measures
+
+Why: the 10-29 production run showed pose (badges) at ~2:40 of every 5-min part (25-28 fps on A4500 / RTX 4000 Ada). With it, a part took ~5:40, so one machine fell behind real time.
+
+Change: `src/pose.py` `pose_video` decodes and letterboxes on a background thread, up to 4 batches ahead of the GPU. Same batches in the same order (branch `perf/pose-overlap`, aba92ac).
+
+Measured:
+- **Local (RTX 2000 Ada, LFC footage at 30 fps, 3,600 rally-window frames):** 18.9 → 22.9 fps (x1.21), output byte-identical to the old code. Model-only throughput on this card is ~24 fps, so here the GPU itself is the ceiling.
+- **Staging replay #12** (LFC part 1, 720p, 2,518 posed frames, RTX 2000 Ada): pose 147.1 s (replay #10, same part, same card type) → 123.9 s (x1.19). `badge_measures` (minus pose_sec) has the same md5 as replays #10 and #11: 65 swings, 7 rallies.
+- **Not measured:** the gain on stronger cards (A4500 / A5000 / 4000 Ada), where serial pose is further below the GPU's own ceiling. Staging picks the cheapest available card.
+
+Conclusion: a safe, result-neutral ~20%. That saves ~25-30 s per part, not enough by itself to bring a part (~5:40) under 5 min. Bigger cuts change the posed frames or the input size, and so the badge measures; they need the blind brickwall rerun (src/badges.py header).
+
+### 2026-10-29 — Posing fewer frames for badges: rejected (badges drop with the frames)
+
+Question: can badges pose fewer frames (to keep a 5-min part under 5 min of processing) without changing which badges are awarded?
+
+Method (local only; PGC footage stays on this machine):
+- **Sessions:** the 14 PGC field-test sessions that have cached full pose (`cache/arm_swing/poses_pgc_*.json`, the caches the bars were set on).
+- **Rallies:** found as the pod finds them (`detect_candidates`, occlusion bridge on).
+- **Reference:** `src.badges.measure` + `decide` on every cached frame.
+- **Sparse:** the same code on a subset of frames. Every variant keeps the full serve window.
+
+Results (IoU not applicable; per-session badge agreement against the reference's 7 badges):
+- **Every frame within ±W of ball-track direction changes, every K-th frame elsewhere** (W 6-12, K 6-10): 27-35% of frames posed, 2/7 reference badges kept, 4-5 changed. Ball-track "hits" come at only 0.15-0.75/s against about 1/s of real play, and only ~15-30% of swing peaks fall near one (the far-side gaps; cf. ADR-156).
+- **Two-pass:** pose every K-th frame, then every frame ±W around coarse wrist moves above X× the coarse median:
+
+| K | W | X | Frames posed | Swing peaks kept | Badges kept (of 7) |
+|---|---|---|---|---|---|
+| 3 | 12 | 1 | 100% | 100% | 7 |
+| 3 | 6 | 3 | 81% | 82% | 5 |
+| 3 | 6 | 4 | 72% | 67% | 5 |
+| 3 | 6 | 6 | 57% | 45% | 3 |
+| 6 | 9 | 6 | 32% | 20% | 3 |
+
+Conclusion: every saving in frames costs swing peaks almost one-for-one. Swing speed is a one-frame wrist step sustained into the next frame, so a swing is only seen when both of its frames are posed, and fast swings are spread through rallies, not just at the hits the ball track sees. **Not shipping frame reduction.**
+
+Only 7 reference badges, so the badge counts are small. The swing-peak retention is the stronger evidence. Remaining options to keep a part under 5 min: the result-neutral prefetch (x1.2, above); a second machine when a part has waited too long (no badge change); a smaller pose input size (untested; changes measures and would need the blind brickwall rerun).
+
+### 2026-10-30 — Pose inference batch size: larger batches rejected
+
+**Hypothesis.** The GPU is the pose bottleneck, so raising `pose_video`'s batch from 8 to 16 (or 32) may improve throughput without changing detections or badge measures.
+
+**Setup.** Commit `fcd310c88d0e78ca89f41f5c4a0a92bc0a325d7d`; production `src/pose.py` and the exact production TorchScript object `weights/yolov8x-pose-736x1280-torch21.torchscript`; RunPod RTX 2000 Ada, Torch 2.1.0+cu118, 16 GB VRAM. Used `videos/IMG_7743_consistency_0-300s.mp4` (1920×1080, 30 fps) and the seven blind labels in `eval/labels/IMG_7743_consistency_0-300s_blind.jsonl`, yielding the same 2,353 rally-window frames per run. Kept the production 736×1280 input, CUDA fp16, and decode/letterbox prefetch unchanged. Warmed each batch shape first; ran three full timed passes for each size in alternating order. Pose throughput timing excludes the separate `badges.measure` CPU calculation.
+
+**Result.**
+
+| Batch | Pose seconds (three runs) | Mean fps | Detections | Badge summary | Pose output vs batch 8 |
+|---:|---|---:|---:|---|---|
+| 8 | 102.635, 102.460, 102.392 | 22.96 | 7,992 | identical hash in all runs; 7 rallies, 62 swings | reference |
+| 16 | 102.081, 102.246, 102.566 | 23.00 | 7,992 | identical hash to batch 8 in all runs; 7 rallies, 62 swings | same frame/person counts; mean absolute coordinate delta 0.000030 px, max 0.375 px; badge hash unchanged |
+| 32 | 105.934, 105.813, 106.055 | 22.21 | 7,991 | stable hash across runs; 7 rallies, 62 swings, but hash differs from batch 8 | one frame's person count differs; p99 coordinate delta 0.094 px; max 974.2 px on the count-mismatch frame |
+
+**Conclusion.** Batch 16 was only 0.2% faster than batch 8 (0.20 seconds over this sample), within run-to-run variation, with no badge change. Batch 32 was 3.4% slower and changed one detection/output. Keep batch 8; increasing the batch does not reduce processing time on this GPU.
+
+**Cost.** The temporary RTX 2000 Ada pod was billed at $0.24/hour and ran for about 24 minutes, approximately $0.10. It was terminated after the runs.
+
+### 2026-10-30 — Lower pose input and smaller model: faster, with measurement drift
+
+**Hypothesis.** Lowering the image size from 736×1280 to 640×1120 should reduce model compute; replacing YOLOv8x-pose with the much smaller YOLOv8n-pose should cut pose time further. Test them separately and together, keeping batch 8 and the pose/badge code fixed.
+
+**Setup.** Local NVIDIA RTX 2000 Ada, Python 3.10, Torch 2.1.0+cu118, `src/pose.py`, CUDA fp16 and batch 8. Used the exact production TorchScript as the baseline, plus the repo's `yolov8x-pose.pt` exported at 640×1120 and `yolov8n-pose.pt` exported at both 736×1280 and 640×1120 (Ultralytics 8.3.0 exporter). `videos/IMG_7743_consistency_0-300s.mp4`, seven blind-labeled rallies, 2,353 identical pose frames. Two timed passes per variant, alternating order. The second pass also ran `src.badges.measure` and `decide` to inspect measured values and award candidates.
+
+**Result.**
+
+| Variant | Mean pose time | Mean fps | Pose detections | Difference vs production pose output | Badge measurements |
+|---|---:|---:|---:|---|---|
+| Production YOLOv8x, 736×1280 | 102.644 s | 22.92 | 7,992 | reference | 62 swings; 7 serve windows |
+| YOLOv8x, 640×1120 | 75.632 s | 31.11 | 7,242 | 1.36× throughput; 761/2,353 frames differ in person count; matched boxes mean IoU 0.974; matched keypoints shift 2.44 px on average, p95 7.00 px | 63 swings; 6 serve windows; kitchen-share measures shift on two rallies |
+| YOLOv8n, 736×1280 | 24.067 s | 97.77 | 6,802 | 4.26× throughput; 1,081/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.46 px on average, p95 19.69 px | 60 swings; 6 serve windows; kitchen-share measures shift |
+| YOLOv8n, 640×1120 | 20.981 s | 112.15 | 5,960 | 4.89× throughput; 1,484/2,353 frames differ in person count; matched boxes mean IoU 0.949; matched keypoints shift 6.96 px on average, p95 20.54 px | 57 swings; 6 serve windows; two kitchen-share measures fall from 0.175/0.282 to 0.003/0.000 |
+
+All four variants produced 7 rally measurements, but `decide([measure])` awarded no badges for this seven-rally sample under any variant. Thus this run demonstrates speed and raw-measure changes, not badge-award parity. Timing was measured on the same GPU for every condition. The sample is much smaller than the complete blind brickwall badge set.
+
+**Conclusion.** Input reduction alone gives a useful 26% wall-time cut, but it changes detections and several raw badge measurements; it is a candidate for the full blind badge rerun, not a production change yet. YOLOv8n gives much larger speed gains but diverges substantially from the production pose output; at reduced input it loses 5 of 62 swing peaks and nearly removes two kitchen-share measurements in this sample. Do not replace the production model on this evidence. The full blind brickwall badge comparison is required before selecting either variant.
+
+**Cost.** RunPod had no available GPUs across the same-generation and project-approved fallback list. The experiment ran on the local RTX 2000 Ada, with no cloud GPU charge. The Torch 2.1 and Ultralytics export environment and temporary model artifacts were removed afterward.
+
+### 2026-10-30 — Detailed badge-measure replay for the pose variants
+
+Follow-up replay of the same seven IMG_7743 rallies to inspect the raw fields behind the hashes. This is a detail capture, not another timing comparison; each variant was posed once with the same frames and `src.badges.measure` / `decide` code.
+
+**Kitchen share by labeled rally** (fraction of rally frames with players at both kitchen lines):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 2 | 0.17508 | 0.14815 | 0.13131 | 0.00337 |
+| 3 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+| 4 | 0.28218 | 0.25743 | 0.16832 | 0.00000 |
+| 5–7 | 0.00000 | 0.00000 | 0.00000 | 0.00000 |
+
+**Estimated serve speed by rally** (box-heights per second; `—` means the serve window had no estimate):
+
+| Rally | Production x | x 640×1120 | n 736×1280 | n 640×1120 |
+|---:|---:|---:|---:|---:|
+| 1 | 1.162 | 1.537 | 1.637 | 1.533 |
+| 2 | 1.220 | 1.341 | 1.815 | 1.421 |
+| 3 | 1.488 | 1.682 | 1.618 | 2.925 |
+| 4 | 2.821 | 2.510 | 2.393 | 2.496 |
+| 5 | 0.675 | 0.844 | 0.622 | 0.101 |
+| 6 | 0.532 | — | — | — |
+| 7 | 1.189 | 1.237 | 2.615 | 1.593 |
+
+Swing peaks assigned to each rally window were production `[7, 8, 6, 6, 12, 6, 5]`, x 640×1120 `[6, 8, 7, 7, 11, 6, 6]`, n 736×1280 `[8, 9, 7, 6, 10, 7, 4]`, and n 640×1120 `[7, 8, 6, 4, 10, 6, 5]`. Greedy timestamp matching within ±0.5 s paired 42/50 production-window peaks for x 640×1120, 40/50 for n 736×1280, and 37/50 for n 640×1120. This matches time only; it does not establish player identity or that a paired peak is the same physical swing.
+
+`decide([measure])` awarded no badges for the production measurements or any variant, so these seven rallies still cannot tell whether badge awards would agree on a session with actual candidates. The raw-field comparison makes the drift concrete: the reduced-resolution x model retains the two nonzero kitchen-share rallies fairly closely but loses one serve estimate; n at full size lowers both kitchen shares and changes several serve speeds; the combined n + smaller input nearly erases both kitchen-share measurements and reduces the assigned swing peaks from 50 to 46.
+
+### 2026-10-30 — Full blind brickwall badge comparison: YOLOv8x at 640×1120
+
+**Question.** Does reducing the production YOLOv8x-pose input from 736×1280 to 640×1120 preserve the badges awarded for a complete blind brickwall session, and how much pose time does it save?
+
+**Setup.** Full `videos/brickwall_30fps.mp4` session (1280×720, 45,397 source frames, about 25:13). Rally segments were regenerated with `detect_candidates(..., occlusion_bridge=True)` from the cached TrackNet predictions and calibration: 42 rallies and 27,329 identical pose frames for each condition. Both used `src.pose.pose_video`, batch 8, CUDA fp16, and the same RTX 2000 Ada / Torch 2.1.0+cu118 runtime. Baseline was the exact production TorchScript model at 736×1280; variant was the repo's YOLOv8x-pose weights exported at 640×1120 with Ultralytics 8.3.0. `src.badges.measure` and `decide` were unchanged. The production pass took 1,187.3 s (about 19:47). The reduced-size pass was about 868 s (about 14:28; estimated from the final 26,000-frame progress sample at 825.9 s and the remaining frames at that pass's observed rate), approximately 1.37× throughput / 27% less pose time. Both were local runs; no cloud GPU cost.
+
+**Badge result.** This is a failure of award parity, despite the throughput improvement:
+
+| Measure | Production x, 736×1280 | x, 640×1120 |
+|---|---:|---:|
+| Session swing peaks | 682 | 686 |
+| Rally serve windows | 30 | 29 |
+| Typical swing | 1.925 | 1.807 |
+| Awarded badges | 3 | 4 |
+| Kitchen-share mean absolute change across 42 rallies | — | 0.0695 (max 0.2851; 13 rallies change by more than 0.10) |
+
+Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rally 1 (46.6 s), and **Kitchen War** at rally 28 (929.2 s). Reduced input retained Quick Hands at rally 0, but moved Hardest Swing to rally 12 (350.4 s) and Kitchen War to rally 3 (123.4 s); it also awarded a new **Killer Shot** at rally 34 (1107.7 s). Award margins and underlying serve estimates also shifted. The total swing count being similar (682 vs 686) therefore masks material identity and ranking drift.
+
+**Conclusion.** Do not adopt 640×1120 for badge inference. A roughly 27% pose-time saving does not compensate for changing two of the three production award locations and adding a fourth award. Keep the 736×1280 production input and batch 8; see ADR-163. The comparison is one complete session, so it rejects this candidate on the available blind set but does not estimate generalization across cameras or venues.
+
+**Measurement note.** The candidate pass's exact wall-time summary was not retained in the process output; its approximately 868 s is reconstructed from the last progress record and observed throughput, so the speed ratio is approximate. No cloud GPU was used.
+
+## 2026-10-30 — Staging YOLOv8n speed trial: full Lifetime Fall Classic clip
+
+**Question.** How does the speed-first YOLOv8n build perform in the real staging pipeline on the full Lifetime Fall Classic source?
+
+**Setup.** Staging only, branch commit `798c065` (`codex/staging-yolov8n-pose`), YOLOv8n TorchScript at 736×1280, batch 8. The staged model artifact was `weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript` in the staging private ingest bucket. Submitted the full `Lifetime Fall Classic.mp4` (1920×1080, 60000/1001 fps, 1,302.732 s / 21:42.7) through the actual staging agent upload flow as one job; staging converted it to 30 fps. This is a full-file one-job run, not the historical five-part game-clock replay.
+
+**Result.** Job `2a1b5164-e4e8-40ea-8462-5ca83f079837` was created at 09:32:03 UTC, entered the queue at 09:33:44, was first observed running at 09:34:12, and completed at 09:47:10. Queue update to completion was 13 min 25 s; first observed running to completion was about 12 min 58 s. Badge pose processed 11,096 frames in 192 s (57.8 frames/s). It measured 290 swing peaks across 30 rallies. Badge selection produced Kitchen War (rally 22, about 823.3 s) and Hardest Swing (rally 26, about 1047.7 s). Clip cutting produced 30 rally candidates; the full selection contained 10 reels totaling 170.7 s. The staging share is [available here](https://staging--picvision-reel-share.netlify.app/r/e94de081-633a-4e8a-9021-e6493913871b).
+
+**Interpretation.** This confirms YOLOv8n completes on the actual staging pipeline and gives a useful pose-stage measurement. The 192 s pose time is about 2.5× slower than the local seven-rally 97.8 fps result, but that is not a controlled GPU comparison. Do not compare the 13:25 queue-to-done time directly to the old five-part x runs: this run used one 21.7-minute 1080p60 source converted to 30 fps, one job, and an unrecorded cloud GPU type. RunPod billing for this job was not available, so cloud cost is unknown. The staging result's badges have no same-run YOLOv8x baseline; it demonstrates speed, not badge parity. Production remains unchanged.
+
+## 2026-10-30 — Staging YOLOv8n replay: Lifetime Fall Classic in five timed parts
+
+**Question.** What would players wait for if the speed-first YOLOv8n model processed the same five-minute, 720p30 Lifetime Fall Classic parts used in the earlier production-style staging replays?
+
+**Setup.** The five existing 720p30, ~2 Mbps parts cut from `Lifetime Fall Classic.mp4`: 300 / 300 / 300 / 300 / 102.7 seconds. Each part was uploaded through the real staging agent API at the time it would have finished recording, using commit `798c065` and the staging-only YOLOv8n 736×1280 model, batch 8. Uploads took 17–18 seconds for parts 1–4 and 7.3 seconds for part 5. Simulated recording end was about 11:47:11 UTC. The agent access used for this replay could not create a new `recording_sessions` row, so these were five separate jobs and share pages, without a session's warm-machine reuse, cumulative badge redecision, or one shared player link. Their job timings are real staging timings; the overall player wait is a stressed independent-job case, not a faithful measurement of the shared-session production path.
+
+| Part | Attempts to finish | Pose frames / time | Rallies / swings | Time from that part's recording end to reels ready | Share |
+|---:|---:|---:|---:|---:|---|
+| 1 | 1 | 2,518 / 43.0 s | 7 / 63 | 5:24 | [part 1](https://staging--picvision-reel-share.netlify.app/r/cbd96fe2-7445-4957-b68e-b4a6754ac487) |
+| 2 | 3 | 2,770 / 39.0 s | 8 / 68 | 28:51 | [part 2](https://staging--picvision-reel-share.netlify.app/r/e34e5d76-2dd8-4c89-8222-38e5efabb930) |
+| 3 | 2 | 2,383 / 37.3 s | 7 / 61 | 15:16 | [part 3](https://staging--picvision-reel-share.netlify.app/r/25fdcba4-9508-4d80-ac02-28f2311e3ec8) |
+| 4 | 2 | 2,300 / 37.7 s | 6 / 58 | 10:13 | [part 4](https://staging--picvision-reel-share.netlify.app/r/c691c4f5-53d2-41ac-a279-cc6630a6c086) |
+| 5 | 1 | 352 / 8.8 s | 1 / 8 | 3:28 | [part 5](https://staging--picvision-reel-share.netlify.app/r/0e6ec0ad-de20-49ed-a6df-7b805db2ab59) |
+
+**Outcome.** All five were ready at 12:04:19 UTC, **17:08 after recording ended**. Four parts were ready by +8:34; part 2 set the final wait. Successful pose work totaled 10,323 frames / 165.8 s, about 62.3 fps. Part 2's first two jobs were terminated after two stuck container starts each; part 3's first job had the same failure; part 4's first pod stopped without reporting an outcome. The successful retry for part 2 also waited through RunPod capacity failures before a machine started. These delays dominate the player-visible result. GPU types and billing for the successful jobs were unavailable from the agent API, so there is no reliable cost figure or controlled GPU comparison.
+
+**Badge check.** Running the unchanged `src.badges.decide` on the five successful jobs' combined `badge_measures` gives 258 swings and three hypothetical session awards: Kitchen War (part 3, rally 5), Hardest Swing (part 3, rally 2), and Killer Shot (part 4, rally 0). This is an offline calculation because the five jobs do not share a recording session. The earlier five-part YOLOv8x replay #10 on these files awarded Kitchen War in part 3 and Killer Shot in part 2; the current result moves Killer Shot and adds Hardest Swing. Different cloud machines and intervening pipeline changes prevent attributing that badge difference solely to YOLOv8n.
+
+**Conclusion.** YOLOv8n reduced the pose work on each five-minute part to roughly 37–43 seconds in this staging run. A complete player set was still late because machine starts failed. To measure the actual production path and cumulative badge behavior, the replay needs a fresh console-issued recording session so the warm machine and single share link are exercised.
+
+## 2026-10-31 — Shared-session staging replay: Lifetime Fall Classic in five timed parts
+
+**Question.** How long after a 21:43 recording ends are all five parts available when the staging pipeline uses a single recording session and a warm pod?
+
+**Setup.** Replayed the same five 720p30, ~2 Mbps Lifetime Fall Classic files (300 / 300 / 300 / 300 / 102.7 seconds) through the normal staging agent upload API at game-clock times. All five jobs used recording session `25675cf7-31c9-41a7-8a4e-36ed3ead7109` and share ID `315d2f0e-11d7-468d-92f7-3c45a0e03bb0`. The session was created by a temporary staging-only helper route because the agent token cannot create sessions. That route was removed after the replay (staging POST now returns 404). The staged pod code pointer was still `798c065`; it uses YOLOv8n-pose at 736×1280, batch 8. The wider sub-$0.50 GPU fallback list was active. This was a staged replay of pre-encoded files, not a live camera recording.
+
+| Part | Recording finished (UTC) | Upload | Job completed (UTC) | Part-end to ready | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|---:|
+| 1 | 17:37:51 | 17.8 s | 17:41:55 | 4:04 | 2,518 / 36.6 s | 7 / 63 |
+| 2 | 17:42:51 | 17.2 s | 17:45:51 | 3:00 | 2,770 / 34.4 s | 8 / 68 |
+| 3 | 17:47:50 | 17.5 s | 17:50:40 | 2:49 | 2,383 / 29.8 s | 7 / 61 |
+| 4 | 17:52:50 | 17.6 s | 17:55:39 | 2:49 | 2,366 / 29.1 s | 6 / 59 |
+| 5 | 17:54:32 | 7.5 s | 17:56:40 | 2:07 | 352 / 5.8 s | 1 / 8 |
+
+**Result.** The simulated footage ended around 17:54:32 UTC; the end-recording notification was accepted at 17:54:46. Parts 1–3 were already ready, part 4 finished about 1:08 after footage ended, and all five were ready at 17:56:40, **2:08 after footage ended**. All five jobs completed without retries and share one [staging highlight page](https://staging--picvision-reel-share.netlify.app/r/315d2f0e-11d7-468d-92f7-3c45a0e03bb0). Successful pose work totaled 10,389 frames / 135.7 s, about 76.6 frames/s. The prior independent-job replay was 17:08 after recording; its pod failures and lack of session reuse make this a useful operational comparison, not a controlled model or GPU speed comparison.
+
+**Machine and cost.** Warm-pod allocation initially met Secure Cloud capacity failures. One $0.28/hour pod was created at 17:37:29 UTC, about 4:28 after the warm job was queued, and reused for all five parts. It remained active at the last observed poll, 17:58:25 UTC, then was terminated; the exact stop time and invoice are unavailable. Compute through that poll is approximately $0.098 at the reported rate, a lower bound rather than the final charge, excluding storage. The observed rate is consistent with RTX 4000 Ada, but the pod API did not report its GPU type. This run did not select any of the four newly added fallback GPUs, so their performance remains unmeasured.
+
+**Vertical delivery.** The five-part replay had no venue desktop, so its share initially opened wide. On 2026-10-31, the staging desktop stand-in used the original 1080p source and the console's pending fetches for this share only. It trimmed and uploaded all ten selected rally clips through the app's normal high-res and 9:16 crop flow; all ten returned `vertical: true`. The share video API now reports 10 vertical addresses and the same share URL renders the vertical feed (HTTP 200). This was a later post-processing step, not included in the 2:08 game-end-to-ready timing above.
+
+**Limit.** The share page returned HTTP 200. This test confirms the five jobs, one session, one link, and warm-pod reuse in staging; it does not establish production reliability across repeated sessions, badge parity against YOLOv8x, or the final billed cost.
+
+## 2026-10-31 — Five-part staging replay with concurrent vertical delivery
+
+**Question.** When the venue desktop's trim/crop/upload step runs alongside cloud processing, when are all ten final 9:16 highlights available after a 21:43 game?
+
+**Setup.** Replayed the same five pre-encoded 720p30 Lifetime Fall Classic parts at 300 / 300 / 300 / 300 / 102.7-second game-clock boundaries through the normal staging agent job API. All jobs shared recording session `5a1d419d-c526-4967-9cab-38933088348d` and [share page](https://staging--picvision-reel-share.netlify.app/r/3ccb2890-6e7e-4ac5-86e0-b9250f1e96fc). A temporary authenticated, staging-only route issued the session and was removed immediately after creation; POST to it now returns 404. In parallel, the staging desktop stand-in polled this share's pending high-res fetches, trimmed from the original 1080p source, and used the app's own `deliverHighRes` path to upload sharp wide clips and 9:16 crops as each cloud part became available. This is a file replay, not an RTSP camera or a packaged venue desktop. The staging pod still used YOLOv8n-pose at 736×1280, batch 8.
+
+| Part | Part recorded (UTC) | Upload | Cloud done (UTC) | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---:|
+| 1 | 07:14:42 | 17.4 s | 07:17:26 | 2,518 / 36.3 s | 7 / 63 |
+| 2 | 07:19:42 | 17.4 s | 07:22:29 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 07:24:43 | 17.1 s | 07:27:17 | 2,383 / 29.4 s | 7 / 61 |
+| 4 | 07:29:42 | 16.9 s | 07:32:18 | 2,366 / 30.2 s | 6 / 59 |
+| 5 | 07:31:24 | 7.9 s | 07:33:10 | 352 / 5.6 s | 1 / 8 |
+
+**Result.** All five jobs finished without retries. The footage ended at 07:31:24 UTC (15:31:24 Taiwan); part 4 finished 54 seconds later. The last of the ten **final selected** vertical crops was uploaded at 07:33:08, and part 5 completed/finalized the set at 07:33:10: **about 1:46 after footage ended**. The first vertical crop had arrived at 07:17:40, 14 seconds after part 1's cloud completion, while recording was still underway. The desktop stand-in uploaded 21 crops as the evolving top-ten set changed; the final share page contains ten selected reels and all ten have vertical addresses. It rendered the vertical feed with HTTP 200; `ffprobe` confirmed all ten selected videos are 608×1080 (9:16). Pose work totaled 10,389 frames / 135.6 s (~76.6 fps).
+
+**Interpretation and limits.** This closes the missing desktop stage in the previous shared-session replay and measures full vertical availability for this staged file replay. Its 1:46 final wait is 22 seconds shorter than that run's 2:08 cloud-only wait, but the runs had different machine allocation and queue conditions, so it is not an estimate of a vertical-cropping speedup. The 21 interim crops reflect the changing provisional top ten; only ten remained selected. GPU type and exact billed cost were not established, and this does not test real camera capture, venue uplink, packaged desktop behavior, or badge parity with production YOLOv8x.
+
+## 2026-10-31 — Five-part staging replay with AAC audio
+
+**Question.** Does preserving source sound through the cloud clip, venue desktop high-res replacement, and vertical crop produce audible reels without a material increase in the final wait?
+
+**Setup.** The same 21:43 Lifetime Fall Classic file was replayed in five parts at 300 / 300 / 300 / 300 / 102.7-second boundaries. This time each 720p upload included the source AAC audio. All jobs shared recording session `5ceffed7-451c-4f74-8e13-a2a006d95b0a` and [staging share](https://staging--picvision-reel-share.netlify.app/r/030f1d5b-1711-4fa5-bbc0-9dfb27dd33bb). The staging desktop stand-in concurrently trimmed the original 1080p source and used the normal `deliverHighRes` path for the sharp wide and 9:16 replacements. The staging reel page enabled its sound control. The temporary authenticated staging session setup route was removed immediately after issuing the session; its POST now returns 404. Pipeline code `3dad7e3`, reel page `d80ce65`; production was unchanged.
+
+| Part | Footage boundary (UTC) | Upload | Cloud done (UTC) | Boundary to done | Pose frames / time | Rallies / swings |
+|---:|---|---:|---|---:|---|---:|
+| 1 | 07:59:03 | 18.3 s | 08:02:09 | 3:06 | 2,518 / 39.5 s | 7 / 63 |
+| 2 | 08:04:03 | 18.1 s | 08:06:56 | 2:53 | 2,770 / 34.1 s | 8 / 68 |
+| 3 | 08:09:04 | 18.0 s | 08:11:35 | 2:31 | 2,383 / 32.3 s | 7 / 61 |
+| 4 | 08:14:02 | 17.7 s | 08:16:41 | 2:39 | 2,366 / 31.0 s | 6 / 59 |
+| 5 | 08:15:46 | 7.7 s | 08:17:38 | 1:52 | 352 / 6.1 s | 1 / 8 |
+
+**Result.** All five jobs completed without retries. The last of the final ten vertical clips uploaded at 08:17:33, and part 5 finalized the set at 08:17:38: **1:52 after the footage ended**, versus 1:46 in the prior silent replay. The share page returned HTTP 200, rendered ten selected reels, and had its sound control enabled. `ffprobe` confirmed every selected vertical file is 608×1080 H.264 with 48 kHz AAC. Five-second decodes of all ten had measurable audio (mean volume −23.1 to −26.0 dB); a cloud 720p clip sampled before desktop replacement also had 48 kHz AAC. Rally and swing counts match the silent run in all five parts.
+
+**Interpretation and limits.** This staging file replay demonstrates working audio through cloud and desktop output. The six-second difference in final wait is too small to attribute to AAC: machine startup, job queueing, and network timing differed between runs. Part upload time increased by about a second for the full-size parts. This test uses the sample video's soundtrack, not a real camera microphone, and does not test packaged desktop capture, iPhone playback controls, or GPU billing. The production branches remain unchanged.

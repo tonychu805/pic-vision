@@ -22,6 +22,7 @@ import { isSameCameraSource } from "./identity.js";
 import { vendorsForIps } from "./vendorLookup.js";
 import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri, isRecording } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
+import { isUntrustedCertError } from "./probeResult.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -199,7 +200,40 @@ function notifyCamerasChanged() {
 // generous for a slow camera and still bounded for a person watching.
 const ONVIF_TIMEOUT_MS = 10_000;
 
-export async function testConnection({ hostname, port, username, password, path: connectPath, connectionType, sampleClipPath }) {
+// The HTTPS retry is a fallback for a plain-HTTP attempt that already
+// failed, against a camera on the operator's own LAN -- it either answers
+// fast or it's the same "nothing there" case the comment above covers, so
+// it doesn't need the same generous ceiling.
+const ONVIF_HTTPS_RETRY_TIMEOUT_MS = 5_000;
+
+// Isolated from testConnection's ONVIF branch so that branch can call it up
+// to three times (HTTP, strict HTTPS, HTTPS with the operator's explicit
+// go-ahead to skip verification) without repeating the `new Cam({...})`
+// shape each time.
+//
+// connectPath defaults to the library's own '/onvif/device_service' when
+// omitted -- but that's not universal. A real Synology camera on this
+// network (2026-09-01) serves ONVIF at '/Onvif/device_service' (capital
+// O) instead, confirmed via a raw HTTP probe (401 + WWW-Authenticate:
+// Digest realm="IPCam" there, plain 404 at the lowercase path) -- WS-
+// Discovery never found it either, so manual add is the only way in,
+// and it needs this override to actually reach the right endpoint.
+//
+// preserveAddress: true -- a real find (2026-10-07, three Synology units
+// checked via raw SOAP): GetCapabilities self-reports the Media service
+// XAddr with no port (implying 80) or port 80 outright, but that service
+// is only actually reachable on whatever port we just connected on
+// (confirmed working: 8080). Without this flag the library trusts the
+// camera's own (wrong) self-reported address for every subsequent Media
+// call and silently fails to reach it; this makes it substitute back the
+// host/port that actually got us connected in the first place.
+async function connectOnvif({ hostname, port, username, password, path: connectPath, useSecure, timeout, secureOpts }) {
+  const cam = new Cam({ hostname, port, username, password, path: connectPath || undefined, useSecure, secureOpts, timeout, preserveAddress: true });
+  await cam.connect();
+  return cam;
+}
+
+export async function testConnection({ hostname, port, username, password, path: connectPath, connectionType, sampleClipPath, acceptUnverifiedCert }) {
   // A sample-clip "camera" has no network connection to test at all --
   // the closest equivalent check is just confirming its one video file is
   // still where it was left (it could have been moved/deleted outside the
@@ -221,24 +255,28 @@ export async function testConnection({ hostname, port, username, password, path:
     return { info: {}, streamUri: null };
   }
 
-  // connectPath defaults to the library's own '/onvif/device_service' when
-  // omitted -- but that's not universal. A real Synology camera on this
-  // network (2026-09-01) serves ONVIF at '/Onvif/device_service' (capital
-  // O) instead, confirmed via a raw HTTP probe (401 + WWW-Authenticate:
-  // Digest realm="IPCam" there, plain 404 at the lowercase path) -- WS-
-  // Discovery never found it either, so manual add is the only way in,
-  // and it needs this override to actually reach the right endpoint.
-  //
-  // preserveAddress: true -- a real find (2026-10-07, three Synology units
-  // checked via raw SOAP): GetCapabilities self-reports the Media service
-  // XAddr with no port (implying 80) or port 80 outright, but that service
-  // is only actually reachable on whatever port we just connected on
-  // (confirmed working: 8080). Without this flag the library trusts the
-  // camera's own (wrong) self-reported address for every subsequent Media
-  // call and silently fails to reach it; this makes it substitute back the
-  // host/port that actually got us connected in the first place.
-  const cam = new Cam({ hostname, port: port || 80, username, password, path: connectPath || undefined, timeout: ONVIF_TIMEOUT_MS, preserveAddress: true });
-  await cam.connect();
+  // Three tiers: plain HTTP (the common case), then strict HTTPS, then --
+  // only once the operator has explicitly said yes -- HTTPS with
+  // certificate verification off. Most real IP cameras that speak ONVIF
+  // over HTTPS at all use a self-signed cert, so the strict middle tier is
+  // expected to fail on them; that failure is the signal classifyProbeError
+  // turns into the consent prompt, not a dead end.
+  let cam;
+  try {
+    cam = await connectOnvif({ hostname, port: port || 80, username, password, path: connectPath, useSecure: false, timeout: ONVIF_TIMEOUT_MS });
+  } catch (httpErr) {
+    try {
+      cam = await connectOnvif({ hostname, port: port || 443, username, password, path: connectPath, useSecure: true, timeout: ONVIF_HTTPS_RETRY_TIMEOUT_MS });
+    } catch (httpsErr) {
+      if (!isUntrustedCertError(httpsErr)) throw httpErr; // unrelated HTTPS failure -- stick with the familiar HTTP message
+      if (!acceptUnverifiedCert) throw httpsErr; // the ONE case where the HTTPS error is more useful: it's what lets the caller recognize "untrustedCert" and offer the consent step at all
+      try {
+        cam = await connectOnvif({ hostname, port: port || 443, username, password, path: connectPath, useSecure: true, timeout: ONVIF_HTTPS_RETRY_TIMEOUT_MS, secureOpts: { rejectUnauthorized: false } });
+      } catch {
+        throw httpErr; // the accepted attempt itself failed for some OTHER reason -- fall back to the familiar message
+      }
+    }
+  }
   const info = await cam.getDeviceInformation();
   let streamUri = null;
   try {
@@ -352,10 +390,10 @@ function existingSource(candidate) {
   return listCameras().find((c) => isSameCameraSource(c, candidate));
 }
 
-export async function addCamera({ label, hostname, port, username, password, path }) {
+export async function addCamera({ label, hostname, port, username, password, path, acceptUnverifiedCert }) {
   const existing = existingSource({ hostname, port, path, connectionType: "onvif" });
   if (existing) return existing;
-  const { info, streamUri, profile, subProfile, subStreamUri } = await testConnection({ hostname, port, username, password, path });
+  const { info, streamUri, profile, subProfile, subStreamUri } = await testConnection({ hostname, port, username, password, path, acceptUnverifiedCert });
   const camera = {
     id: randomUUID(),
     label: label || info.manufacturer + " " + info.model,
@@ -364,6 +402,12 @@ export async function addCamera({ label, hostname, port, username, password, pat
     path: path || undefined,
     username,
     password,
+    // Persisted, not just threaded through this one call -- every later
+    // status check (cloud.js's heartbeat, the detail page's re-check) hands
+    // this whole stored camera back to testConnection, with no interactive
+    // surface to re-prompt from. Without this a camera accepted once would
+    // start failing its very next background check.
+    acceptUnverifiedCert: Boolean(acceptUnverifiedCert),
     manufacturer: info.manufacturer,
     model: info.model,
     // ONVIF's GetDeviceInformation doesn't return a MAC address -- there's
@@ -725,35 +769,89 @@ export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
   };
 }
 
-export async function addCameraViaRtsp({ label, hostname, port, path, username, password }) {
+// Trusts what's actually measured over which URL the operator labeled
+// "secondary" (same ADR-087 philosophy already in this file for fps --
+// measure, don't trust the label) -- if the "sub" stream turns out to be
+// the higher-resolution one, swap roles so capture.js's sub slot always
+// carries the smaller stream. Unmeasured resolution on either side
+// (profile.width/height null) leaves roles as given -- there's nothing to
+// compare. Pure and synchronous: no IO here, see addCameraViaRtsp for the
+// probing/measuring this decides between.
+export function chooseStreamRoles(mainCandidate, subCandidate) {
+  if (!subCandidate) {
+    return { streamUri: mainCandidate.streamUri, profile: mainCandidate.profile, subStreamUri: null, subProfile: null };
+  }
+  const mainArea = resolutionArea(mainCandidate.profile);
+  const subArea = resolutionArea(subCandidate.profile);
+  const swap = mainArea != null && subArea != null && subArea > mainArea;
+  const finalMain = swap ? subCandidate : mainCandidate;
+  const finalSub = swap ? mainCandidate : subCandidate;
+  return {
+    streamUri: finalMain.streamUri,
+    profile: finalMain.profile,
+    subStreamUri: finalSub.streamUri,
+    subProfile: finalSub.profile,
+  };
+}
+
+function resolutionArea(profile) {
+  if (!profile || profile.width == null || profile.height == null) return null;
+  return profile.width * profile.height;
+}
+
+export async function addCameraViaRtsp({ label, hostname, port, path, username, password, sub = null }) {
   port = port || 554;
   const existing = existingSource({ hostname, port, path, connectionType: "rtsp" });
   if (existing) return existing;
   await describeRtspStream({ hostname, port, path, username, password }); // throws if not real
   const streamUri = `rtsp://${encodeURIComponent(username)}:${encodeURIComponent(password)}@${hostname}:${port}${path}`;
+  // An RTSP-added camera never went through ONVIF, so nothing else knows
+  // its codec, resolution, frame rate or bitrate -- all of it comes from
+  // sampling the stream (ADR-087). Without this it would show nothing and
+  // skip the frame-rate guard entirely, which is how a venue ends up at
+  // 15fps unnoticed. `fps` deliberately stays null: this is what the
+  // camera is *sending*, not what it is *set* to, so the guard can't
+  // claim the settings are fine and blame the network instead.
+  const mainCandidate = { streamUri, profile: await rtspProfile(streamUri) };
+
+  let subCandidate = null;
+  let subPort = null;
+  // Different host means a different camera's stream, not this one's own
+  // second profile -- out of scope, so it's skipped rather than tracked.
+  if (sub && sub.hostname === hostname) {
+    subPort = sub.port || 554;
+    try {
+      await describeRtspStream({ hostname, port: subPort, path: sub.path, username: sub.username, password: sub.password });
+      const subStreamUri = `rtsp://${encodeURIComponent(sub.username)}:${encodeURIComponent(sub.password)}@${hostname}:${subPort}${sub.path}`;
+      subCandidate = { streamUri: subStreamUri, profile: await rtspProfile(subStreamUri) };
+    } catch {
+      // Same tolerance subStreamInfo() already has for an ONVIF sub
+      // profile that won't hand back a stream URI -- degrades to absent.
+    }
+  }
+
+  const roles = chooseStreamRoles(mainCandidate, subCandidate);
+  // Roles swapped: the operator's "sub" URL turned out to be the bigger
+  // stream, so it now carries camera.port/path/username/password too.
+  const swapped = Boolean(subCandidate) && roles.streamUri !== streamUri;
   const vendors = vendorsForIps([hostname]);
   const vendor = vendors[hostname] ?? null;
   const camera = {
     id: randomUUID(),
     label: label || (vendor ? `${vendor} camera` : "Camera"),
     hostname,
-    port,
-    path,
-    username,
-    password,
+    port: swapped ? subPort : port,
+    path: swapped ? sub.path : path,
+    username: swapped ? sub.username : username,
+    password: swapped ? sub.password : password,
     manufacturer: vendor,
     model: null,
     serialNumber: null,
     firmwareVersion: null,
-    streamUri: streamUri,
-    // An RTSP-added camera never went through ONVIF, so nothing else knows
-    // its codec, resolution, frame rate or bitrate -- all of it comes from
-    // sampling the stream (ADR-087). Without this it would show nothing and
-    // skip the frame-rate guard entirely, which is how a venue ends up at
-    // 15fps unnoticed. `fps` deliberately stays null: this is what the
-    // camera is *sending*, not what it is *set* to, so the guard can't
-    // claim the settings are fine and blame the network instead.
-    profile: await rtspProfile(streamUri),
+    streamUri: roles.streamUri,
+    profile: roles.profile,
+    subStreamUri: roles.subStreamUri,
+    subProfile: roles.subProfile,
     connectionType: "rtsp",
     addedAt: new Date().toISOString(),
   };

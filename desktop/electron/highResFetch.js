@@ -18,6 +18,7 @@ import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
 import { listCameras } from "./cameras/store.js";
+import { cropVertical } from "./verticalCrop.js";
 
 // Guards against the SAME reel being started twice -- the console keeps
 // offering a fetch on every heartbeat until this machine's own PATCH
@@ -33,18 +34,30 @@ const inFlight = new Set();
 // names, and that part's own segment list -- parts live under the
 // recording's sub-stream sibling since the Stage 2 upload-direction fix
 // (uploadDirFor's doc comment), never under main itself.
-export function findRecordingForPart(camera, partIndex) {
+//
+// Matched by the reel's session id, not the part number alone (2026-10-29):
+// every recording of a camera has a part-01, part-02, ..., so "the first
+// folder with a part-03" cut a later session's sharp and 9:16 clips out of
+// an EARLIER session's recording -- other players, another time, on this
+// session's share page. A part's session id ends in "-<folder>-part-NN"
+// (autoSplit.js partSessionId), which names exactly one folder. Without a
+// session id (a console from before this change) a part number is used
+// only when one recording has it; anything ambiguous is skipped -- a clip
+// left at proxy resolution is better than someone else's footage.
+export function findRecordingForPart(camera, partIndex, sessionId = null) {
   const cameraDir = cameraRecordingsDir(camera);
   if (!existsSync(cameraDir)) return null;
   const partName = `part-${String(partIndex).padStart(2, "0")}`;
+  const matches = [];
   for (const name of readdirSync(cameraDir)) {
     if (name.endsWith("-sub")) continue;
+    if (sessionId && !sessionId.endsWith(`-${name}-${partName}`)) continue;
     const mainDir = path.join(cameraDir, name);
     if (!statSync(mainDir).isDirectory()) continue;
     const part = listParts(uploadDirFor(mainDir)).find((p) => p.name === partName);
-    if (part) return { mainDir, part };
+    if (part) matches.push({ mainDir, part });
   }
-  return null;
+  return matches.length === 1 ? matches[0] : null;
 }
 
 // Exactly the shape startRecording's outDir names itself in
@@ -146,22 +159,64 @@ export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
     await run(["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", concatOut]);
     await run([
       "-y", "-v", "error", "-ss", String(startSec), "-i", concatOut, "-t", String(endSec - startSec),
-      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p", "-movflags", "+faststart", "-an", outPath,
+      "-map", "0:v:0", "-map", "0:a:0?",
+      "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
+      "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
+      "-movflags", "+faststart", outPath,
     ]);
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
 }
 
-async function uploadHighRes(reelId, filePath) {
-  const minted = await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "POST" });
+// verticalPath (2026-10-27): the 9:16 crop of the same clip, when there is
+// one -- minted and uploaded the same way, confirmed in the same PATCH.
+// `connection` is for callers outside the app (scripts/sample-high-res.mjs);
+// the app itself uses its stored one.
+async function uploadHighRes(reelId, filePath, verticalPath = null, connection = undefined) {
+  const call = (method, body) => consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method, body, connection });
+  const minted = await call("POST");
   await uploadFile(minted.url, filePath);
-  await consoleFetch(`/api/agents/reels/${reelId}/high-res`, { method: "PATCH", body: { key: minted.key } });
+  let verticalKey;
+  if (verticalPath) {
+    const v = await call("POST");
+    await uploadFile(v.url, verticalPath);
+    verticalKey = v.key;
+  }
+  await call("PATCH", { key: minted.key, ...(verticalKey ? { verticalKey } : {}) });
+}
+
+// The 9:16 crop of the trimmed clip, or null: no framing path from the
+// console (an older clip), or the crop failed -- the sharper 16:9 clip is
+// still sent either way.
+async function maybeCropVertical(label, fetchReq, clipPath) {
+  const { framing, clipStartSec, partStartSec, reelId } = fetchReq;
+  if (!framing || typeof clipStartSec !== "number") return null;
+  const verticalPath = path.join(path.dirname(clipPath), "vertical.mp4");
+  try {
+    await cropVertical(clipPath, verticalPath, framing, partStartSec - clipStartSec);
+    return verticalPath;
+  } catch (err) {
+    logEvent("vertical_reel_failed", `${label}: couldn't make the phone-shaped version of a rally clip`, `${reelId}: ${err.message}`);
+    return null;
+  }
+}
+
+/**
+ * Everything after the trim: crop the 9:16 version (when the console sent a
+ * framing path) and upload both. Shared with scripts/sample-high-res.mjs,
+ * which trims from a sample video instead of a camera recording, so sample
+ * sessions exercise this same code. Returns whether a vertical was sent.
+ */
+export async function deliverHighRes(fetchReq, clipPath, { label, connection } = {}) {
+  const verticalPath = await maybeCropVertical(label, fetchReq, clipPath);
+  await uploadHighRes(fetchReq.reelId, clipPath, verticalPath, connection);
+  return Boolean(verticalPath);
 }
 
 async function processOne(camera, fetchReq) {
-  const { reelId, partIndex, partStartSec, partEndSec } = fetchReq;
-  const located = findRecordingForPart(camera, partIndex);
+  const { reelId, partIndex, partStartSec, partEndSec, sessionId } = fetchReq;
+  const located = findRecordingForPart(camera, partIndex, typeof sessionId === "string" ? sessionId : null);
   if (!located) {
     // Not an error worth logging on its own -- the local recording this
     // would trim from is routinely gone before this ever runs (retention,
@@ -186,7 +241,7 @@ async function processOne(camera, fetchReq) {
   try {
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
     await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
-    await uploadHighRes(reelId, outPath);
+    await deliverHighRes(fetchReq, outPath, { label: camera.label });
     logEvent("high_res_reel_synced", `${camera.label}: sent a sharper version of a rally clip`, reelId);
   } finally {
     rmSync(path.dirname(outPath), { recursive: true, force: true });

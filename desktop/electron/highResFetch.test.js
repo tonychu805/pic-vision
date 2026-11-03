@@ -61,6 +61,35 @@ test("a camera with no recordings at all returns null", () => {
   assert.equal(findRecordingForPart({ id: "find-part-no-recordings" }, 1), null);
 });
 
+test("two recordings with the same part number: the session id picks the right one", () => {
+  // The 2026-10-29 bug: the first folder with a part-03 won, so a later
+  // session's clips were cut from an earlier session's recording.
+  const camId = "find-part-two-sessions";
+  const older = path.join(RECORDINGS_ROOT, camId, "2026-10-28T10-00-27-432Z");
+  const newer = path.join(RECORDINGS_ROOT, camId, "2026-10-29T10-35-39-462Z");
+  for (const dir of [older, newer]) {
+    mkdirSync(dir, { recursive: true });
+    mkdirSync(path.join(`${dir}-sub`, "parts", "part-03"), { recursive: true });
+    writeFileSync(path.join(`${dir}-sub`, "parts", "part-03", "session-010.mkv"), "");
+  }
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-29T10-35-39-462Z-part-03").mainDir, newer);
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-28T10-00-27-432Z-part-03").mainDir, older);
+  // A session whose recording is gone from this machine: nothing, never the other one.
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-27T09-00-00-000Z-part-03"), null);
+  // No session id (an older console) and two candidates: skipped, not guessed.
+  assert.equal(findRecordingForPart({ id: camId }, 3), null);
+});
+
+test("a camera label containing the folder-like text cannot match the wrong folder", () => {
+  const camId = "find-part-label";
+  const dir = path.join(RECORDINGS_ROOT, camId, "2026-10-29T05-21-05-452Z");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(path.join(`${dir}-sub`, "parts", "part-01"), { recursive: true });
+  writeFileSync(path.join(`${dir}-sub`, "parts", "part-01", "session-000.mkv"), "");
+  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-part-01").mainDir, dir);
+  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-part-011"), null);
+});
+
 // ---------- partWindow / mainWindowsOverlapping: real mtimes, no drift ----------
 
 test("a part's window spans its first segment's start to its last segment's end", () => {
@@ -194,4 +223,21 @@ test("a cut entirely inside the first segment never reaches the second", { timeo
   await trimHighRes([segA, segB], 1, 3, out);
   const dur = probedDuration(out);
   assert.ok(Math.abs(dur - 2) < 0.3, `expected ~2s, got ${dur}`);
+});
+
+test("trimHighRes converts camera PCM audio to browser-compatible AAC", { timeout: 30_000 }, async () => {
+  const source = path.join(outDir, "session-with-audio.mkv");
+  const made = spawnSync(FFMPEG, [
+    "-y", "-v", "error", "-f", "lavfi", "-i", "color=c=red:size=320x240:rate=30:duration=4",
+    "-f", "lavfi", "-i", "sine=frequency=440:sample_rate=8000:duration=4",
+    "-c:v", "libx264", "-c:a", "pcm_alaw", source,
+  ], { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr?.slice(-300));
+  const out = path.join(outDir, "clip-with-audio.mp4");
+  await trimHighRes([source], 1, 3, out);
+  const probed = spawnSync(FFPROBE, ["-v", "error", "-show_entries", "stream=codec_type,codec_name,sample_rate", "-of", "json", out], { encoding: "utf8" });
+  assert.equal(probed.status, 0, probed.stderr);
+  const streams = JSON.parse(probed.stdout).streams;
+  assert.ok(streams.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
+  assert.ok(streams.some((s) => s.codec_type === "audio" && s.codec_name === "aac" && s.sample_rate === "48000"));
 });

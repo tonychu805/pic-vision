@@ -34,6 +34,7 @@ const EVENT_META = {
   pipeline_started: { icon: "ph ph-cloud-arrow-up", tone: "info" },
   pipeline_done: { icon: "ph ph-check-circle", tone: "ok" },
   pipeline_failed: { icon: "ph ph-warning-circle", tone: "bad" },
+  upload_retry: { icon: "ph ph-arrow-clockwise", tone: "warn" },
   cloud_connected: { icon: "ph ph-cloud-check", tone: "ok" },
   cloud_disconnected: { icon: "ph ph-cloud-slash", tone: "bad" },
   signed_in: { icon: "ph ph-sign-in", tone: "quiet" },

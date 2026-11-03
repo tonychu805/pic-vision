@@ -14,7 +14,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES, sessionEndReport } from "./autoSplit.js";
 import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
@@ -626,6 +626,10 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
         cameras,
         agentName: getAgentName(),
         ...agentBuildInfo(typeof app.getVersion === "function" ? app.getVersion() : null, process.platform),
+        // Part length (0 = whole recordings): the console readies a GPU this
+        // long into a session, minus 3 minutes, so part 1 isn't kept waiting
+        // for a machine to start (2026-10-27).
+        partMinutes: getAutoSplitMinutes(),
       }),
     });
     if (!res.ok) {
@@ -1096,9 +1100,24 @@ const partsInFlight = new Set();
 
 function sendPart(camera, recordingDir, part) {
   partsInFlight.add(part.dir);
-  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x 10 min)`);
+  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x ${SEGMENT_MINUTES} min)`);
   Promise.resolve(sendRecordingToCloud(camera, part.dir, partSessionId(camera.label, recordingDir, part.name)))
     .finally(() => partsInFlight.delete(part.dir));
+}
+
+function reportSessionEnd(camera, recordingDir) {
+  const report = sessionEndReport(recordingDir);
+  if (!report) return;
+  const connection = getCloudConnection();
+  if (!connection?.apiToken) return;
+  fetch(`${connection.consoleUrl}/api/agents/recording-sessions/${report.recordingSessionId}/end`, {
+    signal: AbortSignal.timeout(30_000),
+    method: "POST",
+    headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
+    body: JSON.stringify({ partCount: report.partCount }),
+  })
+    .then((res) => { if (!res.ok) throw new Error(`HTTP ${res.status}`); })
+    .catch((err) => console.error(`[autosplit] ${camera.label}: could not report the session's end: ${err.message}`));
 }
 
 /** Create and send the parts that are due for one recording; resend any whose earlier send never reached the console. */
@@ -1110,6 +1129,10 @@ function sendDueParts(camera, recordingDir, { stillRecording, flush }) {
     for (const part of unsentParts(recordingDir, isRunning)) sendPart(camera, recordingDir, part);
     const created = makeDueParts(recordingDir, { stillRecording, partMinutes: minutes, flush });
     for (const part of created) sendPart(camera, recordingDir, part);
+    // Recording has stopped and the last part is cut: say so, with how many
+    // parts there are, so the session's GPUs stop waiting once all arrive.
+    // Best effort and safe to repeat; without it they wait one part length.
+    if (!stillRecording && flush) reportSessionEnd(camera, recordingDir);
     return created.map((p) => p.name);
   });
 }

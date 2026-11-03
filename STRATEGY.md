@@ -251,3 +251,24 @@ From a business-model exploration (2026-08-10). Distilled here because it's soun
 8. **What's the real BOM** once detection quality is pinned down (yolov8x-class, not Nano; camera resolution to resolve the ball)? Decides whether the HaaS ~$150/court/month math holds.
 9. **Does the A/B-test wedge hold** — will a proven "smart court" actually command a booking premium, or do players value the clips but not enough to pay/switch?
 10. **HaaS vs buyout vs rev-share** as the lead motion — which one gets the first venues to yes?
+
+---
+
+## 11. Staging / testing pipeline (proposal, 2026-10-20 — tracked as PIC-233)
+
+**Problem.** No isolated pre-production environment for the reel pipeline. It surfaced trying to test the new highlight work (serve gate + badges) end-to-end: there was no safe place to run it, so the only options were "modify prod" or "assemble artifacts by hand."
+
+Current state:
+- **One production orchestrator worker** (`pic-vision-orchestrator`, `CLAIMING_ENABLED=true`). No staging env in its wrangler config.
+- **"Staging" console shares the production Supabase DB** (free tier, no branching) — only one active Supabase project exists. So schema migrations and RLS changes are effectively tested in prod, against prod data.
+- A test bucket (`test-ingest-runpod`) + the workstation runner (`cloud_pipeline/job_runner.py`, `run_cloud_job.py`) can run the real pod pipeline, but job/reel rows still write to the shared prod DB, and that bucket is **publicly served** via `cdn.picvisionai.com` (PIC-153) — a dev convenience, not a clean sandbox.
+
+**Recommendation — right-sized, in priority order.** Deliberately *not* a full staging clone (orchestrator + console + share app): for a one-operator prototype that's a lot of surface for little marginal safety. Build in tiers:
+
+1. **Now (cheap, high value): golden-session e2e smoke test.** Fixed test footage + calib in a *private* staging bucket (not `test-ingest-runpod`); a script runs the real pod pipeline (TrackNet → detect → cut → upload) and asserts it produced a valid reel; isolated by a dedicated test agent/brand id so the prod orchestrator never claims it and rows are filterable/cleanable; wired into CI as the pre-release e2e gate CLAUDE.md asks for but currently can't run.
+2. **Before venue scale: DB isolation.** A separate Supabase project (or paid branching) for staging, so migrations + RLS get a real dry run. Highest-risk gap once paying venues depend on reels — a bad migration today is a prod incident with no net.
+3. **Later / if the team grows: full staging stack** (staging orchestrator, console, share app, buckets). Worth it when >1 engineer ships concurrently; overkill now.
+
+**Caveats.** `test-ingest-runpod` is publicly exposed via `cdn.picvisionai.com` (whole-bucket, PIC-153) — real staging footage must not live there; a proper effort needs a private staging bucket. Deploy *discipline* already exists (PR gates, release-candidate-from-commit in CLAUDE.md); the gap is an isolated environment to exercise, not process.
+
+**Context.** Came out of measuring whether the new serve-gate/highlight-badge work can run in production in time (it can — pose is an in-pod stage added to `pod_driver.py`, ~0.5–2.5 min on a sub-$0.50 GPU, measured on RTX 2000 Ada / A5000). The blocker to demoing it e2e was the absence of this staging path. Tracked as Linear PIC-233 (team PIC).

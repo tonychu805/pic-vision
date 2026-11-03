@@ -178,6 +178,49 @@ test("uploadDirFor falls back to the recording's own folder with no sub-stream",
   assert.equal(uploadDirFor(outDir), outDir);
 });
 
+const segments = (dir, n) => {
+  mkdirSync(dir, { recursive: true });
+  for (let i = 0; i < n; i++) writeFileSync(path.join(dir, `session-${String(i).padStart(3, "0")}.mkv`), "");
+};
+
+// 2026-10-28: the sibling is created at Start, before the sub-stream has
+// connected. One that never connects must not swallow the session's
+// uploads while main records fine.
+test("uploadDirFor uploads main when the sub-stream folder exists but never recorded", () => {
+  const outDir = path.join(home, "upload-dir-dead-sub");
+  segments(outDir, 2);
+  mkdirSync(`${outDir}-sub`, { recursive: true });
+  assert.equal(uploadDirFor(outDir), outDir);
+});
+
+// Paired: a working sub-stream is still what goes up, including one that
+// connected a little after main and trails it by a segment.
+test("uploadDirFor keeps the sub-stream when it is recording, even a segment behind", () => {
+  const outDir = path.join(home, "upload-dir-live-sub");
+  segments(outDir, 3);
+  segments(`${outDir}-sub`, 2);
+  assert.equal(uploadDirFor(outDir), `${outDir}-sub`);
+  const early = path.join(home, "upload-dir-early");
+  segments(early, 1);
+  mkdirSync(`${early}-sub`, { recursive: true });
+  assert.equal(uploadDirFor(early), `${early}-sub`, "first segment still being written: too early to give up on sub");
+});
+
+// Once a part exists the choice is fixed: part numbering and the high-res
+// fetch read one folder per recording, so it must not flip mid-session.
+test("uploadDirFor stays with whichever folder auto-split already made parts in", () => {
+  const toMain = path.join(home, "upload-dir-stick-main");
+  segments(toMain, 2);
+  mkdirSync(path.join(toMain, "parts", "part-01"), { recursive: true });
+  segments(`${toMain}-sub`, 5); // sub came alive later
+  assert.equal(uploadDirFor(toMain), toMain);
+  const toSub = path.join(home, "upload-dir-stick-sub");
+  segments(toSub, 9);
+  segments(`${toSub}-sub`, 2); // sub dropped after its first part
+  mkdirSync(path.join(`${toSub}-sub`, "parts", "part-01"), { recursive: true });
+  assert.equal(uploadDirFor(toSub), `${toSub}-sub`);
+});
+
 // listRecordings: a dual-stream camera's sub-stream sibling must never
 // show up as its own, separate fake recording -- it lives right next to
 // the main folder it belongs to, not nested inside it.

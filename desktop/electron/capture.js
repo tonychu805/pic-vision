@@ -3,7 +3,7 @@
 // management" bullet. Command shape is exactly TECH_SPEC.md §1.2's spec,
 // not reinvented: `-c copy` (stream copy, no re-encode -- nearly free on
 // CPU, and avoids PIC-67's GPU-encoder question entirely for this step),
-// 10-minute segments (`-f segment -segment_time 600` -- a crash or Wi-Fi
+// SEGMENT_MINUTES-long segments (`-f segment -segment_time`, autoSplit.js -- a crash or Wi-Fi
 // drop costs one segment, not the whole recording, per the real frame-
 // drop testing in ADR-030/032), and `-use_wallclock_as_timestamps 1`
 // (the camera's own RTP timestamps are unreliable/non-monotonic, same
@@ -15,7 +15,7 @@
 // becomes its own highlight reel once automatic capture is built"), just
 // not this one -- a manual button is simpler to get right first.
 import { spawn, spawnSync } from "node:child_process";
-import { listParts } from "./autoSplit.js";
+import { listParts, partsDir, SEGMENT_MINUTES, SEGMENT_RE } from "./autoSplit.js";
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
@@ -438,7 +438,7 @@ function spawnSegmenter(cameraId, slotName, url, slot) {
     "-use_wallclock_as_timestamps", "1",
     "-c", "copy",
     "-f", "segment",
-    "-segment_time", "600",
+    "-segment_time", String(SEGMENT_MINUTES * 60),
     "-segment_start_number", String(start),
     "-reset_timestamps", "1",
     path.join(slot.outDir, "session-%03d.mkv"),
@@ -696,9 +696,31 @@ export function activeOutDir(cameraId) {
 // everything upload-related already only ever has a main outDir in hand
 // (started.outDir, note.outDir, activeOutDir()), by long-standing
 // convention this keeps rather than changes.
+//
+// The sibling existing is not enough (2026-10-28): startRecording creates
+// it before the sub-stream has connected, so a camera whose sub-stream
+// never came up left an empty folder that won every time -- nothing was
+// uploaded and the session got no clips, while main recorded fine. So:
+//   - once auto-split has made a part in either folder, stay with that one
+//     (part numbering and the high-res fetch read one folder per recording);
+//   - before that, use the sub-stream only while it keeps up with main (it
+//     may trail by the one segment it connected later), else main.
+// Uploading main costs bandwidth (~2-3x per part), not correctness: the pod
+// takes any resolution, and the high-res fetch re-trims main either way.
 export function uploadDirFor(outDir) {
   const subDir = `${outDir}-sub`;
-  return existsSync(subDir) ? subDir : outDir;
+  if (!existsSync(subDir)) return outDir;
+  if (existsSync(partsDir(subDir))) return subDir;
+  if (existsSync(partsDir(outDir))) return outDir;
+  return segmentCount(subDir) >= segmentCount(outDir) - 1 ? subDir : outDir;
+}
+
+function segmentCount(dir) {
+  try {
+    return readdirSync(dir).filter((f) => SEGMENT_RE.test(f)).length;
+  } catch {
+    return 0;
+  }
 }
 
 // Is `pid` still one of OUR recordings? Checked against its command line,

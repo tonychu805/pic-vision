@@ -250,6 +250,7 @@ function AutoSplitCard() {
         <label>Send each part to the cloud every</label>
         <select className="input" style={{ maxWidth: 180 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
           <option value={0}>Off (send when recording stops)</option>
+          <option value={5}>5 minutes</option>
           <option value={10}>10 minutes</option>
           <option value={20}>20 minutes</option>
           <option value={30}>30 minutes</option>

@@ -8,5 +8,13 @@ flask
 boto3     # cloud_pipeline/ -- Cloudflare R2 (S3-compatible) client
 requests  # cloud_pipeline/ -- RunPod REST API
 
+# security floors for transitive deps (see sbom/VULNERABILITIES.md, 2026-10-22).
+# These are pulled in indirectly; the floors keep the resolver off known-vulnerable
+# versions. Drop a line here if its parent is removed (e.g. pillow if ultralytics goes).
+pillow>=13.0.0       # via ultralytics/torchvision/matplotlib -- 24 CVEs fixed in 13.0.0
+urllib3>=2.8.0       # via requests, boto3(botocore) -- PYSEC-2026-4175/4176/4177
+werkzeug>=3.1.9      # via flask -- PYSEC-2026-4312
+certifi>=2026.10.19  # via requests -- PYSEC-2026-4320 (compromised emSign CA root)
+
 # dev only
 pytest
