@@ -3635,3 +3635,15 @@ the cloud pod path is unchanged.
 **Evidence.** On the seven-rally blind sample, YOLOv8n was 4.26× faster in pose inference than YOLOv8x but changed keypoints and raw badge measurements (ADR-162). The staged five-part shared-session replay completed all ten vertical highlights with audio 1:52 after footage ended. All five parts completed without retries, but that one replay is not a controlled production latency or badge-parity study; see `EXPERIMENTS.md`, 2026-10-31 audio replay.
 
 **Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.
+
+## ADR-165 — Adopt one canonical schema per label kind; stop inventing a shape per tool
+
+**Date.** 2026-11-03
+
+**Context.** A 2026-11-03 audit (triggered by checking whether the Court 3 ball-model fine-tune's labels could be trusted) found rally presence/quality tracked by three independent, disagreeing systems (`label_web.py`, a scratchpad `labels.json`, CVAT's `scale-dropped-review`), and every other label kind — bounce, hit, serve — exported from CVAT in its own ad-hoc shape (nested `bounces`/`hits` arrays, no stable id, no explicit time origin, no provenance). `sessions.jsonl` and `FOOTAGE_INVENTORY.md` went stale because nothing generated them from the label files themselves. Separately, and worse: `label_web.py`'s grade pass can run `rallies.splice()` and delete a presence row outright when a candidate is judged not a rally, with no record — a direct violation of the project's own two-layer-labeling rule.
+
+**Decision.** One schema per label kind, not a database and not a single file: `eval/labels/<kind>/<source>.jsonl`, each row sharing an envelope (`id`, `time`, `provenance`) and a kind-specific payload. Full spec in `TECH_SPEC.md` §11.5. Rally presence and rally quality are split into two separate files linked by `id`, so a quality verdict of "not a rally" is a normal row in the quality file, not a deletion from the presence file. Any collection surface — CVAT, an extended `label_web.py`, a one-off scratch tool — may keep existing as long as it writes this shape.
+
+**Consequences.** This is a schema for *new* labels going forward; existing files (`eval/labels/bounces/*`, `eval/labels/hits/*`, the per-session rally `.jsonl` files, `sessions.jsonl`) are not migrated by this decision alone — each either gets a small adapter script or is read as a legacy format until it's next touched. `sessions.jsonl` and `FOOTAGE_INVENTORY.md`'s per-source table are intended to become generated output of a script over `eval/labels/**/*.jsonl`, not hand-maintained — not built yet.
+
+**Follow-up.** Add a schema-validation test under `tests/`; extend `label_web.py` with a generic item/label mode built on this schema and fix the grade-pass deletion bug as part of that; write the generator that replaces `sessions.jsonl`/`FOOTAGE_INVENTORY.md`. See `progress/11.03 progress overview.md` for the full priority list.
