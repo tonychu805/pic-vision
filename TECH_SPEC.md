@@ -567,6 +567,62 @@ Stand this up in Phase 0 against a hand-written `rallies.json` so the harness is
 - Consecutive frame **triplets**, since the model consumes 3 frames.
 - Ball **center points**, not boxes — matches the heatmap formulation.
 
+### 11.5 Canonical label schema
+
+Every label kind — rally presence, rally quality, bounce, hit, serve — is committed as flat
+`eval/labels/<kind>/<source>.jsonl`, one JSON object per line, never a database (ADR-165; a
+2026-11-03 audit found every kind up to then had invented its own ad-hoc shape, with real
+consequences: `label_web.py`'s grade pass could delete a presence row outright with no record,
+and `sessions.jsonl`/`FOOTAGE_INVENTORY.md` went stale because nothing generated them from the
+label files themselves).
+
+Every row shares this envelope:
+
+```json
+{
+  "id": "pdsc_court3_part9_0007",
+  "time": {"video": "pdsc-fieldtest-nov2026/.../session-009.mkv", "origin_s": 412.6},
+  "provenance": {"tool": "label_web.py", "operator": "tony", "created_at": "2026-11-03T14:02:00+08:00", "candidate_from": "detect_candidates gap_sec=3.0,min_crossings=6"}
+}
+```
+
+- `id` is assigned once per row and never renumbered, even if the row later turns out not to
+  apply — nothing is ever silently removed from a presence file once written.
+- `time.video` + `time.origin_s` replace a filename-encoded offset (`_090-390s.jsonl`, a
+  `_120-180` suffix) as the thing that actually locates the label.
+- `provenance.candidate_from` records what proposed the row (a detector config, a CVAT job, a
+  pre-registered test) — the traceability `EXPERIMENTS.md` entries keep needing and
+  `sessions.jsonl` never had.
+
+Per-kind payload, appended to the shared envelope:
+
+| Kind | Payload | File |
+|---|---|---|
+| `rally_presence` | `{"start_s", "end_s"}` | `eval/labels/rally_presence/<source>.jsonl` |
+| `rally_quality` | `{"verdict": "highlight" \| "ordinary" \| "not_a_rally"}`, same `id` as its presence row | `eval/labels/rally_quality/<source>.jsonl` |
+| `bounce` / `hit` / `serve` | `{"x_px", "y_px", "visible"}` | `eval/labels/bounce/<source>.jsonl` (and `hit/`, `serve/`) |
+
+**Presence and quality are separate files, keyed by `id`, on purpose.** The bug this closes:
+`label_web.py`'s old grade pass could run `rallies.splice()` and delete a presence row outright
+once a candidate turned out not to be a rally. Under this schema, "not a rally" is a normal
+`rally_quality` row (`"verdict": "not_a_rally"`) — the presence row that proposed the candidate is
+never touched. A quality file with no row for a given `id` means "not graded yet," never "doesn't
+exist."
+
+**Multiple collection surfaces may write these files** — CVAT, `label_web.py`, a one-off scratch
+web tool — as long as each emits this envelope. The schema doesn't pick a tool; it picks what
+every tool has to agree on.
+
+**The index is generated, not hand-maintained.** `sessions.jsonl` and `FOOTAGE_INVENTORY.md`'s
+per-source table are both meant to become the output of a script that reads
+`eval/labels/**/*.jsonl` directly, not a hand-kept table — tracked as the next step after this
+schema, not built yet.
+
+This is a schema for new labels going forward. Existing files predating it
+(`eval/labels/bounces/*`, `eval/labels/hits/*`, the per-session rally `.jsonl` files) are not
+migrated by writing this section — each gets a small adapter, or is read as a legacy format,
+until it's next touched.
+
 ---
 
 ## 12. Repository layout
