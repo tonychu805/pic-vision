@@ -3635,3 +3635,13 @@ the cloud pod path is unchanged.
 **Evidence.** On the seven-rally blind sample, YOLOv8n was 4.26× faster in pose inference than YOLOv8x but changed keypoints and raw badge measurements (ADR-162). The staged five-part shared-session replay completed all ten vertical highlights with audio 1:52 after footage ended. All five parts completed without retries, but that one replay is not a controlled production latency or badge-parity study; see `EXPERIMENTS.md`, 2026-10-31 audio replay.
 
 **Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.
+
+## ADR-170 — A network shortfall never blocks recording; only a camera set below 25 fps does
+
+**Date:** 2026-11-09 · **Status:** built and tested on branches (`fix/desktop-fps-network-shortfall` in pic-vision, `fix/console-fps-network-shortfall` in the console); not released. Amends ADR-131 and ADR-087.
+
+**Why.** The desktop measures a camera's frame rate from one 5-second probe, refreshed every 10 minutes, and that measurement decided the block. A Wi-Fi blip during the probe on a camera set to 30 fps refused recording and calibration until the next probe, booked sessions included (operator report). The console's Start button used the same rule.
+
+**Decision (operator).** Block only a camera whose *setting* is below 25 fps: an ONVIF camera reporting a setting under 25 (unless what arrives is at least 25), or a camera that reports no setting (RTSP) whose measured rate is under 25. A camera set correctly whose frames arrive below 25 records, with a network warning that says such parts may not be processed. The pod's whole-recording check (`src/video_quality.py`: refused when more than half of it is below 25 fps) stays the gate for a real drop.
+
+**Checked.** Desktop `npm test` 385/385 (3 of the new tests fail on the old rule); console frame-rate and notification tests 17/17; the console suite's one failure (`nextPartEnv`, reads `pod_driver.py` from a sibling checkout path) fails the same way on `origin/main`.

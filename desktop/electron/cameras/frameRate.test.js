@@ -103,25 +103,52 @@ test("a camera set to 30 but only 27 arriving is warned about the network, not t
 
 // --- configured vs. measured (ADR-087 amendment) ---------------------------
 
-test("what actually arrives decides pass/fail, not what the camera claims", () => {
-  // The hole this closes: a camera set to 30 that only delivers 15 used to
-  // sail through, because only the configured number was ever checked.
+test("what actually arrives is what the venue is told about", () => {
+  // A camera set to 30 that only delivers 15 used to sail through, because
+  // only the configured number was ever checked.
   assert.equal(effectiveFps(both(30, 15)), 15);
-  assert.ok(frameRateProblem(both(30, 15)));
+  assert.equal(frameRateLevel(both(30, 15)), "low");
+  assert.ok(frameRateWarning(both(30, 15)));
+});
+
+// 2026-11-09 (operator): one 5-second probe that caught a Wi-Fi blip on a
+// camera set to 30 refused every recording until the next probe, up to 10
+// minutes later, booked sessions included.
+test("a network shortfall on a camera set correctly never refuses recording", () => {
+  for (const measured of [24.8, 15, 5]) {
+    assert.equal(frameRateProblem(both(30, measured)), null, `set to 30, ${measured} arriving`);
+    assert.doesNotThrow(() => assertUsableFrameRate(both(30, measured)));
+  }
 });
 
 test("a camera set correctly but starved by the network is told it's the network", () => {
-  const problem = frameRateProblem(both(30, 15));
-  assert.match(problem, /set to 30 fps but only about 15 fps are reaching/);
-  assert.match(problem, /network problem/);
+  const warning = assertUsableFrameRate(both(30, 15));
+  assert.match(warning, /set to 30 fps but only about 15 fps are reaching/);
+  assert.match(warning, /Recording anyway/);
+  assert.match(warning, /Wi-Fi/);
+  assert.match(warning, /can't be processed/);
   // Must NOT send them to change a setting that is already right.
-  assert.doesNotMatch(problem, /set the video frame rate/);
+  assert.doesNotMatch(warning, /set the video frame rate/);
+  assert.doesNotMatch(warning, /set the camera's video frame rate/);
 });
 
 test("a camera genuinely set too low is told to change the setting", () => {
   const problem = frameRateProblem(both(15, 15));
   assert.match(problem, /set the video frame rate to 30/);
   assert.doesNotMatch(problem, /network problem/);
+  assert.throws(() => assertUsableFrameRate(both(15, 15)), /set the video frame rate to 30/);
+});
+
+test("a camera reporting a low setting that measurably delivers enough is not refused", () => {
+  assert.equal(frameRateProblem(both(15, 30)), null);
+  assert.equal(frameRateLevel(both(15, 30)), "ok");
+});
+
+test("an RTSP camera measured below the floor is still refused", () => {
+  // No setting is reported, so what arrived is the only evidence of it.
+  const rtsp = { label: "Court 2", hostname: "10.0.0.9", profile: { fps: null, measuredFps: 15 } };
+  assert.throws(() => assertUsableFrameRate(rtsp), /set the video frame rate to 30/);
+  assert.equal(frameRateLevel(rtsp), "blocked");
 });
 
 test("an RTSP camera has no configured rate, so it gets the settings advice", () => {
@@ -159,6 +186,19 @@ test("the level matches the actual gate: blocked below 25, low from 25 to 29, fi
 test("a camera the level calls blocked is exactly one recording refuses", () => {
   for (const fps of [10, 15, 24, 24.8, 25, 26, 28.9, 29, 30]) {
     assert.equal(frameRateLevel(camera(fps)) === "blocked", frameRateProblem(camera(fps)) !== null, `${fps} fps`);
+    for (const configured of [null, 15, 30]) {
+      const cam = both(configured, fps);
+      assert.equal(frameRateLevel(cam) === "blocked", frameRateProblem(cam) !== null, `set ${configured}, ${fps} arriving`);
+    }
+  }
+});
+
+test("every camera that isn't refused and isn't fine gets a warning", () => {
+  for (const fps of [5, 15, 24.8, 25, 28.9]) {
+    for (const configured of [null, 15, 30]) {
+      const cam = both(configured, fps);
+      if (frameRateLevel(cam) === "low") assert.ok(frameRateWarning(cam), `set ${configured}, ${fps} arriving`);
+    }
   }
 });
 
