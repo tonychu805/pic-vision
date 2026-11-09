@@ -3636,9 +3636,21 @@ the cloud pod path is unchanged.
 
 **Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.
 
+## ADR-165 — Adopt one canonical schema per label kind; stop inventing a shape per tool
+
+**Date.** 2026-11-03
+
+**Context.** A 2026-11-03 audit (triggered by checking whether the Court 3 ball-model fine-tune's labels could be trusted) found rally presence/quality tracked by three independent, disagreeing systems (`label_web.py`, a scratchpad `labels.json`, CVAT's `scale-dropped-review`), and every other label kind — bounce, hit, serve — exported from CVAT in its own ad-hoc shape (nested `bounces`/`hits` arrays, no stable id, no explicit time origin, no provenance). `sessions.jsonl` and `FOOTAGE_INVENTORY.md` went stale because nothing generated them from the label files themselves. Separately, and worse: `label_web.py`'s grade pass can run `rallies.splice()` and delete a presence row outright when a candidate is judged not a rally, with no record — a direct violation of the project's own two-layer-labeling rule.
+
+**Decision.** One schema per label kind, not a database and not a single file: `eval/labels/<kind>/<source>.jsonl`, each row sharing an envelope (`id`, `time`, `provenance`) and a kind-specific payload. Full spec in `TECH_SPEC.md` §11.5. Rally presence and rally quality are split into two separate files linked by `id`, so a quality verdict of "not a rally" is a normal row in the quality file, not a deletion from the presence file. Any collection surface — CVAT, an extended `label_web.py`, a one-off scratch tool — may keep existing as long as it writes this shape.
+
+**Consequences.** This is a schema for *new* labels going forward; existing files (`eval/labels/bounces/*`, `eval/labels/hits/*`, the per-session rally `.jsonl` files, `sessions.jsonl`) are not migrated by this decision alone — each either gets a small adapter script or is read as a legacy format until it's next touched. `sessions.jsonl` and `FOOTAGE_INVENTORY.md`'s per-source table are intended to become generated output of a script over `eval/labels/**/*.jsonl`, not hand-maintained — not built yet.
+
+**Follow-up.** Add a schema-validation test under `tests/`; extend `label_web.py` with a generic item/label mode built on this schema and fix the grade-pass deletion bug as part of that; write the generator that replaces `sessions.jsonl`/`FOOTAGE_INVENTORY.md`. See `progress/11.03 progress overview.md` for the full priority list.
+
 ## ADR-170 — A network shortfall never blocks recording; only a camera set below 25 fps does
 
-**Date:** 2026-11-09 · **Status:** built and tested on branches (`fix/desktop-fps-network-shortfall` in pic-vision, `fix/console-fps-network-shortfall` in the console); not released. Amends ADR-131 and ADR-087.
+**Date:** 2026-11-09 · **Status:** console part merged (pic-vision-cloud-console #28, 2026-11-09); desktop part in pic-vision #57, reaches venues with the next desktop release. Amends ADR-131 and ADR-087.
 
 **Why.** The desktop measures a camera's frame rate from one 5-second probe, refreshed every 10 minutes, and that measurement decided the block. A Wi-Fi blip during the probe on a camera set to 30 fps refused recording and calibration until the next probe, booked sessions included (operator report). The console's Start button used the same rule.
 
