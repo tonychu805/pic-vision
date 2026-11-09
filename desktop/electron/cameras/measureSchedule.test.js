@@ -28,6 +28,12 @@ test("while settling, a reading older than a minute is measured again", () => {
   assert.equal(needsMeasuring(cam, { now: NOW, appStartedAt: OLD_START }), true);
 });
 
+test("while settling, the previous check-in's reading is measured again at the next one", () => {
+  // Heartbeat every 60 s; the reading is stamped when its 15 s probe ends.
+  const cam = camera({ fps: 30, measuredFps: 22, measuredAt: ago(45 * 1000), measuredAtFps: 30 }, { addedAt: ago(2 * 60 * 1000) });
+  assert.equal(needsMeasuring(cam, { now: NOW, appStartedAt: OLD_START }), true);
+});
+
 test("once settled, a reading stands for 10 minutes", () => {
   const fresh = camera({ fps: 30, measuredFps: 30, measuredAt: ago(STEADY_TTL_MS - 1000), measuredAtFps: 30 });
   const stale = camera({ fps: 30, measuredFps: 30, measuredAt: ago(STEADY_TTL_MS + 1000), measuredAtFps: 30 });

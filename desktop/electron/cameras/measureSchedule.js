@@ -10,7 +10,11 @@
 import { frameRateProblem } from "./frameRate.js";
 
 export const SETTLE_MS = 10 * 60 * 1000;
-export const SETTLE_TTL_MS = 60 * 1000;
+// Under the 60 s heartbeat that triggers a measurement, so a settling camera
+// is measured at every check-in. At 60 s exactly, a reading stamped when
+// its 15-second probe ended was 45 s old at the next check-in and skipped,
+// which halved the rate (staging, 2026-11-09).
+export const SETTLE_TTL_MS = 30 * 1000;
 export const STEADY_TTL_MS = 10 * 60 * 1000;
 // Three times the old sample: a blip moves a 15-second count a third as much.
 export const PROBE_SECONDS = 15;
