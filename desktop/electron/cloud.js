@@ -28,6 +28,7 @@ import { withDeadline } from "./deadline.js";
 import { agentBuildInfo } from "./version.js";
 import { rememberedResult, rememberResult } from "./commandMemory.js";
 import { retentionSummary } from "./recordingRetention.js";
+import { needsMeasuring, needsCheckBeforeStart, PROBE_SECONDS } from "./cameras/measureSchedule.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -225,34 +226,29 @@ export function getOtherAgentNames() {
 //   - never measured, or missing fields this camera type can supply
 //   - the ONVIF-reported (configured) rate changed since we last measured,
 //     which IS the "someone changed the setting" signal
-//   - the measurement has simply gone stale
+//   - the measurement has gone stale: after a minute while the camera
+//     settles, after 10 minutes once it has (cameras/measureSchedule.js)
 //
 // Skipped while a camera is recording: the probe opens a second RTSP
 // session and some cameras allow only one. A finished recording is
 // re-measured on stop anyway (runCommand), which is better evidence.
-const MEASURE_TTL_MS = 10 * 60 * 1000;
+const APP_STARTED_AT = Date.now();
 
 // Only to stop two probes racing for the same camera -- never to stop a
 // repeat, which was the original bug.
 const measuringNow = new Set();
 
-function needsMeasuring(camera) {
-  const p = camera.profile ?? {};
-  if (p.measuredFps == null) return true;
-  if (camera.connectionType !== "onvif"
-      && (p.codec == null || p.width == null || p.height == null || p.bitrateKbps == null)) return true;
-  // A changed configured rate means the camera was reconfigured, so the
-  // stored measurement describes the old setting and must not outlive it.
-  // This matters because effectiveFps() prefers the measured value: a
-  // stale one would override the fresh configured one indefinitely.
-  if (p.measuredAtFps != null && p.fps != null && p.measuredAtFps !== p.fps) return true;
-  if (!p.measuredAt) return true;
-  return Date.now() - new Date(p.measuredAt).getTime() > MEASURE_TTL_MS;
+// A start its stored reading would refuse gets one fresh look first: that
+// reading may be a settling stream or a blip from up to 10 minutes ago.
+async function checkedBeforeStart(camera) {
+  if (!needsCheckBeforeStart(camera)) return camera;
+  await refreshMeasuredProfile(camera, { force: true });
+  return listCameras().find((c) => c.id === camera.id) ?? camera;
 }
 
-async function refreshMeasuredProfile(camera) {
+async function refreshMeasuredProfile(camera, { force = false } = {}) {
   if (measuringNow.has(camera.id) || isRecording(camera.id)) return;
-  if (!needsMeasuring(camera)) return;
+  if (!force && !needsMeasuring(camera, { now: Date.now(), appStartedAt: APP_STARTED_AT })) return;
 
   // A sample clip is a local file (milliseconds); a live camera means
   // holding its stream open for a few seconds. Both land in the same
@@ -264,7 +260,7 @@ async function refreshMeasuredProfile(camera) {
 
   measuringNow.add(camera.id);
   try {
-    const measured = await measureStreamProfile(source);
+    const measured = await measureStreamProfile(source, { seconds: PROBE_SECONDS, timeoutMs: (PROBE_SECONDS + 15) * 1000 });
     if (!measured) return;
     const { fps, ...rest } = measured;
     // An ONVIF camera already reported codec/resolution/bitrate, and those
@@ -838,7 +834,7 @@ async function runCommand(command) {
     if (current && startMatchesCurrent(command.params, readSessionMeta(current))) {
       return { outDir: current, alreadyRecording: true };
     }
-    const started = await startRecording(camera);
+    const started = await startRecording(await checkedBeforeStart(camera));
     // The playing session the console issued with this start (ADR-128):
     // every upload of this recording, whole or in parts, carries it back.
     try {
@@ -1080,7 +1076,7 @@ export async function recoverRecordingsAfterRestart(now = Date.now()) {
     } else if (action === "resume") {
       const camera = cameras.find((c) => c.id === note.cameraId);
       try {
-        await startRecording(camera, { resumeInto: note.outDir });
+        await startRecording(await checkedBeforeStart(camera), { resumeInto: note.outDir });
       } catch (err) {
         // Keep the note: at the booking's end, bookingEndTick sends what
         // was recorded before the restart.
