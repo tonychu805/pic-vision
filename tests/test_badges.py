@@ -76,7 +76,7 @@ def test_spectators_off_court_are_ignored():
 def test_same_rally_number_in_two_parts_are_different_rallies():
     cands = [
         {"badge": "Killer Shot", "part": 0, "rally": 3, "margin": 2.0},
-        {"badge": "Kitchen War", "part": 1, "rally": 3, "margin": 1.5},
+        {"badge": "Kitchen War", "part": 1, "rally": 3, "margin": 1.5, "value": 0.75},
     ]
     assert {b: (c["part"], c["rally"]) for b, c in award(cands).items()} == {"Killer Shot": (0, 3), "Kitchen War": (1, 3)}
 
@@ -100,3 +100,40 @@ def test_the_bar_is_the_sessions_typical_swing_not_the_parts():
     session = decide([slow, part(2.0, 2.0)])
     assert session["typical_swing"] == 2.0
     assert "Killer Shot" not in session["awarded"]
+
+
+def test_exchanges_count_only_crossings_while_both_teams_are_at_the_kitchen():
+    P = _rally_poses(0, 300)
+    for f in range(30, 241):                                      # 1.0 .. 8.0 s: a kitchen standoff
+        P[str(f)] = [_player(10, 15, (500, 400, 560, 600), (530, 450)), _player(10, 29, (600, 100, 630, 160), (615, 120))]
+    rally = measure(P, [{"start": 1.0, "end": 9.0}], 1280, 720, crossings=[2.0, 3.0, 8.5, 9.5])["rallies"][0]
+    assert rally["exchanges"] == 2                                # 8.5 is after the standoff, 9.5 after the rally
+    assert rally["kitchen_s"] == round(211 / 30, 3)
+    assert "exchanges" not in measure(P, [{"start": 1.0, "end": 9.0}], 1280, 720)["rallies"][0]
+
+
+def _kitchen_rally(start, share, exchanges, kitchen_s):
+    return {"start": start, "end": start + 20, "share": share, "serve": None, "exchanges": exchanges, "kitchen_s": kitchen_s}
+
+
+def test_kitchen_war_goes_to_the_longest_fastest_battle_not_the_highest_share():
+    swings = [[1.0, 0.4 * i, 3.0] for i in range(20)]
+    calm = _kitchen_rally(10.0, 0.9, 15, 16.0)                    # mostly at the kitchen, slow
+    war = _kitchen_rally(40.0, 0.65, 31, 20.0)                    # less of the rally, twice the exchanges
+    assert decide([{"swings": swings, "rallies": [calm, war]}])["awarded"]["Kitchen War"]["start"] == 40.0
+
+
+def test_kitchen_war_falls_back_to_share_for_parts_measured_without_crossings():
+    swings = [[1.0, 0.4 * i, 3.0] for i in range(20)]
+    a, b = ({"start": s, "end": s + 20, "share": sh, "serve": None} for s, sh in ((10.0, 0.9), (40.0, 0.65)))
+    assert decide([{"swings": swings, "rallies": [a, b]}])["awarded"]["Kitchen War"]["start"] == 10.0
+
+
+def test_kitchen_war_takes_its_next_best_rally_when_its_best_holds_another_badge():
+    cands = [
+        {"badge": "Hardest Swing", "rally": 1, "margin": 3.0, "value": 15.0},
+        {"badge": "Kitchen War", "rally": 0, "margin": 1.8, "value": 14.0},
+        {"badge": "Kitchen War", "rally": 1, "margin": 1.3, "value": 48.0},
+        {"badge": "Kitchen War", "rally": 2, "margin": 1.1, "value": 30.0},
+    ]
+    assert {b: c["rally"] for b, c in award(cands).items()} == {"Hardest Swing": 1, "Kitchen War": 2}

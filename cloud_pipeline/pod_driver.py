@@ -558,7 +558,7 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
-def measure_badges(s3_in, video, segments, calib):
+def measure_badges(s3_in, video, segments, crossings, calib):
     """Pose the rallies and measure them for badges; None if anything goes wrong.
 
     Measures only (src/badges.py measure()): every bar is relative to the
@@ -600,7 +600,7 @@ def measure_badges(s3_in, video, segments, calib):
                 _check_cancel("badges", f"measuring for badges: posed {done}/{total} rally frames...")
 
         poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
-        result = measure(poses, segments, w, h)
+        result = measure(poses, segments, w, h, crossings)
         result["pose_frames"] = len(frames)
         result["pose_sec"] = round(time.time() - started, 1)
         _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
@@ -788,12 +788,13 @@ def run():
     # real outcome, far likelier now that a session is sent in 10-20 minute
     # parts (ADR-127): finish with no reels instead of crashing the job
     # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
-    segments = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]
+    detected = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)
+    segments = detected["segments"]
     if not segments:
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
-    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else (None, None)
+    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
