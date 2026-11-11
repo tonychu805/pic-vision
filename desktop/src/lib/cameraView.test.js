@@ -54,9 +54,9 @@ import { translator } from "../../electron/i18n/index.js";
 
 test("the status labels follow the language", () => {
   const zh = translator("zh-TW");
-  assert.equal(readiness(cam(), zh).label, "就緒");
+  assert.equal(readiness(cam(), zh).label, "準備就緒");
   assert.equal(readiness(cam({ isRecording: true }), zh).label, "錄影中");
   assert.equal(readiness(cam({ isCalibrated: false }), zh).label, "需要校正");
   assert.equal(cardVisuals(configuredCard(cam(), "offline", zh), zh).stateLabel, "沒有回應");
-  assert.equal(cardVisuals(configuredCard(cam({ connectionType: "sampleClip", calibrationKnown: false }), "ok", zh), zh).stateLabel, "檔案就緒");
+  assert.equal(cardVisuals(configuredCard(cam({ connectionType: "sampleClip", calibrationKnown: false }), "ok", zh), zh).stateLabel, "檔案準備就緒");
 });
