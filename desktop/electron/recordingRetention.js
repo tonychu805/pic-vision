@@ -27,7 +27,7 @@ import { RECORDINGS_ROOT, activeRecordingDirs, uploadDirFor } from "./capture.js
 import { isPipelineRunning } from "./pipeline.js";
 import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { listCameras } from "./cameras/store.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 
 // capture.js names a recording's folder new Date().toISOString() with ':'
 // and '.' made filesystem-safe. Anything else in there is not ours to judge.
@@ -209,8 +209,8 @@ export function retentionSweep({ now = Date.now(), timezone = null, apply = true
         // main, not on its own schedule.
         const subDir = `${dir}-sub`;
         if (existsSync(subDir)) rmSync(subDir, { recursive: true, force: true });
-        logEvent("recording_deleted", `Removed a recording of ${label} from this computer`,
-          "Its highlights are ready and the venue-local recording day has ended.");
+        logEvent("recording_deleted", msg("log.recordingDeleted", { label }),
+          msg("log.recordingDeletedDetail"));
       }
       results.push({ cameraId, dir, startedAt, endedAt, doneAt: reelDoneAt(dir), ...decision });
     }

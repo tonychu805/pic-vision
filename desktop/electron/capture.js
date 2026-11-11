@@ -19,7 +19,7 @@ import { listParts, partsDir, SEGMENT_MINUTES, SEGMENT_RE } from "./autoSplit.js
 import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync } from "node:fs";
 import path from "node:path";
 import os from "node:os";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { tm } from "./language.js";
 import { FFMPEG, FFPROBE } from "./binaries.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
@@ -472,7 +472,7 @@ function reconnect(cameraId, slotName, url, slot, record, cameraLabel, reason, a
   if (record.stopping) return;
   if (attempt === 0) {
     record.interruptions += 1;
-    logEvent("recording_interrupted", `${cameraLabel} (${slotName}) lost its camera stream -- reconnecting`, reason);
+    logEvent("recording_interrupted", msg("log.streamLost", { label: cameraLabel, slot: slotName }), reason);
   }
   slot.proc = null;
   slot.retryTimer = setTimeout(() => {
@@ -481,7 +481,7 @@ function reconnect(cameraId, slotName, url, slot, record, cameraLabel, reason, a
     const proc = spawnSegmenter(cameraId, slotName, url, slot);
     const healthy = setTimeout(() => {
       if (slot.proc === proc && !record.stopping) {
-        logEvent("recording_resumed", `${cameraLabel} (${slotName}) is recording again`, slot.outDir);
+        logEvent("recording_resumed", msg("log.streamResumed", { label: cameraLabel, slot: slotName }), slot.outDir);
       }
     }, RECONNECTED_AFTER_MS);
     const startedAt = Date.now();
@@ -556,8 +556,8 @@ export function startRecording(camera, { resumeInto = null } = {}) {
     let started = false;
     const timer = setTimeout(() => {
       started = true;
-      if (resumeInto) logEvent("recording_resumed", `${camera.label} is recording again after the app restarted`, outDir);
-      else logEvent("recording_started", `Started recording ${camera.label}`, outDir);
+      if (resumeInto) logEvent("recording_resumed", msg("log.resumedAfterRestart", { label: camera.label }), outDir);
+      else logEvent("recording_started", msg("log.recordingStarted", { label: camera.label }), outDir);
       resolve(frameRateWarning ? { outDir, startedAt, frameRateWarning } : { outDir, startedAt });
     }, STARTUP_GRACE_MS);
     proc.on("exit", (code) => {
@@ -572,7 +572,7 @@ export function startRecording(camera, { resumeInto = null } = {}) {
       // wrong password, camera offline) -- say so rather than retry.
       if (active.get(camera.id) === record) active.delete(camera.id);
       const reason = lastError(main, code);
-      logEvent("recording_failed", `${camera.label} recording failed to start`, reason);
+      logEvent("recording_failed", msg("log.recordingFailed", { label: camera.label }), reason);
       reject(new Error(reason));
     });
   });
@@ -618,7 +618,7 @@ export function stopProcess(proc, { clean = requestCleanStop, graceMs = STOP_GRA
     if (graceMs > 0) {
       timer = setTimeout(() => {
         if (proc.exitCode === null && proc.signalCode === null) {
-          logEvent("recording_stop_forced", `ffmpeg ignored a clean stop for ${graceMs / 1000}s; terminated it`);
+          logEvent("recording_stop_forced", msg("log.stopForced", { seconds: graceMs / 1000 }));
           proc.kill();
         }
       }, graceMs);
@@ -662,7 +662,7 @@ function stopActiveRecording(cameraId, rec) {
 
   return Promise.all([stopSlot(rec.main), rec.sub ? stopSlot(rec.sub) : Promise.resolve()]).then(() => {
     if (active.get(cameraId) === rec) active.delete(cameraId);
-    logEvent("recording_stopped", "Stopped recording", rec.main.outDir);
+    logEvent("recording_stopped", msg("log.recordingStopped"), rec.main.outDir);
     // Free, and better evidence than probing the live stream: this is
     // exactly what got captured and what the pipeline will be given. Also
     // how an RTSP camera's rate stays current after someone changes it in
@@ -789,7 +789,7 @@ export async function cleanUpOrphanedRecordings({ graceMs = 15_000, entries = le
       } catch {
         // Exited between the check and the signal: nothing left to stop.
       }
-      logEvent("recording_orphan_stopped", "Stopped a recording left running when the app closed unexpectedly", slot.outDir);
+      logEvent("recording_orphan_stopped", msg("log.orphanStopped"), slot.outDir);
       stopped.push({ cameraId, outDir: slot.outDir });
     }
   }

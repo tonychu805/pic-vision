@@ -8,5 +8,6 @@ import * as cloud from "./strings/cloud.js";
 import * as settings from "./strings/settings.js";
 import * as tools from "./strings/tools.js";
 import * as main from "./strings/main.js";
+import * as log from "./strings/log.js";
 
-export const en = { ...common.en, ...cameras.en, ...detail.en, ...cloud.en, ...settings.en, ...tools.en, ...main.en };
+export const en = { ...common.en, ...cameras.en, ...detail.en, ...cloud.en, ...settings.en, ...tools.en, ...main.en, ...log.en };

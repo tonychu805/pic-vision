@@ -23,7 +23,7 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync,
 import path from "node:path";
 import { powerSaveBlocker } from "electron";
 import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { tm } from "./language.js";
 import { retryWithinWindow } from "./uploadRetry.js";
 
@@ -127,7 +127,9 @@ async function uploadWithRetry(jobId, upload, filePath, onProgress, rec) {
     // and the `refresh` below would 409 on the now-cancelled job.
     shouldStop: (err) => Boolean(err.aborted || rec?.cancelled),
     onRetry: (err, n, delay) => {
-      logEvent("upload_retry", `${rec?.label ?? "Recording"} upload interrupted, trying again in ${Math.round(delay / 1000)}s (try ${n + 1})`, err.message);
+      logEvent("upload_retry", rec?.label
+          ? msg("log.uploadRetry", { label: rec.label, seconds: Math.round(delay / 1000), n: n + 1 })
+          : msg("log.uploadRetryNoLabel", { seconds: Math.round(delay / 1000), n: n + 1 }), err.message);
     },
     // A 403 here is almost always an expired signature rather than a
     // real permission problem -- a venue on slow Wi-Fi can take longer
@@ -236,7 +238,7 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
           progress: null,
           done: false,
         });
-        logEvent("pipeline_failed", `${label} cloud job not found on the console`);
+        logEvent("pipeline_failed", msg("log.jobNotFound", { label }));
         return;
       }
       // Console unreachable: keep the job alive and try again.
@@ -269,17 +271,17 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
     if (job.status === "done") {
       const reels = job.result?.reels ?? [];
       if (reels.length === 0) {
-        logEvent("pipeline_done", `${label}: no rallies found`, "Finished; this stretch had no play to cut.");
+        logEvent("pipeline_done", msg("log.noRallies", { label }), msg("log.noRalliesDetail"));
         return;
       }
       const full = reels.find((r) => r.kind === "full") ?? reels[0];
       const stats = full?.stats;
-      const detail = stats ? `${stats.n_chosen} rallies, ${Math.round(stats.total_duration_sec)}s` : null;
-      logEvent("pipeline_done", `${label} reel ready`, detail);
+      const detail = stats ? msg("log.reelStats", { n: stats.n_chosen, seconds: Math.round(stats.total_duration_sec) }) : null;
+      logEvent("pipeline_done", msg("log.reelReady", { label }), detail);
     } else if (job.status === "cancelled") {
-      logEvent("pipeline_failed", `${label} cloud job cancelled`);
+      logEvent("pipeline_failed", msg("log.jobCancelled", { label }));
     } else {
-      logEvent("pipeline_failed", `${label} cloud job failed`, job.error || job.message || null);
+      logEvent("pipeline_failed", msg("log.jobFailed", { label }), job.error || job.message || null);
     }
     return;
   }
@@ -333,7 +335,7 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
   const rec = { jobId, label, cancelled: false, abort: new AbortController() };
   active.set(recordingDir, rec);
   writeFileSync(path.join(jobDir, "job.json"), JSON.stringify({ jobId, sessionId, label }, null, 2));
-  logEvent("pipeline_started", `Sent ${label} to the cloud`);
+  logEvent("pipeline_started", msg("log.sentToCloud", { label }));
 
   // Uploading a two-hour session takes a while; without this the Mac can
   // sleep mid-transfer and the job sits half-uploaded until it expires.
@@ -357,11 +359,11 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
     // upload has finished, which is exactly what just didn't happen.
     if (rec.cancelled || err.aborted) {
       writeStatus(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
-      logEvent("pipeline_failed", `${label} cloud job cancelled`);
+      logEvent("pipeline_failed", msg("log.jobCancelled", { label }));
       return { jobDir, cancelled: true };
     }
     writeStatus(jobDir, { stage: "error", message: "upload failed", error: err.message, done: false });
-    logEvent("pipeline_failed", `${label} upload failed`, err.message);
+    logEvent("pipeline_failed", msg("log.uploadFailed", { label }), err.message);
     throw err;
   } finally {
     powerSaveBlocker.stop(blocker);

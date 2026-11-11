@@ -1,3 +1,4 @@
+import { t } from "../i18n/index.js";
 // Turns a failed connection check into something an operator can act on.
 //
 // Until now every failure collapsed into one badge: CamerasPage did
@@ -127,22 +128,25 @@ export function classifyProbeError(error, connectionType) {
   return { state: "offline", detail: message };
 }
 
+const PROBE_KEYS = {
+  auth: "log.probe.auth",
+  untrustedCert: "log.probe.untrustedCert",
+  service: "log.probe.service",
+  missing: "log.probe.missing",
+  offline: "log.probe.offline",
+};
+
 /**
- * Plain-language summary for the activity log. The badge is two words; a
- * log line can afford to say what to try, and it's the one place the raw
- * detail is worth carrying.
+ * Plain-language summary for the activity log, as a translatable Log message
+ * (activityLog.js msg()). The badge is two words; a log line can afford to
+ * say what to try, and it's the one place the raw detail is worth carrying.
  */
+export function probeStateMsg(state, label) {
+  return { key: PROBE_KEYS[state] ?? PROBE_KEYS.offline, vars: { label } };
+}
+
+/** The same sentence as plain English text. */
 export function describeProbeState(state, label) {
-  switch (state) {
-    case "auth":
-      return `${label} refused the saved username or password`;
-    case "untrustedCert":
-      return `${label} answered, but its certificate isn't trusted`;
-    case "service":
-      return `${label} answered, but its ONVIF service didn't — streaming may still work`;
-    case "missing":
-      return `${label}'s video file is missing`;
-    default:
-      return `${label} didn't answer`;
-  }
+  const { key, vars } = probeStateMsg(state, label);
+  return t("en", key, vars);
 }

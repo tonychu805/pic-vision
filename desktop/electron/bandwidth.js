@@ -19,7 +19,7 @@
 import { randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
 import { consoleFetch, putStream, requireConnection } from "./consoleApi.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { tm } from "./language.js";
 
 // Ladder, smallest first. A slow venue answers on the first rung (8 MB
@@ -229,18 +229,26 @@ export async function runBandwidthTest({ cameras = 1 } = {}) {
       at: new Date().toISOString(),
     };
     state = { running: false, stage: "done", sentBytes: run.sizeBytes, totalBytes: run.sizeBytes, result, error: null };
+    const one = cameras === 1;
+    const detailKey = result.unstable
+      ? (one ? "log.speedDetail.oneUnstable" : "log.speedDetail.manyUnstable")
+      : (one ? "log.speedDetail.one" : "log.speedDetail.many");
     logEvent(
       "benchmark_upload",
-      `Upload speed measured: ${result.mbps.toFixed(1)} Mbps`,
-      `${samples.length} × ${(run.sizeBytes / 1e6).toFixed(0)} MB (${samples.map((m) => m.toFixed(1)).join(", ")} Mbps) — ` +
-        `a 2-hour session on ${cameras} camera${cameras === 1 ? "" : "s"} would take about ` +
-        `${Math.round(result.sessionMinutes)} minutes to upload` +
-        (result.unstable ? `, or ${Math.round(result.slowestSessionMinutes)} minutes at the slowest speed measured` : ""),
+      msg("log.speedMeasured", { mbps: result.mbps.toFixed(1) }),
+      msg(detailKey, {
+        n: samples.length,
+        size: (run.sizeBytes / 1e6).toFixed(0),
+        samples: samples.map((m) => m.toFixed(1)).join(", "),
+        cameras,
+        minutes: Math.round(result.sessionMinutes),
+        slowest: Math.round(result.slowestSessionMinutes),
+      }),
     );
     return result;
   } catch (err) {
     state = { running: false, stage: "error", sentBytes: 0, totalBytes: 0, result: null, error: err.message };
-    logEvent("benchmark_failed", "Upload speed test failed", err.message);
+    logEvent("benchmark_failed", msg("log.speedFailed"), err.message);
     throw err;
   }
 }
