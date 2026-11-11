@@ -47,3 +47,16 @@ test("the card and the detail page take the same readiness label", () => {
   assert.equal(cardVisuals(configuredCard(cam({ isCalibrated: false }), "ok")).stateLabel, "Needs calibration");
   assert.equal(cardVisuals(configuredCard(cam({ connectionType: "sampleClip", calibrationKnown: false }), "ok")).stateLabel, "File ready");
 });
+
+// The same logic, spoken in Traditional Chinese: the labels come from the
+// dictionary, not from the code.
+import { translator } from "../../electron/i18n/index.js";
+
+test("the status labels follow the language", () => {
+  const zh = translator("zh-TW");
+  assert.equal(readiness(cam(), zh).label, "就緒");
+  assert.equal(readiness(cam({ isRecording: true }), zh).label, "錄影中");
+  assert.equal(readiness(cam({ isCalibrated: false }), zh).label, "需要校正");
+  assert.equal(cardVisuals(configuredCard(cam(), "offline", zh), zh).stateLabel, "沒有回應");
+  assert.equal(cardVisuals(configuredCard(cam({ connectionType: "sampleClip", calibrationKnown: false }), "ok", zh), zh).stateLabel, "檔案就緒");
+});

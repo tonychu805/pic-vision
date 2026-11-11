@@ -21,6 +21,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import React from "react";
 import { renderToStaticMarkup } from "react-dom/server";
 import { bundleForTest } from "./bundleForTest.js";
+import { pinLanguage } from "./testLanguage.js";
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const ROOT = path.resolve(HERE, "..", "..");
@@ -39,6 +40,7 @@ before(async () => {
   mkdirSync(OUT_DIR, { recursive: true });
   rmSync(BUNDLE, { force: true });
   bundleForTest(path.join(ROOT, "src", "ErrorBoundary.jsx"), BUNDLE);
+  pinLanguage("en-US");
   ({ default: ErrorBoundary } = await import(pathToFileURL(BUNDLE).href));
 });
 

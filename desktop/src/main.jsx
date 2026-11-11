@@ -2,6 +2,7 @@ import React from "react";
 import { createRoot } from "react-dom/client";
 import App from "./App.jsx";
 import ErrorBoundary from "./ErrorBoundary.jsx";
+import { LanguageProvider } from "./i18n.jsx";
 import { installRendererErrorReporting } from "./lib/rendererErrors.js";
 import "./index.css";
 
@@ -18,7 +19,9 @@ installRendererErrorReporting({
 createRoot(document.getElementById("root")).render(
   <React.StrictMode>
     <ErrorBoundary>
-      <App />
+      <LanguageProvider>
+        <App />
+      </LanguageProvider>
     </ErrorBoundary>
   </React.StrictMode>
 );

@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { cleanIpcError, describeAddFailure } from "../lib/ipcError.js";
 import CameraCard from "../components/CameraCard.jsx";
 import { buildCards } from "../lib/cameraView.js";
+import { useI18n } from "../i18n.jsx";
 
 const SCAN_TIMEOUT_MS = 5000;
 
@@ -21,6 +22,7 @@ const SCAN_TIMEOUT_MS = 5000;
 // giving up, and offers a raw-RTSP-URL field as the true last resort --
 // each step vendor-neutral, none of it branching on a detected brand.
 function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPort = 80, onClose, onAdded }) {
+  const { t, rich } = useI18n();
   const foundIt = Boolean(initialHostname);
   // "Sample clip" (2026-09-03): a local video file stands in for a live
   // camera, so calibration and the cloud pipeline can be exercised
@@ -66,7 +68,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   const pickClipFile = async () => {
     setClipError("");
     if (typeof window.systemAPI?.pickVideoFile !== "function") {
-      setClipError("This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).");
+      setClipError(t("add.clip.notLoaded"));
       return;
     }
     try {
@@ -217,9 +219,9 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     return (
       <div className="dialog-backdrop">
         <div className="dialog">
-          <div className="dialog-title">Looking for a video stream…</div>
+          <div className="dialog-title">{t("add.looking.title")}</div>
           <div className="dialog-body">
-            Sign-in didn't work the usual way — checking whether this camera has a video stream available directly.
+            {t("add.looking.body")}
           </div>
         </div>
       </div>
@@ -231,10 +233,10 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   // already known (a discovered card, or the RTSP-fallback phases below).
   const sourceSelector = !foundIt && (
     <div className="field">
-      <label>Add</label>
+      <label>{t("add.source.label")}</label>
       <select className="input" value={sourceType} onChange={(e) => setSourceType(e.target.value)}>
-        <option value="camera">A live camera</option>
-        <option value="sampleClip">A sample clip (for testing)</option>
+        <option value="camera">{t("add.source.camera")}</option>
+        <option value="sampleClip">{t("add.source.clip")}</option>
       </select>
     </div>
   );
@@ -243,22 +245,21 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     return (
       <div className="dialog-backdrop">
         <form className="dialog" onSubmit={submitSampleClip}>
-          <div className="dialog-title">Add a sample clip</div>
+          <div className="dialog-title">{t("add.clip.title")}</div>
           {sourceSelector}
           <div className="dialog-body">
-            Upload a video file to test calibration and the cloud pipeline without a real camera — it's treated
-            like a camera whose one recording is this file.
+            {t("add.clip.body")}
           </div>
           <div className="field">
-            <label>Name (optional)</label>
-            <input className="input" value={clipLabel} onChange={(e) => setClipLabel(e.target.value)} placeholder="Test clip" />
+            <label>{t("add.nameOptional")}</label>
+            <input className="input" value={clipLabel} onChange={(e) => setClipLabel(e.target.value)} placeholder={t("add.clip.namePlaceholder")} />
           </div>
           <div className="field">
-            <label>Video file</label>
+            <label>{t("add.clip.file")}</label>
             <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-              <button type="button" className="btn btn-secondary" onClick={pickClipFile}>Choose file…</button>
+              <button type="button" className="btn btn-secondary" onClick={pickClipFile}>{t("add.clip.choose")}</button>
               <span style={{ fontSize: "var(--fs-body)", fontFamily: "var(--font-mono)", flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-                {clipPath || "No file chosen"}
+                {clipPath || t("add.clip.noFile")}
               </span>
             </div>
           </div>
@@ -266,9 +267,9 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>{clipError}</p>
           )}
           <div className="dialog-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>{t("common.cancel")}</button>
             <button type="submit" className="btn btn-primary" disabled={clipSaving || !clipPath}>
-              {clipSaving ? "Adding…" : "Add"}
+              {clipSaving ? t("add.adding") : t("add.add")}
             </button>
           </div>
         </form>
@@ -280,7 +281,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     // `error` here is whatever the ONVIF attempt threw, until the operator
     // submits a stream URL of their own -- after which it's that attempt's
     // failure instead, and no longer says anything about ONVIF.
-    const failure = describeAddFailure(error, form.hostname);
+    const failure = describeAddFailure(error, form.hostname, t);
     const urlError = urlAttempted ? error : null;
     return (
       <div className="dialog-backdrop">
@@ -288,7 +289,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
           <div className="dialog-title">{failure.title}</div>
           <div className="dialog-body">{failure.body}</div>
           <div className="field">
-            <label>Video stream address</label>
+            <label>{t("add.url.label")}</label>
             <input
               className="input"
               value={rtspUrl}
@@ -309,12 +310,12 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
           </div>
           {urlError && (
             <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>
-              Couldn't connect with that either. ({cleanIpcError(urlError)})
+              {t("add.url.failed", { reason: cleanIpcError(urlError) })}
             </p>
           )}
           <div className="dialog-actions">
-            <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Connecting…" : "Connect & add"}</button>
+            <button type="button" className="btn btn-secondary" onClick={onClose}>{t("common.cancel")}</button>
+            <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? t("add.connecting") : t("add.connectAdd")}</button>
           </div>
         </form>
       </div>
@@ -324,30 +325,26 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
   return (
     <div className="dialog-backdrop">
       <form className="dialog" onSubmit={submit}>
-        <div className="dialog-title">{foundIt ? "Set up this camera" : "Add a camera by IP address"}</div>
+        <div className="dialog-title">{foundIt ? t("add.form.titleFound") : t("add.form.titleManual")}</div>
         {sourceSelector}
         <div className="dialog-body">
           {foundIt ? (
             <>
-              We found {initialVendor ? `a ${initialVendor} device` : "a device"} on your network. Enter its sign-in
-              below to connect it — the same username and password you'd use in the camera's own app, not your
-              Wi-Fi password.
+              {initialVendor ? t("add.form.foundVendor", { vendor: initialVendor }) : t("add.form.found")}
             </>
           ) : (
             <>
-              Don't see your camera in the list? You can add it directly if you know its IP address — check the
-              camera's own app, usually under Network or Wi-Fi settings. It looks like a short string of numbers,
-              e.g. <span style={{ fontFamily: "var(--font-mono)" }}>192.168.1.42</span>.
+              {rich("add.form.manual", { example: <span style={{ fontFamily: "var(--font-mono)" }}>192.168.1.42</span> })}
             </>
           )}
         </div>
-        <div className="field"><label>Name (optional)</label><input className="input" value={form.label} onChange={update("label")} placeholder="e.g. Court 1" /></div>
+        <div className="field"><label>{t("add.nameOptional")}</label><input className="input" value={form.label} onChange={update("label")} placeholder={t("add.form.namePlaceholder")} /></div>
         <div className="field">
-          <label>Camera IP address</label>
+          <label>{t("add.form.ip")}</label>
           <input className="input" value={form.hostname} onChange={update("hostname")} required autoFocus={!foundIt} />
         </div>
-        <div className="field"><label>Username</label><input className="input" value={form.username} onChange={update("username")} autoFocus={foundIt} /></div>
-        <div className="field"><label>Password</label><input className="input" type="password" value={form.password} onChange={update("password")} /></div>
+        <div className="field"><label>{t("add.form.username")}</label><input className="input" value={form.username} onChange={update("username")} autoFocus={foundIt} /></div>
+        <div className="field"><label>{t("add.form.password")}</label><input className="input" type="password" value={form.password} onChange={update("password")} /></div>
 
         {!showAdvanced ? (
           <button
@@ -356,13 +353,13 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             style={{ alignSelf: "flex-start", fontSize: "var(--fs-body)", padding: 0 }}
             onClick={() => setShowAdvanced(true)}
           >
-            Advanced settings
+            {t("add.form.advanced")}
           </button>
         ) : (
           <div style={{ display: "flex", gap: 10 }}>
-            <div className="field" style={{ flex: 1 }}><label>Port</label><input className="input" type="number" value={form.port} onChange={update("port")} /></div>
+            <div className="field" style={{ flex: 1 }}><label>{t("add.form.port")}</label><input className="input" type="number" value={form.port} onChange={update("port")} /></div>
             <div className="field" style={{ flex: 2 }}>
-              <label>Custom connection path</label>
+              <label>{t("add.form.path")}</label>
               <input className="input" value={form.path} onChange={update("path")} placeholder="/onvif/device_service" />
             </div>
           </div>
@@ -370,13 +367,12 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
 
         {error && (
           <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: 0 }}>
-            Couldn't connect — double-check the username and password, or that the camera is turned on and connected
-            to the same network. ({error})
+            {t("add.form.failed", { error })}
           </p>
         )}
         <div className="dialog-actions">
-          <button type="button" className="btn btn-secondary" onClick={onClose}>Cancel</button>
-          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? "Connecting…" : "Connect & add"}</button>
+          <button type="button" className="btn btn-secondary" onClick={onClose}>{t("common.cancel")}</button>
+          <button type="submit" className="btn btn-primary" disabled={saving}>{saving ? t("add.connecting") : t("add.connectAdd")}</button>
         </div>
       </form>
     </div>
@@ -384,6 +380,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
 }
 
 export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenScanSettings, active }) {
+  const { t } = useI18n();
   const [configured, setConfigured] = useState([]);
   const [discovered, setDiscovered] = useState([]);
   const [sweepHits, setSweepHits] = useState([]);
@@ -538,7 +535,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
 
   useEffect(() => () => clearInterval(scanTimer.current), []);
 
-  const cards = buildCards({ configured, discovered, sweepHits, statusById });
+  const cards = buildCards({ configured, discovered, sweepHits, statusById }, t);
   // Used to also require `hasScanned === false`, which meant a scan that
   // found nothing fell through to the list branch and rendered an empty
   // scroll area -- a header and blank space, at exactly the moment there's
@@ -612,32 +609,34 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
               state ("Looking for cameras"), so the page changed identity
               as you used it and the sidebar's own count said it again.
               Constant title, changing subtitle. */}
-          <div className="page-title">Cameras</div>
+          <div className="page-title">{t("cams.title")}</div>
           <div className="page-sub">
             {scanning
-              ? "Looking for cameras — this takes a few seconds…"
+              ? t("cams.sub.scanning")
               : mine.length === 0 && found.length === 0
-                ? "None added yet"
+                ? t("cams.sub.none")
                 // A scan that turns up only cameras already added used to
                 // leave this line reading exactly as it did before the
                 // click, so there was no way to tell the scan had run at
                 // all (PIC-152). Say what happened until something changes.
                 : hasScanned && found.length === 0
-                  ? `${mine.length} added · scan finished, nothing new found`
-                  : `${mine.length} added${found.length ? ` · ${found.length} found on your network` : ""}`}
+                  ? t("cams.sub.scanDoneNothing", { n: mine.length })
+                  : found.length
+                    ? t("cams.sub.addedFound", { n: mine.length, found: found.length })
+                    : t("cams.sub.added", { n: mine.length })}
           </div>
         </div>
         <div style={{ display: "flex", alignItems: "center", gap: 8, marginLeft: "auto" }}>
           {selectFeatureEnabled && (
             <button className="btn btn-secondary" onClick={() => setSelectMode((v) => !v)}>
-              <i className="ph ph-check-square-offset" style={{ fontSize: 15 }} />Select
+              <i className="ph ph-check-square-offset" style={{ fontSize: 15 }} />{t("cams.select")}
             </button>
           )}
           <button className="btn btn-secondary" onClick={() => openManual()}>
-            <i className="ph ph-plus" style={{ fontSize: 15 }} />Add manually
+            <i className="ph ph-plus" style={{ fontSize: 15 }} />{t("cams.addManually")}
           </button>
           <button className="btn btn-primary" onClick={startScan} disabled={scanning}>
-            <i className="ph ph-radar" style={{ fontSize: 16 }} />{scanning ? "Scanning…" : "Scan"}
+            <i className="ph ph-radar" style={{ fontSize: 16 }} />{scanning ? t("cams.scanning") : t("cams.scan")}
           </button>
           {/* Scan settings used to be a top-level nav tab, a peer of
               Cameras/Log/Cloud console -- odd standing for a page whose
@@ -646,8 +645,8 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
           <button
             className="btn btn-ghost"
             style={{ padding: "0 6px" }}
-            title="Scan options"
-            aria-label="Scan options"
+            title={t("cams.scanOptions")}
+            aria-label={t("cams.scanOptions")}
             onClick={onOpenScanSettings}
           >
             <i className="ph ph-sliders-horizontal" style={{ fontSize: 16 }} />
@@ -658,8 +657,8 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
       {scanning && (
         <div style={{ flex: "none", margin: "0 22px 14px", padding: "14px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", boxShadow: "var(--shadow-sm)" }}>
           <div style={{ display: "flex", alignItems: "baseline", gap: 8, marginBottom: 10 }}>
-            <span style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>Checking every device on your network…</span>
-            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)" }} onClick={stopScan}>Stop</button>
+            <span style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>{t("cams.scanning.panel")}</span>
+            <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)" }} onClick={stopScan}>{t("cams.stop")}</button>
           </div>
           <div style={{ height: 3, borderRadius: 2, background: "color-mix(in srgb, var(--color-text) 10%, transparent)", overflow: "hidden" }}>
             <div style={{ height: "100%", width: `${scanPct}%`, background: "var(--color-accent)", transition: "width .12s linear" }} />
@@ -674,18 +673,18 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
           result. */}
       {scanError && sweepError && (
         <p style={{ margin: "0 22px 12px", fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
-          The scan ran into a problem, but you can still add a camera by hand below.
+          {t("cams.scanProblem")}
         </p>
       )}
 
       {selectMode && (
         <div style={{ flex: "none", display: "flex", alignItems: "center", gap: 10, margin: "0 22px 12px", padding: "8px 14px", borderRadius: "var(--radius-md)", background: "var(--color-accent-900)" }}>
-          <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--color-accent-200)" }}>{picked.size} of {cards.length} selected</span>
+          <span style={{ fontSize: "var(--fs-body)", fontWeight: 500, color: "var(--color-accent-200)" }}>{t("cams.selected", { n: picked.size, total: cards.length })}</span>
           <div style={{ width: 1, height: 14, background: "var(--color-accent-700)" }} />
-          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-key" style={{ fontSize: 14 }} />Sign in</button>
-          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-clock-clockwise" style={{ fontSize: 14 }} />Sync time</button>
-          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-arrow-circle-up" style={{ fontSize: 14 }} />Update firmware</button>
-          <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)", color: "var(--text-3)" }} onClick={() => { setSelectMode(false); setPicked(new Set()); }}>Done</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-key" style={{ fontSize: 14 }} />{t("cams.bulk.signIn")}</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-clock-clockwise" style={{ fontSize: 14 }} />{t("cams.bulk.syncTime")}</button>
+          <button className="btn btn-ghost" style={{ fontSize: 12.5 }} onClick={() => setBulkOpen(true)}><i className="ph ph-arrow-circle-up" style={{ fontSize: 14 }} />{t("cams.bulk.firmware")}</button>
+          <button className="btn btn-ghost" style={{ marginLeft: "auto", fontSize: "var(--fs-body)", color: "var(--text-3)" }} onClick={() => { setSelectMode(false); setPicked(new Set()); }}>{t("cams.done")}</button>
         </div>
       )}
 
@@ -700,40 +699,37 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
                   found on this network" is true of all four situations
                   networkPresence.js separates, which is why it was no help
                   at the venue this was built for (2026-09-19). */}
-              {scanVerdict?.title ?? (hasScanned ? "Nothing found on this network" : "No cameras added yet")}
+              {scanVerdict?.title ?? (hasScanned ? t("cams.empty.nothingFound") : t("cams.empty.none"))}
             </div>
             <p className="text-2" style={{ fontSize: "var(--fs-strong)", lineHeight: 1.6 }}>
               {scanVerdict?.detail ?? (diagnosing ? (
-                <>Working out why — checking what this network lets you see…</>
+                t("cams.empty.diagnosing")
               ) : hasScanned ? (
-                <>
-                  The scan finished without finding anything. A camera on a different network, or one that doesn't
-                  answer discovery, won't show up here — you can still add it yourself using its IP address.
-                </>
+                t("cams.empty.scannedNone")
               ) : (
-                <>
-                  picvision can look for cameras on your Wi-Fi network for you — usually takes just a few seconds. If it
-                  doesn't find yours, you can add it yourself using its IP address instead.
-                </>
+                t("cams.empty.intro")
               ))}
             </p>
             {/* The numbers the paragraph above is a reading of, so the
                 reading can be checked rather than taken on faith. */}
             {scanVerdict?.facts?.cidr && (
               <div className="text-3" style={{ fontSize: "var(--fs-body)", marginTop: 10 }}>
-                {scanVerdict.facts.cidr} · {scanVerdict.facts.addressesChecked} addresses checked ·{" "}
-                {scanVerdict.facts.neighbors === 1 ? "1 device" : `${scanVerdict.facts.neighbors} devices`} visible
+                {t("cams.empty.facts", {
+                  cidr: scanVerdict.facts.cidr,
+                  checked: scanVerdict.facts.addressesChecked,
+                  devices: scanVerdict.facts.neighbors === 1 ? t("cams.empty.oneDevice") : t("cams.empty.manyDevices", { n: scanVerdict.facts.neighbors }),
+                })}
               </div>
             )}
             <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 16 }}>
               <button className="btn btn-primary" onClick={startScan}>
-                <i className="ph ph-radar" style={{ fontSize: 16 }} />{hasScanned ? "Scan again" : "Scan this network"}
+                <i className="ph ph-radar" style={{ fontSize: 16 }} />{hasScanned ? t("cams.scanAgain") : t("cams.scanThisNetwork")}
               </button>
-              <button className="btn btn-secondary" onClick={() => openManual()}>Add manually</button>
+              <button className="btn btn-secondary" onClick={() => openManual()}>{t("cams.addManually")}</button>
             </div>
             {hasScanned && (
               <button className="btn btn-ghost" style={{ marginTop: 10, fontSize: "var(--fs-body)" }} onClick={onOpenScanSettings}>
-                Check scan options
+                {t("cams.checkScanOptions")}
               </button>
             )}
           </div>
@@ -748,7 +744,7 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
               boundary visible. */}
           {mine.length > 0 && (
             <>
-              {found.length > 0 && <div className="section-label">Your cameras</div>}
+              {found.length > 0 && <div className="section-label">{t("cams.section.yours")}</div>}
               <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
                 {mine.map((card) => (
                   <CameraCard key={card.key} card={card} selectMode={selectMode} picked={picked.has(card.key)} onOpen={() => handleCardOpen(card)} onDismiss={() => dismissDevice(card.key)} />
@@ -760,12 +756,10 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
           {found.length > 0 && (
             <>
               <div className="section-label" style={{ marginTop: mine.length > 0 ? 20 : 0 }}>
-                Found on your network
+                {t("cams.section.found")}
               </div>
               <p className="page-sub" style={{ margin: "-6px 0 8px" }}>
-                {found.length === 1
-                  ? "One device that might be your camera — open it to finish setting it up."
-                  : `${found.length} devices that might be your cameras — open one to finish setting it up.`}
+                {found.length === 1 ? t("cams.found.one") : t("cams.found.many", { n: found.length })}
               </p>
               <div style={{ display: "flex", flexDirection: "column", gap: 8, opacity: 0.92 }}>
                 {found.map((card) => (
@@ -790,13 +784,12 @@ export default function CamerasPage({ onOpenCamera, onCameraCountChange, onOpenS
       {bulkOpen && (
         <div className="dialog-backdrop">
           <div className="dialog" style={{ width: "min(520px, 100%)" }}>
-            <div className="dialog-title">Apply to {picked.size} camera{picked.size === 1 ? "" : "s"}</div>
+            <div className="dialog-title">{picked.size === 1 ? t("cams.bulk.title.one") : t("cams.bulk.title.many", { n: picked.size })}</div>
             <div className="dialog-body">
-              Bulk sign-in / sync-time / firmware-update aren't wired up yet — this needs stored credential sets
-              to actually run against real cameras, which doesn't exist here.
+              {t("cams.bulk.body")}
             </div>
             <div className="dialog-actions">
-              <button className="btn btn-secondary" onClick={() => setBulkOpen(false)}>Close</button>
+              <button className="btn btn-secondary" onClick={() => setBulkOpen(false)}>{t("cams.close")}</button>
             </div>
           </div>
         </div>

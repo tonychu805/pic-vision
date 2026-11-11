@@ -20,6 +20,7 @@ import { existsSync, mkdirSync, readdirSync, readFileSync, statSync, unlinkSync 
 import path from "node:path";
 import os from "node:os";
 import { logEvent } from "./activityLog.js";
+import { tm } from "./language.js";
 import { FFMPEG, FFPROBE } from "./binaries.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
 import Store from "electron-store";
@@ -501,7 +502,7 @@ function reconnect(cameraId, slotName, url, slot, record, cameraLabel, reason, a
 // same way a dropped stream reconnects, so it stays one recording, one
 // session, one link.
 export function startRecording(camera, { resumeInto = null } = {}) {
-  if (active.has(camera.id)) throw new Error("Already recording this camera");
+  if (active.has(camera.id)) throw new Error(tm("main.rec.already"));
   // Refuse rather than record footage the pipeline can't get rallies out
   // of -- a low frame rate halves detection and would otherwise fail
   // silently, hours later, as a thin reel with no explanation. Between the

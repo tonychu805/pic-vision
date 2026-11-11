@@ -1,4 +1,10 @@
 import { frameRateLevel } from "../../electron/cameras/frameRate.js";
+import { translator } from "../../electron/i18n/index.js";
+
+// Every function below that produces words takes the translator last and
+// defaults to English, so the logic tests keep reading plain English and the
+// UI passes its own `t`.
+const english = translator("en");
 // Derives the mockup's card/detail view-model (STATE_META, card(), sel())
 // from real data: configured cameras (cameraAPI.list()/add()), transient
 // discovery results (cameraAPI.discover()), and per-camera live-test status
@@ -19,21 +25,21 @@ import { frameRateLevel } from "../../electron/cameras/frameRate.js";
 // recorded -- recording is started from the cloud console -- and
 // "Streaming" invited a venue owner to believe footage was being captured.
 export const STATE_META = {
-  ok: { label: "Online", tagClass: "tag tag-success" },
-  checking: { label: "Checking…", tagClass: "tag tag-neutral" },
-  offline: { label: "Not answering", tagClass: "tag tag-danger" },
-  auth: { label: "Sign-in needed", tagClass: "tag tag-warning" },
+  ok: { labelKey: "state.ok", tagClass: "tag tag-success" },
+  checking: { labelKey: "state.checking", tagClass: "tag tag-neutral" },
+  offline: { labelKey: "state.offline", tagClass: "tag tag-danger" },
+  auth: { labelKey: "state.auth", tagClass: "tag tag-warning" },
   // The camera answered; its ONVIF control service didn't. Distinct from
   // `offline` because the RTSP stream is a different port and may be
   // perfectly fine -- which is exactly the case that made two cameras read
   // "Not answering" while live view played from both (2026-09-07).
-  service: { label: "Settings unreachable", tagClass: "tag tag-warning" },
+  service: { labelKey: "state.service", tagClass: "tag tag-warning" },
   // The camera answered over HTTPS with a certificate we can't verify --
   // same tier as `auth`/`service`: it isn't down, it's a decision, and the
   // only place that decision gets made is the add-flow dialog, not here.
-  untrustedCert: { label: "Certificate not trusted", tagClass: "tag tag-warning" },
+  untrustedCert: { labelKey: "state.untrustedCert", tagClass: "tag tag-warning" },
   // A sample clip whose file has been moved or deleted since it was added.
-  missing: { label: "File missing", tagClass: "tag tag-danger" },
+  missing: { labelKey: "state.missing", tagClass: "tag tag-danger" },
   // Two sweep-hit levels, distinct from `auth` (which means "we know this
   // is ONVIF, just needs credentials"): `rtsp` means an actual RTSP
   // OPTIONS handshake completed (RFC 2326 -- needs no credentials, so this
@@ -41,8 +47,8 @@ export const STATE_META = {
   // definitely speaking RTSP, ONVIF support is still unknown. `unconfirmed`
   // is weaker still: the TCP port answered but nothing recognizable as
   // RTSP came back, so this could be any service, camera or not.
-  rtsp: { label: "Ready to add", tagClass: "tag tag-outline" },
-  unconfirmed: { label: "Unconfirmed", tagClass: "tag tag-neutral" },
+  rtsp: { labelKey: "state.rtsp", tagClass: "tag tag-outline" },
+  unconfirmed: { labelKey: "state.unconfirmed", tagClass: "tag tag-neutral" },
 };
 
 // Builds a full card for one configured (persisted) camera -- the only
@@ -57,7 +63,7 @@ export const STATE_META = {
 // time this session -- the underlying `cameraAPI.add()` call had already
 // completed and saved the camera, so it looked like "sign in failed" when
 // the save had actually worked and only the *next* render crashed).
-export function configuredCard(c, state) {
+export function configuredCard(c, state, tr = english) {
   const isSampleClip = c.connectionType === "sampleClip";
   return {
     key: c.id,
@@ -67,8 +73,8 @@ export function configuredCard(c, state) {
     // A sample-clip camera has no network address -- nothing to show here.
     ip: isSampleClip ? null : c.hostname,
     subtitle: isSampleClip
-      ? "Sample clip"
-      : [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? "Camera" : "ONVIF camera"),
+      ? tr("view.sampleClip")
+      : [c.manufacturer, c.model].filter(Boolean).join(" ") || (c.connectionType === "rtsp" ? tr("view.camera") : tr("view.onvifCamera")),
     state,
   };
 }
@@ -78,7 +84,7 @@ export function configuredCard(c, state) {
 // ONVIF unconfirmed) -- unified so the grid can render all three the same
 // way the mockup's DEVICES list does (some entries already streaming, some
 // needing auth).
-export function buildCards({ configured, discovered, sweepHits, statusById }) {
+export function buildCards({ configured, discovered, sweepHits, statusById }, tr = english) {
   // .filter(Boolean): a sample-clip camera has no hostname, and several
   // configured ones sharing `undefined` here must never be treated as the
   // same discovered/sweep device.
@@ -87,7 +93,7 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
   // Keyed by id, not hostname -- a sample-clip camera has no hostname at
   // all, and two of them would otherwise collide under the same
   // `undefined` key and show each other's status.
-  const configuredCards = configured.map((c) => configuredCard(c, statusById[c.id] ?? "checking"));
+  const configuredCards = configured.map((c) => configuredCard(c, statusById[c.id] ?? "checking", tr));
 
   // Plain-language names for anything not yet added -- a venue owner has
   // no use for a raw IP or protocol name as the headline.
@@ -105,13 +111,13 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
       key: d.hostname,
       kind: "discovered",
       device: d,
-      name: deviceHeadline(d) ?? (d.vendor ? `${d.vendor} camera` : "Camera found"),
-      detail: deviceDetail(d),
+      name: deviceHeadline(d) ?? (d.vendor ? tr("view.vendorCamera", { vendor: d.vendor }) : tr("view.cameraFound")),
+      detail: deviceDetail(d, tr),
       ip: `${d.hostname}:${d.port}`,
       // Identity beats an action prompt here: the state tag already says
       // what to do ("Needs sign-in"), and "Tap to sign in" told nobody
       // WHICH camera they were about to sign in to.
-      subtitle: deviceDetail(d) ?? "Tap to sign in",
+      subtitle: deviceDetail(d, tr) ?? tr("view.tapSignIn"),
       state: "auth",
     }));
 
@@ -130,14 +136,14 @@ export function buildCards({ configured, discovered, sweepHits, statusById }) {
         deviceHeadline(s) ??
         (s.confirmed
           ? s.vendor
-            ? `${s.vendor} camera found`
-            : "Camera found"
+            ? tr("view.vendorCameraFound", { vendor: s.vendor })
+            : tr("view.cameraFound")
           : s.vendor
-            ? `${s.vendor} device found`
-            : "Possible device found"),
-      detail: deviceDetail(s),
+            ? tr("view.vendorDeviceFound", { vendor: s.vendor })
+            : tr("view.possibleDevice")),
+      detail: deviceDetail(s, tr),
       ip: `${s.hostname}:${s.port}`,
-      subtitle: deviceDetail(s) ?? (s.confirmed ? "Tap to set up" : "Tap to check"),
+      subtitle: deviceDetail(s, tr) ?? (s.confirmed ? tr("view.tapSetUp") : tr("view.tapCheck")),
       // A device that declares itself a camera over SSDP
       // (deviceType IPCamera:1) is a camera, whatever the port sweep
       // could infer on its own.
@@ -162,13 +168,13 @@ export function deviceHeadline(device) {
 // The line underneath: what distinguishes two of the same model on the
 // same pole. Serial and MAC are both printed on the camera's own body,
 // which is what someone standing next to it can compare against.
-export function deviceDetail(device) {
+export function deviceDetail(device, tr = english) {
   const parts = [];
   if (device.ssdp?.manufacturer && device.ssdp.manufacturer !== device.vendor) parts.push(device.ssdp.manufacturer);
   else if (device.vendor) parts.push(device.vendor);
   if (device.scopes?.location) parts.push(device.scopes.location);
-  if (device.ssdp?.serial) parts.push(`serial ${device.ssdp.serial}`);
-  if (device.mac) parts.push(`MAC ${device.mac.slice(-8)}`);
+  if (device.ssdp?.serial) parts.push(tr("view.serial", { serial: device.ssdp.serial }));
+  if (device.mac) parts.push(tr("view.mac", { mac: device.mac.slice(-8) }));
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -184,27 +190,27 @@ export function deviceDetail(device) {
  * (`calibrationKnown`); before that "not calibrated" just means "not heard".
  * A sample clip can't record, so it is only ever Ready or Needs calibration.
  */
-export function readiness(camera) {
+export function readiness(camera, tr = english) {
   const fps = frameRateLevel(camera);
-  if (camera.isRecording) return { label: "Recording", tagClass: "tag tag-accent" };
-  if (fps === "blocked") return { label: "Frame rate too low", tagClass: "tag tag-danger" };
-  if (camera.calibrationKnown && !camera.isCalibrated) return { label: "Needs calibration", tagClass: "tag tag-warning" };
-  if (fps === "low") return { label: "Low frame rate", tagClass: "tag tag-warning" };
-  if (!camera.calibrationKnown) return { label: STATE_META.ok.label, tagClass: STATE_META.ok.tagClass };
-  return { label: "Ready", tagClass: "tag tag-success" };
+  if (camera.isRecording) return { label: tr("ready.recording"), tagClass: "tag tag-accent" };
+  if (fps === "blocked") return { label: tr("ready.fpsBlocked"), tagClass: "tag tag-danger" };
+  if (camera.calibrationKnown && !camera.isCalibrated) return { label: tr("ready.needsCalibration"), tagClass: "tag tag-warning" };
+  if (fps === "low") return { label: tr("ready.fpsLow"), tagClass: "tag tag-warning" };
+  if (!camera.calibrationKnown) return { label: tr(STATE_META.ok.labelKey), tagClass: STATE_META.ok.tagClass };
+  return { label: tr("ready.ready"), tagClass: "tag tag-success" };
 }
 
-export function cardVisuals(card) {
+export function cardVisuals(card, tr = english) {
   const meta = STATE_META[card.state];
   const live = card.state === "ok";
   // "Online" reads wrong for a sample-clip camera, which has no network
   // presence at all -- STATE_META's "ok" for one of those just means "its
   // file is there," so say that instead.
   const isSampleClip = card.kind === "configured" && card.camera.connectionType === "sampleClip";
-  const ready = card.kind === "configured" && card.state === "ok" ? readiness(card.camera) : null;
+  const ready = card.kind === "configured" && card.state === "ok" ? readiness(card.camera, tr) : null;
   return {
     ...card,
-    stateLabel: ready ? (isSampleClip && ready.label === STATE_META.ok.label ? "File ready" : ready.label) : meta.label,
+    stateLabel: ready ? (isSampleClip && ready.label === tr(STATE_META.ok.labelKey) ? tr("ready.fileReady") : ready.label) : tr(meta.labelKey),
     stateTagClass: ready ? ready.tagClass : meta.tagClass,
     live,
     thumbIcon: live
@@ -228,15 +234,15 @@ export function cardVisuals(card) {
 // of them were visible anywhere before: H.265 has silently broken decoding
 // on this project's footage once already, and anything below 30fps makes the
 // ball travel further between frames than the tracker was tuned for.
-export function profileSpec(camera) {
+export function profileSpec(camera, tr = english) {
   const p = camera.profile;
   if (!p) return null;
   const parts = [];
   if (p.codec) parts.push(p.codec === "H265" ? "H.265" : p.codec === "H264" ? "H.264" : p.codec);
   if (p.width && p.height) parts.push(`${p.width}x${p.height}`);
-  const fps = frameRateSummary(camera);
+  const fps = frameRateSummary(camera, tr);
   if (fps) parts.push(fps);
-  if (p.bitrateKbps) parts.push(`${(p.bitrateKbps / 1000).toFixed(1)} Mbps`);
+  if (p.bitrateKbps) parts.push(tr("view.mbps", { n: (p.bitrateKbps / 1000).toFixed(1) }));
   return parts.length ? parts.join(" · ") : null;
 }
 
@@ -244,60 +250,61 @@ export function profileSpec(camera) {
 // fine" or "never managed to check" -- indistinguishable, which is the same
 // silent-failure shape the frame-rate guard exists to remove, just moved up
 // a level. A camera we couldn't measure says so.
-export function frameRateSummary(camera) {
+export function frameRateSummary(camera, tr = english) {
   const num = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v : null);
   const configured = num(camera.profile?.fps);
   const measured = num(camera.profile?.measuredFps);
-  if (measured === null && configured === null) return "frame rate not determined";
+  if (measured === null && configured === null) return tr("view.fpsNotDetermined");
   if (measured !== null && configured !== null && Math.abs(measured - configured) / configured > 0.15) {
-    return `${configured} fps set, ${Math.round(measured)} arriving`;
+    return tr("view.fpsMismatch", { configured, measured: Math.round(measured) });
   }
   const effective = measured ?? configured;
-  return `${Math.round(effective)} fps${measured !== null ? " (measured)" : ""}`;
+  return tr(measured !== null ? "view.fpsMeasured" : "view.fps", { fps: Math.round(effective) });
 }
 
-export function detailPanels(camera) {
-  const na = "Not available";
+export function detailPanels(camera, tr = english) {
+  const na = tr("panel.na");
+  // A camera added via the RTSP fallback never went through ONVIF's
+  // GetDeviceInformation -- model/serial/firmware are genuinely
+  // unknown, not just unset, so this says so rather than implying
+  // they were looked up and came back empty.
+  const naNoOnvif = tr("panel.naNoOnvif");
   const viaRtsp = camera.connectionType === "rtsp";
   if (camera.connectionType === "sampleClip") {
     return {
       identity: [
-        { k: "Source", v: "Uploaded sample clip" },
-        { k: "Vendor", v: na },
-        { k: "Model", v: na },
-        { k: "Serial", v: na },
-        { k: "Firmware", v: na },
+        { k: tr("panel.source"), v: tr("panel.uploadedClip") },
+        { k: tr("panel.vendor"), v: na },
+        { k: tr("panel.model"), v: na },
+        { k: tr("panel.serial"), v: na },
+        { k: tr("panel.firmware"), v: na },
       ],
-      network: [{ k: "Address", v: na }, { k: "Mode", v: "Not networked" }],
+      network: [{ k: tr("panel.address"), v: na }, { k: tr("panel.mode"), v: tr("panel.notNetworked") }],
       streams: camera.sampleClipPath
-        ? [{ label: "FILE", url: camera.sampleClipPath, spec: "uploaded video file, not a live stream" }]
+        ? [{ label: "FILE", url: camera.sampleClipPath, spec: tr("panel.fileSpec") }]
         : [],
     };
   }
   return {
     identity: [
-      { k: "Vendor", v: camera.manufacturer || na },
-      // A camera added via the RTSP fallback never went through ONVIF's
-      // GetDeviceInformation -- model/serial/firmware are genuinely
-      // unknown, not just unset, so this says so rather than implying
-      // they were looked up and came back empty.
-      { k: "Model", v: viaRtsp ? "Not available (added without ONVIF)" : camera.model || na },
-      { k: "Serial", v: viaRtsp ? "Not available (added without ONVIF)" : camera.serialNumber || na },
-      { k: "MAC", v: na },
-      { k: "Firmware", v: viaRtsp ? "Not available (added without ONVIF)" : camera.firmwareVersion || na },
+      { k: tr("panel.vendor"), v: camera.manufacturer || na },
+      { k: tr("panel.model"), v: viaRtsp ? naNoOnvif : camera.model || na },
+      { k: tr("panel.serial"), v: viaRtsp ? naNoOnvif : camera.serialNumber || na },
+      { k: tr("panel.mac"), v: na },
+      { k: tr("panel.firmware"), v: viaRtsp ? naNoOnvif : camera.firmwareVersion || na },
     ],
     network: [
-      { k: "Address", v: `${camera.hostname}:${camera.port}` },
+      { k: tr("panel.address"), v: `${camera.hostname}:${camera.port}` },
       {
-        k: viaRtsp ? "Stream path" : "ONVIF path",
-        v: camera.path || (viaRtsp ? na : "/onvif/device_service (default)"),
+        k: viaRtsp ? tr("panel.streamPath") : tr("panel.onvifPath"),
+        v: camera.path || (viaRtsp ? na : tr("panel.onvifDefault")),
       },
-      { k: "Mode", v: na },
-      { k: "Subnet", v: na },
-      { k: "Gateway", v: na },
+      { k: tr("panel.mode"), v: na },
+      { k: tr("panel.subnet"), v: na },
+      { k: tr("panel.gateway"), v: na },
     ],
     streams: camera.streamUri
-      ? [{ label: "MAIN", url: camera.streamUri, spec: profileSpec(camera) || (viaRtsp ? "found directly, without ONVIF" : "reported by camera's GetStreamUri") }]
+      ? [{ label: "MAIN", url: camera.streamUri, spec: profileSpec(camera, tr) || (viaRtsp ? tr("panel.foundDirectly") : tr("panel.reportedByCamera")) }]
       : [],
   };
 }

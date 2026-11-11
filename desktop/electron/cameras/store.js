@@ -19,6 +19,7 @@ import { copyFileSync, existsSync, mkdirSync, renameSync } from "node:fs";
 import path from "node:path";
 import { findWorkingRtspPath, describeRtspStream } from "./rtspProbe.js";
 import { isSameCameraSource } from "./identity.js";
+import { tm } from "../language.js";
 import { vendorsForIps } from "./vendorLookup.js";
 import { RECORDINGS_ROOT, cameraRecordingsDir, sanitizeForPath, measureStreamFps, measureStreamProfile, authenticatedStreamUri, isRecording } from "../capture.js";
 import { encryptField, decryptField } from "../secureField.js";
@@ -452,9 +453,9 @@ const SAMPLE_CLIP_EXT = new Set([".mp4", ".mov", ".mkv", ".avi", ".MP4", ".MOV",
 // notes). No `existingSource` dedup here -- a sample-clip camera has
 // no hostname, so that check doesn't apply and isn't called.
 export async function addCameraFromSampleClip({ label, filePath }) {
-  if (!filePath || !existsSync(filePath)) throw new Error("File not found: " + filePath);
+  if (!filePath || !existsSync(filePath)) throw new Error(tm("main.clip.notFound", { path: filePath }));
   const ext = path.extname(filePath);
-  if (!SAMPLE_CLIP_EXT.has(ext)) throw new Error(`Unsupported video file type ${ext || "(none)"}`);
+  if (!SAMPLE_CLIP_EXT.has(ext)) throw new Error(tm("main.clip.unsupported", { ext: ext || tm("main.clip.noExt") }));
 
   const camera = {
     id: randomUUID(),
@@ -759,7 +760,7 @@ export async function probeRtspFallback({ hostname, port, username, password }) 
 // the camera's own app would show) or supplied separately.
 export function parseRtspUrl(raw, fallbackUsername, fallbackPassword) {
   const url = new URL(raw);
-  if (url.protocol !== "rtsp:") throw new Error("Must start with rtsp://");
+  if (url.protocol !== "rtsp:") throw new Error(tm("main.rtsp.scheme"));
   return {
     hostname: url.hostname,
     port: Number(url.port) || 554,

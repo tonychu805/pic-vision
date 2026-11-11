@@ -10,8 +10,10 @@ import SettingsPage from "./pages/SettingsPage.jsx";
 import CloudPage from "./pages/CloudPage.jsx";
 import SignInPage from "./pages/SignInPage.jsx";
 import AccountMismatchDialog from "./components/AccountMismatchDialog.jsx";
+import { useI18n } from "./i18n.jsx";
 
 export default function App() {
+  const { t } = useI18n();
   const [nav, setNav] = useState("cameras");
   const [selectedCard, setSelectedCard] = useState(null);
   const [cameraCount, setCameraCount] = useState(0);
@@ -121,7 +123,7 @@ export default function App() {
               onCameraRemoved={backToGrid}
               // Credentials just verified against the real camera, so
               // unlike a rename this DID change reachability.
-              onCameraReconnected={(camera) => setSelectedCard(configuredCard(camera, "ok"))}
+              onCameraReconnected={(camera) => setSelectedCard(configuredCard(camera, "ok", t))}
               onCameraRenamed={(camera) => {
                 // Keep the card's existing connection state -- a rename
                 // doesn't change whether the camera is actually reachable,
@@ -135,7 +137,7 @@ export default function App() {
                   isCalibrated: camera.isCalibrated ?? prev.camera.isCalibrated,
                   calibrationRmseFt: camera.calibrationRmseFt ?? prev.camera.calibrationRmseFt,
                   calibratedAt: camera.calibratedAt ?? prev.camera.calibratedAt,
-                }, prev.state));
+                }, prev.state, t));
               }}
             />
           )}

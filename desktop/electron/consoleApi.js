@@ -8,11 +8,12 @@ import { createReadStream, statSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import { request as httpsRequest } from "node:https";
 import { getCloudConnection } from "./cloud.js";
+import { tm } from "./language.js";
 
 export function requireConnection() {
   const connection = getCloudConnection();
   if (!connection?.apiToken) {
-    throw new Error("This device isn't connected to the cloud console yet");
+    throw new Error(tm("main.console.notConnected"));
   }
   return connection;
 }

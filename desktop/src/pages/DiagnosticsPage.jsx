@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { formatFps } from "../../electron/cameras/frameRate.js";
+import { useI18n } from "../i18n.jsx";
 
 // The venue-survey page: is this site actually able to run a session?
 //
@@ -13,9 +14,9 @@ import { formatFps } from "../../electron/cameras/frameRate.js";
 const POLL_INTERVAL_MS = 500;
 
 const VERDICT_META = {
-  ok: { tag: "tag-success", label: "Good" },
-  slow: { tag: "tag-warning", label: "Slow" },
-  below: { tag: "tag-danger", label: "Too slow" },
+  ok: { tag: "tag-success", labelKey: "diag.verdict.ok" },
+  slow: { tag: "tag-warning", labelKey: "diag.verdict.slow" },
+  below: { tag: "tag-danger", labelKey: "diag.verdict.below" },
 };
 
 function formatBytes(bytes) {
@@ -31,10 +32,10 @@ function sessionMinutesAt(mbps, cameras) {
   return (CAMERA_MBPS * cameras * 2 * 3600) / mbps / 60;
 }
 
-function formatDuration(minutes) {
+function formatDuration(minutes, t) {
   if (minutes == null) return "—";
-  if (minutes < 60) return `${Math.round(minutes)} minutes`;
-  return `${(minutes / 60).toFixed(1)} hours`;
+  if (minutes < 60) return t("diag.minutes", { n: Math.round(minutes) });
+  return t("diag.hours", { n: (minutes / 60).toFixed(1) });
 }
 
 function Row({ label, value, tone, detail }) {
@@ -69,6 +70,7 @@ function Section({ title, children, action }) {
 }
 
 function UploadSection({ cameraCount }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState(null);
   const timer = useRef(null);
 
@@ -103,10 +105,10 @@ function UploadSection({ cameraCount }) {
 
   return (
     <Section
-      title="Upload speed"
+      title={t("diag.upload.title")}
       action={
         <button className="btn btn-primary" style={{ fontSize: "var(--fs-fine)" }} disabled={status?.running} onClick={start}>
-          {status?.running ? "Measuring…" : result ? "Measure again" : "Measure"}
+          {status?.running ? t("diag.upload.measuring") : result ? t("diag.upload.again") : t("diag.upload.measure")}
         </button>
       }
     >
@@ -115,10 +117,10 @@ function UploadSection({ cameraCount }) {
           <Row
             label={
               status.sample > 1
-                ? `Uploading test data to the cloud (run ${status.sample} of ${status.sampleTotal})`
-                : "Uploading test data to the cloud"
+                ? t("diag.upload.runningRun", { run: status.sample, total: status.sampleTotal })
+                : t("diag.upload.running")
             }
-            detail={`${formatBytes(status.sentBytes)} of ${formatBytes(status.totalBytes)} — repeated a few times, because the same connection can be several times slower one minute than the next`}
+            detail={t("diag.upload.runningDetail", { sent: formatBytes(status.sentBytes), total: formatBytes(status.totalBytes) })}
             value={`${Math.round(pct)}%`}
           />
           <div style={{ height: 4, borderRadius: 2, background: "var(--hairline)", margin: "4px 0 10px" }}>
@@ -131,45 +133,47 @@ function UploadSection({ cameraCount }) {
             <div style={{ minWidth: 0, flex: 1 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
                 <span className="mono" style={{ fontSize: 22 }}>{result.mbps.toFixed(1)}</span>
-                <span className="text-3" style={{ fontSize: "var(--fs-body)" }}>Mbps up</span>
-                {meta && <span className={`tag ${meta.tag}`}>{meta.label}</span>}
+                <span className="text-3" style={{ fontSize: "var(--fs-body)" }}>{t("diag.upload.mbpsUp")}</span>
+                {meta && <span className={`tag ${meta.tag}`}>{t(meta.labelKey)}</span>}
               </div>
               <div className="text-3" style={{ fontSize: "var(--fs-fine)" }}>
-                median of {result.samples.length} × {formatBytes(result.sizeBytes)} straight to the cloud storage
-                recordings go to ({result.samples.map((m) => m.toFixed(1)).join(", ")} Mbps)
+                {t("diag.upload.median", { n: result.samples.length, size: formatBytes(result.sizeBytes), samples: result.samples.map((m) => m.toFixed(1)).join(", ") })}
               </div>
             </div>
           </div>
           {result.unstable && (
             <Row
-              label="The connection to cloud storage is inconsistent"
-              detail={`Runs ranged from ${result.slowest.toFixed(1)} to ${result.fastest.toFixed(1)} Mbps minutes apart, so a session could take anywhere between ${formatDuration(
-                sessionMinutesAt(result.fastest, result.cameras),
-              )} and ${formatDuration(result.slowestSessionMinutes)}. Worth re-running at the venue's busiest hour before trusting either end.`}
-              value="Varies"
+              label={t("diag.upload.unstable")}
+              detail={t("diag.upload.unstableDetail", {
+                slowest: result.slowest.toFixed(1),
+                fastest: result.fastest.toFixed(1),
+                fastTime: formatDuration(sessionMinutesAt(result.fastest, result.cameras), t),
+                slowTime: formatDuration(result.slowestSessionMinutes, t),
+              })}
+              value={t("diag.upload.varies")}
               tone="warning"
             />
           )}
           <Row
-            label={`A 2-hour session on ${result.cameras} camera${result.cameras === 1 ? "" : "s"}`}
+            label={result.cameras === 1 ? t("diag.upload.session.one") : t("diag.upload.session.many", { n: result.cameras })}
             detail={
               result.verdict === "below"
-                ? "Slower than the cameras record, so every session falls further behind — this venue needs a faster upload before it can run sessions back to back"
+                ? t("diag.upload.below")
                 : result.verdict === "slow"
-                  ? "Reels will arrive well after everyone has left"
-                  : "Comfortable — reels land while people are still around"
+                  ? t("diag.upload.slow")
+                  : t("diag.upload.good")
             }
-            value={formatDuration(result.sessionMinutes)}
+            value={formatDuration(result.sessionMinutes, t)}
             tone={result.verdict === "below" ? "danger" : result.verdict === "slow" ? "warning" : "success"}
           />
         </>
       ) : status?.error ? (
-        <Row label="Couldn't measure the upload speed" detail={status.error} value="Failed" tone="danger" />
+        <Row label={t("diag.upload.failedTitle")} detail={status.error} value={t("diag.failed")} tone="danger" />
       ) : (
         <Row
-          label="Not measured yet"
-          detail={`Uploads throwaway data to the cloud and times it. Nothing from your cameras is sent.${
-            cameraCount ? ` Estimates assume ${cameraCount} camera${cameraCount === 1 ? "" : "s"} recording at once.` : ""
+          label={t("diag.upload.notYet")}
+          detail={`${t("diag.upload.notYetDetail")}${
+            cameraCount ? ` ${cameraCount === 1 ? t("diag.upload.assume.one") : t("diag.upload.assume.many", { n: cameraCount })}` : ""
           }`}
           value="—"
         />
@@ -179,6 +183,7 @@ function UploadSection({ cameraCount }) {
 }
 
 export default function DiagnosticsPage() {
+  const { t } = useI18n();
   const [checks, setChecks] = useState(null);
   const [running, setRunning] = useState(false);
 
@@ -200,43 +205,43 @@ export default function DiagnosticsPage() {
   return (
     <div className="page-fixed">
       <div className="page-head">
-        <div className="page-title">Diagnostics</div>
+        <div className="page-title">{t("diag.title")}</div>
         <button
           className="btn btn-secondary"
           style={{ marginLeft: "auto", fontSize: "var(--fs-fine)" }}
           disabled={running}
           onClick={run}
         >
-          {running ? "Checking…" : "Re-check"}
+          {running ? t("diag.checking") : t("diag.recheck")}
         </button>
       </div>
 
       <div style={{ flex: 1, minHeight: 0, overflow: "auto", display: "flex", flexDirection: "column", gap: 14 }}>
         <UploadSection cameraCount={cameras.length} />
 
-        <Section title="Cloud console">
+        <Section title={t("diag.console.title")}>
           {checks?.console?.ok ? (
             <Row
-              label="Reachable"
+              label={t("diag.console.reachable")}
               detail={checks.console.consoleUrl}
               value={`${checks.console.latencyMs} ms`}
               tone="success"
             />
           ) : (
             <Row
-              label="Not reachable"
-              detail={checks?.console?.detail ?? "Checking…"}
-              value={checks ? "Failed" : "…"}
+              label={t("diag.console.unreachable")}
+              detail={checks?.console?.detail ?? t("diag.checking")}
+              value={checks ? t("diag.failed") : "…"}
               tone={checks ? "danger" : undefined}
             />
           )}
         </Section>
 
-        <Section title="Cameras">
+        <Section title={t("diag.cameras.title")}>
           {!checks ? (
-            <Row label="Checking…" value="…" />
+            <Row label={t("diag.checking")} value="…" />
           ) : cameras.length === 0 ? (
-            <Row label="No cameras added yet" detail="Add one from the Cameras tab first" value="—" />
+            <Row label={t("diag.cameras.none")} detail={t("diag.cameras.noneDetail")} value="—" />
           ) : (
             cameras.map((c) => (
               <Row
@@ -247,20 +252,20 @@ export default function DiagnosticsPage() {
                     ? c.detail
                     : [
                         c.width && c.height ? `${c.width}×${c.height}` : null,
-                        c.fps ? `${formatFps(c.fps)} fps` : "frame rate unknown",
-                        c.bitrateKbps ? `${(c.bitrateKbps / 1000).toFixed(1)} Mbps` : null,
-                        c.fpsLevel === "blocked" ? "too slow to record — needs at least 25 fps (30 is best)" : null,
-                        c.fpsLevel === "low" ? "records, but rally detection works best at 30 fps" : null,
+                        c.fps ? `${formatFps(c.fps)} fps` : t("diag.cameras.fpsUnknown"),
+                        c.bitrateKbps ? t("view.mbps", { n: (c.bitrateKbps / 1000).toFixed(1) }) : null,
+                        c.fpsLevel === "blocked" ? t("diag.cameras.blocked") : null,
+                        c.fpsLevel === "low" ? t("diag.cameras.low") : null,
                       ]
                         .filter(Boolean)
                         .join(" · ")
                 }
                 value={
-                  !c.reachable ? (c.isSampleClip ? "File missing" : "Not answering")
-                  : c.fpsLevel === "blocked" ? "Frame rate too low"
-                  : c.fpsLevel === "low" ? "Low frame rate"
-                  : c.isSampleClip ? "File ready"
-                  : "Online"
+                  !c.reachable ? (c.isSampleClip ? t("state.missing") : t("state.offline"))
+                  : c.fpsLevel === "blocked" ? t("ready.fpsBlocked")
+                  : c.fpsLevel === "low" ? t("ready.fpsLow")
+                  : c.isSampleClip ? t("ready.fileReady")
+                  : t("state.ok")
                 }
                 tone={!c.reachable || c.fpsLevel === "blocked" ? "danger" : c.fpsLevel === "low" ? "warning" : "success"}
               />
@@ -268,16 +273,16 @@ export default function DiagnosticsPage() {
           )}
         </Section>
 
-        <Section title="Storage">
+        <Section title={t("diag.storage.title")}>
           {checks?.disk?.ok ? (
             <Row
-              label="Free space for recordings"
-              detail={`${checks.disk.path} — about ${Math.round(checks.disk.recordingHours)} hours of recording from one camera`}
+              label={t("diag.storage.free")}
+              detail={t("diag.storage.freeDetail", { path: checks.disk.path, hours: Math.round(checks.disk.recordingHours) })}
               value={formatBytes(checks.disk.freeBytes)}
               tone={checks.disk.recordingHours < 4 ? "danger" : checks.disk.recordingHours < 12 ? "warning" : "success"}
             />
           ) : (
-            <Row label="Couldn't read free space" detail={checks?.disk?.detail ?? "Checking…"} value={checks ? "Failed" : "…"} />
+            <Row label={t("diag.storage.failed")} detail={checks?.disk?.detail ?? t("diag.checking")} value={checks ? t("diag.failed") : "…"} />
           )}
         </Section>
       </div>

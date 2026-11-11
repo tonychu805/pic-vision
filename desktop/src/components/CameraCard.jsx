@@ -1,4 +1,5 @@
 import { cardVisuals } from "../lib/cameraView.js";
+import { useI18n } from "../i18n.jsx";
 
 // Row layout, not a card grid (2026-09-05: dropped in favor of a list --
 // these never showed a real video thumbnail anyway, just a status icon on a
@@ -17,7 +18,8 @@ import { cardVisuals } from "../lib/cameraView.js";
 // it -- so the row is a flex container holding the big button plus, when
 // relevant, the dismiss button as a sibling.
 export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss }) {
-  const v = cardVisuals(card);
+  const { t } = useI18n();
+  const v = cardVisuals(card, t);
   const dismissable = !selectMode && card.kind !== "configured";
 
   return (
@@ -82,8 +84,8 @@ export default function CameraCard({ card, selectMode, picked, onOpen, onDismiss
         <button
           className="btn btn-ghost"
           style={{ flex: "none", padding: "0 6px", minHeight: 0 }}
-          title="Not my camera — remove from this list"
-          aria-label={`Remove ${v.name} from this list`}
+          title={t("card.dismissTitle")}
+          aria-label={t("card.dismissAria", { name: v.name })}
           onClick={onDismiss}
         >
           <i className="ph ph-x" style={{ fontSize: 13 }} />

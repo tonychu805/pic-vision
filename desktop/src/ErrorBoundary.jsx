@@ -1,5 +1,6 @@
 import React from "react";
 import { formatRendererError } from "./lib/rendererErrors.js";
+import { tNow } from "./lib/language.js";
 
 // The difference between a broken app and a missing one.
 //
@@ -48,11 +49,10 @@ export default class ErrorBoundary extends React.Component {
       }}>
         <div style={{ maxWidth: 780, margin: "0 auto", WebkitAppRegion: "no-drag" }}>
           <div style={{ fontSize: 20, fontFamily: "system-ui, sans-serif", marginBottom: 10 }}>
-            Something in the app broke
+            {tNow("crash.title")}
           </div>
           <p style={{ fontFamily: "system-ui, sans-serif", color: "#a8a8b8", marginTop: 0 }}>
-            The app is still running and nothing you recorded has been lost. This has been
-            written to the Log tab. Reloading usually gets you back to where you were.
+            {tNow("crash.body")}
           </p>
           <button
             onClick={() => window.location.reload()}
@@ -61,7 +61,7 @@ export default class ErrorBoundary extends React.Component {
               border: 0, borderRadius: 7, padding: "8px 16px", cursor: "pointer", margin: "6px 0 22px",
             }}
           >
-            Reload the app
+            {tNow("crash.reload")}
           </button>
           <div style={{ color: "#ff9d9d", marginBottom: 12, whiteSpace: "pre-wrap" }}>{message}</div>
           {/* Shown, not hidden behind a disclosure: the whole reason this

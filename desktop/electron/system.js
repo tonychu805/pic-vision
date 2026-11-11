@@ -2,6 +2,7 @@
 // honestly (os.networkInterfaces()), so there's no reason to hardcode a
 // fake subnet the way the mockup's static prototype data does.
 import { dialog, shell } from "electron";
+import { tm } from "./language.js";
 import os from "node:os";
 
 export function guessCidr(ip, netmask) {
@@ -71,9 +72,9 @@ export function getNetworkInfo() {
 // the OS for a path.
 export async function pickVideoFile() {
   const result = await dialog.showOpenDialog({
-    title: "Select a sample video clip",
+    title: tm("dialog.pickVideo.title"),
     properties: ["openFile"],
-    filters: [{ name: "Video", extensions: ["mp4", "mov", "mkv", "avi"] }],
+    filters: [{ name: tm("dialog.pickVideo.filter"), extensions: ["mp4", "mov", "mkv", "avi"] }],
   });
   if (result.canceled || result.filePaths.length === 0) return null;
   return result.filePaths[0];

@@ -12,6 +12,7 @@ import { RECORDINGS_ROOT } from "./capture.js";
 import { listCameras, testConnection } from "./cameras/store.js";
 import { consoleFetch } from "./consoleApi.js";
 import { getCloudConnection } from "./cloud.js";
+import { tm } from "./language.js";
 import { CAMERA_MBPS } from "./bandwidth.js";
 import { frameRateLevel } from "./cameras/frameRate.js";
 
@@ -24,7 +25,7 @@ import { frameRateLevel } from "./cameras/frameRate.js";
 export async function checkConsole() {
   const connection = getCloudConnection();
   if (!connection?.apiToken) {
-    return { ok: false, detail: "This device isn't connected to the cloud console yet" };
+    return { ok: false, detail: tm("main.console.notConnected") };
   }
   const startedAt = Date.now();
   try {
