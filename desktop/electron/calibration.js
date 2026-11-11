@@ -15,7 +15,7 @@
 import { grabSnapshot, grabFrameFromFile, probeDuration, discardSnapshot } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 
 // A sample-clip camera (2026-09-03) has no live stream to grab from --
 // its snapshot comes from seeking into the uploaded file instead. Default
@@ -47,7 +47,7 @@ export async function grabAndUploadSnapshot(camera) {
   try {
     const { url, publicUrl } = await consoleFetch("/api/agents/calibration-snapshots", { method: "POST" });
     await uploadFile(url, snapshot.path);
-    logEvent("calibration_snapshot", `Grabbed a calibration frame from ${camera.label}`);
+    logEvent("calibration_snapshot", msg("log.calibrationSnapshot", { label: camera.label }));
     return frameRateWarning ? { snapshotUrl: publicUrl, frameRateWarning } : { snapshotUrl: publicUrl };
   } finally {
     discardSnapshot(snapshot.path);

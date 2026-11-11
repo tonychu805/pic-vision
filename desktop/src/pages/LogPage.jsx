@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useI18n } from "../i18n.jsx";
+import { logTitle, logDetail } from "../lib/logText.js";
 
 // Real activity history (2026-09-05, replacing the mock "Alerts" page --
 // see electron/activityLog.js for what actually writes these and why:
@@ -90,6 +91,8 @@ function groupByDay(events) {
 function LogRow({ event }) {
   const { t, lang } = useI18n();
   const [expanded, setExpanded] = useState(false);
+  const title = logTitle(event, t);
+  const detail = logDetail(event, t);
   const meta = EVENT_META[event.type] || DEFAULT_META;
   const color = TONE_COLOR[meta.tone] ?? TONE_COLOR.quiet;
   const time = new Date(event.at).toLocaleTimeString(lang, { hour: "numeric", minute: "2-digit" });
@@ -99,9 +102,9 @@ function LogRow({ event }) {
       <i className={meta.icon} style={{ fontSize: 15, color, flex: "none", marginTop: 1 }} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontSize: "var(--fs-strong)", fontWeight: 500, color: meta.tone === "bad" ? "var(--color-danger)" : undefined }}>
-          {event.title}
+          {title}
         </div>
-        {event.detail && (
+        {detail && (
           <div
             className="text-3"
             style={{
@@ -111,7 +114,7 @@ function LogRow({ event }) {
                 : { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }),
             }}
           >
-            {event.detail}
+            {detail}
           </div>
         )}
       </div>
@@ -133,13 +136,13 @@ function LogRow({ event }) {
     color: "inherit",
   };
 
-  if (!event.detail) return <div style={rowStyle}>{body}</div>;
+  if (!detail) return <div style={rowStyle}>{body}</div>;
   return (
     <button
       type="button"
       style={{ ...rowStyle, cursor: "pointer" }}
       onClick={() => setExpanded((v) => !v)}
-      title={expanded ? t("log.hideFull") : event.detail}
+      title={expanded ? t("log.hideFull") : detail}
     >
       {body}
     </button>

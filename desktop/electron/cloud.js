@@ -12,7 +12,7 @@ import { hostname } from "node:os";
 import { app } from "electron";
 import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
-import { classifyProbeError, describeProbeState } from "./cameras/probeResult.js";
+import { classifyProbeError, probeStateMsg } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
 import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES, sessionEndReport } from "./autoSplit.js";
 import { processPendingHighResFetches } from "./highResFetch.js";
@@ -21,7 +21,7 @@ import { basename, join } from "node:path";
 import { existsSync, readdirSync } from "node:fs";
 import { bookingEndsAt, startArrivedTooLate, noteBookingRecording, listBookingRecordings, findBookingRecording, updateBookingRecording, forgetBookingRecording, bookingsToFinish, sendDue, planAfterRestart } from "./bookingRecordings.js";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { tm } from "./language.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
@@ -432,7 +432,7 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
     // both mean the same thing to an operator -- the console couldn't be
     // reached -- so both fall into the same "network" bucket rather than
     // needing their own message.
-    logEvent("cloud_register_failed", "Couldn't reach the cloud console to connect this machine",
+    logEvent("cloud_register_failed", msg("log.registerUnreachable"),
       `${consoleUrl}: ${err.message}`);
     throw new Error("network");
   }
@@ -446,7 +446,7 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
     // from the console, and IS worth keeping close to verbatim -- so it
     // goes to the log too, but classified as "auth" for the plain-language
     // side rather than folded into the same generic bucket as a 500.
-    logEvent("cloud_register_failed", "Connecting this machine to the cloud console failed",
+    logEvent("cloud_register_failed", msg("log.registerFailed"),
       `HTTP ${res.status}: ${body.error || "(no error body)"}`);
     throw new Error(res.status >= 500 ? "server" : "auth");
   }
@@ -474,7 +474,7 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
   // claim a working link before one heartbeat has proved it (PIC-92). Also
   // how Reconnect clears "removed".
   resetHealth();
-  logEvent("cloud_connected", `Connected to the cloud console (${body.brandName})`);
+  logEvent("cloud_connected", msg("log.cloudConnected", { brand: body.brandName }));
   startHeartbeatLoop();
   return connection;
 }
@@ -558,7 +558,7 @@ async function cameraStatuses() {
     const previous = lastCameraStatus.get(c.id);
     if (previous && previous !== status) {
       if (status === "online") {
-        logEvent("camera_online", `${c.label} came back online`);
+        logEvent("camera_online", msg("log.cameraOnline", { label: c.label }));
       } else {
         // Say WHY, and carry the raw message as the detail line. Without
         // this the log said "went offline" for a camera that had answered
@@ -567,7 +567,7 @@ async function cameraStatuses() {
         // inside the app. The badge stays two words; this is where the
         // detail lives (Log tab rows expand).
         const { state, detail } = classifyProbeError(results[i].reason, c.connectionType);
-        logEvent("camera_offline", describeProbeState(state, c.label), detail);
+        logEvent("camera_offline", probeStateMsg(state, c.label), detail);
       }
     }
     lastCameraStatus.set(c.id, status);
@@ -634,19 +634,21 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
       // isn't retried forever -- surfaces in status() instead of
       // silently hammering an endpoint that will never accept it again.
       console.error(`[cloud] heartbeat rejected: HTTP ${res.status}`);
-      if (lastAttemptOk !== false) logEvent("cloud_disconnected", "Lost connection to the cloud console", `HTTP ${res.status}`);
+      if (lastAttemptOk !== false) logEvent("cloud_disconnected", msg("log.cloudLost"), `HTTP ${res.status}`);
       lastAttemptOk = false;
       consecutiveRejections = res.status === 401 ? consecutiveRejections + 1 : 0;
       if (consecutiveRejections >= REJECTIONS_BEFORE_REMOVED && !removedFromVenue) {
         removedFromVenue = true;
         stopHeartbeatLoop();
-        logEvent("cloud_removed", `This machine was removed from ${connection.brandName ?? "its venue"} in the cloud console`,
-          "It has stopped reporting. Recordings on this machine are kept. Reconnect it from the This machine page if that was a mistake.");
+        logEvent("cloud_removed", connection.brandName
+            ? msg("log.cloudRemoved", { brand: connection.brandName })
+            : msg("log.cloudRemovedNoBrand"),
+          msg("log.cloudRemovedDetail"));
       }
       return;
     }
     consecutiveRejections = 0;
-    if (lastAttemptOk === false) logEvent("cloud_connected", "Reconnected to the cloud console");
+    if (lastAttemptOk === false) logEvent("cloud_connected", msg("log.cloudReconnected"));
     lastAttemptOk = true;
     lastHeartbeatAt = new Date().toISOString();
     // Keeps a Settings-page rename on the console reaching this already-
@@ -688,7 +690,7 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
     // logged, not thrown; the loop just tries again next interval rather
     // than crashing the agent over a transient network blip.
     console.error(`[cloud] heartbeat failed: ${err.message}`);
-    if (lastAttemptOk !== false) logEvent("cloud_disconnected", "Lost connection to the cloud console", err.message);
+    if (lastAttemptOk !== false) logEvent("cloud_disconnected", msg("log.cloudLost"), err.message);
     lastAttemptOk = false;
   }
 }
@@ -856,8 +858,8 @@ async function runCommand(command) {
     // camera is recording now (see stopTargets).
     const current = activeOutDir(camera.id);
     if (current && !stopTargets(command.params, readSessionMeta(current))) {
-      logEvent("recording_stop_skipped", `Kept recording ${camera.label}`,
-        "A booking ended, but the recording running now belongs to a different session.");
+      logEvent("recording_stop_skipped", msg("log.stopSkipped", { label: camera.label }),
+        msg("log.stopSkippedDetail"));
       return { stopped: false, skipped: "the current recording belongs to a different session" };
     }
     const result = await stopRecording(camera.id);
@@ -956,7 +958,7 @@ function sendRecordingToCloud(camera, recordingDir, sessionIdOverride) {
     cameraLabel: camera.label,
   }).catch((err) => {
     console.error(`[cloud] scheduled send failed for ${camera.label}: ${err.message}`);
-    logEvent("pipeline_failed", `${camera.label} scheduled upload failed`, err.message);
+    logEvent("pipeline_failed", msg("log.scheduledUploadFailed", { label: camera.label }), err.message);
   });
 }
 
@@ -1023,10 +1025,10 @@ export async function bookingEndTick(now = Date.now()) {
       if (activeOutDir(camera.id) === note.outDir) {
         const result = await stopRecording(camera.id);
         if (!result.stopped) continue; // being stopped elsewhere right now; next tick
-        logEvent("recording_stopped", `Stopped ${camera.label} at the end of its booking`, note.outDir);
+        logEvent("recording_stopped", msg("log.bookingStopped", { label: camera.label }), note.outDir);
       }
       if (!newestSegment(note.outDir)) {
-        logEvent("pipeline_failed", `${camera.label}: nothing was recorded for this booking, so nothing was sent`, note.outDir);
+        logEvent("pipeline_failed", msg("log.bookingNothingRecorded", { label: camera.label }), note.outDir);
         forgetBookingRecording(note);
         continue;
       }
@@ -1042,7 +1044,7 @@ export async function bookingEndTick(now = Date.now()) {
       }
       if (bookingSendsInFlight.has(note.outDir) || isPipelineRunning(uploadDir)) continue;
       if (!sendDue(note, now)) continue;
-      if (note.lastSendAt) logEvent("pipeline_started", `Trying again to send ${camera.label}'s booking`, note.outDir);
+      if (note.lastSendAt) logEvent("pipeline_started", msg("log.bookingRetrySend", { label: camera.label }), note.outDir);
       updateBookingRecording(note, { stopped: true, lastSendAt: now });
       bookingSendsInFlight.add(note.outDir);
       // Not awaited: an upload takes as long as the uplink needs. Whether it
@@ -1081,7 +1083,7 @@ export async function recoverRecordingsAfterRestart(now = Date.now()) {
       } catch (err) {
         // Keep the note: at the booking's end, bookingEndTick sends what
         // was recorded before the restart.
-        logEvent("recording_failed", `${camera.label} couldn't pick its booking back up after the app restarted`, err.message);
+        logEvent("recording_failed", msg("log.bookingNotResumed", { label: camera.label }), err.message);
       }
     }
   }
@@ -1097,7 +1099,7 @@ const partsInFlight = new Set();
 
 function sendPart(camera, recordingDir, part) {
   partsInFlight.add(part.dir);
-  logEvent("pipeline_started", `Sending ${camera.label} ${part.name} (${part.segments.length} x ${SEGMENT_MINUTES} min)`);
+  logEvent("pipeline_started", msg("log.sendingPart", { label: camera.label, part: part.name, n: part.segments.length, minutes: SEGMENT_MINUTES }));
   Promise.resolve(sendRecordingToCloud(camera, part.dir, partSessionId(camera.label, recordingDir, part.name)))
     .finally(() => partsInFlight.delete(part.dir));
 }

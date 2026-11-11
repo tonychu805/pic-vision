@@ -13,7 +13,7 @@
 // arrived via a cookie session (the console) or a bearer header (here).
 import Store from "electron-store";
 import { registerAgent, getCloudConnection, adoptConnection, wasDisconnectedByUser } from "./cloud.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
@@ -126,7 +126,7 @@ export async function signIn(email, password) {
     user: { id: data.user.id, email: data.user.email },
   };
   saveSession(session);
-  logEvent("signed_in", `Signed in as ${session.user.email}`);
+  logEvent("signed_in", msg("log.signedIn", { email: session.user.email }));
 
   // Registers a device that isn't connected yet; leaves a device
   // connected as somebody ELSE alone, for the UI to ask about (ADR-094).
@@ -256,7 +256,7 @@ export async function signOut() {
     }).catch(() => {});
   }
   // Logged before clearing -- session.user.email won't exist to read afterward.
-  if (session?.user?.email) logEvent("signed_out", `Signed out (${session.user.email})`);
+  if (session?.user?.email) logEvent("signed_out", msg("log.signedOut", { email: session.user.email }));
   store.delete("session");
   return null;
 }
