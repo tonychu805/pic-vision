@@ -244,7 +244,7 @@ function AutoSplitCard() {
       <div className="section-label">{t("settings.parts.title")}</div>
       <div className="field">
         <label>{t("settings.parts.label")}</label>
-        <select className="input" style={{ maxWidth: 180 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
+        <select className="input" style={{ maxWidth: 280 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
           <option value={0}>{t("settings.parts.off")}</option>
           {[5, 10, 20, 30, 60].map((n) => <option key={n} value={n}>{t("settings.parts.minutes", { n })}</option>)}
         </select>

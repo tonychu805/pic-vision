@@ -154,10 +154,10 @@ export const zhTW = {
   "mismatch.yourAccount": "你的帳號",
   "mismatch.body": "它目前在為 {from} 錄影，但你登入的是 {email}。",
   "mismatch.bodyWithAccount": "它目前在為 {from} 錄影，但你登入的是 {email} — {to}。",
-  "mismatch.warning": "如果把它連到 {to}，它的相機會出現在那邊，但在 {from} 底下做的相機校正會留在 {from}，錄影前需要重新校正。過去的精華影片會留在製作它們的帳號，而 {from} 會看到這台電腦離線。",
-  "mismatch.keep": "如果這台電腦應該繼續為 {from} 錄影，請登出後改用那個帳號重新登入。",
+  "mismatch.warning": "如果把它連到「{to}」，它的相機會出現在那邊，但在「{from}」底下做的相機校正會留在「{from}」，錄影前需要重新校正。過去的精華影片會留在製作它們的帳號，而「{from}」會看到這台電腦離線。",
+  "mismatch.keep": "如果這台電腦應該繼續為「{from}」錄影，請登出後改用那個帳號重新登入。",
   "mismatch.signingOut": "登出中…",
   "mismatch.signOut": "登出",
   "mismatch.connecting": "連線中…",
-  "mismatch.connect": "連到 {to}",
+  "mismatch.connect": "連到「{to}」",
 };
