@@ -22,6 +22,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { bookingEndsAt, startArrivedTooLate, noteBookingRecording, listBookingRecordings, findBookingRecording, updateBookingRecording, forgetBookingRecording, bookingsToFinish, sendDue, planAfterRestart } from "./bookingRecordings.js";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
 import { logEvent } from "./activityLog.js";
+import { tm } from "./language.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
 import { withDeadline } from "./deadline.js";
@@ -1150,8 +1151,8 @@ export async function autoSplitSendNow(cameraId) {
   const camera = listCameras().find((c) => c.id === cameraId);
   if (!camera) throw new Error("Camera not found");
   const dir = activeOutDir(cameraId);
-  if (!dir) throw new Error(`${camera.label} isn't recording`);
-  if (!getAutoSplitMinutes()) throw new Error("Turn on sending in parts in Settings first");
+  if (!dir) throw new Error(tm("main.parts.notRecording", { label: camera.label }));
+  if (!getAutoSplitMinutes()) throw new Error(tm("main.parts.turnOn"));
   const sent = await sendDueParts(camera, uploadDirFor(dir), { stillRecording: true, flush: true });
   return { sent };
 }

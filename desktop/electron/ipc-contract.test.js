@@ -81,7 +81,8 @@ const FRESH_INPUT_ONLY = new Set([
 // switch (power:setKeepAwake, power:setOpenAtLogin), coerced with `=== true`.
 // `hostname`/`port`: a typed-in camera address (cameras:updateAddress), a
 // string and a number -- the camera itself is looked up in main by `id`.
-const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|minutes|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack|on|hostname|port)$/;
+// `lang`: "en" or "zh-TW" (language:set), validated against the supported list.
+const SCALAR_PARAM = /^(id|cameraId|url|label|name|key|event|raw|cidr|ms|minutes|timeout|username|password|email|fallbackUsername|fallbackPassword|jobDir|recordingDir|targetSec|message|stack|on|hostname|port|lang)$/;
 
 function isObjectParam(param) {
   // `{ a, b }` / `[a, b]` -- destructured, therefore an object.

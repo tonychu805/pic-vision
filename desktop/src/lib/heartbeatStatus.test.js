@@ -143,3 +143,15 @@ test("a machine checking in reads Connected; one just starting reads Connecting�
   assert.equal(sidebarConnection({ brandName: "V", lastAttemptOk: null, lastHeartbeatAt: null }, NOW).title, "Connecting…");
   assert.equal(sidebarConnection(undefined, NOW).title, "Checking…");
 });
+
+import { translator as zhTranslator } from "../../electron/i18n/index.js";
+
+test("the connection line is the same story in Traditional Chinese", () => {
+  const zh = zhTranslator("zh-TW");
+  const now = Date.parse("2026-11-11T10:00:00Z");
+  const ok = heartbeatStatus({ brandName: "PGC", lastAttemptOk: true, lastHeartbeatAt: "2026-11-11T09:58:00Z" }, now, zh);
+  assert.equal(ok.title, "已連線到 PGC");
+  assert.equal(ok.detail, "上次回報：2 分鐘前。");
+  assert.equal(sidebarConnection(null, now, zh).title, "未連線");
+  assert.equal(timeAgo("2026-11-11T07:00:00Z", now, zh), "3 小時前");
+});

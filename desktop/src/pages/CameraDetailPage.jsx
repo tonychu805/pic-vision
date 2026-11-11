@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
 import { frameRateLevel, frameRateProblem, frameRateWarning } from "../../electron/cameras/frameRate.js";
 import { cardVisuals, detailPanels } from "../lib/cameraView.js";
+import { useI18n } from "../i18n.jsx";
 
 function formatElapsed(startedAt) {
   const secs = Math.max(0, Math.floor((Date.now() - new Date(startedAt).getTime()) / 1000));
@@ -19,6 +20,7 @@ function formatElapsed(startedAt) {
 // should still be able to see it's working -- just nothing here can
 // start or stop it anymore.
 function RecordingControl({ camera }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState({ recording: false });
   const [, forceTick] = useState(0); // re-render every 2s so the elapsed-time text keeps moving
 
@@ -35,15 +37,15 @@ function RecordingControl({ camera }) {
         <>
           <span style={{ width: 8, height: 8, flex: "none", borderRadius: "50%", background: "var(--color-success)", animation: "blip 1.4s ease-in-out infinite" }} />
           <div style={{ flex: 1, minWidth: 0 }}>
-            <div style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>Recording · {formatElapsed(status.startedAt)}</div>
+            <div style={{ fontSize: "var(--fs-body)", fontWeight: 500 }}>{t("detail.recording", { elapsed: formatElapsed(status.startedAt) })}</div>
             <div style={{ fontSize: "var(--fs-fine)", fontFamily: "var(--font-mono)", color: "var(--text-3)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-              Saving to {status.outDir}
+              {t("detail.savingTo", { dir: status.outDir })}
             </div>
           </div>
         </>
       ) : (
         <div className="text-3" style={{ flex: 1, minWidth: 0, fontSize: "var(--fs-body)" }}>
-          Not recording
+          {t("detail.notRecording")}
         </div>
       )}
     </div>
@@ -58,6 +60,7 @@ function RecordingControl({ camera }) {
 // (see electron/liveview.js); this component just owns start/stop and
 // the connecting/error states around it.
 function LiveViewButton({ camera }) {
+  const { t } = useI18n();
   const [open, setOpen] = useState(false);
   const [url, setUrl] = useState(null);
   const [error, setError] = useState("");
@@ -74,7 +77,7 @@ function LiveViewButton({ camera }) {
     // build says so instead of a bare "cannot read properties of
     // undefined".
     if (typeof window.liveViewAPI?.start !== "function") {
-      setError("This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).");
+      setError(t("detail.notLoaded"));
       setStarting(false);
       return;
     }
@@ -82,7 +85,7 @@ function LiveViewButton({ camera }) {
       const { url: liveUrl } = await window.liveViewAPI.start(camera.id);
       setUrl(liveUrl);
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
     }
     setStarting(false);
   };
@@ -96,28 +99,28 @@ function LiveViewButton({ camera }) {
   return (
     <>
       <button className="btn btn-secondary" style={{ fontSize: "var(--fs-body)" }} onClick={openLiveView}>
-        <i className="ph ph-play-circle" style={{ fontSize: 15 }} />Live view
+        <i className="ph ph-play-circle" style={{ fontSize: 15 }} />{t("detail.liveView")}
       </button>
       {open && (
         <div className="dialog-backdrop" onClick={close}>
           <div className="dialog" style={{ width: "min(720px, 100%)" }} onClick={(e) => e.stopPropagation()}>
-            <div className="dialog-title">{camera.label} -- live</div>
+            <div className="dialog-title">{t("detail.liveTitle", { label: camera.label })}</div>
             <div className="dialog-body" style={{ padding: 0 }}>
               {error ? (
                 <p style={{ padding: 16, fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>{error}</p>
               ) : starting ? (
-                <p style={{ padding: 16, fontSize: "var(--fs-body)", color: "var(--text-3)" }}>Connecting…</p>
+                <p style={{ padding: 16, fontSize: "var(--fs-body)", color: "var(--text-3)" }}>{t("common.connecting")}</p>
               ) : (
                 <img
                   src={url}
-                  alt={`${camera.label} live view`}
+                  alt={t("detail.liveAlt", { label: camera.label })}
                   style={{ display: "block", width: "100%", aspectRatio: "16/9", objectFit: "contain", background: "#000" }}
-                  onError={() => setError("Lost connection to the camera's stream.")}
+                  onError={() => setError(t("detail.liveLost"))}
                 />
               )}
             </div>
             <div className="dialog-actions">
-              <button className="btn btn-secondary" onClick={close}>Close</button>
+              <button className="btn btn-secondary" onClick={close}>{t("common.close")}</button>
             </div>
           </div>
         </div>
@@ -135,6 +138,7 @@ const isSampleClip = (camera) => camera.connectionType === "sampleClip";
 // Three dead ends telling you to go somewhere with no way to get there.
 // One line, once, with a button that opens it.
 function ConsolePointer() {
+  const { t } = useI18n();
   const [url, setUrl] = useState(null);
 
   useEffect(() => {
@@ -145,7 +149,7 @@ function ConsolePointer() {
     <div className="notice notice-quiet" style={{ marginTop: 14, alignItems: "center" }}>
       <i className="ph ph-cloud" style={{ fontSize: 15, flex: "none" }} />
       <span style={{ flex: 1, minWidth: 0 }}>
-        Recording and calibration for this camera are managed in the cloud console.
+        {t("detail.consolePointer")}
       </span>
       {url && (
         <button
@@ -153,7 +157,7 @@ function ConsolePointer() {
           style={{ flex: "none", fontSize: "var(--fs-body)" }}
           onClick={() => window.systemAPI?.openExternal?.(url)}
         >
-          Open console<i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} />
+          {t("detail.openConsole")}<i className="ph ph-arrow-square-out" style={{ fontSize: 13 }} />
         </button>
       )}
     </div>
@@ -170,6 +174,7 @@ function ConsolePointer() {
 // blocked below 29 after ADR-131 lowered the floor to 25, so it told venues
 // "recording and calibration are disabled" for cameras that were recording.
 function FrameRateWarning({ camera }) {
+  const { t } = useI18n();
   const level = frameRateLevel(camera);
   if (level === "ok") return null;
   if (level === "unknown") {
@@ -177,8 +182,7 @@ function FrameRateWarning({ camera }) {
       <div className="notice notice-quiet" style={{ marginBottom: 10 }}>
         <i className="ph ph-question text-3" style={{ fontSize: 15, flex: "none", marginTop: 1 }} />
         <span>
-          This camera's frame rate hasn't been determined yet, so it isn't being checked. It'll be
-          measured on the next connection, or after its next recording.
+          {t("detail.fps.unknown")}
         </span>
       </div>
     );
@@ -188,8 +192,8 @@ function FrameRateWarning({ camera }) {
     <div className={`notice ${blocked ? "notice-danger" : "notice-warning"}`} style={{ marginBottom: 10 }}>
       <i className="ph ph-warning" style={{ fontSize: 15, color: blocked ? "var(--color-danger)" : "var(--color-warning)", flex: "none", marginTop: 1 }} />
       <span>
-        {blocked && <b>Recording and calibration are turned off for this camera. </b>}
-        {blocked ? frameRateProblem(camera) : frameRateWarning(camera)}
+        {blocked && <b>{t("detail.fps.blockedPrefix")}</b>}
+        {blocked ? frameRateProblem(camera, t) : frameRateWarning(camera, t)}
       </span>
     </div>
   );
@@ -202,14 +206,15 @@ function FrameRateWarning({ camera }) {
 // merges the state in from the last heartbeat response. So this is a
 // read-only indicator: there is nothing here for the operator to set.
 function CalibrationControl({ camera }) {
+  const { t } = useI18n();
   const rmse = typeof camera.calibrationRmseFt === "number" ? camera.calibrationRmseFt : null;
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, fontSize: "var(--fs-body)", flexWrap: "wrap" }}>
-      <span className="text-3" style={{ flex: "none" }}>Calibration:</span>
+      <span className="text-3" style={{ flex: "none" }}>{t("detail.calibration")}</span>
       <span style={{ flex: 1, minWidth: 0 }}>
         {camera.isCalibrated
-          ? `Calibrated${rmse !== null ? ` — ${rmse.toFixed(2)} ft reprojection error` : ""}`
-          : "Not calibrated"}
+          ? (rmse !== null ? t("detail.calibratedRmse", { rmse: rmse.toFixed(2) }) : t("detail.calibrated"))
+          : t("detail.notCalibrated")}
       </span>
     </div>
   );
@@ -231,17 +236,17 @@ function CalibrationControl({ camera }) {
 // the console (Cameras page badge + Reels page failed-job card, PIC-137
 // follow-up), checked by whoever's actually tracking it, repeatedly, not
 // read once off this one machine's screen.
-function coarseStageLabel(stage) {
-  if (stage === "upload") return "Uploading…";
-  if (stage === "done") return "Done";
-  if (stage === "cancelling") return "Stopping…";
-  if (stage === "cancelled") return "Cancelled";
-  if (stage === "error") return "Failed";
+function coarseStageLabel(stage, t) {
+  if (stage === "upload") return t("detail.stage.upload");
+  if (stage === "done") return t("detail.stage.done");
+  if (stage === "cancelling") return t("detail.stage.cancelling");
+  if (stage === "cancelled") return t("detail.stage.cancelled");
+  if (stage === "error") return t("detail.stage.error");
   // Everything else -- queued, download, calibrate, drift_check, convert,
   // proxy, r2_upload, input_check, inference, cut, r2_download, and any
   // future pod_driver.py stage -- is "somewhere in the cloud pipeline,"
   // which is all a one-off viewer here could act on anyway.
-  return "Processing in the cloud…";
+  return t("detail.stage.processing");
 }
 
 // A job's terminal stages -- everything else in CLOUD_STAGE_LABELS is
@@ -259,6 +264,7 @@ const TERMINAL_STAGES = new Set(["done", "error", "cancelled"]);
 // Same 2s interval RecordingControl already uses for capture:status, not a
 // different cadence invented for this.
 function CloudJobRow({ camera, recording }) {
+  const { t } = useI18n();
   const [status, setStatus] = useState(null);
   const [error, setError] = useState("");
   const [starting, setStarting] = useState(false);
@@ -280,9 +286,9 @@ function CloudJobRow({ camera, recording }) {
     setError("");
     try {
       const result = await window.pipelineAPI.cancel(recording.dir);
-      if (result?.consoleError) setError("Stopped here, but the console didn't confirm");
+      if (result?.consoleError) setError(t("detail.cancelUnconfirmed"));
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
     }
     setStatus(await window.pipelineAPI.statusForRecording(recording.dir));
     setCancelling(false);
@@ -295,7 +301,7 @@ function CloudJobRow({ camera, recording }) {
       await window.pipelineAPI.run({ cameraId: camera.id, recordingDir: recording.dir });
       setStatus(await window.pipelineAPI.statusForRecording(recording.dir));
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
     }
     setStarting(false);
   };
@@ -314,16 +320,16 @@ function CloudJobRow({ camera, recording }) {
   // live check against a real completed job (Court 3) caught an earlier
   // version of this line offering "Retry" on a job that had actually worked.
   const failed = status?.stage === "error" || status?.stage === "cancelled";
-  const stageLabel = status?.stage ? coarseStageLabel(status.stage) : null;
+  const stageLabel = status?.stage ? coarseStageLabel(status.stage, t) : null;
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: "var(--fs-body)" }}>
       <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-        {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
+        {t(recording.segments === 1 ? "detail.recordingLine.one" : "detail.recordingLine.many", { name: recording.name, n: recording.segments })}
       </span>
       {(!hasRun || failed) && (
         <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} disabled={starting || recording.recording || !camera.isCalibrated} onClick={start}>
-          {starting ? "Starting…" : recording.recording ? "Still recording" : !camera.isCalibrated ? "Calibrate first" : failed ? "Retry" : "Send to cloud"}
+          {starting ? t("detail.starting") : recording.recording ? t("detail.stillRecording") : !camera.isCalibrated ? t("detail.calibrateFirst") : failed ? t("detail.retry") : t("detail.sendToCloud")}
         </button>
       )}
       {error && <span style={{ flex: "none", color: "var(--color-danger)" }}>{error}</span>}
@@ -345,7 +351,7 @@ function CloudJobRow({ camera, recording }) {
               disabled={cancelling}
               onClick={cancel}
             >
-              {cancelling ? "Stopping…" : "Cancel"}
+              {cancelling ? t("detail.stopping") : t("detail.cancel")}
             </button>
           )}
         </>
@@ -360,6 +366,7 @@ function CloudJobRow({ camera, recording }) {
 // part twice. While recording, "Send what's recorded so far" sends every
 // finished piece now, for when the session is about to end.
 function PartedRecording({ camera, recording, onChanged }) {
+  const { t } = useI18n();
   const [splitMinutes, setSplitMinutes] = useState(0);
   const [sending, setSending] = useState(false);
   const [note, setNote] = useState("");
@@ -371,10 +378,10 @@ function PartedRecording({ camera, recording, onChanged }) {
     setNote("");
     try {
       const { sent } = await window.autoSplitAPI.sendNow(camera.id);
-      setNote(sent.length ? `Sent ${sent.join(", ")}` : "Nothing finished to send yet -- the current piece is still recording");
+      setNote(sent.length ? t("detail.sentList", { list: sent.join(", ") }) : t("detail.nothingToSend"));
       onChanged?.();
     } catch (err) {
-      setNote(cleanIpcError(err));
+      setNote(cleanIpcError(err, t));
     }
     setSending(false);
   };
@@ -383,19 +390,19 @@ function PartedRecording({ camera, recording, onChanged }) {
     <div style={{ padding: "7px 0", borderBottom: "1px solid var(--hairline)", fontSize: "var(--fs-body)" }}>
       <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
         <span style={{ flex: 1, minWidth: 0, fontFamily: "var(--font-mono)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
-          {recording.name} ({recording.segments} segment{recording.segments === 1 ? "" : "s"})
+          {t(recording.segments === 1 ? "detail.recordingLine.one" : "detail.recordingLine.many", { name: recording.name, n: recording.segments })}
         </span>
         {recording.recording && (splitMinutes > 0 ? (
           <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", flex: "none" }} disabled={sending} onClick={sendNow}>
-            {sending ? "Sending…" : "Send what's recorded so far"}
+            {sending ? t("detail.sending") : t("detail.sendSoFar")}
           </button>
         ) : (
-          <span className="text-4" style={{ flex: "none", fontSize: "var(--fs-fine)" }}>Still recording</span>
+          <span className="text-4" style={{ flex: "none", fontSize: "var(--fs-fine)" }}>{t("detail.stillRecording")}</span>
         ))}
       </div>
       {recording.recording && splitMinutes > 0 && (
         <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "4px 0 0" }}>
-          Sending in {splitMinutes}-minute parts while recording; the rest goes when recording stops.
+          {t("detail.sendingParts", { n: splitMinutes })}
         </p>
       )}
       {note && <p className="text-3" style={{ fontSize: "var(--fs-fine)", margin: "4px 0 0" }}>{note}</p>}
@@ -413,6 +420,7 @@ function PartedRecording({ camera, recording, onChanged }) {
 // mount -- a manual "Refresh" avoids surprising a job row mid-poll if a
 // new recording starts while this page is open.
 function CloudPipelineControl({ camera, onCameraUpdated }) {
+  const { t } = useI18n();
   const [recordings, setRecordings] = useState([]);
   const [retention, setRetention] = useState(null);
 
@@ -468,9 +476,9 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
   return (
     <div className="card" style={{ marginTop: 14 }}>
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 10 }}>
-        <span className="section-label" style={{ marginBottom: 0 }}>Cloud pipeline</span>
+        <span className="section-label" style={{ marginBottom: 0 }}>{t("detail.pipeline.title")}</span>
         <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={refresh}>
-          <i className="ph ph-arrows-clockwise" style={{ fontSize: 13 }} />Refresh
+          <i className="ph ph-arrows-clockwise" style={{ fontSize: 13 }} />{t("detail.pipeline.refresh")}
         </button>
       </div>
       <FrameRateWarning camera={camera} />
@@ -478,18 +486,18 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
       {retention && (retention.waitingAfterEndOfDay || retention.waitingForReel || retention.deletesAt || retention.recording) && (
         <p className="text-3" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0" }}>
           {retention.waitingAfterEndOfDay
-            ? `${retention.waitingAfterEndOfDay} local recording${retention.waitingAfterEndOfDay === 1 ? " is" : "s are"} kept until its reel succeeds.`
+            ? t(retention.waitingAfterEndOfDay === 1 ? "detail.pipeline.keptUntilReel.one" : "detail.pipeline.keptUntilReel.many", { n: retention.waitingAfterEndOfDay })
             : retention.waitingForReel
-              ? `${retention.waitingForReel} local recording${retention.waitingForReel === 1 ? " is" : "s are"} waiting for a reel, then delete at the venue's end of day.`
+              ? t(retention.waitingForReel === 1 ? "detail.pipeline.waitingForReel.one" : "detail.pipeline.waitingForReel.many", { n: retention.waitingForReel })
               : retention.deletesAt
-                ? "Completed local source footage deletes at the venue's end of day."
-                : "A recording is in use and will not be deleted."}
+                ? t("detail.pipeline.deletesAt")
+                : t("detail.pipeline.inUse")}
         </p>
       )}
       <div style={{ marginTop: 10 }}>
         {recordings.length === 0 ? (
           <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>
-            No recordings yet.
+            {t("detail.pipeline.none")}
           </p>
         ) : (
           recordings.map((r) => (r.parts?.length || r.recording
@@ -508,6 +516,7 @@ function CloudPipelineControl({ camera, onCameraUpdated }) {
 // credentials exist for the length of a clipboard write rather than for
 // the length of the session.
 function CopyStreamUri({ cameraId }) {
+  const { t } = useI18n();
   const [state, setState] = useState("idle");
 
   const copy = async () => {
@@ -523,9 +532,9 @@ function CopyStreamUri({ cameraId }) {
   };
 
   return (
-    <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={copy} title="Copies the URI including its username and password">
+    <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)" }} onClick={copy} title={t("detail.copy.title")}>
       <i className={`ph ${state === "copied" ? "ph-check" : "ph-copy"}`} style={{ fontSize: 14 }} />
-      {state === "copied" ? "Copied" : state === "failed" ? "Failed" : "Copy"}
+      {state === "copied" ? t("detail.copy.copied") : state === "failed" ? t("detail.copy.failed") : t("detail.copy.copy")}
     </button>
   );
 }
@@ -543,6 +552,7 @@ function CopyStreamUri({ cameraId }) {
 // saved (electron/cameras/store.js's updateCameraCredentials), so a typo
 // can't replace working credentials with broken ones.
 function CameraSignIn({ camera, onUpdated }) {
+  const { t, rich } = useI18n();
   const [username, setUsername] = useState(camera.username ?? "");
   const [password, setPassword] = useState("");
   const [saving, setSaving] = useState(false);
@@ -560,7 +570,7 @@ function CameraSignIn({ camera, onUpdated }) {
       // text is "RTSP/1.0 401 Unauthorized" or an ONVIF SOAP fault, which
       // tells a venue owner nothing. The one thing worth saying is which
       // of the two things to check.
-      setError("That didn't work — check the username and password, and that this camera is switched on.");
+      setError(t("detail.signin.failed"));
       setSaving(false);
       return;
     }
@@ -576,20 +586,20 @@ function CameraSignIn({ camera, onUpdated }) {
 
   return (
     <form className="card" style={{ marginTop: 14 }} onSubmit={submit}>
-      <div className="section-label">Sign in to this camera</div>
+      <div className="section-label">{t("detail.signin.title")}</div>
       <p className="text-3" style={{ fontSize: "var(--fs-body)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        {camera.label} is refusing the saved username and password. Enter them again to reconnect.
+        {t("detail.signin.body", { label: camera.label })}
         {camera.manufacturer?.toLowerCase().includes("tp-link") || /tapo/i.test(camera.model ?? "") ? (
-          <> Tapo cameras use the separate <b>camera account</b> created in the Tapo app, not your TP-Link login.</>
+          <>{rich("detail.signin.tapo", { account: <b>{t("detail.signin.tapoAccount")}</b> })}</>
         ) : null}
       </p>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
         <div className="field" style={{ flex: 1 }}>
-          <label>Username</label>
+          <label>{t("detail.signin.username")}</label>
           <input className="input" value={username} onChange={(e) => setUsername(e.target.value)} autoComplete="off" />
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Password</label>
+          <label>{t("detail.signin.password")}</label>
           <input
             className="input"
             type="password"
@@ -599,7 +609,7 @@ function CameraSignIn({ camera, onUpdated }) {
           />
         </div>
         <button className="btn btn-primary" style={{ marginBottom: 2 }} disabled={saving || !username || !password}>
-          {saving ? "Checking…" : "Sign in"}
+          {saving ? t("detail.signin.checking") : t("detail.signin.submit")}
         </button>
       </div>
       {error && (
@@ -612,7 +622,23 @@ function CameraSignIn({ camera, onUpdated }) {
 // The known refusals updateCameraAddress (electron/cameras/store.js) throws
 // in plain words, worth showing as they are. Anything else is the camera
 // not answering, reported in words that say what to check (PIC-93).
-const ADDRESS_REFUSALS = /^(A sample clip has no address|Stop this camera's recording|Another camera, .* already uses that address|That address answers as a different camera)/;
+// Keyed by the main process's own (English) refusal text -- store.js's
+// ADDRESS_ERRORS -- so recognising one doesn't depend on the display language;
+// what the operator reads is the translation.
+const ADDRESS_REFUSALS = [
+  [/^A sample clip has no address/, "detail.addr.sampleClip"],
+  [/^Stop this camera's recording/, "detail.addr.recording"],
+  [/^Another camera, (.*), already uses that address/, "detail.addr.taken"],
+  [/^That address answers as a different camera/, "detail.addr.otherCamera"],
+];
+
+function describeAddressRefusal(message, t) {
+  for (const [pattern, key] of ADDRESS_REFUSALS) {
+    const match = pattern.exec(message);
+    if (match) return t(key, { label: match[1] });
+  }
+  return null;
+}
 
 // Point this camera at its new address.
 //
@@ -625,6 +651,7 @@ const ADDRESS_REFUSALS = /^(A sample clip has no address|Stop this camera's reco
 // same camera, in the same place, which the page says plainly because an
 // RTSP camera can't be checked.
 export function CameraAddress({ camera, onUpdated }) {
+  const { t } = useI18n();
   const [hostname, setHostname] = useState(camera.hostname ?? "");
   const [port, setPort] = useState(String(camera.port ?? ""));
   const [saving, setSaving] = useState(false);
@@ -638,10 +665,8 @@ export function CameraAddress({ camera, onUpdated }) {
     try {
       updated = await window.cameraAPI.updateAddress(camera.id, hostname.trim(), Number(port) || undefined);
     } catch (err) {
-      const message = cleanIpcError(err);
-      setError(ADDRESS_REFUSALS.test(message)
-        ? message
-        : "Nothing answered as this camera at that address — check the address, and that the camera is on and on the same network as this machine.");
+      const message = cleanIpcError(err, t);
+      setError(describeAddressRefusal(message, t) ?? t("detail.addr.nothing"));
       setSaving(false);
       return;
     }
@@ -652,19 +677,17 @@ export function CameraAddress({ camera, onUpdated }) {
 
   return (
     <form className="card" style={{ marginTop: 14 }} onSubmit={submit}>
-      <div className="section-label">Did this camera get a new address?</div>
+      <div className="section-label">{t("detail.addr.title")}</div>
       <p className="text-3" style={{ fontSize: "var(--fs-body)", margin: "0 0 12px", lineHeight: 1.5 }}>
-        {camera.label} isn't answering at {camera.hostname}. If its address changed — a router restart often does
-        this — enter the new one. It stays the same camera, so its calibration and recordings are kept. Only do
-        this for the same camera still mounted in the same place; a camera that was moved needs calibrating again.
+        {t("detail.addr.body", { label: camera.label, host: camera.hostname })}
       </p>
       <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
         <div className="field" style={{ flex: 2 }}>
-          <label>IP address</label>
+          <label>{t("detail.addr.ip")}</label>
           <input className="input" value={hostname} onChange={(e) => setHostname(e.target.value)} autoComplete="off" spellCheck={false} />
         </div>
         <div className="field" style={{ flex: 1 }}>
-          <label>Port</label>
+          <label>{t("detail.addr.port")}</label>
           <input className="input" value={port} onChange={(e) => setPort(e.target.value.replace(/[^0-9]/g, ""))} inputMode="numeric" autoComplete="off" />
         </div>
         <button
@@ -672,7 +695,7 @@ export function CameraAddress({ camera, onUpdated }) {
           style={{ marginBottom: 2 }}
           disabled={saving || !hostname.trim() || (hostname.trim() === camera.hostname && String(camera.port ?? "") === port)}
         >
-          {saving ? "Checking…" : "Use this address"}
+          {saving ? t("detail.addr.checking") : t("detail.addr.use")}
         </button>
       </div>
       {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-body)", margin: "10px 0 0" }}>{error}</p>}
@@ -699,6 +722,7 @@ function InfoPanel({ title, rows }) {
 // would need the same re-verification addCamera/addCameraViaRtsp do
 // before saving, which renameCamera doesn't attempt).
 function EditableCameraName({ camera, onRenamed }) {
+  const { t } = useI18n();
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState(camera.label);
   const [saving, setSaving] = useState(false);
@@ -740,7 +764,7 @@ function EditableCameraName({ camera, onRenamed }) {
       className="btn btn-ghost"
       style={{ padding: 0, fontFamily: "var(--font-heading)", fontSize: "var(--fs-title)", lineHeight: 1.2, color: "var(--color-text)", justifyContent: "flex-start", gap: 8 }}
       onClick={() => setEditing(true)}
-      title="Rename this camera"
+      title={t("detail.rename")}
     >
       {camera.label}
       <i className="ph ph-pencil-simple" style={{ fontSize: 15, color: "var(--text-4)" }} />
@@ -756,6 +780,7 @@ function EditableCameraName({ camera, onRenamed }) {
 // 2026-09-04) -- Schedule lives entirely in the cloud console now, not
 // something this local removal can or should reach into.
 function RemoveCameraControl({ camera, onRemoved }) {
+  const { t } = useI18n();
   const [confirming, setConfirming] = useState(false);
   const [removing, setRemoving] = useState(false);
 
@@ -768,17 +793,17 @@ function RemoveCameraControl({ camera, onRemoved }) {
   if (!confirming) {
     return (
       <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", flex: "none" }} onClick={() => setConfirming(true)}>
-        <i className="ph ph-trash" style={{ fontSize: 14 }} />Remove camera
+        <i className="ph ph-trash" style={{ fontSize: 14 }} />{t("detail.remove")}
       </button>
     );
   }
 
   return (
     <div style={{ display: "flex", alignItems: "center", gap: 8, flex: "none" }}>
-      <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-3)" }}>Remove this camera?</span>
-      <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} disabled={removing} onClick={() => setConfirming(false)}>Cancel</button>
+      <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-3)" }}>{t("detail.removeConfirm")}</span>
+      <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} disabled={removing} onClick={() => setConfirming(false)}>{t("common.cancel")}</button>
       <button className="btn btn-primary" style={{ fontSize: "var(--fs-fine)", color: "var(--color-danger)", borderColor: "var(--color-danger)" }} disabled={removing} onClick={remove}>
-        {removing ? "Removing…" : "Remove"}
+        {removing ? t("detail.removing") : t("detail.removeYes")}
       </button>
     </div>
   );
@@ -791,8 +816,9 @@ function RemoveCameraControl({ camera, onRemoved }) {
 // found, replacing this page's own separate, weaker inline sign-in form
 // -- ONVIF-only, no RTSP fallback if it failed).
 export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCameraRenamed, onCameraReconnected }) {
-  const v = cardVisuals(card);
-  const panels = detailPanels(card.camera);
+  const { t } = useI18n();
+  const v = cardVisuals(card, t);
+  const panels = detailPanels(card.camera, t);
   // Collapsed by default (2026-09-01, operator's call) -- Identity/
   // Network/Streams is real data but genuinely technical (raw stream
   // URLs, ONVIF paths, MAC/serial fields that are often just "Not
@@ -805,7 +831,7 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
   return (
     <div className="page">
       <button className="btn btn-ghost" style={{ fontSize: "var(--fs-body)", marginBottom: 8 }} onClick={onBack}>
-        <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />All cameras
+        <i className="ph ph-arrow-left" style={{ fontSize: 14 }} />{t("detail.back")}
       </button>
 
       <div style={{ display: "flex", alignItems: "flex-start", gap: 12, marginBottom: 14 }}>
@@ -840,7 +866,7 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         // single synthetic entry for the Cloud pipeline panel below).
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 14, padding: "12px 16px", borderRadius: "var(--radius-md)", background: "var(--color-surface)", fontSize: "var(--fs-body)", color: "var(--text-3)" }}>
           <i className="ph ph-file-video" style={{ fontSize: 16, flex: "none" }} />
-          Sample clip -- no live stream to record. Its one "recording" is the uploaded file itself, below.
+          {t("detail.sampleNote")}
         </div>
       ) : (
         <RecordingControl camera={card.camera} />
@@ -855,20 +881,20 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         onClick={() => setShowDetails((v) => !v)}
       >
         <i className={`ph ${showDetails ? "ph-caret-up" : "ph-caret-down"}`} style={{ fontSize: 13 }} />
-        {showDetails ? "Hide camera details" : "Show camera details"}
+        {showDetails ? t("detail.hideDetails") : t("detail.showDetails")}
       </button>
       {showDetails && (
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 10 }}>
-            <InfoPanel title="Identity" rows={panels.identity} />
-            <InfoPanel title="Network" rows={panels.network} />
+            <InfoPanel title={t("detail.identity")} rows={panels.identity} />
+            <InfoPanel title={t("detail.network")} rows={panels.network} />
           </div>
 
           <div className="card" style={{ marginTop: 14 }}>
-            <div className="section-label">Streams</div>
+            <div className="section-label">{t("detail.streams")}</div>
             {panels.streams.length === 0 ? (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>
-                No stream URI on record for this camera.
+                {t("detail.noStream")}
               </p>
             ) : (
               panels.streams.map((s) => (

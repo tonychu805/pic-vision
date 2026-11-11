@@ -17,6 +17,7 @@
 // separate jobs with separate reels. Combining them into one session reel
 // is that later work, not this.
 import Store from "electron-store";
+import { tm } from "./language.js";
 import { existsSync, linkSync, copyFileSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 
@@ -42,7 +43,7 @@ export function getAutoSplitMinutes() {
 
 export function setAutoSplitMinutes(minutes) {
   const n = Number(minutes);
-  if (!Number.isFinite(n) || n < 0 || n > 120) throw new Error("part length must be 0 (off) to 120 minutes");
+  if (!Number.isFinite(n) || n < 0 || n > 120) throw new Error(tm("main.parts.badLength"));
   const rounded = n === 0 ? 0 : Math.max(SEGMENT_MINUTES, Math.round(n / SEGMENT_MINUTES) * SEGMENT_MINUTES);
   store.set("minutes", rounded);
   return rounded;

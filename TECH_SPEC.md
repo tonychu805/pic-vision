@@ -876,6 +876,14 @@ pic-vision/
 │   │   │                              # not guessed). logAPI (2026-09-05) is the
 │   │   │                              # newest bridge here -- list()/clear()
 │   │   │                              # over activityLog.js
+│   │   ├── i18n/                    # 2026-11-11 (ADR-171): English + Traditional
+│   │   │                              # Chinese dictionaries (strings/<area>.js, en
+│   │   │                              # and zh-TW side by side), t()/pickLang(),
+│   │   │                              # and i18n.test.js (every key in both
+│   │   │                              # languages). Electron-free, so the renderer
+│   │   │                              # bundles it too (src/i18n.jsx).
+│   │   ├── language.js              # the saved language (else system, else
+│   │   │                              # zh-TW) + tm() for main-process wording
 │   │   ├── activityLog.js               # 2026-09-05: real event history for the
 │   │   │                              # Log tab (replaced the mock "Alerts"
 │   │   │                              # page). Deliberately dependency-free

@@ -24,6 +24,7 @@ import path from "node:path";
 import { powerSaveBlocker } from "electron";
 import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
 import { logEvent } from "./activityLog.js";
+import { tm } from "./language.js";
 import { retryWithinWindow } from "./uploadRetry.js";
 
 const SEGMENT_RE = /^session-\d+\.mkv$/;
@@ -292,7 +293,7 @@ async function pollUntilDone(recordingDir, jobDir, jobId, label) {
 // also means an uncalibrated camera is refused by the console with a real
 // message rather than by a local file check.
 export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionId, cameraId, cameraLabel }) {
-  if (active.has(recordingDir)) throw new Error("A cloud job is already running for this recording");
+  if (active.has(recordingDir)) throw new Error(tm("main.job.running"));
   const connection = requireConnection();
 
   const files = videoPath ? [videoPath] : segmentsIn(recordingDir);

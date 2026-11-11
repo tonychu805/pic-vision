@@ -41,6 +41,11 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   addSampleClip: (config) => ipcRenderer.invoke("cameras:addSampleClip", config),
 });
 
+contextBridge.exposeInMainWorld("languageAPI", {
+  get: () => ipcRenderer.invoke("language:get"),
+  set: (lang) => ipcRenderer.invoke("language:set", lang),
+});
+
 contextBridge.exposeInMainWorld("powerAPI", {
   get: () => ipcRenderer.invoke("power:get"),
   setKeepAwake: (on) => ipcRenderer.invoke("power:setKeepAwake", on),

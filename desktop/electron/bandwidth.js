@@ -20,6 +20,7 @@ import { randomBytes } from "node:crypto";
 import { Readable } from "node:stream";
 import { consoleFetch, putStream, requireConnection } from "./consoleApi.js";
 import { logEvent } from "./activityLog.js";
+import { tm } from "./language.js";
 
 // Ladder, smallest first. A slow venue answers on the first rung (8 MB
 // at 2 Mbps is ~32s, already too long to make anyone sit through twice);
@@ -188,7 +189,7 @@ async function runOnce(sizeBytes, sampleIndex = 1) {
  * having a bad minute, and the two need different answers.
  */
 export async function runBandwidthTest({ cameras = 1 } = {}) {
-  if (state.running) throw new Error("A speed test is already running");
+  if (state.running) throw new Error(tm("main.speed.running"));
   requireConnection();
 
   state = { running: true, stage: "starting", sentBytes: 0, totalBytes: 0, result: null, error: null };

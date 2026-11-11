@@ -27,6 +27,7 @@
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { app, Menu, Tray, nativeImage, BrowserWindow } from "electron";
+import { tm, onLanguageChange } from "./language.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -34,6 +35,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // is garbage-collected and silently vanishes from the menu bar.
 let tray = null;
 let refreshTimer = null;
+let stopWatchingLanguage = null;
 
 const REFRESH_MS = 5000;
 
@@ -52,25 +54,25 @@ function render({ isRecordingNow, recordingLabels, connection }) {
   const connected = Boolean(connection);
 
   const items = [
-    { label: connection?.brandName ? `picvision ai — ${connection.brandName}` : "picvision ai", enabled: false },
+    { label: connection?.brandName ? tm("tray.titleBrand", { brand: connection.brandName }) : tm("tray.title"), enabled: false },
     { type: "separator" },
     {
       // Deliberately reports the local view only. Whether the last
       // heartbeat actually succeeded is a different question the renderer
       // can't answer either yet (PIC-92) -- claiming "Connected" on the
       // strength of a stored token would repeat that bug in a new place.
-      label: connected ? `Signed in to ${connection.consoleUrl.replace(/^https?:\/\//, "")}` : "Not connected to the console",
+      label: connected ? tm("tray.signedIn", { host: connection.consoleUrl.replace(/^https?:\/\//, "") }) : tm("tray.notConnected"),
       enabled: false,
     },
     {
       label: recording
-        ? `Recording: ${recordingLabels.join(", ")}`
-        : "Not recording",
+        ? tm("tray.recording", { labels: recordingLabels.join(tm("tray.labelSeparator")) })
+        : tm("tray.notRecording"),
       enabled: false,
     },
     { type: "separator" },
     {
-      label: "Open picvision",
+      label: tm("tray.open"),
       click: () => {
         const [existing] = BrowserWindow.getAllWindows();
         if (existing) {
@@ -90,13 +92,13 @@ function render({ isRecordingNow, recordingLabels, connection }) {
       // Goes through app.quit(), not app.exit(), so before-quit runs and
       // stops any recording cleanly -- ADR-031 found that killing ffmpeg
       // outright corrupts the output container.
-      label: recording ? "Stop recording and quit" : "Quit picvision",
+      label: recording ? tm("tray.stopQuit") : tm("tray.quit"),
       click: () => app.quit(),
     },
   ];
 
   tray.setContextMenu(Menu.buildFromTemplate(items));
-  tray.setToolTip(recording ? `picvision ai — recording ${recordingLabels.join(", ")}` : "picvision ai — running");
+  tray.setToolTip(recording ? tm("tray.tooltipRecording", { labels: recordingLabels.join(tm("tray.labelSeparator")) }) : tm("tray.tooltipRunning"));
 
   // macOS only: text beside the menu bar icon. A recording is the one
   // state worth seeing without opening anything, since it's the one that
@@ -139,12 +141,17 @@ export function createTray(readState) {
 
   refresh();
   refreshTimer = setInterval(refresh, REFRESH_MS);
+  // The menu is rebuilt on a 5 s timer; a language switch redraws it at once
+  // rather than leaving the old language up for the rest of the tick.
+  stopWatchingLanguage = onLanguageChange(refresh);
   return tray;
 }
 
 export function destroyTray() {
   if (refreshTimer) clearInterval(refreshTimer);
   refreshTimer = null;
+  stopWatchingLanguage?.();
+  stopWatchingLanguage = null;
   tray?.destroy();
   tray = null;
 }
