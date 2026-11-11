@@ -194,20 +194,16 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
     return (
       <div className="dialog-backdrop">
         <div className="dialog">
-          <div className="dialog-title">This camera's certificate isn't trusted</div>
+          <div className="dialog-title">{t("add.cert.title")}</div>
           <div className="dialog-body">
-            This camera only answered over a secure connection, with a certificate we can't verify — common for a
-            camera's own built-in HTTPS, which usually isn't signed by anyone your computer already trusts.
-            ({cleanIpcError(certDetail)}) You can trust it and continue — anyone who could intercept that connection
-            would already have to be on your own network — or skip it and we'll look for a plain video stream
-            instead.
+            {t("add.cert.body", { detail: cleanIpcError(certDetail, t) })}
           </div>
           <div className="dialog-actions">
             <button type="button" className="btn btn-secondary" onClick={declineCert} disabled={saving}>
-              Use RTSP instead
+              {t("add.cert.useRtsp")}
             </button>
             <button type="button" className="btn btn-primary" onClick={acceptCert} disabled={saving}>
-              {saving ? "Connecting…" : "Trust this certificate"}
+              {saving ? t("add.connecting") : t("add.cert.trust")}
             </button>
           </div>
         </div>
@@ -300,7 +296,7 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
             />
           </div>
           <div className="field">
-            <label>Secondary / sub-stream RTSP URL (optional)</label>
+            <label>{t("add.sub.label")}</label>
             <input
               className="input"
               value={subRtspUrl}

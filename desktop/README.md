@@ -1058,6 +1058,18 @@ Until `ADR-097` (2026-09-09) the /8 case *was* a real problem: the cap was
 applied after the address list had been built, so Scan froze the app for
 ~6.5 seconds and ~1 GB before refusing. Counted first now.
 
+## Languages (2026-11-11, ADR-171)
+
+English and Traditional Chinese, default Traditional Chinese. The language is the saved
+choice, else the system language, else Traditional Chinese; the switch is in the sidebar,
+Settings and the sign-in screen, and changing it redraws in place and is remembered across
+restarts. The dictionaries are `electron/i18n/strings/<area>.js` (English and Chinese side
+by side). To add or change a string, edit both languages in the same file; `npm test`
+fails if one is missing, if a `{placeholder}` differs, or if a key is unused or unknown.
+In React, `const { t } = useI18n()`; in the main process, `tm("key")` from
+`electron/language.js`. Camera names, operator-typed text and the Log's event text are
+not translated.
+
 ## Known gaps (not built)
 
 - RTSP-over-wifi reliability: `DECISIONS.md` ADR-030/032 found real frame
