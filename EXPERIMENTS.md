@@ -3995,3 +3995,17 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 TIMING (A5000): 46.8 s in the model, 14.5 s waiting for frames, 5.5 s post-processing, 270 fps. RTX 2000 Ada: 92.9 s in the model, 0.2 s waiting, 184 fps (GPU-bound there, as locally).
 
 **Reading.** Confirmed: inside the container the pod reported the host's 48-96 CPUs while 5-7 were usable, and the thread pools sized to the host count were the slowdown; sized correctly, inference is 2-5x faster and A5000 hosts are now the fastest. Which of the two changes did it is not separated (the CUDA graph gave nothing locally). The hit finder, untouched, is now the slowest stage (2.9-3.3 min per 10 min, over its ~2.4 budget) and runs in pod_driver's own process with the same unbounded thread pools -- the same fix there is the likely next step (not yet tested). Rallies hit finder / crossings: 21/11, 17/5, 24/20.
+
+## 2026-11-12 — Hit finder thread limit: no gain (pose is GPU-bound); RunPod capacity shortage
+
+**Change** (`e2dca5c`, staging): the same thread sizing (src/cpus.py) before the hit finder and badges in pod_driver; the hit finder's stats split pose_sec / features_sec.
+
+**Run 3** (same three stand-alone jobs, queued 11:08 UTC). Only PGC c199a97c got a GPU (RTX A5000, after 9 min 37 s of "no instances currently available" on every card under the $0.50/hr cap); PGC eda301d9 and Brickwall were still waiting after 20+ min.
+
+| PGC c199a97c, 10 min | Run 2 | Run 3 |
+|---|---|---|
+| Inference | 1.2 min | 1.3 min |
+| Hit finder | 2.9 min | 3.1 min (pose 181.3 s, features 2.1 s; cv2 threads 7) |
+| Check-in to done | 6.7 min | 7.3 min |
+
+**Reading.** The hit finder is GPU-bound on pose: 18,000 pose inferences (9,000 frames x 2 passes) in 181 s, about 100/s, as the v8n model does locally; threads were not its cost and the change gave nothing (kept: harmless, consistent). The pipeline keeps up on an A5000 (7.3 min per 10 min); the hit finder is ~1.5 min of pose per 5-min part, inside the 2.5-min pose budget (EXPERIMENTS 2026-11-10). The new limit is GPU supply: RunPod had nothing under the price cap for 10-20+ min.
