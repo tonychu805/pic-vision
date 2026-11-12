@@ -23,8 +23,6 @@ os.environ["TF_CPP_MIN_LOG_LEVEL"] = "3"
 
 import cv2
 import numpy as np
-import tensorflow as tf
-import keras.backend as K
 
 # court_crop is the one src/ module this script needs (the pod ships src/ beside it).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -34,6 +32,7 @@ HEIGHT, WIDTH = 288, 512
 
 
 def custom_loss(y_true, y_pred):
+    import keras.backend as K
     loss = (-1) * (K.square(1 - y_pred) * y_true * K.log(K.clip(y_pred, K.epsilon(), 1))
                    + K.square(y_pred) * (1 - y_true) * K.log(K.clip(1 - y_pred, K.epsilon(), 1)))
     return K.mean(loss)
@@ -134,8 +133,32 @@ def apply_mask(img, mask3):
     return cv2.bitwise_and(img, mask3)
 
 
-def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5, crop_to_court=False):
-    print("Loading model...")
+def load_infer(model_path):
+    """infer(x) -> float32 heatmaps for a (n, 9, HEIGHT, WIDTH) float32 batch.
+
+    A .pt file is the PyTorch TrackNet (src/tracknet_torch.py, 2026-11-12): the
+    pod needs no TensorFlow, so it runs on the stock runpod/pytorch image
+    instead of pulling our 9.3 GB one. Anything else is the Keras model, as
+    before (PIC_VISION_INFER_FP16 applies to both)."""
+    half = os.environ.get("PIC_VISION_INFER_FP16", "1") == "1"
+    if model_path.endswith(".pt"):
+        import torch
+        from src.tracknet_torch import load
+        device = "cuda" if torch.cuda.is_available() else "cpu"
+        torch.backends.cudnn.benchmark = True          # one fixed input shape
+        model = load(model_path, device=device, half=half)
+        dtype = next(model.parameters()).dtype
+        print(f"model: PyTorch TrackNet, {dtype}, {device}")
+
+        def infer(x):
+            with torch.no_grad():
+                return model(torch.from_numpy(x).to(device, dtype)).float().cpu().numpy()
+        return infer
+    return _tf_infer(model_path, half)
+
+
+def _tf_infer(model_path, half):
+    import tensorflow as tf
     model = tf.keras.models.load_model(
         model_path,
         custom_objects={"custom_loss": custom_loss},
@@ -154,14 +177,20 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     # (shifts <= 0.5 px at 512 wide; EXPERIMENTS.md). The saved model pins
     # each layer to float32, so the float16 copy is rebuilt from its config.
     # PIC_VISION_INFER_FP16=0 / PIC_VISION_INFER_XLA=0 restore the old path.
-    if os.environ.get("PIC_VISION_INFER_FP16", "1") == "1":
+    if half:
         model = half_precision(model)
     xla = os.environ.get("PIC_VISION_INFER_XLA", "1") == "1"
     print(f"model: {model.layers[-1].compute_dtype}, XLA {'on' if xla else 'off'}")
 
     @tf.function(jit_compile=xla)
-    def infer(x):
+    def tf_infer(x):
         return tf.cast(model(x, training=False), tf.float32)
+    return lambda x: tf_infer(tf.constant(x)).numpy()
+
+
+def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5, crop_to_court=False):
+    print("Loading model...")
+    infer = load_infer(model_path)
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -214,7 +243,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     warm_trio = [img1, img2, img3]
     if mask is not None:
         warm_trio = [apply_mask(im, mask3) for im in warm_trio]
-    _ = infer(tf.constant(prep3(warm_trio, crop))).numpy()
+    _ = infer(prep3(warm_trio, crop))
 
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -293,7 +322,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                 unit = frame_q.get()
                 if unit is None:
                     break
-                raw_pred = infer(tf.constant(unit)).numpy()
+                raw_pred = infer(unit)
                 mask_pred = (raw_pred > heat_threshold).astype(np.float32)
                 h_pred = (mask_pred[0] * 255).astype(np.uint8)
                 probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred

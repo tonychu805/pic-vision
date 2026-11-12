@@ -122,8 +122,27 @@ OCCLUSION_BRIDGE = True
 # 2026-11-01). This swap is the change under review. The previous weights stay
 # in the bucket at weights/weights_k14_epoch19.tar; rolling back is reverting
 # these two lines and the three below.
-WEIGHTS_R2_KEY = "weights/pdsc_court3_ft_e2_20261101.tar"
-WEIGHTS_LOCAL = "/workspace/weights_pdsc_ft_e2"
+#
+# 2026-11-12: the same weights converted to PyTorch (scripts/tracknet_to_torch.py,
+# src/tracknet_torch.py), so the pod needs no TensorFlow and runs on a stock
+# image. A .pt key is downloaded as is; a .tar key (a Keras SavedModel) is
+# extracted and run through TensorFlow as before -- the rollback.
+WEIGHTS_R2_KEY = "weights/tracknet_pdsc_court3_ft_e2_20261101.pt"
+WEIGHTS_LOCAL = "/workspace/tracknet_pdsc_court3_ft_e2.pt"
+
+
+def fetch_weights(s3_in, workdir):
+    """The ball model at WEIGHTS_LOCAL, downloaded once per pod."""
+    if os.path.exists(WEIGHTS_LOCAL):
+        return
+    if WEIGHTS_R2_KEY.endswith(".tar"):
+        weights_tar = os.path.join(workdir, "weights.tar")
+        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
+        subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
+        os.remove(weights_tar)
+    else:
+        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, WEIGHTS_LOCAL + ".part")
+        os.replace(WEIGHTS_LOCAL + ".part", WEIGHTS_LOCAL)
 # pod_infer runs once at HEAT_LOW; src/ball_threshold.py then keeps the
 # HEAT_HIGH detections for a video that already detects the ball in at least
 # HEALTHY_DETECTION_RATE of its frames, and the HEAT_LOW ones otherwise. The
@@ -809,13 +828,9 @@ def run():
             _encode_h264(["-i", cfr_video, "-vf", "scale=-2:1080"],
                          ["-map", "0:v:0", "-map", "0:a:0?", "-c:a", "copy", proxy_video])
 
-    # --- Weights: same R2-cached tarball every pod-based run already used. ---
+    # --- Weights: the R2-cached ball model (fetch_weights). ---
     _check_cancel("inference", "fetching model weights...")
-    if not os.path.exists(WEIGHTS_LOCAL):
-        weights_tar = os.path.join(WORKDIR, "weights.tar")
-        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
-        subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"],
-                       check=True)
+    fetch_weights(s3_in, WORKDIR)
 
     _log("running TrackNet inference...")
     csv_path = os.path.join(WORKDIR, "predictions.csv")
@@ -1041,11 +1056,7 @@ def prefetch_models():
     still missing, exactly as before."""
     try:
         s3_in, _ = _r2_clients()
-        if not os.path.exists(WEIGHTS_LOCAL):
-            weights_tar = os.path.join("/workspace", "weights.tar")
-            s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
-            subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
-            os.remove(weights_tar)
+        fetch_weights(s3_in, "/workspace")
         if BADGES and not os.path.exists(POSE_LOCAL):
             s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
         _log("warm start: models ready")

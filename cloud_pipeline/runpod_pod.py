@@ -177,27 +177,32 @@ def create_pod(name, ssh_pubkey, gpu_type_ids=None, image=DEFAULT_IMAGE,
 # already-proven tf215-cuda118) plus a `dockerStartCmd` override
 # sidesteps the whole mystery instead of solving it, since it never
 # builds or runs a derived image at all. See DECISIONS.md ADR-093.
+#
+# 2026-11-12: the image is now RunPod's own unmodified PyTorch image, and the
+# two packages it lacks are installed at start (pinned; OpenCV without deps so
+# the image's numpy is left alone). Still no derived image: the build-time
+# layers that hung in 2026-09 are not involved.
 _BOOTSTRAP_CMD = (
     "curl -sL \"$BOOTSTRAP_URL\" -o /tmp/deps.tar && "
     "mkdir -p /workspace && tar -xf /tmp/deps.tar -C /workspace --no-same-owner && "
+    "python3 -m pip install -q --no-cache-dir boto3==1.35.99 requests==2.32.3 && "
+    "python3 -m pip install -q --no-cache-dir --no-deps opencv-python-headless==4.10.0.84 && "
     "cd /workspace && python3 -u pod_driver.py"
 )
 
 
-# The image RunPod has actually been observed to start, and a byte-identical
-# copy of it under a second tag (pushed 2026-09-18, same digest confirmed).
-#
-# Two different failures share one remedy here. A tag that goes missing
-# leaves every job failing at container start with nothing to fall back to,
-# since ADR-101's investigation means a REBUILT image is not a safe
-# substitute -- only this exact one is proven. And the unexplained
-# container-start hang ADR-101 gave up on looks identical from outside: pod
-# created, nothing ever checks in. job_runner.py retries a stuck attempt
-# once on the second entry here, which clears the first case (the tag is
-# gone) and, being a fresh pod, usually clears the second too.
+# RunPod's official PyTorch images, not ours (2026-11-12). Ours
+# (tonychu805/pic-vision-tracknet, 9.3 GB with TensorFlow) had to be pulled
+# onto any host that lacked it, and on 2026-11-12 four pods in a row sat
+# "awaiting_container" past the 4-minute limit. TensorFlow was there only for
+# the ball model, which now runs in PyTorch (src/tracknet_torch.py). Measured
+# the same day, 3 starts each: container running in 21-28 s (2.1) and
+# 12-38 s (2.4). The retry uses the other image, so it never waits on the
+# same pull twice. 2.1 first: the pose model was exported with torch 2.1, and
+# its CUDA 11.8 runs on every host driver.
 POD_IMAGES = [
-    "tonychu805/pic-vision-tracknet:tf215-cuda118",
-    "tonychu805/pic-vision-tracknet:tf215-cuda118-known-good-20260918",
+    "runpod/pytorch:2.1.0-py3.10-cuda11.8.0-devel-ubuntu22.04",
+    "runpod/pytorch:2.4.0-py3.11-cuda12.4.1-devel-ubuntu22.04",
 ]
 
 
