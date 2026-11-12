@@ -657,6 +657,11 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
     return fallback, info
 
 
+def rally_finder(hit_finder_info):
+    """'hit_finder' when the top-rally clips came from the hit finder, else 'crossings'."""
+    return "hit_finder" if (hit_finder_info or {}).get("used") == "hit_finder" else "crossings"
+
+
 def clip_framings(video, csv_path, calib, clips, poses):
     """{clip file: 9:16 framing path} for every rally clip (src/framing.py); {} on any failure.
 
@@ -904,6 +909,9 @@ def run():
             # Where a 9:16 window sits over this clip as it plays (vertical
             # reels, src/framing.py); absent if framing failed.
             **({"framing": framings[clip["file"]]} if clip["file"] in framings else {}),
+            # Which finder produced the rally: the console exempts hit-finder
+            # clips from its sharper-cut score floor (reels.finder).
+            "finder": rally_finder(hit_finder_info),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:

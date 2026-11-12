@@ -142,3 +142,9 @@ def test_a_cancel_during_the_hit_finder_still_stops_the_job(pod, monkeypatch):
     monkeypatch.setattr(HF, "find_rallies", cancelled)
     with pytest.raises(pod.Cancelled):
         pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+
+
+def test_clips_say_they_came_from_the_hit_finder_only_when_it_was_used(pod):
+    assert pod.rally_finder({"used": "hit_finder", "rallies": 4}) == "hit_finder"
+    assert pod.rally_finder({"used": "crossings", "error": "boom"}) == "crossings"   # fell back
+    assert pod.rally_finder(None) == "crossings"                                       # HIT_FINDER off
