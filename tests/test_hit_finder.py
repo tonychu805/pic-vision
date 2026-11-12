@@ -115,7 +115,7 @@ CROSSING_RALLIES = [{"start": 1.0, "end": 9.0}]
 
 def test_the_pod_uses_the_hit_finders_rallies(pod, monkeypatch):
     found = [{"start": 2.0, "end": 8.0}, {"start": 20.0, "end": 30.0}]
-    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: (found, {"candidates": 40, "accepted": 12, "frames": 900}))
+    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: (found, {"candidates": 40, "accepted": 12, "frames": 900, "posed": 450}))
     segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert segs == found
     assert info["used"] == "hit_finder" and info["rallies"] == 2 and info["crossing_rallies"] == 1
@@ -131,7 +131,7 @@ def test_the_pod_falls_back_to_the_crossing_rallies_on_an_error(pod, monkeypatch
 
 
 def test_the_pod_falls_back_when_the_hit_finder_finds_nothing(pod, monkeypatch):
-    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([], {"candidates": 3, "accepted": 0, "frames": 900}))
+    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([], {"candidates": 3, "accepted": 0, "frames": 900, "posed": 450}))
     segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert segs == CROSSING_RALLIES and info["used"] == "crossings" and "error" not in info
 
@@ -148,3 +148,66 @@ def test_clips_say_they_came_from_the_hit_finder_only_when_it_was_used(pod):
     assert pod.rally_finder({"used": "hit_finder", "rallies": 4}) == "hit_finder"
     assert pod.rally_finder({"used": "crossings", "error": "boom"}) == "crossings"   # fell back
     assert pod.rally_finder(None) == "crossings"                                       # HIT_FINDER off
+
+
+def _video(path, n=12, size=(64, 48)):
+    import cv2
+    import numpy as np
+    out = cv2.VideoWriter(str(path), cv2.VideoWriter_fourcc(*"mp4v"), 30, size)
+    for i in range(n):
+        out.write(np.full((size[1], size[0], 3), i * 10, np.uint8))
+    out.release()
+    return str(path)
+
+
+class Brightness:
+    """A 'pose model' whose one person sits at the frame's mean brightness: frames are told apart."""
+
+    def prepare(self, frames):
+        return [float(f.mean()) for f in frames]
+
+    def infer(self, means):
+        return [[([m, m, m + 1, m + 1], [[m, m, 1.0]] * 17)] for m in means]
+
+    def __call__(self, frames):
+        return self.infer(self.prepare(frames))
+
+
+def test_one_decode_gives_each_pass_what_it_would_get_alone(tmp_path):
+    import numpy as np
+    video, H = _video(tmp_path / "v.mp4"), np.eye(3)
+    frames = [0, 2, 4, 6, 8, 10]
+    models = {"full": Brightness(), "far": pose.CropModel(Brightness(), (0, 0, 32, 24))}
+    together = pose.pose_video_passes(video, frames, models, H, batch=4)
+    for name, m in models.items():
+        assert together[name] == pose.pose_video(video, frames, m, H, batch=4)
+    assert sorted(together["full"], key=int) == [str(f) for f in frames]
+
+
+def test_one_decode_also_works_for_plain_models(tmp_path):
+    import numpy as np
+    video = _video(tmp_path / "v.mp4")
+    plain = {"a": lambda imgs: [[] for _ in imgs], "b": lambda imgs: [[([0, 0, 1, 1], [[0, 0, 1.0]] * 17)] for _ in imgs]}
+    out = pose.pose_video_passes(video, [1, 3], plain, np.eye(3))
+    assert out["a"] == {"1": [], "3": []} and len(out["b"]["1"]) == 1
+
+
+def _baselines(seconds, step):
+    """Someone at each baseline for `seconds`, posed every `step` frames."""
+    near = {"court": [10.0, 0.0]}
+    far = {"court": [10.0, 44.0]}
+    n = int(seconds * HF.FPS)
+    return ({str(f): [near] for f in range(0, n + 60, step)},
+            {str(f): [far] if f < n else [] for f in range(0, n + 60, step)})
+
+
+def test_a_held_set_up_is_found_at_either_sampling_step():
+    for step in (3, 6):
+        full, far = _baselines(3.0, step)
+        assert HF.serve_setups(full, far, [], step) == [0.0]
+
+
+def test_a_set_up_shorter_than_the_hold_is_not_found_at_either_step():
+    for step in (3, 6):
+        full, far = _baselines(1.5, step)
+        assert HF.serve_setups(full, far, [], step) == []

@@ -638,12 +638,12 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
         def progress(kind, done, total):
             if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
                 last[0] = time.time()
-                _check_cancel("hit_finder", f"finding rallies from paddle swings: {kind} pass, posed {done}/{total} frames...")
+                _check_cancel("hit_finder", f"finding rallies from paddle swings: posed {done}/{total} frames...")
 
         segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress)
         info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
         _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
-             f"{found['frames']} frames posed twice in {info['sec']}s")
+             f"{found['posed']} of {found['frames']} frames posed (both passes, one decode) in {info['sec']}s")
         if segs:
             info["used"] = "hit_finder"
             return segs, info

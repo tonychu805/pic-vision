@@ -38,6 +38,13 @@ MIN_TURNS, DEEP_FT, DEEP_MAX_FT, DEEP_WINDOW = 4, 15.0, 28.0, 3.0
 CROSS_GAP = 6.0
 SERVE_PAUSE, SERVE_QUIET = 1.5, 1.0
 SETUP_FT, SETUP_HOLD, SETUP_DEAD = 1.0, 2.0, 1.5
+# Cost (2026-11-12): pose every STRIDE-th frame. 2 halves the pose work; on
+# the 9 PGC parts it found 6 fewer of 89 real rallies and flagged 22 fewer
+# (F 0.610 vs 0.604, EXPERIMENTS 2026-11-12). Serve set-ups are sampled
+# every SETUP_STEP frames, a multiple of STRIDE so every sample was posed
+# (the research code used 3, i.e. every 0.1 s, at STRIDE 1).
+STRIDE = 2
+SETUP_STEP = 6
 
 MODEL_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "hit_finder_v0.json")
 FEATURES = ("behind", "from_net", "wide", "wrist", "own_side", "other_side", "ball_near", "ball_3s", "ball_check",
@@ -234,13 +241,15 @@ def candidates(P, n, T, ny):
 
 # --- Chains into rallies ---
 
-def serve_setups(full, far, crossings):
-    """Start times (s) of serve set-ups: someone at/behind each baseline, held, ball dead (sampled every 0.1 s)."""
+def serve_setups(full, far, crossings, step=None):
+    """Start times (s) of serve set-ups: someone at/behind each baseline, held, ball dead (sampled every `step` frames)."""
     if SETUP_FT is None or not full:
         return []
+    step = step or SETUP_STEP
+    hold = int(round(SETUP_HOLD * FPS / step))
     n = max(int(f) for f in full) + 1
     out, run, t0 = [], 0, None
-    for f in range(0, n, 3):
+    for f in range(0, n, step):
         ys = [p["court"][1] for p in full.get(str(f), []) if p["court"] and p["court"][1] < NET] + \
              [p["court"][1] for p in far.get(str(f), []) if p["court"] and p["court"][1] >= NET]
         ys = [y for y in ys if -8 <= y <= 52]
@@ -250,7 +259,7 @@ def serve_setups(full, far, crossings):
             continue
         t0 = f / FPS if run == 0 else t0
         run += 1
-        if run == int(SETUP_HOLD * 10) and not any(t0 <= x <= t0 + SETUP_DEAD for x in crossings):
+        if run == hold and not any(t0 <= x <= t0 + SETUP_DEAD for x in crossings):
             out.append(t0)
     return out
 
@@ -294,31 +303,32 @@ def build(C, prob, cut, gap, crossings=None, setups=None):
     return out
 
 
-def rallies_from_poses(full, far, n, w, csv_path, calib, crossings, model):
+def rallies_from_poses(full, far, n, w, csv_path, calib, crossings, model, setup_step=None):
     """Rallies from already-posed frames (both passes, keyed by str(frame))."""
     from src.ball import net_line_y
     k = (calib.get("calibration_resolution") or [w])[0] / w
     P = people_per_frame(full, far, n, k)
     C = candidates(P, n, ball_points(csv_path, calib), net_line_y(calib))
     prob = model.predict_proba([[c[f] for f in FEATURES] for c in C]) if C else []
-    segs = build(C, prob, model.cut, model.gap, crossings, serve_setups(full, far, crossings)) if C else []
+    segs = build(C, prob, model.cut, model.gap, crossings, serve_setups(full, far, crossings, setup_step)) if C else []
     return segs, {"candidates": len(C), "accepted": sum(p >= model.cut for p in prob)}
 
 
-def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, model=None):
-    """Pose every frame of `video` (whole frame + far close-up) and return (rallies, info)."""
+def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, model=None, stride=None):
+    """Pose every `stride`-th frame of `video` (whole frame + far close-up, one decode) and return (rallies, info)."""
     import cv2
-    from src.pose import CropModel, pose_video
+    from src.pose import CropModel, pose_video_passes
+    stride = stride or STRIDE
     cap = cv2.VideoCapture(video)
     n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
     w, h = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)), int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
     cap.release()
     model = model or Model()
     H = homography(calib, w, h)
-    frames = list(range(n))
-    full = pose_video(video, frames, pose_model, H, progress=progress and (lambda d, t: progress("full", d, t)))
-    far = pose_video(video, frames, CropModel(pose_model, far_crop_box(calib, w, h)), H,
-                     progress=progress and (lambda d, t: progress("far", d, t)))
-    segs, info = rallies_from_poses(full, far, n, w, csv_path, calib, crossings, model)
-    info["frames"] = n
+    frames = list(range(0, n, stride))
+    posed = pose_video_passes(video, frames, {"full": pose_model, "far": CropModel(pose_model, far_crop_box(calib, w, h))},
+                              H, progress=progress and (lambda d, t: progress("both", d, t)))
+    setup_step = SETUP_STEP if stride == STRIDE else 3 * stride
+    segs, info = rallies_from_poses(posed["full"], posed["far"], n, w, csv_path, calib, crossings, model, setup_step)
+    info.update(frames=n, posed=len(frames), stride=stride)
     return segs, info

@@ -170,6 +170,78 @@ def _batches(video, frames, batch):
         cap.release()
 
 
+def pose_video_passes(video, frames, models, H, batch=8, progress=None):
+    """Pose the same frames with several models (e.g. whole frame + far crop)
+    from ONE decode. Returns {name: {str(frame): [person, ...]}}.
+
+    pose_video once per model decodes the video once per model; on the pod
+    decoding is CPU work the GPU waits for (see pose_video), so the hit
+    finder's two passes paid for two full decodes. Each model sees exactly
+    the frames it would have seen alone, so the output is the same."""
+    out = {name: {} for name in models}
+    if not frames:
+        return out
+
+    def keep(name, idx, people_per_frame):
+        for fn, people in zip(idx, people_per_frame):
+            out[name][str(fn)] = [{"box": [float(v) for v in b], "court": to_court(H, b),
+                                   "kp": [[float(k[0]), float(k[1]), float(k[2])] for k in kp]}
+                                  for b, kp in people]
+
+    def report():
+        if progress:
+            progress(min(len(v) for v in out.values()), len(frames))
+
+    if not all(hasattr(m, "prepare") for m in models.values()):
+        for idx, imgs in _batches(video, frames, batch):
+            for name, m in models.items():
+                keep(name, idx, m(imgs))
+            report()
+        return out
+
+    import queue
+    import threading
+    q = queue.Queue(maxsize=PREFETCH_BATCHES)
+    stop = threading.Event()
+    DONE = object()
+
+    def put(item):
+        while not stop.is_set():
+            try:
+                q.put(item, timeout=0.5)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def produce():
+        try:
+            for idx, imgs in _batches(video, frames, batch):
+                if not put((idx, {name: m.prepare(imgs) for name, m in models.items()})):
+                    return
+            put(DONE)
+        except BaseException as e:      # handed to the consumer, re-raised there
+            put(e)
+
+    worker = threading.Thread(target=produce, name="pose-prefetch-passes", daemon=True)
+    worker.start()
+    try:
+        while True:
+            item = q.get()
+            if item is DONE:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            idx, prepared = item
+            for name, m in models.items():
+                keep(name, idx, m.infer(prepared[name]))
+            report()
+    finally:
+        stop.set()
+        worker.join(timeout=5)
+    return out
+
+
 def pose_video(video, frames, model, H, batch=8, progress=None):
     """Pose the given frame indices of `video`. Returns {str(frame): [person, ...]}.
 
