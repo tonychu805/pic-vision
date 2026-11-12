@@ -301,8 +301,14 @@ def test_reads_use_the_read_client_and_writes_use_the_write_client():
     source = inspect.getsource(pod_driver.run)
     assert not re.search(r"s3_out\.download_file", source)
     assert not re.search(r"s3_in\.upload_file", source)
-    assert len(re.findall(r"s3_in\.download_file", source)) == 3
+    assert len(re.findall(r"s3_in\.download_file", source)) == 2
     assert len(re.findall(r"s3_out\.upload_file", source)) == 3
+    # The ball model's download moved into fetch_weights (2026-11-12): run()
+    # must hand it the read client, and it must only read with it.
+    assert re.search(r"fetch_weights\(s3_in,", source)
+    weights = inspect.getsource(pod_driver.fetch_weights)
+    assert len(re.findall(r"s3_in\.download_file", weights)) == 2      # .tar and .pt branches
+    assert not re.search(r"upload_file|s3_out", weights)
 
 
 # --- NVENC -> libx264 fallback (2026-09-21) ---------------------------------
