@@ -630,17 +630,20 @@ def _done_marker_in_tmp(monkeypatch, tmp_path):
     monkeypatch.setattr(pod_driver, "DONE_MARKER", str(tmp_path / "pod_driver_done"))
 
 
-def test_the_ball_detector_runs_at_the_low_threshold_and_is_then_cut_per_video():
-    # One inference pass at HEAT_LOW, then src/ball_threshold.py decides, per video, whether
-    # the strict value is kept (a venue that already detects well) or the low one is used.
-    assert pod_driver.HEAT_LOW < pod_driver.HEAT_HIGH
+def test_the_ball_detector_runs_at_productions_single_cut():
+    # 2026-11-12 (operator): k14 at production's 0.5, which the hit finder was judged on.
+    # The per-video step stays wired (HEAT_LOW < HEAT_HIGH turns it back on); at equal
+    # values it changes nothing.
+    assert pod_driver.HEAT_LOW == pod_driver.HEAT_HIGH == 0.5
     source = inspect.getsource(pod_driver.run)
     assert '"--heat-threshold", str(HEAT_LOW)' in source
     assert "apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH" in source
 
 
-def test_the_ball_model_is_sent_the_court_not_the_whole_frame():
-    # pod_infer maps the crop's detections back to calibration pixels, so every consumer is unchanged;
-    # dropping this flag silently returns to the whole-frame run that loses the far-side ball.
-    assert pod_driver.CROP_TO_COURT is True
+def test_the_ball_model_sees_the_whole_frame_with_k14():
+    # 2026-11-12 (operator): the Court 3 crop went with the unfinished Court 3 weights; k14
+    # runs on the whole frame, as production and as the hit finder was judged on. The flag
+    # stays wired for the Court 3 work.
+    assert pod_driver.CROP_TO_COURT is False
+    assert "k14" in pod_driver.WEIGHTS_R2_KEY
     assert '"--crop-to-court"' in inspect.getsource(pod_driver.run)

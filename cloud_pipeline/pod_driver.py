@@ -127,8 +127,13 @@ OCCLUSION_BRIDGE = True
 # src/tracknet_torch.py), so the pod needs no TensorFlow and runs on a stock
 # image. A .pt key is downloaded as is; a .tar key (a Keras SavedModel) is
 # extracted and run through TensorFlow as before -- the rollback.
-WEIGHTS_R2_KEY = "weights/tracknet_pdsc_court3_ft_e2_20261101.pt"
-WEIGHTS_LOCAL = "/workspace/tracknet_pdsc_court3_ft_e2.pt"
+#
+# 2026-11-12 (operator): back to the production k14 weights, converted. The
+# Court 3 fine-tune is unfinished, and the hit finder was trained and judged
+# on k14 ball positions from the whole frame at 0.5 -- so the crop and the
+# 0.40 cut below go back to production's values with it.
+WEIGHTS_R2_KEY = "weights/tracknet_k14_epoch19.pt"
+WEIGHTS_LOCAL = "/workspace/tracknet_k14_epoch19.pt"
 
 
 def fetch_weights(s3_in, workdir):
@@ -151,14 +156,17 @@ def fetch_weights(s3_in, workdir):
 # 35 s blob); the strict value alone finds almost nothing on Court 3. 0.40 over 0.35:
 # on the operator's rated candidates 70% (of 10) were real or part real against 57%
 # (of 21), at the price of fewer rallies. Both are small samples.
-HEAT_LOW = 0.40
+# 0.5 (2026-11-12): production's single cut, with k14; equal to HEAT_HIGH, the adaptive
+# step changes nothing.
+HEAT_LOW = 0.5
 HEAT_HIGH = 0.5
 HEALTHY_DETECTION_RATE = 0.25
 # The model sees only the court and the airspace over it (src/court_crop.py), not the
 # whole frame: the far ball shrinks 2.4x instead of 3.75x on its way to the model's
 # 512x288 input. With the fine-tuned weights, 13 of 22 court-side and 8 of 12 wall-side
 # marked balls are found against 3 and 3 on the whole frame (EXPERIMENTS.md 2026-11-01).
-CROP_TO_COURT = True
+# Off (2026-11-12): the whole frame, as production and as the hit finder was judged on.
+CROP_TO_COURT = False
 # Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
 # exported with the pod's Torch 2.1 runtime at 736x1280. The operator
 # selected the faster model after the staging replay, accepting possible
