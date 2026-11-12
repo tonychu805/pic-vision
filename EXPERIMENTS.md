@@ -4009,3 +4009,22 @@ TIMING (A5000): 46.8 s in the model, 14.5 s waiting for frames, 5.5 s post-proce
 | Check-in to done | 6.7 min | 7.3 min |
 
 **Reading.** The hit finder is GPU-bound on pose: 18,000 pose inferences (9,000 frames x 2 passes) in 181 s, about 100/s, as the v8n model does locally; threads were not its cost and the change gave nothing (kept: harmless, consistent). The pipeline keeps up on an A5000 (7.3 min per 10 min); the hit finder is ~1.5 min of pose per 5-min part, inside the 2.5-min pose budget (EXPERIMENTS 2026-11-10). The new limit is GPU supply: RunPod had nothing under the price cap for 10-20+ min.
+
+## 2026-11-12 — Google Cloud L4 as a second GPU vendor: works, ~1.2x slower than a RunPod A5000
+
+**Why.** RunPod had no GPU under the $0.50/hr cap for 10-20+ min in run 3 (above); testing a second vendor as a fallback (operator: Vast and Google, keep a cap).
+
+**Run.** A stand-alone benchmark (not the pod driver; scratch `vendor_bench/bench.py`): the pod's two GPU stages on PGC eda301d9 0925T1201 s004 (10 min, 1080p) -- `scripts/pod_infer.py` (k14 .pt, 0.5, whole frame), then `detect_candidates` and `hit_finder.find_rallies` with the v8n 736x1280 TorchScript pose. Google VM: spot, asia-east1-a, Google's stock image `pytorch-2-9-cu129-ubuntu-2204-nvidia-580` (torch 2.9.1; it lacks ffprobe -- apt-installed; the pod fetches its own). Code at `5110201`. Deleted after.
+
+| Machine | CPUs | Ball model | Hit finder | Both GPU stages | Rallies |
+|---|---|---|---|---|---|
+| Workstation RTX 2000 Ada (reference) | 16 | 1.7 min | 2.7 min | 4.4 min | 21 |
+| Google L4, g2-standard-4 | 4 | 2.6 min | 3.9 min | 6.5 min | 21 |
+| Google L4, g2-standard-8 | 8 | 2.0 min | 3.3 min | 5.4 min | 21 |
+| RunPod A5000 (run 2/3 above, in the real pod) | 7 | 1.2 min | 2.9-3.1 min | 4.1-4.4 min | -- |
+
+Ball model TIMING on the L4: 58 s in the model (faster than the RTX 2000 Ada's 95 s), but 52-81 s waiting for frames -- CPU-bound on decode with 4-8 vCPUs. Rallies: 19 of 21 identical to the workstation, 2 with end times 0.6 and 3.1 s apart (different torch/GPU); identical between the 4- and 8-CPU runs.
+
+Start-up: VM request to SSH + CUDA ready 136 s (first boot, 100 GB disk from a large image); a stopped VM restarted in 30 s. Download from the internet 36 MB/s (one GitHub file). Price not confirmed: Google's pricing API refused this account; third-party pages disagree on g2-standard-8 spot in asia-east1 ($0.39-0.74/hr), on demand ~$0.99/hr. Read the real charge from the project's bill.
+
+**Reading.** Google's L4 runs our pipeline unchanged on its own stock image, with the same rallies. It is slower than an A5000 per part (+1.0-1.3 min of GPU stages per 10 min on 8 CPUs, +2.1-2.4 on 4) but would still keep up (A5000 check-in to done 6.7-7.3 min per 10 min, so ~8-8.5 on an L4-8, estimated). As a fallback when RunPod has nothing it is usable; as the main vendor it is slower and, at spot prices above ~$0.50, over the cap. Not tested: the real pod driver on Google (R2 keys, job flow), spot reclaim mid-part, and Vast (needs an account).
