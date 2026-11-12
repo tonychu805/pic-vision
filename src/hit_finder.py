@@ -20,6 +20,7 @@ import bisect
 import json
 import math
 import os
+import time
 
 import numpy as np
 
@@ -326,9 +327,13 @@ def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, m
     model = model or Model()
     H = homography(calib, w, h)
     frames = list(range(0, n, stride))
+    t0 = time.perf_counter()
     posed = pose_video_passes(video, frames, {"full": pose_model, "far": CropModel(pose_model, far_crop_box(calib, w, h))},
                               H, progress=progress and (lambda d, t: progress("both", d, t)))
+    t1 = time.perf_counter()
     setup_step = SETUP_STEP if stride == STRIDE else 3 * stride
     segs, info = rallies_from_poses(posed["full"], posed["far"], n, w, csv_path, calib, crossings, model, setup_step)
-    info.update(frames=n, posed=len(frames), stride=stride)
+    # Where the time went: pose (decode + GPU) vs features and chaining (pure Python).
+    info.update(frames=n, posed=len(frames), stride=stride,
+                pose_sec=round(t1 - t0, 1), features_sec=round(time.perf_counter() - t1, 1))
     return segs, info

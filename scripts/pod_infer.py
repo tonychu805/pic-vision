@@ -28,6 +28,7 @@ import numpy as np
 # court_crop is the one src/ module this script needs (the pod ships src/ beside it).
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from src.court_crop import court_crop_box, grid_to_calibration  # noqa: E402
+from src.cpus import limit_threads, usable_cpus  # noqa: E402,F401 -- thread pools sized to the pod (src/cpus.py)
 
 HEIGHT, WIDTH = 288, 512
 
@@ -132,43 +133,6 @@ def apply_mask(img, mask3):
     gives the same pixels as img * mask (0/1) at ~1/3 of the CPU time --
     the CPU side was what limited a pod (2026-10-27 profile)."""
     return cv2.bitwise_and(img, mask3)
-
-
-def usable_cpus():
-    """CPUs this process may really use: its affinity set, capped by a cgroup CPU quota.
-
-    In a container os.cpu_count() reports the HOST's cores (often 64-128 on a
-    GPU server) while the pod gets 9-16; OpenCV and torch size their thread
-    pools from it and then fight over the few real ones (suspected cause of
-    the 2026-11-12 staging runs where faster A5000 hosts inferred slower)."""
-    n = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
-    try:                                                    # cgroup v2
-        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
-        if quota != "max":
-            n = min(n, max(1, int(quota) // int(period)))
-    except (OSError, ValueError):
-        try:                                                # cgroup v1
-            quota = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
-            period = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
-            if quota > 0:
-                n = min(n, max(1, quota // period))
-        except (OSError, ValueError):
-            pass
-    return n
-
-
-def limit_threads():
-    """Size OpenCV's (and, if loaded, torch's) thread pools to the CPUs really available.
-    PIC_VISION_INFER_THREADS overrides. Returns what was set, for the timing line."""
-    n = int(os.environ.get("PIC_VISION_INFER_THREADS") or usable_cpus())
-    cv2.setNumThreads(n)
-    info = {"host_cpus": os.cpu_count(), "usable_cpus": usable_cpus(), "cv2_threads": n}
-    if "torch" in sys.modules:
-        import torch
-        # The model runs on the GPU; torch's own CPU work here is two copies per call.
-        torch.set_num_threads(min(2, n))
-        info["torch_threads"] = torch.get_num_threads()
-    return info
 
 
 def load_infer(model_path):

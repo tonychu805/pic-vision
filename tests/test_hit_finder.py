@@ -211,3 +211,20 @@ def test_a_set_up_shorter_than_the_hold_is_not_found_at_either_step():
     for step in (3, 6):
         full, far = _baselines(1.5, step)
         assert HF.serve_setups(full, far, [], step) == []
+
+
+def test_the_pod_sizes_thread_pools_before_the_hit_finder(pod, monkeypatch):
+    # Same cause as inference (src/cpus.py): host-sized pools thrash on a 5-7 CPU pod.
+    from src import cpus
+    seen = []
+    monkeypatch.setattr(cpus, "limit_threads", lambda: seen.append(1) or {"usable_cpus": 7, "cv2_threads": 7})
+    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([{"start": 1.0, "end": 9.0}], {"candidates": 4, "accepted": 4, "frames": 900, "posed": 450}))
+    segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+    assert seen == [1] and info["threads"]["cv2_threads"] == 7 and info["used"] == "hit_finder"
+
+
+def test_usable_cpus_never_exceeds_what_the_process_may_run_on():
+    import os
+    from src import cpus
+    n = cpus.usable_cpus()
+    assert 1 <= n <= len(os.sched_getaffinity(0)) <= (os.cpu_count() or n)

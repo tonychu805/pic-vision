@@ -615,6 +615,8 @@ def measure_badges(s3_in, video, segments, crossings, calib):
         import numpy as np
         from src.badges import measure
         from src.pose import PoseModel, pose_frames, pose_video
+        from src.cpus import limit_threads
+        limit_threads()          # pool sizes from the pod's real CPUs, not the host's (src/cpus.py)
         started = time.time()
         if not os.path.exists(POSE_LOCAL):
             s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
@@ -663,6 +665,8 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
     try:
         from src import hit_finder
         from src.pose import PoseModel
+        from src.cpus import limit_threads
+        info.update(threads=limit_threads())   # as pod_infer: the pod's real CPUs, not the host's
         started = time.time()
         if not os.path.exists(POSE_LOCAL):
             s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
