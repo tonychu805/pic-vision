@@ -3930,3 +3930,19 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 - Pose time on that part, decode included: 138 s whole frame + 148 s far close-up = 291 s per 10 min of footage, about 2.4 min per 5-min part (budget about 2.5, EXPERIMENTS 2026-11-10). The pod's GPU is not measured.
 
 **Not checked.** One part only for the pod path; the pod's own card; picture-level playback of the clips it cuts. Staging gives the per-part comparison: each job's stats carry `hit_finder` (rallies, crossing rallies, candidates, seconds, which list was used).
+
+## 2026-11-12 — Hit finder, first staging pod run (one part, Court 3)
+
+**Run.** Stand-alone staging job `cb940d72` (no recording session, so the 11:13 share was not re-ranked) on the 11:13 Court 3 recording, part 3 (session-002.mkv, 5 min, 1080p), pod code `3bb1543`, RTX 4000 Ada. Same footage as job `6f9f79e2` on the crossing rallies (11-02). Court 3 is outside the hit finder's training and test footage (far ball hard to see), so this is a function and speed check, not a quality verdict.
+
+**Measured.** Job done, no error, hit-finder rallies used (not the fallback). Pod start (claim to check-in) 2.5 min; inference 80 s; **hit_finder stage 223.6 s** (both passes, 9,000 frames each); badges 32 s; cut 34 s. 543 swing candidates, 80 accepted, **4 rallies against 9 crossing rallies**. Share `ac293ab1`: all 6 videos load.
+
+| Hit finder (score) | Crossing rallies (score, 11-02) |
+|---|---|
+| 192-210 s (61.4) | 192-206 (51.0) |
+| 162-174 (54.8) | 162-174 (53.4) |
+| 45-59 (48.5) | none |
+| 180-193 (33.3) | none |
+| none | 236-261 (78.1, in the 11:13 share's top 10), 16-34, 61-80, 119-136, 221-238, 5-17, 138-151 |
+
+**Reading.** Speed: 3.7 min per 5-min part on the pod's card, about 1.5x the 2.5-min budget and slower than locally (2.4 min at 720p; this part is 1080p). With inference and the rest, one pod takes longer than the footage lasts, so a continuous session falls behind unless more pods run. Quality: unknown until playback; the crossing finder's best clip of this part (236-261) is not among the hit finder's 4.
