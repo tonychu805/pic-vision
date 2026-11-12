@@ -28,6 +28,7 @@ POD_DEPS_FILES = [
     "src/track.py", "src/select.py", "src/tracknet.py", "src/render.py",
     "src/drift.py", "src/video_quality.py", "src/rallies.py",
     "src/pose.py", "src/badges.py", "src/framing.py", "src/ball_threshold.py", "src/court_crop.py",
+    "src/hit_finder.py", "src/hit_finder_v0.json",
     "scripts/check_drift.py", "scripts/rank_and_reel.py",
     "scripts/burst_moment_reel.py", "scripts/top_rallies_reel.py",
     "scripts/pod_infer.py",

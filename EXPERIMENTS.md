@@ -3918,3 +3918,15 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 **Result 4: badges (preview, not shipped).** The badge step (`src/badges.py`, pod `measure` over every rally, then the session-wide `decide`) on the 03:12 rallies, with ultralytics `yolov8n-pose.pt` as a stand-in for the pod's TorchScript export: 768 swings, typical speed 2.12; awarded Hardest Swing (part 1, 195.9-213.1 s, 1.5x its bar), Killer Shot (part 7, 9.6-18.7 s, 1.39x), First Strike (part 1, 238.7-245.6 s, 1.06x); 7 candidates, none for Kitchen War or Quick Hands. The operator rated the first two real rallies where the badge does not fit; the third was not graded. The bars were set on yolov8x pose caches and were not re-checked for this venue or the nano model.
 
 **Limits.** All of this is a local replay: nothing ran on a pod or the staging site. 113 is a count of candidates; recall is unmeasured and three empty parts were not watched. The top-10 ranking was graded on one session's best 10 clips only. The start-lead table is from 16 clips of one venue.
+
+## 2026-11-12 — Hit finder on the pod path (staging branch `feat/hit-finder-pod`): equivalence and speed
+
+**What.** `src/hit_finder.py` is a port of `scripts/hit_detector.py` (feat/ball-recall-eval 2abdf2d) for the pod, with the model frozen as `src/hit_finder_v0.json` (sklearn HistGradientBoosting refit exactly as the research `fit()`: both practice videos, YOLOv8n poses, 4,422 labelled swings; exported trees, no sklearn on the pod; setting cut 0.7, gap 3 s). v0 is tournament-trained, not the final model (option A retrain pending).
+
+**Checks (measured, local RTX 2000 Ada).**
+- Frozen trees vs sklearn `predict_proba` on 113 embedded rows: worst difference 2.5e-16.
+- Port vs research code, same cached ultralytics v8n poses and ball predictions, the 9 PGC test parts at 720p: identical rally lists on all 9 (156 rallies, start/end within 1e-9), each side on its own branch's `src/`.
+- Full pod path on pgc_eda301d9_0925T1201_s004 (10 min, 720p): the pod's TorchScript YOLOv8n (736x1280, fp16) on every frame, whole frame + far close-up -> 22 rallies vs the research run's 22, all 22 matched at IoU 0.5; 14 real of 16 labelled for both (greedy IoU 0.5 match); 1,171 vs 1,174 swing candidates.
+- Pose time on that part, decode included: 138 s whole frame + 148 s far close-up = 291 s per 10 min of footage, about 2.4 min per 5-min part (budget about 2.5, EXPERIMENTS 2026-11-10). The pod's GPU is not measured.
+
+**Not checked.** One part only for the pod path; the pod's own card; picture-level playback of the clips it cuts. Staging gives the per-part comparison: each job's stats carry `hit_finder` (rallies, crossing rallies, candidates, seconds, which list was used).

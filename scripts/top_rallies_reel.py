@@ -28,7 +28,7 @@ DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False):
+                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False, segments=None):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -47,9 +47,13 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     n=None cuts every rally. Each clip also carries its rally's own unpadded
     'rally_start'/'rally_end', which is how a badge decided later, across a
     whole session (src/badges.py decide()), finds the clip of its rally.
+
+    `segments` replaces the detected rallies (the hit finder's, src/hit_finder.py);
+    they are scored the same way, on the detected net crossings and speeds.
     """
     cand = detect_candidates(video, csv, calib_path, occlusion_bridge=occlusion_bridge)
-    segments, times_crossed, speeds = cand["segments"], cand["times_crossed"], cand["speeds"]
+    times_crossed, speeds = cand["times_crossed"], cand["speeds"]
+    segments = cand["segments"] if segments is None else segments
     print(f"{len(segments)} candidate rally segments", file=sys.stderr)
 
     with open(calib_path) as f:

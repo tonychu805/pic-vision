@@ -148,6 +148,14 @@ CROP_TO_COURT = True
 BADGES = True
 POSE_R2_KEY = "weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript"
 POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
+# Hit finder (src/hit_finder.py, staging 2026-11-12): the top-rally clips and
+# the badges use rallies found from paddle swings instead of net crossings,
+# ranked by the same score. It poses EVERY frame twice with the same YOLOv8n
+# export, the pod's biggest new cost (about 3 min per 5-min part locally,
+# budget about 2.5). Model v0 is tournament-trained, not final. A failure or
+# no rally found falls back to the crossing rallies; full and burst reels
+# keep the crossing rallies either way.
+HIT_FINDER = True
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
@@ -613,6 +621,42 @@ def measure_badges(s3_in, video, segments, crossings, calib):
         return None, None
 
 
+def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
+    """(rallies, info): the hit finder's rallies, or `fallback` (the crossing
+    rallies) when it fails or finds none. info goes into the job's stats so
+    staging can compare the two finders part by part."""
+    info = {"crossing_rallies": len(fallback)}
+    try:
+        from src import hit_finder
+        from src.pose import PoseModel
+        started = time.time()
+        if not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        _check_cancel("hit_finder", "finding rallies from paddle swings...")
+        last = [time.time()]
+
+        def progress(kind, done, total):
+            if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
+                last[0] = time.time()
+                _check_cancel("hit_finder", f"finding rallies from paddle swings: {kind} pass, posed {done}/{total} frames...")
+
+        segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress)
+        info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
+        _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
+             f"{found['frames']} frames posed twice in {info['sec']}s")
+        if segs:
+            info["used"] = "hit_finder"
+            return segs, info
+        _log("hit finder found no rallies; using the net-crossing rallies")
+    except Cancelled:
+        raise
+    except Exception as e:  # noqa: BLE001 -- the crossing rallies are a full answer on their own
+        _log(f"hit finder skipped: {type(e).__name__}: {e}")
+        info["error"] = f"{type(e).__name__}: {e}"
+    info["used"] = "crossings"
+    return fallback, info
+
+
 def clip_framings(video, csv_path, calib, clips, poses):
     """{clip file: 9:16 framing path} for every rally clip (src/framing.py); {} on any failure.
 
@@ -794,6 +838,12 @@ def run():
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
+    # Clips and badges must share one rally list: a badge finds its clip by
+    # the rally's own start/end (top_rallies_reel.py).
+    hit_finder_info = None
+    if HIT_FINDER:
+        segments, hit_finder_info = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
+                                                        detected["times_crossed"], segments)
     badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
@@ -807,9 +857,10 @@ def run():
     has_burst = burst_result["chronological"] is not None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
                                     session_id, n=None if BADGES else TOP_RALLIES_N, logo_path=logo_path,
-                                    occlusion_bridge=OCCLUSION_BRIDGE)
+                                    occlusion_bridge=OCCLUSION_BRIDGE,
+                                    segments=segments if HIT_FINDER else None)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
-             "top_rallies": top_result["stats"]}
+             "top_rallies": top_result["stats"], "hit_finder": hit_finder_info}
     framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")

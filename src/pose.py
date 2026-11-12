@@ -8,8 +8,9 @@ export size, decode boxes + 17 keypoints, class-agnostic NMS, scale back to
 the frame. Output per frame matches the pose caches the badge bars were set
 on: a list of {"box": [x0,y0,x1,y1], "court": [x_ft, y_ft], "kp": [[x,y,c]*17]}.
 
-Only rally windows are posed (pose_frames), never the whole footage -- pose
-is the expensive model and badges only look at rallies.
+Badges pose only rally windows (pose_frames). The hit finder
+(src/hit_finder.py) poses every frame, twice: the whole frame and, through
+CropModel, a close-up of the far court.
 """
 import cv2
 import numpy as np
@@ -107,6 +108,31 @@ class PoseModel:
             out = self.model(x.half() if self.half else x)
         out = (out[0] if isinstance(out, (list, tuple)) else out).float()
         return [decode(out[i], scale, pad) for i, (scale, pad) in enumerate(meta)]
+
+
+class CropModel:
+    """A pose model run on one fixed crop of every frame; boxes and keypoints come back in frame pixels.
+
+    Same as eval_serve_detector.Crop, which the hit finder was trained with,
+    but it keeps the wrapped model's prepare/infer split (when it has one) so
+    pose_video still decodes ahead of the GPU."""
+
+    def __init__(self, model, box):
+        self.model, (self.x0, self.y0, self.x1, self.y1) = model, box
+        if hasattr(model, "prepare"):
+            self.prepare = lambda frames: model.prepare(self._crop(frames))
+            self.infer = lambda prepared: self._shift(model.infer(prepared))
+
+    def _crop(self, frames):
+        return [f[self.y0:self.y1, self.x0:self.x1] for f in frames]
+
+    def _shift(self, per_frame):
+        x0, y0 = self.x0, self.y0
+        return [[([b[0] + x0, b[1] + y0, b[2] + x0, b[3] + y0], [[k[0] + x0, k[1] + y0, k[2]] for k in kps])
+                 for b, kps in people] for people in per_frame]
+
+    def __call__(self, frames):
+        return self._shift(self.model(self._crop(frames)))
 
 
 def to_court(H, box):
