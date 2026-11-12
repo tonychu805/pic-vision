@@ -4054,3 +4054,22 @@ The 3090 host downloaded from the internet at 0.7 MB/s (one GitHub file; Google'
 Vast offer listings carry no field saying which images a host already has; the first run of the 5-host test lost 4 timings to a script bug (`vastai destroy` read the loop's stdin) and was redone on fresh hosts. Vast spend for all of this: $0.18. Google test VMs and the image deleted after.
 
 **Reading.** Start-up is set by whether the host already has the image, and we choose that by choosing the image: Vast's own template starts like RunPod's stock image (under 2 min on 5/5), a generic image does not. On Google, the VM itself is the floor (~60 s for the create call); a prepared image saves the installs (~1.5 min total), a stopped VM restarts in 30 s. A Vast template's torch is newer (cu13) than the pod's 2.1 -- our code ran on torch 2.4 and 2.9 here, not yet on the template's version.
+
+## 2026-11-13 — Google fallback in the orchestrator: a real staging job ran end to end on Google
+
+**Change** (console `feat/gce-fallback` `42aad50` + `106acfc`, staging orchestrator only; pic-vision `8bb1989` image script). When RunPod has no machine, the orchestrator rents a Google spot L4 (`g2-standard-8`, asia-east1 a/b/c) booted from our prepared image family `pic-vision-pod`; the VM's startup script runs the same start command as a RunPod pod. A machine that never checks in is followed by Google first. Production has no Google settings and is unchanged. No vendor race: two machines would both process the same part.
+
+**Run.** Staging orchestrator deployed with the test switch `RUNPOD_DISABLED`, so RunPod reports no capacity. Pod code: staging.json (`e2dca5c`).
+- Job f32d6a7a (PGC c199a97c): Google VM created and our code started; failed at download -- its footage had been deleted from the staging bucket after yesterday's run (a test-data gap, not the fallback).
+- Job 0cf24639 (PGC eda301d9, `session-005.mkv` re-uploaded -- a different file from the 11-12 run, so its rallies are not comparable): claimed 17:00:00 UTC, code running 17:00:52, done 17:12:19, 17 reels; the cleanup deleted the VM ~2 min after. No VM or disk left.
+
+| Stage | Google L4 g2-standard-8 |
+|---|---|
+| Claim to code running | 52 s |
+| convert | 2.0 min |
+| inference | 2.5 min (TIMING: 57 s model, 74 s waiting for frames) |
+| hit finder | 3.5 min (pose 205 s; 15 rallies, 12 from crossings) |
+| badges + cut + upload | 3.2 min |
+| Check-in to done | 11.5 min per 10 min of play |
+
+**Reading.** The fallback works end to end: create, boot, start, process, report, clean up, all automatic. Start-up is fast (52 s claim to running). Processing is slower than a RunPod A5000 (6.7-7.3 min per 10 min, 11-12) and does not keep up with a 10-minute part cadence (11.5 min), so it suits a fallback, not the main path. Not tested: RunPod-first then Google on a real shortage, a spot VM reclaimed mid-part, the real Google price. The Workflow's ~50-request budget is near its limit when both vendors are tried (counted in budget.test.ts).
