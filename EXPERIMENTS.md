@@ -3979,3 +3979,19 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 | Desktop step, top 10 (workstation) | 84 s | 73 s | - | 119 s |
 
 **Reading.** Start-up is fixed for this sample (4 of 4 within 84 s; the custom image had 4 stuck starts the same morning). Inference is now the slowest stage and varies 2x by host: the faster A5000 cards were slower than the RTX 2000 Ada, so per-call overhead or the host CPU limits, not the GPU (not profiled). Only the RTX 2000 Ada run kept up with real time. Court 3: k14 on the whole frame finds no crossing rallies, and the pod stops before the hit finder (by design today). The desktop step is 7-16 s per clip here; an N100 is not measured. All 30 verticals and every clip load on the three shares. Clip quality not judged (no playback yet).
+
+## 2026-11-12 — Pod inference: thread pools sized to the pod's real CPUs (+ CUDA graph): 2-5x faster
+
+**Change** (`92c50a7`, staging): `pod_infer.py` sizes OpenCV's threads to the CPUs the pod may really use (affinity, capped by the cgroup quota), torch CPU threads 2, the PyTorch forward pass as one CUDA graph, and a TIMING line kept in the job's stats (`stats.inference`). Locally: predictions.csv byte-identical, no speed change (local time is GPU compute).
+
+**Run.** The same three stand-alone staging jobs as earlier the same day, re-queued (same footage, calibration, pod image).
+
+| 10 min of footage | GPU | CPUs reported / usable | Inference before -> after | Hit finder before -> after | Check-in to done before -> after |
+|---|---|---|---|---|---|
+| PGC eda301d9 | RTX 2000 Ada | 48 / 5 | 3.4 -> 1.7 min | 2.2 -> 3.0 min | 8.2 -> 8.2 min |
+| PGC c199a97c | RTX A5000 | 96 / 7 | 6.3 -> 1.2 min | 2.6 -> 2.9 min | 11.5 -> 6.7 min |
+| Brickwall SEMI | RTX A5000 | 96 / 7 | 5.5 -> 1.2 min | 2.7 -> 3.3 min | ~12 -> 9.5 min |
+
+TIMING (A5000): 46.8 s in the model, 14.5 s waiting for frames, 5.5 s post-processing, 270 fps. RTX 2000 Ada: 92.9 s in the model, 0.2 s waiting, 184 fps (GPU-bound there, as locally).
+
+**Reading.** Confirmed: inside the container the pod reported the host's 48-96 CPUs while 5-7 were usable, and the thread pools sized to the host count were the slowdown; sized correctly, inference is 2-5x faster and A5000 hosts are now the fastest. Which of the two changes did it is not separated (the CUDA graph gave nothing locally). The hit finder, untouched, is now the slowest stage (2.9-3.3 min per 10 min, over its ~2.4 budget) and runs in pod_driver's own process with the same unbounded thread pools -- the same fix there is the likely next step (not yet tested). Rallies hit finder / crossings: 21/11, 17/5, 24/20.
