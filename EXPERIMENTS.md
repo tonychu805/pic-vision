@@ -3962,3 +3962,20 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 | Speed, one 10-min 720p part | 222 fps | 176 fps |
 
 **Reading.** Equivalent for every downstream use measured: same rallies on 8 of 10 parts, the two differences net zero on labelled rallies. PyTorch is about 20% slower than TF with XLA locally; not tuned. The pod's speed is measured on staging.
+
+## 2026-11-12 — Staging end to end on four footage types: stock image, PyTorch ball model, hit finder, stand-in desktop
+
+**Setup.** Staging pod code `dd07e83` (k14 in PyTorch, whole frame, 0.5; hit finder every 2nd frame), staging orchestrator `feat/stock-pod-image` (runpod/pytorch 2.1 image + pinned pip installs). Four stand-alone jobs queued together; then `desktop/scripts/sample-high-res.mjs` (the desktop's own trim/crop/upload code, run on the workstation as the staging test agent) on each share's top 10, from the original 1080p footage. Test-data changes: part_index set on the test clips (stand-alone jobs leave it null, which the heartbeat requires); a fresh token hash on the staging test agent.
+
+| | PGC eda301d9 | PGC c199a97c | Court 3 11:13 p3 | Brickwall SEMI |
+|---|---|---|---|---|
+| Footage | 10 min 720p | 10 min 720p | 5 min 1080p | 10 min 720p |
+| GPU | RTX 2000 Ada | RTX A5000 | RTX A5000 | RTX A5000 |
+| Claim to first check-in | 27 s | 19 s | 19 s | 84 s |
+| Inference (PyTorch) | 3.4 min | 6.3 min | 3.8 min | 5.5 min |
+| Hit finder | 2.2 min | 2.6 min | not run | 2.7 min |
+| Check-in to done | 8.2 min | 11.5 min | 4.5 min | ~12 min |
+| Rallies: hit finder / crossings | 21 / 11 | 17 / 5 | 0 / 0 ("no rallies found") | 24 / ? |
+| Desktop step, top 10 (workstation) | 84 s | 73 s | - | 119 s |
+
+**Reading.** Start-up is fixed for this sample (4 of 4 within 84 s; the custom image had 4 stuck starts the same morning). Inference is now the slowest stage and varies 2x by host: the faster A5000 cards were slower than the RTX 2000 Ada, so per-call overhead or the host CPU limits, not the GPU (not profiled). Only the RTX 2000 Ada run kept up with real time. Court 3: k14 on the whole frame finds no crossing rallies, and the pod stops before the hit finder (by design today). The desktop step is 7-16 s per clip here; an N100 is not measured. All 30 verticals and every clip load on the three shares. Clip quality not judged (no playback yet).
