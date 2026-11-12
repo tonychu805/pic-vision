@@ -4028,3 +4028,29 @@ Ball model TIMING on the L4: 58 s in the model (faster than the RTX 2000 Ada's 9
 Start-up: VM request to SSH + CUDA ready 136 s (first boot, 100 GB disk from a large image); a stopped VM restarted in 30 s. Download from the internet 36 MB/s (one GitHub file). Price not confirmed: Google's pricing API refused this account; third-party pages disagree on g2-standard-8 spot in asia-east1 ($0.39-0.74/hr), on demand ~$0.99/hr. Read the real charge from the project's bill.
 
 **Reading.** Google's L4 runs our pipeline unchanged on its own stock image, with the same rallies. It is slower than an A5000 per part (+1.0-1.3 min of GPU stages per 10 min on 8 CPUs, +2.1-2.4 on 4) but would still keep up (A5000 check-in to done 6.7-7.3 min per 10 min, so ~8-8.5 on an L4-8, estimated). As a fallback when RunPod has nothing it is usable; as the main vendor it is slower and, at spot prices above ~$0.50, over the cap. Not tested: the real pod driver on Google (R2 keys, job flow), spot reclaim mid-part, and Vast (needs an account).
+
+## 2026-11-13 — Vast as a second vendor, and cutting start-up time on Vast and Google
+
+**Vast speed.** The same benchmark (`vendor_bench`) on public footage, not venue footage: Vast's machines under $0.50 are almost all individuals' computers (1 datacenter offer under the cap), so PGC footage was not sent. Brickwall SEMI, first 600 s, re-encoded to 2 Mb/s 1080p. Vast RTX 3090, US, $0.19/hr, `pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime`.
+
+| Machine | CPUs usable | Ball model | Hit finder | Both | Rallies |
+|---|---|---|---|---|---|
+| Workstation RTX 2000 Ada (reference) | 16 | 2.0 min | 2.8 min | 4.8 min | 21 |
+| Vast RTX 3090 | 23 (of 96 reported) | 1.9 min | 2.9 min | 4.8 min | 21 |
+
+The 3090 host downloaded from the internet at 0.7 MB/s (one GitHub file; Google's L4 got 36 MB/s) -- one sample, but a home line that slow would take ~3 min to fetch a 10-min part.
+
+**Start-up, request to "running"** (Vast's status; SSH-ready not separately timed on Vast):
+
+| Vendor, image | n | Time |
+|---|---|---|
+| Vast, `pytorch/pytorch` (generic, not cached on the host) | 1 | 8 min 42 s (image pull + Vast's own apt/locale setup layer) |
+| Vast, Vast's own template "PyTorch (Vast)" (`vastai/pytorch:cuda-13.x-auto`) | 5 fresh hosts (CZ, US x4) | 29, 45, 54, 80, 104 s |
+| Google L4, Google's DL image, to SSH + GPU ready | 2 | 136 s, 180 s |
+| Google L4, our prepared image (ffmpeg + pip extras baked in), to SSH + GPU + ffprobe ready | 1 | 89 s (62 s of it the create call) |
+| Google L4, stopped VM restarted | 1 | 30 s |
+| RunPod stock image (2026-11-12, above) | 4 | 19-84 s |
+
+Vast offer listings carry no field saying which images a host already has; the first run of the 5-host test lost 4 timings to a script bug (`vastai destroy` read the loop's stdin) and was redone on fresh hosts. Vast spend for all of this: $0.18. Google test VMs and the image deleted after.
+
+**Reading.** Start-up is set by whether the host already has the image, and we choose that by choosing the image: Vast's own template starts like RunPod's stock image (under 2 min on 5/5), a generic image does not. On Google, the VM itself is the floor (~60 s for the create call); a prepared image saves the installs (~1.5 min total), a stopped VM restarts in 30 s. A Vast template's torch is newer (cu13) than the pod's 2.1 -- our code ran on torch 2.4 and 2.9 here, not yet on the template's version.
