@@ -3946,3 +3946,19 @@ Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was cho
 | none | 236-261 (78.1, in the 11:13 share's top 10), 16-34, 61-80, 119-136, 221-238, 5-17, 138-151 |
 
 **Reading.** Speed: 3.7 min per 5-min part on the pod's card, about 1.5x the 2.5-min budget and slower than locally (2.4 min at 720p; this part is 1080p). With inference and the rest, one pod takes longer than the footage lasts, so a continuous session falls behind unless more pods run. Quality: unknown until playback; the crossing finder's best clip of this part (236-261) is not among the hit finder's 4.
+
+## 2026-11-12 — TrackNet in PyTorch vs TensorFlow 2.15: same detections, same rallies
+
+**Why.** Pods pulled our 9.3 GB TensorFlow image and stalled on hosts without it (four pods "awaiting_container" past 4 min on 2026-11-12). TensorFlow was there only for TrackNet. `src/tracknet_torch.py` rebuilds the network from the Keras layer list (incl. Keras BatchNormalization(axis=-1) on channels-first data = per-column); `scripts/tracknet_to_torch.py` converts the weights.
+
+**Run (local RTX 2000 Ada).** `scripts/pod_infer.py` on each part twice: the Keras SavedModel in TF 2.15.1 (fp16 + XLA, as the pod) and the converted `.pt` in PyTorch (fp16). The 9 PGC test parts at 720p with k14 on the whole frame at 0.5 (production), and Court 3 11:13 part 3 (1080p) with the Court 3 fine-tune, court crop, 0.40 + adaptive cut (the staging settings then). Rallies by `detect_candidates(occlusion_bridge=True)`; real = matched to v5 labels at IoU 0.5 (greedy).
+
+| | TF 2.15 | PyTorch |
+|---|---|---|
+| Frames where the ball is seen by one only | 71 of 163,674 (0.04%) | |
+| Rallies (10 parts) | 80 | 80, 78 identical (start/end within 0.05 s) |
+| Real rallies, 9 PGC parts (89 labelled) | 39 | 39 |
+| Heatmaps, 64 real inputs | | max diff 8e-4 fp32, 4e-3 fp16; 0 pixels flip across 0.5 |
+| Speed, one 10-min 720p part | 222 fps | 176 fps |
+
+**Reading.** Equivalent for every downstream use measured: same rallies on 8 of 10 parts, the two differences net zero on labelled rallies. PyTorch is about 20% slower than TF with XLA locally; not tuned. The pod's speed is measured on staging.
