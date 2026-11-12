@@ -117,3 +117,36 @@ def test_a_tar_model_is_still_extracted(monkeypatch, tmp_path):
     monkeypatch.setattr(pod_driver.subprocess, "run", lambda cmd, **k: ran.append(cmd))
     pod_driver.fetch_weights(FakeS3(), str(tmp_path))
     assert ran and ran[0][:2] == ["tar", "-xf"]
+
+
+def test_threads_follow_the_override_and_never_the_host_count(monkeypatch):
+    from scripts import pod_infer
+    import cv2
+    monkeypatch.setenv("PIC_VISION_INFER_THREADS", "3")
+    info = pod_infer.limit_threads()
+    assert info["cv2_threads"] == 3 and cv2.getNumThreads() == 3
+    assert info["torch_threads"] <= 2              # torch only copies on the CPU here
+    # Paired: without the override it is the usable count, which can be below the host's.
+    monkeypatch.delenv("PIC_VISION_INFER_THREADS")
+    info = pod_infer.limit_threads()
+    assert info["cv2_threads"] == pod_infer.usable_cpus() <= info["host_cpus"]
+
+
+def test_a_cpu_model_runs_eagerly_with_no_graph(tmp_path, monkeypatch):
+    from scripts import pod_infer
+    path = tmp_path / "m.pt"
+    torch.save({"spec": SPEC, "state_dict": T.TrackNet(SPEC).state_dict()}, path)
+    monkeypatch.setattr(torch.cuda, "is_available", lambda: False)
+    monkeypatch.setattr(pod_infer, "_cuda_graph", lambda *a: pytest.fail("no CUDA graph on the CPU"))
+    y = pod_infer.load_infer(str(path))(np.random.rand(1, 9, 8, 16).astype(np.float32))
+    assert y.shape == (1, 3, 8, 16)
+
+
+def test_the_pod_keeps_inferences_timing_line(monkeypatch):
+    import sys
+    from cloud_pipeline import pod_driver
+    monkeypatch.setattr(pod_driver, "patch_job", lambda **k: False)
+    got = pod_driver._run_inference_streaming([sys.executable, "-c", 'print("  300/900  50 fps  ETA 0.2 min"); print(\'TIMING {"fps": 50.0, "wait_s": 1.5}\')'])
+    assert got == {"fps": 50.0, "wait_s": 1.5}
+    # Paired: an older pod_infer with no timing line still runs, just reports none.
+    assert pod_driver._run_inference_streaming([sys.executable, "-c", 'print("Done")']) is None

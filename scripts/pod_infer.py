@@ -13,6 +13,7 @@ Model: TNV2_old_weights.h5 must be at /workspace/TNV2_old_weights.h5.
 
 import argparse
 import csv
+import json
 import os
 import queue
 import sys
@@ -133,6 +134,43 @@ def apply_mask(img, mask3):
     return cv2.bitwise_and(img, mask3)
 
 
+def usable_cpus():
+    """CPUs this process may really use: its affinity set, capped by a cgroup CPU quota.
+
+    In a container os.cpu_count() reports the HOST's cores (often 64-128 on a
+    GPU server) while the pod gets 9-16; OpenCV and torch size their thread
+    pools from it and then fight over the few real ones (suspected cause of
+    the 2026-11-12 staging runs where faster A5000 hosts inferred slower)."""
+    n = len(os.sched_getaffinity(0)) if hasattr(os, "sched_getaffinity") else (os.cpu_count() or 1)
+    try:                                                    # cgroup v2
+        quota, period = open("/sys/fs/cgroup/cpu.max").read().split()[:2]
+        if quota != "max":
+            n = min(n, max(1, int(quota) // int(period)))
+    except (OSError, ValueError):
+        try:                                                # cgroup v1
+            quota = int(open("/sys/fs/cgroup/cpu/cpu.cfs_quota_us").read())
+            period = int(open("/sys/fs/cgroup/cpu/cpu.cfs_period_us").read())
+            if quota > 0:
+                n = min(n, max(1, quota // period))
+        except (OSError, ValueError):
+            pass
+    return n
+
+
+def limit_threads():
+    """Size OpenCV's (and, if loaded, torch's) thread pools to the CPUs really available.
+    PIC_VISION_INFER_THREADS overrides. Returns what was set, for the timing line."""
+    n = int(os.environ.get("PIC_VISION_INFER_THREADS") or usable_cpus())
+    cv2.setNumThreads(n)
+    info = {"host_cpus": os.cpu_count(), "usable_cpus": usable_cpus(), "cv2_threads": n}
+    if "torch" in sys.modules:
+        import torch
+        # The model runs on the GPU; torch's own CPU work here is two copies per call.
+        torch.set_num_threads(min(2, n))
+        info["torch_threads"] = torch.get_num_threads()
+    return info
+
+
 def load_infer(model_path):
     """infer(x) -> float32 heatmaps for a (n, 9, HEIGHT, WIDTH) float32 batch.
 
@@ -148,13 +186,50 @@ def load_infer(model_path):
         torch.backends.cudnn.benchmark = True          # one fixed input shape
         model = load(model_path, device=device, half=half)
         dtype = next(model.parameters()).dtype
-        print(f"model: PyTorch TrackNet, {dtype}, {device}")
 
-        def infer(x):
+        def eager(x):
             with torch.no_grad():
                 return model(torch.from_numpy(x).to(device, dtype)).float().cpu().numpy()
+
+        graph = None
+        if device == "cuda" and os.environ.get("PIC_VISION_INFER_CUDA_GRAPH", "1") == "1":
+            graph = _cuda_graph(torch, model, (1, 9, HEIGHT, WIDTH), dtype)
+        print(f"model: PyTorch TrackNet, {dtype}, {device}, CUDA graph {'on' if graph else 'off'}")
+        if graph is None:
+            return eager
+        g, static_in, static_out = graph
+
+        def infer(x):
+            if x.shape != tuple(static_in.shape):
+                return eager(x)
+            static_in.copy_(torch.from_numpy(x))
+            g.replay()
+            return static_out.float().cpu().numpy()
         return infer
     return _tf_infer(model_path, half)
+
+
+def _cuda_graph(torch, model, shape, dtype):
+    """The model's forward pass recorded as one CUDA graph, replayed per call, or None.
+
+    Eager PyTorch launches ~100 small kernels per call from Python; on a pod
+    whose CPU is slow or contended that launching, not the GPU, is the cost.
+    A graph replays them as one launch. Same kernels, same numbers."""
+    try:
+        static_in = torch.zeros(shape, device="cuda", dtype=dtype)
+        side = torch.cuda.Stream()
+        side.wait_stream(torch.cuda.current_stream())
+        with torch.cuda.stream(side), torch.no_grad():
+            for _ in range(3):                         # warm-up: cudnn picks its kernels here
+                model(static_in)
+        torch.cuda.current_stream().wait_stream(side)
+        g = torch.cuda.CUDAGraph()
+        with torch.cuda.graph(g), torch.no_grad():
+            static_out = model(static_in)
+        return g, static_in, static_out
+    except Exception as e:  # noqa: BLE001 -- eager still works, just slower
+        print(f"WARNING: CUDA graph unavailable ({type(e).__name__}: {e}); running eagerly")
+        return None
 
 
 def _tf_infer(model_path, half):
@@ -191,6 +266,8 @@ def _tf_infer(model_path, half):
 def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_threshold=0.5, crop_to_court=False):
     print("Loading model...")
     infer = load_infer(model_path)
+    threads = limit_threads()
+    timing = {"prep_s": 0.0, "wait_s": 0.0, "infer_s": 0.0, "post_s": 0.0}
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -281,9 +358,11 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
             try:
                 while ok and not stop_event.is_set():
                     trio = [img1, img2, img3]
+                    t_prep = time.perf_counter()
                     if mask is not None:
                         trio = [apply_mask(im, mask3) for im in trio]
                     item = prep3(trio, crop)
+                    timing["prep_s"] += time.perf_counter() - t_prep
                     while True:
                         try:
                             frame_q.put(item, timeout=0.5)
@@ -319,10 +398,15 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
 
         try:
             while True:
+                t_wait = time.perf_counter()
                 unit = frame_q.get()
+                t_infer = time.perf_counter()
+                timing["wait_s"] += t_infer - t_wait
                 if unit is None:
                     break
                 raw_pred = infer(unit)
+                t_post = time.perf_counter()
+                timing["infer_s"] += t_post - t_infer
                 mask_pred = (raw_pred > heat_threshold).astype(np.float32)
                 h_pred = (mask_pred[0] * 255).astype(np.uint8)
                 probs = raw_pred[0]   # pre-threshold probabilities, same shape as h_pred
@@ -358,6 +442,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                                          round(bh_ratio * best[3], 1),
                                          round(blob_confidence(best_c), 4)])
                     count += 1
+                timing["post_s"] += time.perf_counter() - t_post
 
                 if count % 300 == 0:
                     elapsed = time.time() - t0
@@ -388,6 +473,11 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
         elapsed = time.time() - t0
         print(f"\nDone: {count} frames in {elapsed / 60:.1f} min ({count / elapsed:.1f} fps)")
         print(f"Output: {output_csv}")
+        # One line for pod_driver to keep in the job's stats: where the time went.
+        # wait_s is the GPU loop waiting for decoded frames (CPU-bound if large);
+        # prep_s runs on the decode thread, overlapping the rest.
+        print("TIMING " + json.dumps({"frames": count, "sec": round(elapsed, 1), "fps": round(count / elapsed, 1),
+                                      **{k: round(v, 1) for k, v in timing.items()}, **threads}), flush=True)
 
         # A corrupt region makes cv2.VideoCapture stop reading and return cleanly,
         # so a truncated run is otherwise indistinguishable from a complete one —

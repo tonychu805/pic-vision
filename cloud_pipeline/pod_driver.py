@@ -490,6 +490,7 @@ def _run_inference_streaming(cmd):
 
     deadline = time.time() + INFERENCE_TIMEOUT_SEC
     last_patch_at = 0.0
+    timing = None
     try:
         while True:
             remaining = deadline - time.time()
@@ -504,6 +505,11 @@ def _run_inference_streaming(cmd):
                 if line is None:  # sentinel: process's stdout closed, it's finished
                     break
                 _log(line)
+                if line.startswith("TIMING "):   # pod_infer's summary: kept in the job's stats
+                    try:
+                        timing = json.loads(line[len("TIMING "):])
+                    except ValueError:
+                        pass
 
             due = time.time() - last_patch_at >= PROGRESS_PATCH_INTERVAL_SEC
             if not due:
@@ -533,6 +539,7 @@ def _run_inference_streaming(cmd):
             proc.kill()
     if returncode != 0:
         raise subprocess.CalledProcessError(returncode, cmd)
+    return timing
 
 
 # --- Skipping the convert step (ADR-130) ---
@@ -846,7 +853,7 @@ def run():
                  "--video", proxy_video, "--model", WEIGHTS_LOCAL,
                  "--output", csv_path, "--calib", calib_path,
                  "--heat-threshold", str(HEAT_LOW)] + (["--crop-to-court"] if CROP_TO_COURT else [])
-    _run_inference_streaming(infer_cmd)
+    inference_timing = _run_inference_streaming(infer_cmd)
     choice = apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH, healthy_rate=HEALTHY_DETECTION_RATE)
     _log(f"ball found in {choice['rate_at_high']:.1%} of frames at confidence {HEAT_HIGH} and "
          f"{choice['rate_at_low']:.1%} at {HEAT_LOW}; using "
@@ -888,7 +895,8 @@ def run():
                                     occlusion_bridge=OCCLUSION_BRIDGE,
                                     segments=segments if HIT_FINDER else None)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
-             "top_rallies": top_result["stats"], "hit_finder": hit_finder_info}
+             "top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
+             "inference": inference_timing}
     framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
