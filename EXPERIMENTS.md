@@ -4260,3 +4260,39 @@ Bars:
 - **The Jev guard does what it is for.** On this footage it removed the whole ball-machine stretch and no rally the operator judged real. It is tested on one session, with 4 judged real rallies, so it is a strong first result, not a measured false-drop rate. Test K/L's 1 in 98 remains the best estimate.
 - **Not covered.** Warm-ups without a machine (Test K/L: 0 of 13 caught).
 - **Before the Google backup can carry real sessions:** a part lost to a reclaim or to an unconfirmed create must be retried, and both vendors being full must wait rather than fail at once. A larger Google quota alone fixes neither.
+
+## 2026-11-13 — imajev-4b (local, open) vs Jev as the top-10 guard: FAIL on the general-junk bar; ties Jev on ball machines; 10x slower
+
+**Why.** Jev sends player frames to TypeSafe. imajev (github.com/mohit67890/imajev @ `318e8da`) is an open, Jev-contract model: LoRA + readout on Qwen3.5-4B, Apache-2.0, image input, runs locally. Checked first: kyegomez/open-jev is untrained (random weights, text only), so it was not testable.
+
+**Pre-registered** (`/mnt/fast_scratch/pic-vision-scratch/imajev_eval/PREREGISTERED.md`, written before any call).
+- **Inputs.** Test K + Test L's exact contact sheets and Jev's questions, byte-identical. imajev takes the image as an upload, so the state says "the attached image".
+- **Server.** The adapter's own `calibration.json`, 1 rotation, torch backend, local RTX 2000 Ada.
+- **Rule.** Flag when real < 0.4.
+- **Bars.** Real flagged <= 2 of 98; ball machine 6 of 6; not-real flagged >= 16 of 50.
+
+**Result: FAIL** (bar 3).
+
+| 165 judged clips | imajev-4b | Jev |
+|---|---|---|
+| Real flagged (of 98) | **0** | 1 |
+| Ball machine flagged (of 6) | **6** | 6 |
+| Not-real flagged (of 50) | **9** (bar 16) | 18 |
+| Serve + return only flagged (of 17) | 1 | 1 |
+| Seconds per clip | **4.2** (median; one GPU, serial) | ~0.4 (TypeSafe; pod sends 4 in parallel) |
+
+- **What it caught.** Ball machine 6/6, coaching 1/1, feeding 1/1, failed serve + toss 1/1.
+- **What it missed.** Warm-ups 0/13 and failed serves 0/5; Jev also missed warm-ups.
+- **Scores.** Real 0.56–0.90, not-real 0.15–0.87.
+- **Trade-off at other cuts** (descriptive, in-sample, real/not flagged): 0.3 gave 0/4, 0.5 gave 0/10, 0.6 gave 1/17. That is close to Jev's 1/18 at 0.4. A 0.6 cut needs its own pre-registered test on fresh clips.
+
+**Today's 28 judged clips** (extra, descriptive; sheets built from the source footage over each clip's rally window).
+
+| | imajev-4b, cut 0.4 | imajev-4b, cut 0.6 |
+|---|---|---|
+| Ball-machine "no rally" (13) | 12 | 13 |
+| Real (12) | 0 | 0 |
+
+10 of the 13 ball-machine clips were labelled ball_machine or practice.
+
+**Decision (operator, 2026-11-13).** Keep Jev for the guard. imajev runs on the pod's own GPU one clip at a time, so on 10–25 clips a part it would add about a minute or more where the 10-minute rhythm has almost no margin. Jev adds 14–45 s in all, off the GPU. imajev stays the local fallback if Jev is ruled out on privacy. It would first need a pre-registered test at 0.6 and a speed fix (the 2B model, batching, or a faster pod card; none measured).
