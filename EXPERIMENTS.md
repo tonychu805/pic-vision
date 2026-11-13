@@ -4140,3 +4140,89 @@ Speed locally: no change with 4+ cores (the RTX 2000 Ada is the limit); with 2 c
 | Rallies (from crossings) | 17 (8) | 17 (8) |
 
 **Reading.** The ball model on Google is now GPU-bound (3.9 s of waiting, from 69 s), so GPU decode would buy little there now. The slowest stage is the hit finder's pose (GPU-bound, 3.7 min). The Google fallback does a 10-min part in 8.6 min, comfortably inside the cadence. Same rally count as the previous Google run.
+
+## 2026-11-13 — One real session through staging: speed passes; both finders' top 10s fail on the booking's warm-up
+
+**Setup** (pre-registered in `progress/11.13 plan - staging session test.md`; bars set before the run).
+
+- **Footage.** PGC eda301d9 recording `2026-09-25T08-40-00-655Z`: 8 parts (7 × 600 s + 122 s), 1080p30, never used in staging or in the 11-11 fresh-footage check.
+- **Drift.** Within 1.6 px of the calibration frame on every part.
+- **Calibration.** The eda301d9 one from 25 Sep 10:01, frame 521.3 s, RMSE 0.56 ft. Not `calib/pgc_court_b_0926_calib.json`, which doesn't fit this camera.
+- **Code.** Staging pod code `28da754` (hit finder on, badges on). Staging orchestrator `8b7be0ec` in normal mode (RunPod first, Google backup).
+- **Replay.** A new driver played the venue desktop on the real clock through the agent API (create job → presigned PUT → complete). Part N was sent at T0 + N × 10 min, and the session end was reported at the last part's close. The stand-in desktop (`sample-high-res.mjs --camera`) ran alongside. Test camera `pgc-eda301d9-test`, session `e462535d`, share `3bb2d260`. Staging test agent `part_minutes` was 10 for the run, restored to 5.
+
+**Speed (measured).**
+
+| Part | Machine | Upload | Queued → done |
+|---|---|---|---|
+| warm job | Google L4 spot (RunPod had nothing at 06:12) | — | ready 06:14, 4 min before part 1 |
+| 1 | same Google L4 | 35 s | 10.2 min |
+| 2–7 | same Google L4 | 30–32 s (~37 Mbps) | 8.3–9.3 min, each done 1–2 min before the next part finished uploading |
+| 8 (122 s) | RunPod RTX 4000 Ada (new pod; the warm L4 was busy with part 7) | 6 s | 3.6 min |
+
+- Session end → top 10 decided: 7.5 min (bar ≤ 15).
+- All 10 delivered clips sharp + vertical (stand-in desktop, 9.5–13 s each).
+- Machines removed 2–3 min after their last part (Google VM deleted 07:29, no disk left).
+- No Workflow lost its reads.
+- Speed bars: all pass.
+
+**RunPod supply (measured).**
+
+- **Stock sampling.** 61 samples every 2 min (06:38–08:37 UTC) of secure-cloud stock for the orchestrator's cards. In 12 (20%), nothing under the $0.50 cap was listed. That was 8 of the last 15, 08:09–08:35. Every listing under the cap was "Low" (105 of 105).
+- **Concurrent creates.** Three jobs sent at 07:35–07:36:
+  - the 1st got an RTX 4000 Ada;
+  - the 2nd was refused for that card ("There are no instances currently available") and got an A5000;
+  - the 3rd was refused for 6 card types in a row and got the last option, an RTX 2000 Ada.
+- **Reading.** "Low" is about one machine per card type.
+
+**Determinism (measured).** Part 3 (`session-002.mkv`) ran 4 times, always 18 hit-finder and 10 crossing rallies.
+
+| Run | Machine | Compared with the RTX 4000 Ada run |
+|---|---|---|
+| repeat 1 | RunPod RTX 4000 Ada | reference |
+| repeat 3 | RunPod RTX 2000 Ada | identical clip times and scores |
+| session | Google L4 | 14 of 18 identical; 4 boundaries shifted 1–3 s |
+| repeat 2 | RunPod A5000 | ~11 of 18 identical (one split, one dropped, one added) |
+
+- One rally scored 63.1 / 69.7 / 78.2 across machines, so the top 10 can depend on the machine.
+- Cause not tested. A guess: the GPU's own encode in the convert step (NVENC output differs by GPU generation; libx264 output differed by thread count locally, 11-13).
+- This also explains the 11-13 "12 vs 8" Google outlier class: machine-dependent, not random.
+
+**Rally finding: blind playback by the operator.**
+
+- **Clips.** 20 clips: the session's 10 delivered clips (hit finder, staging), and 10 by production's crossing finder from the same code locally (`HIT_FINDER = False`, top 10 by score; production also puts badged clips first, but there were none). Both sets were cut identically from the source (no logo, same pad), shuffled, key kept apart.
+- **Verdicts.** 19 of 20 scored. c13 (hit finder, part 4, 500–522 s) has no verdict.
+
+| | Real | Part | No rally | Glued | Starts late | Ends early |
+|---|---|---|---|---|---|---|
+| Hit finder (9 scored) | 2 | 0 | **7** | 0 | 0 | 0 |
+| Crossings (10) | 2 | 0 | **6** | 2 | 0 | 0 |
+
+Bars:
+
+| Bar | Result |
+|---|---|
+| Hit finder ≥ 9/10 real, 0 no-rally | **FAIL** (2/9) |
+| Hit finder ≥ crossings | 2 = 2. Met only nominally; both fail |
+| ≤ 1 starts late | Pass, but only 4 real clips to judge |
+
+**Where the failures are.**
+
+- **Part 1.** All 13 clips from part 1's first ~5.5 min were "no rally" (6 crossing, 7 hit finder), plus one glued crossing clip at 299–333 s. That stretch is the start of the booking.
+- **Why it ranks first.** The pod's badge measures put the 16 hit-finder "rallies" there at 14.3 s average, against 8.5 s for the other 102. The score rewards long continuous hitting.
+- **Serve detection doesn't help.** A serve was "detected" on 15 of the 16, so it does not separate them.
+- **Outside part 1.** Hit finder 2/2 real (+1 unscored). Crossings 2 real + 2 glued (part 4 555–595 s, part 1 299–333 s).
+- **Not judged.** Whether the stretch is warm-up or drills is the reading of a "no rally" verdict whose options were "warm-up / drill / dead". Not separately labelled.
+
+**Badges.** 0 awarded across 118 rally clips.
+- Kitchen War is unreachable here: max kitchen share 0.21 against the 0.5 bar, max 1 exchange.
+- Every measured rally has its clip (start times match), so it is not a matching bug.
+- The speed badges (Hardest Swing, Killer Shot, First Strike) were not replayed through the console's `decide()`. Whether any should have fired is open.
+
+**Reading.**
+- **Speed and operations.** Ready: one warm machine keeps a 10-min rhythm, the Google backup took over a real RunPod shortage unaided, and cleanup is clean.
+- **Rally finding.** Not ready, and this is **not specific to the hit finder.** Production's crossing finder fails the same way on the same stretch: its top 10 for this session would have shown 6 non-rallies. The ranking puts long continuous non-game hitting at the start of a booking above real points.
+- **Before either finder ships to more venues, the top 10 needs a warm-up/drill guard.** Earlier candidates:
+  - the 10-13 "pause between rallies" rule, which removed practice on fitted clips and was then tried on 8 unseen PGC segments;
+  - the hit finder's "deep start" rule, which clearly did not catch this stretch.
+- **Next.** Pick a guard by testing it against this session's verdicts. These are now labelled negatives at the top of a ranking, the exact case that matters.
