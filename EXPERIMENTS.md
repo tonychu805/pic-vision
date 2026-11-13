@@ -4226,3 +4226,37 @@ Bars:
   - the 10-13 "pause between rallies" rule, which removed practice on fitted clips and was then tried on 8 unseen PGC segments;
   - the hit finder's "deep start" rule, which clearly did not catch this stretch.
 - **Next.** Pick a guard by testing it against this session's verdicts. These are now labelled negatives at the top of a ranking, the exact case that matters.
+
+## 2026-11-13 — Jev guard on staging: removes every ball-machine clip, keeps every real rally judged; two Google-backup failures seen live
+
+**Setup.**
+- **Code.** Staging pod code `84142dc` (pic-vision `feat/jev-guard`): every rally clip of a part gets a 6-frame contact sheet, identical to Test K's, and the pod sends it with its job token to the staging console. Console `feat/jev-guard` (`2bec788`): the endpoint calls TypeSafe jev-1.14 with Test K's exact questions. Staging DB migration `20261113100000_reels_jev`: `reels.jev_real/jev_kind`, and a clip with real < 0.4 is not delivered and not returned to the share page.
+- **Approval.** PGC frames to TypeSafe allowed by the operator, from staging only (endpoint needs `JEV_IMAGES=on`, set in Netlify Branch deploys only).
+- **Runs.** Parts 1, 3, 4 and 5 of the 25 Sep 08:40 recording, as stand-alone jobs. They hold all 19 clips the operator judged earlier the same day (entry above).
+
+**Measured.**
+
+| Part | Clips checked | Failed | Under 0.4 | Jev time |
+|---|---|---|---|---|
+| 1 (ball machine 0–217 s) | 25 | 0 | 15 | 45.1 s |
+| 3 | 18 | 0 | 0 | 30.8 s |
+| 4 | 12 | 0 | 0 | 14.2 s |
+| 5 | 17 | 0 | 0 | 26.7 s |
+
+- **Ball-machine stretch.** Every clip scored 0.03–0.26 (kinds "practice" / "not_play"). The 7 hit-finder clips judged "no rally" scored 0.05, 0.12, 0.26, 0.19, 0.10, 0.07, 0.10: **7 of 7 removed.** The 6 crossing-finder "no rally" clips lie inside the same stretch, and every hit-finder clip there was removed. The crossing clips themselves were not sent: the pod runs the hit finder.
+- **Real rallies judged real.** Part 3 290–316 s (0.68) and 375–395 s (0.62), part 4 283–314 s (0.67), part 5 368–386 s (0.57): **4 of 4 kept.** The unscored c13 (part 4 500–522 s) scored 0.63.
+- **Glued crossing clips.**
+  - Part 4 555–595 s: overlapping hit-finder clips 0.53 and 0.62, kept.
+  - Part 1 299–333 s: 314–334 s at 0.41, kept.
+- **Outside the machine stretch.** All 57 clips scored 0.35–0.72. One under the cut: part 1 468–478 s at 0.35, kind "real_point", not judged. One exactly at 0.40 (part 3 145–158 s, "not_play"), kept because the cut is strict.
+- **Cost of the step.** 14–45 s per part. The scores agree with Test K: ball machine 0.06–0.25 then, 0.03–0.26 now.
+
+**Google backup failures, live (staging orchestrator `8b7be0ec`).**
+- **Instant failure.** Two jobs (parts 3, 4, first round) failed in seconds: "no GPU capacity after 1 attempt... neither RunPod nor Google". RunPod had nothing, and Google's quota of 1 L4 was held by part 1.
+- **Phantom machine.** Part 5 (first round) recorded `gce-asia-east1-c-6dss0dro`, whose insert ended `QUOTA_EXCEEDED`; the VM never existed. The orchestrator counts a create it cannot confirm as created. That design is deliberate, so a VM that may exist is watched; the inference is that Google's operation wait did not return DONE in time. The cleanup then saw the machine missing and failed the part ("the GPU machine stopped without reporting how this part ended") instead of retrying.
+- **Spot reclaim mid-part.** Part 3 (second round) VM `gce-asia-east1-a-dbkpchmj` was created at 10:56:10 and reclaimed by Google at 11:01:04 (`compute.instances.preempted`). The part failed with the same message and is not retried. It finished only because the test loop resent it.
+
+**Reading.**
+- **The Jev guard does what it is for.** On this footage it removed the whole ball-machine stretch and no rally the operator judged real. It is tested on one session, with 4 judged real rallies, so it is a strong first result, not a measured false-drop rate. Test K/L's 1 in 98 remains the best estimate.
+- **Not covered.** Warm-ups without a machine (Test K/L: 0 of 13 caught).
+- **Before the Google backup can carry real sessions:** a part lost to a reclaim or to an unconfirmed create must be retried, and both vendors being full must wait rather than fail at once. A larger Google quota alone fixes neither.
