@@ -184,12 +184,13 @@ POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
 # no rally found falls back to the crossing rallies; full and burst reels
 # keep the crossing rallies either way.
 HIT_FINDER = True
-# Jev guardrail (staging, operator 2026-11-13): a vision model reads a 6-frame sheet of each
-# of the part's top rally clips and says how likely it is a real point. The frames go to
-# TypeSafe through the console, which holds the key; the pod never does. Answers are only
-# recorded on the clips (reels[].jev), nothing is dropped, and any failure means "not checked".
+# Jev guardrail (staging, operator 2026-11-13): a vision model reads a 6-frame sheet of every
+# rally clip of the part and says how likely it is a real point. Every clip, not just the top
+# ten: the console gives a doubted clip's top-10 slot to the next one down, which must have
+# been checked too. The frames go to TypeSafe through the console, which holds the key; the pod
+# never does. Answers are only recorded on the clips (reels[].jev), nothing is dropped here,
+# and any failure means "not checked".
 JEV = True
-JEV_TOP_K = 10
 JEV_CUT = 0.4  # only the stats count of clips Jev doubts; the console decides what to do with it
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
@@ -709,12 +710,11 @@ def rally_finder(hit_finder_info):
 
 
 def jev_checks(video, clips):
-    """({clip file: {"real", "kind"}}, stats): Jev's verdict on the rally clips ranked JEV_TOP_K or better.
+    """({clip file: {"real", "kind"}}, stats): Jev's verdict on each rally clip.
 
     Fail open: a clip Jev could not answer is left out, and any error returns ({}, None)."""
     try:
         t0 = time.time()
-        top = [c for c in clips if c["rank"] <= JEV_TOP_K]
 
         def ask(clip):
             try:
@@ -734,10 +734,10 @@ def jev_checks(video, clips):
                 return None
 
         with ThreadPoolExecutor(max_workers=4) as pool:
-            answers = list(pool.map(ask, top))
-        found = {c["file"]: a for c, a in zip(top, answers) if a}
+            answers = list(pool.map(ask, clips))
+        found = {c["file"]: a for c, a in zip(clips, answers) if a}
         stats = {"checked": len(found), "flagged": sum(a["real"] < JEV_CUT for a in found.values()),
-                 "failed": len(top) - len(found), "sec": round(time.time() - t0, 1)}
+                 "failed": len(clips) - len(found), "sec": round(time.time() - t0, 1)}
         _log(f"jev: {stats}")
         return found, stats
     except Exception as e:
@@ -949,7 +949,7 @@ def run():
     framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
     jev, stats["jev"] = {}, None
     if JEV:
-        _check_cancel("cut", "asking Jev whether the top rallies are real points...")
+        _check_cancel("cut", "asking Jev whether the rallies are real points...")
         jev, stats["jev"] = jev_checks(proxy_video, top_result["manifest"])
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")

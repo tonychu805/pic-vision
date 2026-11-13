@@ -53,22 +53,22 @@ def test_contact_sheet_shows_the_rally_not_the_whole_video(video):
     assert max(early) < min(late)
 
 
-def test_valid_answers_attach_to_the_top_clips_only(video, monkeypatch):
+def test_valid_answers_attach_to_every_clip(video, monkeypatch):
     sent = []
 
     def post(url, data, headers, timeout):
         sent.append((url, headers, len(data)))
         return Reply(200, {"real": 0.3 if len(sent) % 2 else 0.9, "kind": "real_point"})
     monkeypatch.setattr(pod_driver.requests, "post", post)
-    found, stats = pod_driver.jev_checks(video, clips(pod_driver.JEV_TOP_K + 3))
-    assert sorted(found) == sorted(c["file"] for c in clips(pod_driver.JEV_TOP_K))
-    assert len(sent) == pod_driver.JEV_TOP_K
+    found, stats = pod_driver.jev_checks(video, clips(12))
+    assert sorted(found) == sorted(c["file"] for c in clips(12))
+    assert len(sent) == 12
     url, headers, size = sent[0]
     assert url.endswith(f"/api/runner/jobs/{pod_driver.JOB_ID}/jev")
     assert headers["Authorization"] == f"Bearer {pod_driver.JOB_TOKEN}" and headers["Content-Type"] == "image/jpeg"
     assert size < 2_000_000
-    assert stats["checked"] == pod_driver.JEV_TOP_K and stats["failed"] == 0
-    assert stats["flagged"] == sum(a["real"] < pod_driver.JEV_CUT for a in found.values()) == pod_driver.JEV_TOP_K // 2
+    assert stats["checked"] == 12 and stats["failed"] == 0
+    assert stats["flagged"] == sum(a["real"] < pod_driver.JEV_CUT for a in found.values()) == 6
 
 
 def raises(*a, **k):
