@@ -4092,3 +4092,23 @@ Vast offer listings carry no field saying which images a host already has; the f
 **Not explained yet:** the same file gave 15 rallies (12 from net crossings) on the 8-CPU run and 18 (8 from crossings) on the 16-CPU run; ball found in 26.3% of frames here (the 8-CPU figure was not kept). Net-crossing rallies depend only on the ball track, so the ball model's input or output differed between the runs. One guess: libx264's output depends on its thread count, so the converted video differs between 8 and 16 CPUs (and between Google's CPU encode and RunPod's NVENC). Unverified.
 
 **Reading.** 16 CPUs bring Google under the 10-min part cadence (9.3 min), but the bigger fix is likely NVENC on the image, which would help either size. The run-to-run rally difference needs checking before Google results are trusted like RunPod's.
+
+## 2026-11-13 — Google fallback with NVENC on the image: 9.8 min per 10-min part on 8 CPUs
+
+**Cause of the CPU encodes (measured):** Google's image installs only the driver's compute library (`libnvidia-compute-580-server`), not `libnvidia-encode`. Adding `libnvidia-encode-580-server` and `libnvidia-decode-580-server` at the driver's exact version made `h264_nvenc` work; `scripts/build_gce_pod_image.sh` now installs them and fails the build if an NVENC encode doesn't work. New image `pic-vision-pod-20261113-0237`; the old one deleted.
+
+**Run.** Same job (0cf24639, `session-005.mkv` re-uploaded), staging in test mode (`RUNPOD_DISABLED`), g2-standard-8, restored after. No NVENC warning in the log (`/mnt/fast_scratch/pic-vision-scratch/gce8nvenc_log.txt`).
+
+| Stage | 8 CPUs, CPU encode | 16 CPUs, CPU encode | 8 CPUs, NVENC |
+|---|---|---|---|
+| convert | 2.0 min | 1.2 min | 0.8 min |
+| ball model | 2.5 min | 1.9 min | 2.2 min |
+| hit finder | 3.5 min | 3.2 min | 3.7 min |
+| badges | 1.4 min | 1.4 min | 1.7 min |
+| clips + upload | ~1.8 min | ~1.4 min | ~1.2 min |
+| Pipeline start to done | 11.5 min | 9.3 min | 9.8 min |
+| Rallies (from net crossings) | 15 (12) | 18 (8) | 17 (8) |
+
+**Encode determinism, locally** (`/mnt/fast_scratch/pic-vision-scratch/x264det`): libx264 at the pod's settings is byte-identical run to run at the same thread count, but differs between 8 and 16 threads, and NVENC differs again. The ball model on each: 4,737 / 4,762 / 4,653 frames with a ball, crossing rallies 8 / 8 / 8 (local calibration, not the job's). So encoding moves the ball track slightly but did not change the rally count here. The first Google run's 12 crossing rallies is the outlier (1 of 3 Google runs); cause not found.
+
+**Reading.** NVENC buys the cheaper 8-CPU machine what 16 CPUs bought: under the 10-min part cadence (9.8 min). The ball model is still CPU-bound on decode (69 s waiting); GPU decode is the next lever if needed. Hit finder and badges vary ~10-20% run to run on the same machine type.

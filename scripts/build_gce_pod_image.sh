@@ -32,8 +32,17 @@ for _ in $(seq 1 40); do
   sleep 5
 done
 
+# Google's image ships the driver's compute part only (libnvidia-compute-*), so
+# the pod's ffmpeg found no NVENC and encoded every video on the CPU (2026-11-13,
+# EXPERIMENTS.md). The encode and decode libraries are added at the driver's
+# exact version; the check below fails the build if NVENC still doesn't work.
 "$GCLOUD" compute ssh "$VM" --project="$PROJECT" --zone="$ZONE" --quiet --command='sudo env -i PATH=/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin bash -c "
   set -e
+  pkg=\$(dpkg-query -W -f=\"\\\${Package} \\\${Version}\\n\" \"libnvidia-compute-*\" | head -1)
+  series=\${pkg#libnvidia-compute-}; series=\${series%% *}; version=\${pkg##* }
+  apt-get -qq update
+  DEBIAN_FRONTEND=noninteractive apt-get -qq install -y ffmpeg libnvidia-encode-\$series=\$version libnvidia-decode-\$series=\$version >/dev/null
+  ffmpeg -v error -f lavfi -i testsrc2=size=1920x1080:rate=30 -t 2 -c:v h264_nvenc -f null - && echo \"nvenc ok: \$series \$version\"
   python3 -m pip install -q --no-cache-dir boto3==1.35.99 requests==2.32.3
   python3 -m pip install -q --no-cache-dir --no-deps opencv-python-headless==4.10.0.84
   python3 -c \"import torch, cv2, boto3, requests; assert torch.cuda.is_available(); print(\\\"pod python ok:\\\", torch.__version__, cv2.__version__)\"
