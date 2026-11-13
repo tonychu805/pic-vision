@@ -709,18 +709,28 @@ def rally_finder(hit_finder_info):
     return "hit_finder" if (hit_finder_info or {}).get("used") == "hit_finder" else "crossings"
 
 
-def jev_checks(video, clips):
-    """({clip file: {"real", "kind"}}, stats): Jev's verdict on each rally clip.
+def reel_key(reel_id):
+    """Where a reel lands: the write credential covers <brand>/reels/ and nothing else."""
+    return f"{BRAND_ID}/reels/{reel_id}.mp4"
 
-    Fail open: a clip Jev could not answer is left out, and any error returns ({}, None)."""
+
+def rally_key(start, end):
+    """A rally's identity across the pipeline: its unpadded start and end (clips carry them as rally_start/rally_end)."""
+    return round(float(start), 3), round(float(end), 3)
+
+
+def jev_checks(video, rallies):
+    """({rally_key: {"real", "kind"}}, stats): Jev's verdict on each rally ({"start", "end"}, unpadded).
+
+    Fail open: a rally Jev could not answer is left out, and any error returns ({}, None)."""
     try:
         t0 = time.time()
 
-        def ask(clip):
+        def ask(rally):
             try:
                 from src.jev_sheet import contact_sheet
                 r = requests.post(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/jev",
-                                  data=contact_sheet(video, clip["rally_start"], clip["rally_end"]),
+                                  data=contact_sheet(video, rally["start"], rally["end"]),
                                   headers={"Authorization": f"Bearer {JOB_TOKEN}", "Content-Type": "image/jpeg"},
                                   timeout=30)
                 a = r.json() if r.status_code == 200 else None
@@ -730,19 +740,40 @@ def jev_checks(video, clips):
                     return None
                 return {"real": float(real), "kind": kind}
             except Exception as e:
-                _log(f"jev: clip {clip['file']}: {type(e).__name__}: {e}")
+                _log(f"jev: rally {rally['start']:.1f}-{rally['end']:.1f}: {type(e).__name__}: {e}")
                 return None
 
         with ThreadPoolExecutor(max_workers=4) as pool:
-            answers = list(pool.map(ask, clips))
-        found = {c["file"]: a for c, a in zip(clips, answers) if a}
+            answers = list(pool.map(ask, rallies))
+        found = {rally_key(r["start"], r["end"]): a for r, a in zip(rallies, answers) if a}
         stats = {"checked": len(found), "flagged": sum(a["real"] < JEV_CUT for a in found.values()),
-                 "failed": len(clips) - len(found), "sec": round(time.time() - t0, 1)}
+                 "failed": len(rallies) - len(found), "sec": round(time.time() - t0, 1)}
         _log(f"jev: {stats}")
         return found, stats
     except Exception as e:
         _log(f"jev skipped: {type(e).__name__}: {e}")
         return {}, None
+
+
+def in_background(fn, *args):
+    """Run fn(*args) on a daemon thread; the returned wait() gives its result (or raises its error)."""
+    box = {}
+
+    def target():
+        try:
+            box["value"] = fn(*args)
+        except BaseException as e:  # noqa: BLE001 -- re-raised by wait() in the caller's thread
+            box["error"] = e
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+
+    def wait():
+        t.join()
+        if "error" in box:
+            raise box["error"]
+        return box["value"]
+    return wait
 
 
 def clip_framings(video, csv_path, calib, clips, poses):
@@ -928,6 +959,10 @@ def run():
     if HIT_FINDER:
         segments, hit_finder_info = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
                                                         detected["times_crossed"], segments)
+    # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
+    jev_wait = None
+    if JEV:
+        jev_wait = in_background(jev_checks, proxy_video, segments)
     badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
@@ -946,12 +981,6 @@ def run():
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
              "top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
              "inference": inference_timing}
-    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
-    jev, stats["jev"] = {}, None
-    if JEV:
-        _check_cancel("cut", "asking Jev whether the rallies are real points...")
-        jev, stats["jev"] = jev_checks(proxy_video, top_result["manifest"])
-
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
     burst_reel_id = os.environ.get("BURST_REEL_ID")
@@ -962,16 +991,29 @@ def run():
     # attached to it at all; lib/reels.ts (console) still accepts that
     # exact old shape too, for the separate SSH-driven path that wasn't
     # migrated in the same change (see that file's own comment).
-    ranked_key = f"{BRAND_ID}/reels/{reel_id}.mp4"
-    s3_out.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), OUTPUT_BUCKET, ranked_key)
-    reels = []
+    ranked_key = reel_key(reel_id)
+    burst_key = reel_key(burst_reel_id)
     # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
     # pre-minted by job_runner.py before this pod even started), the count
     # here is only known now, so each clip mints its own id at upload time.
-    for clip in top_result["manifest"]:
-        clip_reel_id = str(uuid.uuid4())
-        clip_key = f"{BRAND_ID}/reels/{clip_reel_id}.mp4"
-        s3_out.upload_file(os.path.join(reel_dir, "top", clip["file"]), OUTPUT_BUCKET, clip_key)
+    clip_ids = [str(uuid.uuid4()) for _ in top_result["manifest"]]
+    files = [(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), ranked_key)] + \
+        ([(os.path.join(reel_dir, "burst", "highlight.mp4"), burst_key)] if has_burst else []) + \
+        [(os.path.join(reel_dir, "top", clip["file"]), reel_key(cid))
+         for clip, cid in zip(top_result["manifest"], clip_ids)]
+    # The uploads run while framing is worked out and Jev finishes; nothing below reads them.
+    upload_pool = ThreadPoolExecutor(max_workers=4)
+    uploads = [upload_pool.submit(s3_out.upload_file, path, OUTPUT_BUCKET, key) for path, key in files]
+    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
+    jev, stats["jev"] = jev_wait() if jev_wait else ({}, None)
+    for u in uploads:
+        u.result()
+    upload_pool.shutdown()
+
+    reels = []
+    for clip, clip_reel_id in zip(top_result["manifest"], clip_ids):
+        clip_key = reel_key(clip_reel_id)
+        verdict = jev.get(rally_key(clip["rally_start"], clip["rally_end"]))
         reels.append({
             "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
             "rank": clip["rank"],
@@ -996,12 +1038,10 @@ def run():
             # Which finder produced the rally: the console exempts hit-finder
             # clips from its sharper-cut score floor (reels.finder).
             "finder": rally_finder(hit_finder_info),
-            **({"jev": jev[clip["file"]]} if clip["file"] in jev else {}),
+            **({"jev": verdict} if verdict else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
-        burst_key = f"{BRAND_ID}/reels/{burst_reel_id}.mp4"
-        s3_out.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), OUTPUT_BUCKET, burst_key)
         reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
     # Retried, not best-effort: every reel above is already in R2 and this

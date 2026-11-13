@@ -25,7 +25,7 @@ def video(tmp_path):
 
 
 def clips(n):
-    return [{"file": f"rally_{i}.mp4", "rank": i, "rally_start": 2.0 + i, "rally_end": 8.0 + i} for i in range(1, n + 1)]
+    return [{"start": 2.0 + i, "end": 8.0 + i} for i in range(1, n + 1)]
 
 
 class Reply:
@@ -53,7 +53,7 @@ def test_contact_sheet_shows_the_rally_not_the_whole_video(video):
     assert max(early) < min(late)
 
 
-def test_valid_answers_attach_to_every_clip(video, monkeypatch):
+def test_valid_answers_come_back_for_every_rally(video, monkeypatch):
     sent = []
 
     def post(url, data, headers, timeout):
@@ -61,7 +61,7 @@ def test_valid_answers_attach_to_every_clip(video, monkeypatch):
         return Reply(200, {"real": 0.3 if len(sent) % 2 else 0.9, "kind": "real_point"})
     monkeypatch.setattr(pod_driver.requests, "post", post)
     found, stats = pod_driver.jev_checks(video, clips(12))
-    assert sorted(found) == sorted(c["file"] for c in clips(12))
+    assert sorted(found) == sorted(pod_driver.rally_key(c["start"], c["end"]) for c in clips(12))
     assert len(sent) == 12
     url, headers, size = sent[0]
     assert url.endswith(f"/api/runner/jobs/{pod_driver.JOB_ID}/jev")
@@ -104,3 +104,19 @@ def test_one_failed_clip_does_not_lose_the_others(video, monkeypatch):
     monkeypatch.setattr(pod_driver.requests, "post", post)
     found, stats = pod_driver.jev_checks(video, clips(3))
     assert len(found) == 2 and stats["checked"] == 2 and stats["failed"] == 1
+
+
+def test_a_verdict_finds_its_clip_by_the_rally_times():
+    """The clip's rally_start/rally_end are the segment's own floats (top_rallies_reel.py), so the keys meet."""
+    seg = {"start": 12.366666666666667, "end": 30.03333333333333}
+    clip = {"rally_start": seg["start"], "rally_end": seg["end"], "start": seg["start"] - 3.0, "end": seg["end"] + 3.0}
+    assert pod_driver.rally_key(clip["rally_start"], clip["rally_end"]) == pod_driver.rally_key(seg["start"], seg["end"])
+
+
+def test_in_background_returns_the_value_or_raises_the_error():
+    assert pod_driver.in_background(lambda a, b: a + b, 2, 3)() == 5
+
+    def boom():
+        raise ValueError("no")
+    with pytest.raises(ValueError):
+        pod_driver.in_background(boom)()

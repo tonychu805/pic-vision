@@ -284,15 +284,16 @@ def test_the_shared_files_the_pod_reads_are_covered_by_its_read_credential():
 
 def test_every_reel_the_pod_uploads_lands_in_its_venues_reel_folder():
     # The write credential covers <brand>/reels/ and nothing else. Every
-    # upload_file call must use a key built under that prefix, or the final
-    # upload of a real job 403s -- the most expensive place to find out.
+    # upload must use a key built under that prefix, or the final upload of
+    # a real job 403s -- the most expensive place to find out.
+    assert pod_driver.reel_key("abc") == f"{pod_driver.BRAND_ID}/reels/abc.mp4"
     source = inspect.getsource(pod_driver.run)
-    # upload_file(os.path.join(...), OUTPUT_BUCKET, <key var>) -- the join()
-    # has its own parentheses, so a plain [^)]* would stop inside it.
-    uploads = re.findall(r"s3_out\.upload_file\(os\.path\.join\([^)]*\),\s*OUTPUT_BUCKET,\s*(\w+)\)", source)
-    assert len(uploads) == 3, f"expected the full, top-rally and burst uploads, found {uploads}"
-    for var in uploads:
-        assert re.search(rf'{var}\s*=\s*f"\{{BRAND_ID\}}/reels/', source), f"{var} is not built under <brand>/reels/"
+    # The uploads are the (path, key) pairs in `files`: the full reel, the burst and every clip, each keyed by reel_key.
+    files = source[source.index("files = "):source.index("upload_pool = ")]
+    assert re.findall(r"\(os\.path\.join\([^)]*\),\s*(\w+(?:\(\w+\))?)\)", files) == ["ranked_key", "burst_key", "reel_key(cid)"]
+    for var in ("ranked_key", "burst_key"):
+        assert re.search(rf"{var}\s*=\s*reel_key\(", source), f"{var} is not built by reel_key"
+    assert "BRAND_ID}/reels" not in source, "a key is built by hand instead of reel_key"
 
 
 def test_reads_use_the_read_client_and_writes_use_the_write_client():
@@ -302,7 +303,9 @@ def test_reads_use_the_read_client_and_writes_use_the_write_client():
     assert not re.search(r"s3_out\.download_file", source)
     assert not re.search(r"s3_in\.upload_file", source)
     assert len(re.findall(r"s3_in\.download_file", source)) == 2
-    assert len(re.findall(r"s3_out\.upload_file", source)) == 3
+    # Every reel goes up through one call, submitted to the upload pool with the write client.
+    assert re.findall(r"s3_out\.upload_file", source) == ["s3_out.upload_file"]
+    assert re.search(r"submit\(s3_out\.upload_file, path, OUTPUT_BUCKET, key\)", source)
     # The ball model's download moved into fetch_weights (2026-11-12): run()
     # must hand it the read client, and it must only read with it.
     assert re.search(r"fetch_weights\(s3_in,", source)
