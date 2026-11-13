@@ -4073,3 +4073,22 @@ Vast offer listings carry no field saying which images a host already has; the f
 | Check-in to done | 11.5 min per 10 min of play |
 
 **Reading.** The fallback works end to end: create, boot, start, process, report, clean up, all automatic. Start-up is fast (52 s claim to running). Processing is slower than a RunPod A5000 (6.7-7.3 min per 10 min, 11-12) and does not keep up with a 10-minute part cadence (11.5 min), so it suits a fallback, not the main path. Not tested: RunPod-first then Google on a real shortage, a spot VM reclaimed mid-part, the real Google price. The Workflow's ~50-request budget is near its limit when both vendors are tried (counted in budget.test.ts).
+
+## 2026-11-13 — Google fallback on 16 CPUs: 9.3 min per 10-min part; NVENC missing on our Google image
+
+**Run.** Same job as above (0cf24639, PGC eda301d9 `session-005.mkv` re-uploaded), staging orchestrator deployed with `RUNPOD_DISABLED` and `GCP_MACHINE_TYPE=g2-standard-16` for this run only, restored after. The VM came up in asia-east1-b (zones are tried a, b, c; why a was skipped is not logged here). Pipeline log from the VM's serial console (`/mnt/fast_scratch/pic-vision-scratch/gce16_log.txt`).
+
+| Stage | g2-standard-8 (above) | g2-standard-16 |
+|---|---|---|
+| convert | 2.0 min | 1.2 min |
+| ball model | 2.5 min (74 s waiting for frames) | 1.9 min (54 s waiting) |
+| hit finder | 3.5 min | 3.2 min |
+| badges | 1.4 min | 1.4 min |
+| clips + upload | ~1.8 min | ~1.4 min |
+| Pipeline start to done | 11.5 min (check-in to done) | 9.3 min (first log line to done) |
+
+**Found:** `NVENC is unavailable on this GPU/host, encoding on the CPU with libx264 instead` -- on Google every encode (the 30 fps convert and every clip) runs on the CPU, though the L4 has NVENC. Likely the image's driver install lacks the NVIDIA encode library (libnvidia-encode); not yet checked. That is a large share of the CPU-bound time on both machine sizes.
+
+**Not explained yet:** the same file gave 15 rallies (12 from net crossings) on the 8-CPU run and 18 (8 from crossings) on the 16-CPU run; ball found in 26.3% of frames here (the 8-CPU figure was not kept). Net-crossing rallies depend only on the ball track, so the ball model's input or output differed between the runs. One guess: libx264's output depends on its thread count, so the converted video differs between 8 and 16 CPUs (and between Google's CPU encode and RunPod's NVENC). Unverified.
+
+**Reading.** 16 CPUs bring Google under the 10-min part cadence (9.3 min), but the bigger fix is likely NVENC on the image, which would help either size. The run-to-run rally difference needs checking before Google results are trusted like RunPod's.
