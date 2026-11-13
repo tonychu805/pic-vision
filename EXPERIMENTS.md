@@ -4112,3 +4112,31 @@ Vast offer listings carry no field saying which images a host already has; the f
 **Encode determinism, locally** (`/mnt/fast_scratch/pic-vision-scratch/x264det`): libx264 at the pod's settings is byte-identical run to run at the same thread count, but differs between 8 and 16 threads, and NVENC differs again. The ball model on each: 4,737 / 4,762 / 4,653 frames with a ball, crossing rallies 8 / 8 / 8 (local calibration, not the job's). So encoding moves the ball track slightly but did not change the rally count here. The first Google run's 12 crossing rallies is the outlier (1 of 3 Google runs); cause not found.
 
 **Reading.** NVENC buys the cheaper 8-CPU machine what 16 CPUs bought: under the 10-min part cadence (9.8 min). The ball model is still CPU-bound on decode (69 s waiting); GPU decode is the next lever if needed. Hit finder and badges vary ~10-20% run to run on the same machine type.
+
+## 2026-11-13 — Ball model's mask and resize on the GPU: Google part 9.8 -> 8.6 min, ball model no longer waits
+
+**Change** (`28da754`, staging pod code): when the PyTorch model runs on CUDA, the court mask, crop and resize to 512x288 run on the GPU (`gpu_prep` in `scripts/pod_infer.py`); decoding stays cv2 on the CPU. `PIC_VISION_INFER_GPU_PREP=0` forces the old path. Measured locally first: mask + resize cost 6.5-7.0 ms of CPU per frame, decode 2.9-4.0 ms.
+
+**Equivalence, locally** (RTX 2000 Ada, old vs new path, same file; `/mnt/fast_scratch/pic-vision-scratch/gpuprep/compare_cpuall.json`):
+
+| Part | Frames whose detection differs | Crossing rallies (identical) | Hit-finder rallies (identical) |
+|---|---|---|---|
+| PGC eda301d9, NVENC encode | 33 of 17,940 | 8 / 8 (8) | 18 / 18 (15) |
+| PGC eda301d9 s004 | 33 of 18,000 | 14 / 14 (12) | 21 / 21 (21) |
+| Brickwall SEMI 600 s | 45 of 18,003 | 20 / 20 (19) | 21 / 21 (20) |
+
+Speed locally: no change with 4+ cores (the RTX 2000 Ada is the limit); with 2 cores the ball model went 174-177 s -> 112 s.
+
+**Google run.** Job 0cf24639 (same re-uploaded file), staging in test mode (`RUNPOD_DISABLED`), g2-standard-8 with NVENC, restored after. Timings from the job's stage_timings and stats.
+
+| Stage | 8 CPUs + NVENC (above) | + mask/resize on GPU |
+|---|---|---|
+| convert | 0.8 min | 0.7 min |
+| ball model | 2.2 min (wait for frames 69 s) | 1.3 min (wait 3.9 s; decode 58 s now overlaps the model's 56 s) |
+| hit finder | 3.7 min | 3.7 min |
+| badges | 1.7 min | 1.7 min |
+| clips + upload | ~1.2 min | ~1.0 min |
+| Check-in to done | 9.8 min | 8.6 min |
+| Rallies (from crossings) | 17 (8) | 17 (8) |
+
+**Reading.** The ball model on Google is now GPU-bound (3.9 s of waiting, from 69 s), so GPU decode would buy little there now. The slowest stage is the hit finder's pose (GPU-bound, 3.7 min). The Google fallback does a 10-min part in 8.6 min, comfortably inside the cadence. Same rally count as the previous Google run.
