@@ -4296,3 +4296,19 @@ Bars:
 10 of the 13 ball-machine clips were labelled ball_machine or practice.
 
 **Decision (operator, 2026-11-13).** Keep Jev for the guard. imajev runs on the pod's own GPU one clip at a time, so on 10–25 clips a part it would add about a minute or more where the 10-minute rhythm has almost no margin. Jev adds 14–45 s in all, off the GPU. imajev stays the local fallback if Jev is ruled out on privacy. It would first need a pre-registered test at 0.6 and a speed fix (the 2B model, batching, or a faster pod card; none measured).
+
+## 2026-11-13 (evening) — Full session with Jev on (staging): the share-page top 10 passes, 9 of 10 real
+
+**Setup.** Same replay as the morning session test (25 Sep 08:40, 8 parts on the real clock, session `d080a9a5`, share `536e0fde`), staging pod code `84142dc` (hit finder + Jev on every rally clip), console `2bec788`, staging DB with `20261113100000_reels_jev`. Top 10 rebuilt exactly as the share page picks it (Jev < 0.4 left out, then by score; no badges assumed — the DB was unreachable to confirm), cut blind from the source footage, judged by the operator on playback.
+
+**Result (bars pre-registered 11-13 morning): PASS on all three.**
+| | Morning, no Jev (hit finder) | Evening, Jev on |
+|---|---|---|
+| Real | 2 of 9 | **9 of 10** (c06 "real, starts late", confirmed by the operator) |
+| No rally | 7 | **0** |
+| Part of a rally | 0 | 1 (part 3 21-50 s, Jev 0.44 "not_play", ends early) |
+| Starts late | 0 | 1 (bar <= 1) |
+- Jev: 116 clips checked, 0 failed, 15 removed (13 in the ball-machine stretch, 1 each in parts 6 and 7, unjudged), 19-40 s per part.
+- Speed: parts done 8.5-12 min after upload on one warm machine; the 10-minute rhythm held, with little margin. Session end to top 10: 8.5 min.
+
+**Reading.** With Jev, the session's top 10 on this footage meets the bar the morning run failed. One session, one venue; the guard covers ball-machine drills, not ordinary warm-ups. Production still runs the crossing finder without any guard; what ships is the operator's call (privacy for Jev, and whether the hit finder goes with it).
