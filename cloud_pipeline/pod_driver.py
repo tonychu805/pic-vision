@@ -94,6 +94,7 @@ import tempfile
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 import requests
@@ -183,6 +184,13 @@ POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
 # no rally found falls back to the crossing rallies; full and burst reels
 # keep the crossing rallies either way.
 HIT_FINDER = True
+# Jev guardrail (staging, operator 2026-11-13): a vision model reads a 6-frame sheet of each
+# of the part's top rally clips and says how likely it is a real point. The frames go to
+# TypeSafe through the console, which holds the key; the pod never does. Answers are only
+# recorded on the clips (reels[].jev), nothing is dropped, and any failure means "not checked".
+JEV = True
+JEV_TOP_K = 10
+JEV_CUT = 0.4  # only the stats count of clips Jev doubts; the console decides what to do with it
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
@@ -700,6 +708,43 @@ def rally_finder(hit_finder_info):
     return "hit_finder" if (hit_finder_info or {}).get("used") == "hit_finder" else "crossings"
 
 
+def jev_checks(video, clips):
+    """({clip file: {"real", "kind"}}, stats): Jev's verdict on the rally clips ranked JEV_TOP_K or better.
+
+    Fail open: a clip Jev could not answer is left out, and any error returns ({}, None)."""
+    try:
+        t0 = time.time()
+        top = [c for c in clips if c["rank"] <= JEV_TOP_K]
+
+        def ask(clip):
+            try:
+                from src.jev_sheet import contact_sheet
+                r = requests.post(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/jev",
+                                  data=contact_sheet(video, clip["rally_start"], clip["rally_end"]),
+                                  headers={"Authorization": f"Bearer {JOB_TOKEN}", "Content-Type": "image/jpeg"},
+                                  timeout=30)
+                a = r.json() if r.status_code == 200 else None
+                real, kind = a["real"], a["kind"]
+                if isinstance(real, bool) or not isinstance(real, (int, float)) or not 0 <= real <= 1 \
+                        or not isinstance(kind, str):
+                    return None
+                return {"real": float(real), "kind": kind}
+            except Exception as e:
+                _log(f"jev: clip {clip['file']}: {type(e).__name__}: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            answers = list(pool.map(ask, top))
+        found = {c["file"]: a for c, a in zip(top, answers) if a}
+        stats = {"checked": len(found), "flagged": sum(a["real"] < JEV_CUT for a in found.values()),
+                 "failed": len(top) - len(found), "sec": round(time.time() - t0, 1)}
+        _log(f"jev: {stats}")
+        return found, stats
+    except Exception as e:
+        _log(f"jev skipped: {type(e).__name__}: {e}")
+        return {}, None
+
+
 def clip_framings(video, csv_path, calib, clips, poses):
     """{clip file: 9:16 framing path} for every rally clip (src/framing.py); {} on any failure.
 
@@ -902,6 +947,10 @@ def run():
              "top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
              "inference": inference_timing}
     framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
+    jev, stats["jev"] = {}, None
+    if JEV:
+        _check_cancel("cut", "asking Jev whether the top rallies are real points...")
+        jev, stats["jev"] = jev_checks(proxy_video, top_result["manifest"])
 
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
@@ -947,6 +996,7 @@ def run():
             # Which finder produced the rally: the console exempts hit-finder
             # clips from its sharper-cut score floor (reels.finder).
             "finder": rally_finder(hit_finder_info),
+            **({"jev": jev[clip["file"]]} if clip["file"] in jev else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
