@@ -116,7 +116,7 @@ CROSSING_RALLIES = [{"start": 1.0, "end": 9.0}]
 def test_the_pod_uses_the_hit_finders_rallies(pod, monkeypatch):
     found = [{"start": 2.0, "end": 8.0}, {"start": 20.0, "end": 30.0}]
     monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: (found, {"candidates": 40, "accepted": 12, "frames": 900, "posed": 450}))
-    segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+    segs, info, _ = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert segs == found
     assert info["used"] == "hit_finder" and info["rallies"] == 2 and info["crossing_rallies"] == 1
 
@@ -125,15 +125,51 @@ def test_the_pod_falls_back_to_the_crossing_rallies_on_an_error(pod, monkeypatch
     def boom(*a, **k):
         raise RuntimeError("CUDA out of memory")
     monkeypatch.setattr(HF, "find_rallies", boom)
-    segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+    segs, info, _ = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert segs == CROSSING_RALLIES
     assert info["used"] == "crossings" and "CUDA out of memory" in info["error"]
 
 
 def test_the_pod_falls_back_when_the_hit_finder_finds_nothing(pod, monkeypatch):
     monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([], {"candidates": 3, "accepted": 0, "frames": 900, "posed": 450}))
-    segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+    segs, info, _ = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert segs == CROSSING_RALLIES and info["used"] == "crossings" and "error" not in info
+
+
+def test_the_hit_finders_whole_frame_poses_come_back_for_badges(pod, monkeypatch):
+    def find(*a, keep_full=None, **k):
+        keep_full.update({"0": ["p"], "2": ["q"]})
+        return [{"start": 2.0, "end": 8.0}], {"candidates": 4, "accepted": 4, "frames": 900, "posed": 450}
+    monkeypatch.setattr(HF, "find_rallies", find)
+    assert pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)[2] == {"0": ["p"], "2": ["q"]}
+    monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([], {"candidates": 0, "accepted": 0, "frames": 900, "posed": 450}))
+    assert pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)[2] == {}   # fell back
+
+
+def test_badges_pose_only_the_rally_frames_the_hit_finder_did_not(pod, monkeypatch, tmp_path):
+    import cv2
+    import numpy as np
+    from src import badges
+    video = str(tmp_path / "v.mp4")
+    w = cv2.VideoWriter(video, cv2.VideoWriter_fourcc(*"mp4v"), 30, (96, 54))
+    for _ in range(120):
+        w.write(np.zeros((54, 96, 3), np.uint8))
+    w.release()
+    segments = [{"start": 1.0, "end": 2.0}]
+    frames = pose.pose_frames(segments, 120)
+    known = {str(f): ["from the hit finder"] for f in frames if f % 2 == 0}
+    posed, measured = [], {}
+
+    def pose_video(video, fs, model, H, progress=None):
+        posed.extend(fs)
+        return {str(f): ["posed for badges"] for f in fs}
+    monkeypatch.setattr(pose, "pose_video", pose_video)
+    monkeypatch.setattr(badges, "measure", lambda P, *a: measured.update(P) or {"rallies": [], "swings": []})
+    result, poses = pod.measure_badges(None, video, segments, [], {"homography": np.eye(3).tolist()}, known=known)
+    assert posed == [f for f in frames if f % 2 == 1]
+    assert measured == poses and sorted(map(int, poses)) == frames
+    assert all(poses[str(f)] == ["from the hit finder"] for f in frames if f % 2 == 0)
+    assert result["pose_frames"] == len(frames) and result["pose_reused"] == len(known)
 
 
 def test_a_cancel_during_the_hit_finder_still_stops_the_job(pod, monkeypatch):
@@ -219,7 +255,7 @@ def test_the_pod_sizes_thread_pools_before_the_hit_finder(pod, monkeypatch):
     seen = []
     monkeypatch.setattr(cpus, "limit_threads", lambda: seen.append(1) or {"usable_cpus": 7, "cv2_threads": 7})
     monkeypatch.setattr(HF, "find_rallies", lambda *a, **k: ([{"start": 1.0, "end": 9.0}], {"candidates": 4, "accepted": 4, "frames": 900, "posed": 450}))
-    segs, info = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
+    segs, info, _ = pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES)
     assert seen == [1] and info["threads"]["cv2_threads"] == 7 and info["used"] == "hit_finder"
 
 

@@ -609,7 +609,7 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
-def measure_badges(s3_in, video, segments, crossings, calib):
+def measure_badges(s3_in, video, segments, crossings, calib, known=None):
     """Pose the rallies and measure them for badges; None if anything goes wrong.
 
     Measures only (src/badges.py measure()): every bar is relative to the
@@ -641,8 +641,13 @@ def measure_badges(s3_in, video, segments, crossings, calib):
         cw, ch = calib.get("calibration_resolution") or (w, h)
         homography = np.array(calib["homography"]) @ np.diag([cw / w, ch / h, 1.0])
         frames = pose_frames(segments, n_frames)
+        # Frames the hit finder already posed whole-frame (same model and homography; on 11-13 part 1 the
+        # reused poses and the badge measures were identical to posing every frame here) are not posed again.
+        known = known or {}
+        poses = {str(f): known[str(f)] for f in frames if str(f) in known}
+        to_pose = [f for f in frames if str(f) not in poses]
 
-        _check_cancel("badges", f"measuring for badges: posing {len(frames)} rally frames...")
+        _check_cancel("badges", f"measuring for badges: posing {len(to_pose)} rally frames...")
         last = [time.time()]
 
         def progress(done, total):
@@ -652,9 +657,10 @@ def measure_badges(s3_in, video, segments, crossings, calib):
                 last[0] = time.time()
                 _check_cancel("badges", f"measuring for badges: posed {done}/{total} rally frames...")
 
-        poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
+        poses.update(pose_video(video, to_pose, PoseModel(POSE_LOCAL), homography, progress=progress))
         result = measure(poses, segments, w, h, crossings)
         result["pose_frames"] = len(frames)
+        result["pose_reused"] = len(frames) - len(to_pose)
         result["pose_sec"] = round(time.time() - started, 1)
         _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
              f"from {len(frames)} posed frames in {result['pose_sec']}s")
@@ -667,9 +673,10 @@ def measure_badges(s3_in, video, segments, crossings, calib):
 
 
 def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
-    """(rallies, info): the hit finder's rallies, or `fallback` (the crossing
+    """(rallies, info, poses): the hit finder's rallies, or `fallback` (the crossing
     rallies) when it fails or finds none. info goes into the job's stats so
-    staging can compare the two finders part by part."""
+    staging can compare the two finders part by part. poses are its whole-frame
+    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback."""
     info = {"crossing_rallies": len(fallback)}
     try:
         from src import hit_finder
@@ -687,13 +694,15 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
                 last[0] = time.time()
                 _check_cancel("hit_finder", f"finding rallies from paddle swings: posed {done}/{total} frames...")
 
-        segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress)
+        poses = {}
+        segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress,
+                                              keep_full=poses)
         info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
         _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
              f"{found['posed']} of {found['frames']} frames posed (both passes, one decode) in {info['sec']}s")
         if segs:
             info["used"] = "hit_finder"
-            return segs, info
+            return segs, info, poses
         _log("hit finder found no rallies; using the net-crossing rallies")
     except Cancelled:
         raise
@@ -701,7 +710,7 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
         _log(f"hit finder skipped: {type(e).__name__}: {e}")
         info["error"] = f"{type(e).__name__}: {e}"
     info["used"] = "crossings"
-    return fallback, info
+    return fallback, info, {}
 
 
 def rally_finder(hit_finder_info):
@@ -955,15 +964,16 @@ def run():
         return
     # Clips and badges must share one rally list: a badge finds its clip by
     # the rally's own start/end (top_rallies_reel.py).
-    hit_finder_info = None
+    hit_finder_info, hit_poses = None, {}
     if HIT_FINDER:
-        segments, hit_finder_info = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
-                                                        detected["times_crossed"], segments)
+        segments, hit_finder_info, hit_poses = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
+                                                                   detected["times_crossed"], segments)
     # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
     jev_wait = None
     if JEV:
         jev_wait = in_background(jev_checks, proxy_video, segments)
-    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib) if BADGES else (None, None)
+    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib,
+                                           known=hit_poses) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
