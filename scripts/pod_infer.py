@@ -135,8 +135,85 @@ def apply_mask(img, mask3):
     return cv2.bitwise_and(img, mask3)
 
 
+def _bilinear_taps(n_in, n_out):
+    """Along one axis: the two source indices and the second one's weight for
+    each output pixel of a bilinear resize with half-pixel centres (cv2.resize
+    INTER_LINEAR, F.interpolate(align_corners=False))."""
+    src = np.maximum((np.arange(n_out) + 0.5) * (n_in / n_out) - 0.5, 0.0)
+    i0 = np.floor(src).astype(np.int64)
+    return i0, np.minimum(i0 + 1, n_in - 1), (src - i0).astype(np.float32)
+
+
+def gpu_prep(mask, crop, frame_shape):
+    """(stage, prep): the court mask, crop and resize on the GPU instead of apply_mask + prep3.
+
+    stage(trio) runs on the decode thread and starts the upload; prep(staged)
+    runs on the inference thread and returns what prep3 returns, as a
+    (1, 9, HEIGHT, WIDTH) float32 CUDA tensor.
+
+    2026-11-13: the mask and resize cost 6.5-7 ms per frame on the CPU, more
+    than decoding (3-4 ms); on an 8-CPU Google machine the GPU waited ~69 s per
+    10-min part for frames. Only the PyTorch model on CUDA gets this
+    (PIC_VISION_INFER_GPU_PREP=0 forces the CPU path); TensorFlow keeps prep3.
+
+    Each output pixel is a weighted sum of 4 source pixels, so only the source
+    rows those touch (576 of 1080 at 1080p) are copied and uploaded: uploading
+    whole frames took 3 ms per trio on an RTX 2000 Ada, longer than the resize.
+    A masked-out source pixel just gets weight 0, which is masking before the
+    resize, as prep3's caller does. The upload runs on its own stream so it
+    overlaps the model."""
+    import torch
+    y0, y1, x0, x1 = (crop[1], crop[3], crop[0], crop[2]) if crop else (0, frame_shape[0], 0, frame_shape[1])
+    full_w = frame_shape[1]
+    r0, r1, wy = _bilinear_taps(y1 - y0, HEIGHT)
+    c0, c1, wx = _bilinear_taps(x1 - x0, WIDTH)
+    rows, at = np.unique(np.concatenate([r0, r1]), return_inverse=True)
+    keep = np.ones((y1 - y0, x1 - x0), np.float32) if mask is None else mask[y0:y1, x0:x1].astype(np.float32)
+    idx, weight = [], []
+    for r, staged_r, w_r in ((r0, at[:HEIGHT], 1 - wy), (r1, at[HEIGHT:], wy)):
+        for c, w_c in ((c0, 1 - wx), (c1, wx)):
+            idx.append(staged_r[:, None] * full_w + (c + x0)[None, :])
+            weight.append(w_r[:, None] * w_c[None, :] * keep[r][:, c])
+    idx = torch.from_numpy(np.stack(idx).reshape(4, -1)).cuda()
+    weight = torch.from_numpy(np.stack(weight).reshape(4, 1, -1, 1)).cuda()
+    rows = torch.from_numpy(rows + y0)
+    copy_stream = torch.cuda.Stream()
+
+    def stage(trio):
+        staged = torch.empty((3, len(rows), full_w, 3), dtype=torch.uint8, pin_memory=True)
+        for i, img in enumerate(trio):
+            torch.index_select(torch.from_numpy(img), 0, rows, out=staged[i])
+        with torch.cuda.stream(copy_stream):
+            x = staged.to("cuda", non_blocking=True)
+            uploaded = torch.cuda.Event()
+            uploaded.record()
+        return x, uploaded
+
+    def prep(staged):
+        x, uploaded = staged
+        stream = torch.cuda.current_stream()
+        stream.wait_event(uploaded)
+        x.record_stream(stream)            # allocated on copy_stream, freed after use on this one
+        x = x.view(3, -1, 3)
+        out = sum(x.index_select(1, idx[k]).float() * weight[k] for k in range(4))
+        # cv2.resize returns uint8, so prep3 sees rounded pixels; rounding here
+        # too lands within one level of it (tests/test_pod_infer_gpu_prep.py).
+        out = out.round_().clamp_(0, 255).div_(255.0)
+        return out.view(3, HEIGHT, WIDTH, 3).permute(0, 3, 1, 2).flip(1).reshape(1, 9, HEIGHT, WIDTH)
+    return stage, prep
+
+
+def wants_gpu_prep(model_path):
+    if not model_path.endswith(".pt") or os.environ.get("PIC_VISION_INFER_GPU_PREP", "1") != "1":
+        return False
+    import torch
+    return torch.cuda.is_available()
+
+
 def load_infer(model_path):
     """infer(x) -> float32 heatmaps for a (n, 9, HEIGHT, WIDTH) float32 batch.
+
+    The PyTorch model also takes that batch as a CUDA tensor (gpu_prep's output).
 
     A .pt file is the PyTorch TrackNet (src/tracknet_torch.py, 2026-11-12): the
     pod needs no TensorFlow, so it runs on the stock runpod/pytorch image
@@ -151,9 +228,22 @@ def load_infer(model_path):
         model = load(model_path, device=device, half=half)
         dtype = next(model.parameters()).dtype
 
+        def to_numpy(y):
+            if device == "cpu":
+                return y.float().numpy()
+            # 2026-11-13: .cpu() copies into pageable memory, and while that copy
+            # waits for the model it blocks every other thread's CUDA copy too:
+            # gpu_prep's upload on the decode thread stalled ~14 ms per trio,
+            # so decoding stopped running ahead of the GPU. A pinned copy doesn't.
+            host = torch.empty(y.shape, dtype=torch.float32, pin_memory=True)
+            host.copy_(y.float(), non_blocking=True)
+            torch.cuda.current_stream().synchronize()
+            return host.numpy()
+
         def eager(x):
+            x = x if torch.is_tensor(x) else torch.from_numpy(x)
             with torch.no_grad():
-                return model(torch.from_numpy(x).to(device, dtype)).float().cpu().numpy()
+                return to_numpy(model(x.to(device, dtype)))
 
         graph = None
         if device == "cuda" and os.environ.get("PIC_VISION_INFER_CUDA_GRAPH", "1") == "1":
@@ -166,9 +256,9 @@ def load_infer(model_path):
         def infer(x):
             if x.shape != tuple(static_in.shape):
                 return eager(x)
-            static_in.copy_(torch.from_numpy(x))
+            static_in.copy_(x if torch.is_tensor(x) else torch.from_numpy(x))
             g.replay()
-            return static_out.float().cpu().numpy()
+            return to_numpy(static_out)
         return infer
     return _tf_infer(model_path, half)
 
@@ -231,7 +321,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     print("Loading model...")
     infer = load_infer(model_path)
     threads = limit_threads()
-    timing = {"prep_s": 0.0, "wait_s": 0.0, "infer_s": 0.0, "post_s": 0.0}
+    timing = {"decode_s": 0.0, "prep_s": 0.0, "wait_s": 0.0, "infer_s": 0.0, "post_s": 0.0}
 
     cap = cv2.VideoCapture(video_path)
     fps = cap.get(cv2.CAP_PROP_FPS)
@@ -276,15 +366,25 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
     print(f"Video: {n_frames} frames @ {fps:.1f} fps = {n_frames / fps:.1f}s, "
           f"x_ratio={x_ratio:.2f} y_ratio={y_ratio:.2f}")
 
+    on_gpu = gpu_prep(mask, crop, frame_shape) if wants_gpu_prep(model_path) else None
+    print(f"mask + resize on the {'GPU' if on_gpu else 'CPU'}")
+    if on_gpu:
+        stage, to_input = on_gpu
+    else:
+        def stage(trio):
+            if mask is not None:
+                trio = [apply_mask(im, mask3) for im in trio]
+            return prep3(trio, crop)
+
+        def to_input(item):
+            return item
+
     # Trace the tf.function once, outside the timed loop below -- the first
     # call to a @tf.function compiles a graph for that input shape, a
     # one-time cost a real run shouldn't pay per-frame. Uses the already-read
     # first trio (mirroring exactly what the loop's first iteration does) so
     # no frame is skipped or read twice.
-    warm_trio = [img1, img2, img3]
-    if mask is not None:
-        warm_trio = [apply_mask(im, mask3) for im in warm_trio]
-    _ = infer(prep3(warm_trio, crop))
+    _ = infer(to_input(stage([img1, img2, img3])))
 
     with open(output_csv, "w", newline="") as f:
         writer = csv.writer(f)
@@ -321,11 +421,8 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
             nonlocal ok, img1, img2, img3
             try:
                 while ok and not stop_event.is_set():
-                    trio = [img1, img2, img3]
                     t_prep = time.perf_counter()
-                    if mask is not None:
-                        trio = [apply_mask(im, mask3) for im in trio]
-                    item = prep3(trio, crop)
+                    item = stage([img1, img2, img3])
                     timing["prep_s"] += time.perf_counter() - t_prep
                     while True:
                         try:
@@ -334,9 +431,11 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                         except queue.Full:
                             if stop_event.is_set():
                                 return
+                    t_decode = time.perf_counter()
                     ok, img1 = cap.read()
                     ok, img2 = cap.read()
                     ok, img3 = cap.read()
+                    timing["decode_s"] += time.perf_counter() - t_decode
             except Exception as e:
                 producer_error.append(e)
             finally:
@@ -368,7 +467,7 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
                 timing["wait_s"] += t_infer - t_wait
                 if unit is None:
                     break
-                raw_pred = infer(unit)
+                raw_pred = infer(to_input(unit))
                 t_post = time.perf_counter()
                 timing["infer_s"] += t_post - t_infer
                 mask_pred = (raw_pred > heat_threshold).astype(np.float32)
@@ -438,10 +537,14 @@ def run(video_path, model_path, output_csv, calib=None, margin_px=80.0, heat_thr
         print(f"\nDone: {count} frames in {elapsed / 60:.1f} min ({count / elapsed:.1f} fps)")
         print(f"Output: {output_csv}")
         # One line for pod_driver to keep in the job's stats: where the time went.
-        # wait_s is the GPU loop waiting for decoded frames (CPU-bound if large);
-        # prep_s runs on the decode thread, overlapping the rest.
+        # wait_s is the GPU loop waiting for decoded frames (CPU-bound if large).
+        # decode_s and prep_s run on the decode thread, overlapping the rest.
+        # prep_s is the mask + resize when gpu_prep is false; when true it is only
+        # copying the needed rows to pinned memory and starting the upload, and
+        # the GPU's mask + resize is in infer_s.
         print("TIMING " + json.dumps({"frames": count, "sec": round(elapsed, 1), "fps": round(count / elapsed, 1),
-                                      **{k: round(v, 1) for k, v in timing.items()}, **threads}), flush=True)
+                                      **{k: round(v, 1) for k, v in timing.items()}, **threads,
+                                      "gpu_prep": on_gpu is not None}), flush=True)
 
         # A corrupt region makes cv2.VideoCapture stop reading and return cleanly,
         # so a truncated run is otherwise indistinguishable from a complete one —
