@@ -4312,3 +4312,37 @@ Bars:
 - Speed: parts done 8.5-12 min after upload on one warm machine; the 10-minute rhythm held, with little margin. Session end to top 10: 8.5 min.
 
 **Reading.** With Jev, the session's top 10 on this footage meets the bar the morning run failed. One session, one venue; the guard covers ball-machine drills, not ordinary warm-ups. Production still runs the crossing finder without any guard; what ships is the operator's call (privacy for Jev, and whether the hit finder goes with it).
+
+## 2026-11-15 — Jev on redacted contact sheets: the wide-margin blur keeps Jev's answers; the tight one loses real rallies
+
+**Why.** Jev contact sheets send six unblurred frames of each rally to TypeSafe, the open privacy item for production. The question is whether Jev still works when faces, heads and everything off the court are blurred before a sheet leaves the pod.
+
+**Redaction** (scratch `jev_blur/build_sheets.py`). It runs on each full-resolution frame before the 784×441 resize.
+- **Outside the court is blurred**, using a downscale/upscale soften (factor 24). "The court" is the camera's calibrated footprint expanded by a margin, plus players' standing height above it (7.5 ft, scaled with depth).
+- **Two margins:**
+  - tight: 2 ft past the sidelines, 3 ft past the baselines;
+  - wide: 4 ft past the sidelines, 10 ft past the baselines, which keeps the area behind the baselines where a ball machine stands.
+- **Heads are blurred** inside the court area, from the staging YOLOv8n pose model's head keypoints.
+- **Faces are blurred** inside the court area, from OpenCV Zoo YuNet (MIT, from `../pic-vision-redaction`, score >= 0.35).
+- The layout is otherwise identical to `src/jev_sheet.py`.
+
+**Clips.**
+- Test K's 95 clips whose session video and calibration are cached: 60 real, 25 not real (6 of them ball machine), 10 serve + return only.
+- 11-13's 28 judged clips: 12 real, 13 ball-machine "no rally", 3 other.
+- Test K's 30 fresh clips and Test L were left out: no calibration for their cameras.
+
+Jev jev-1.14, Test K's exact questions; only blurred sheets were sent (246 calls).
+
+| Cut 0.4 | Unblurred Jev (Test K) | Blurred, wide | Blurred, tight |
+|---|---|---|---|
+| Real flagged | 1 of 60 | **1 of 72** (the same clip: 0.24 unblurred, 0.19 blurred) | 3 of 72 |
+| Ball machine flagged | 6 of 6 | **19 of 19** | 19 of 19 |
+| Other not-real flagged | 2 of 19 | 1 of 19 | 3 of 19 |
+| Score shift vs unblurred (Test K, median / max) | — | +0.000 / 0.20 | -0.010 / 0.21 |
+
+**Reading.**
+- **Wide margin.** Redacting the sheets with the wide margin leaves Jev's decisions unchanged on these clips.
+- **Tight margin.** It cut into the area behind the baselines and removed two more real rallies.
+- **Verification so far.** The redaction was checked by eye on sample sheets: neighbouring court, wall and spectators blurred; ball machine and loose balls kept. It was not audited frame by frame.
+- **Scope.** One venue (PGC), a tested set rather than a coverage guarantee.
+- **Next.** Build the wide-margin redaction into the pod's sheet step, re-pass it on staging, and leave the production privacy call to the operator.
