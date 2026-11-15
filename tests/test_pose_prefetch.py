@@ -60,8 +60,27 @@ def test_prefetch_matches_the_serial_path_and_runs_off_the_main_thread(video):
     b = pose.pose_video(video, FRAMES, split, H, batch=4, progress=lambda done, total: seen.append((done, total)))
     assert a == b
     assert sorted(map(int, b)) == FRAMES
-    assert split.prepare_threads == {"pose-prefetch"}
+    assert split.prepare_threads and all(n.startswith("pose-prepare") for n in split.prepare_threads)
     assert seen[-1] == (len(FRAMES), len(FRAMES))
+
+
+class SlowEarlySplit(Split):
+    """Earlier batches take longer to prepare, so parallel workers finish them out of order."""
+    def prepare(self, frames):
+        import time
+        time.sleep(0.05 * max(0, 3 - len(self.prepare_threads)))
+        return super().prepare(frames)
+
+
+def test_parallel_prepare_gives_the_serial_output_in_frame_order(video, monkeypatch):
+    monkeypatch.setenv("PIC_VISION_POSE_PREP_WORKERS", "3")
+    split = SlowEarlySplit()
+    a = pose.pose_video(video, FRAMES, Serial(), H, batch=2)
+    b = pose.pose_video(video, FRAMES, split, H, batch=2)
+    assert a == b and list(map(int, b)) == FRAMES
+    assert len(split.prepare_threads) > 1
+    passes = pose.pose_video_passes(video, FRAMES, {"one": Split(), "two": Split()}, H, batch=2)
+    assert passes["one"] == passes["two"] == a
 
 
 @pytest.mark.parametrize("where", ["prepare", "infer"])

@@ -12,6 +12,8 @@ Badges pose only rally windows (pose_frames). The hit finder
 (src/hit_finder.py) poses every frame, twice: the whole frame and, through
 CropModel, a close-up of the far court.
 """
+import os
+
 import cv2
 import numpy as np
 
@@ -22,6 +24,16 @@ PAD_VALUE = 114
 # Batches decoded + letterboxed ahead of the GPU in pose_video. A batch of 8
 # 736x1280 uint8 frames is ~22 MB, so this bounds memory at ~90 MB.
 PREFETCH_BATCHES = 4
+
+
+def prepare_workers():
+    """Threads that letterbox batches in parallel (cv2 releases the GIL). 2026-11-15: on a Google L4 one thread
+    prepared 112 frames/s while the model alone does 277, so the GPU waited; the output is the same either way.
+    PIC_VISION_POSE_PREP_WORKERS overrides; default leaves two CPUs for decoding and the rest."""
+    if os.environ.get("PIC_VISION_POSE_PREP_WORKERS"):
+        return max(1, int(os.environ["PIC_VISION_POSE_PREP_WORKERS"]))
+    from src.cpus import usable_cpus
+    return min(4, max(1, usable_cpus() - 2))
 FPS = 30.0
 # Frames posed around each rally: the serve happens up to ~1.5 s before the
 # first net crossing (First Strike), and the last hit up to ~0.5 s after.
@@ -201,7 +213,9 @@ def pose_video_passes(video, frames, models, H, batch=8, progress=None):
 
     import queue
     import threading
-    q = queue.Queue(maxsize=PREFETCH_BATCHES)
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=prepare_workers(), thread_name_prefix="pose-prepare")
+    q = queue.Queue(maxsize=max(PREFETCH_BATCHES, 2 * pool._max_workers))
     stop = threading.Event()
     DONE = object()
 
@@ -217,7 +231,7 @@ def pose_video_passes(video, frames, models, H, batch=8, progress=None):
     def produce():
         try:
             for idx, imgs in _batches(video, frames, batch):
-                if not put((idx, {name: m.prepare(imgs) for name, m in models.items()})):
+                if not put((idx, pool.submit(lambda imgs=imgs: {name: m.prepare(imgs) for name, m in models.items()}))):
                     return
             put(DONE)
         except BaseException as e:      # handed to the consumer, re-raised there
@@ -233,12 +247,14 @@ def pose_video_passes(video, frames, models, H, batch=8, progress=None):
             if isinstance(item, BaseException):
                 raise item
             idx, prepared = item
+            prepared = prepared.result()          # in submission order, so batches stay in frame order
             for name, m in models.items():
                 keep(name, idx, m.infer(prepared[name]))
             report()
     finally:
         stop.set()
         worker.join(timeout=5)
+        pool.shutdown(wait=False, cancel_futures=True)
     return out
 
 
@@ -272,7 +288,9 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
 
     import queue
     import threading
-    q = queue.Queue(maxsize=PREFETCH_BATCHES)
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=prepare_workers(), thread_name_prefix="pose-prepare")
+    q = queue.Queue(maxsize=max(PREFETCH_BATCHES, 2 * pool._max_workers))
     stop = threading.Event()
     DONE = object()
 
@@ -289,7 +307,7 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
     def produce():
         try:
             for idx, imgs in _batches(video, frames, batch):
-                if not put((idx, model.prepare(imgs))):
+                if not put((idx, pool.submit(model.prepare, imgs))):
                     return
             put(DONE)
         except BaseException as e:      # handed to the consumer, re-raised there
@@ -305,8 +323,9 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
             if isinstance(item, BaseException):
                 raise item
             idx, prepared = item
-            keep(idx, model.infer(prepared))
+            keep(idx, model.infer(prepared.result()))   # in submission order, so batches stay in frame order
     finally:
         stop.set()
         worker.join(timeout=5)
+        pool.shutdown(wait=False, cancel_futures=True)
     return out
