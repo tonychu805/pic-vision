@@ -4402,3 +4402,22 @@ The 0.4 cut removed 1 clip, correctly, and no real rally. Three dead-time clips 
 - Every pre-registered bar passes on unseen footage: top 10 (10/10), Jev (0 failures, no real rally removed), redaction (with the head-box gap above), speed (median 5.7 min), session end → top 10 (seconds), cleanup (0 machines at 6 min).
 - **Limits.** One session, one camera, 5 of 6 parts (50 min); no warm-up without a ball machine checked; Google T4 never exercised; RunPod had stock the whole run.
 - **Next.** Operator: the production privacy call on Jev with redacted sheets. Then the production PR stack (each PR with this staging evidence). The head-box fix and the orchestrator's wait-and-retry (checklist item 5) are separate staging changes.
+
+## 2026-11-15 (later) — Release checks: new pod code on production's old image; the console release on staging; first Google T4 job
+
+Three single jobs before the production push (release plan: root `progress/11.15 release plan - hit finder, Jev, stock image.md`). Footage: PGC eda301d9, 25 Sep 19:01 recording.
+
+| Job | What it checks | Machine | Result |
+|---|---|---|---|
+| `0cd9caa4` stand-alone, part 6 | Pod code `c7b3727` on **production's old 9.3 GB image**: production's orchestrator (`origin/main` `ea838aa`) deployed to staging for this job, then staging restored (`17fd3ed`, version `2b8cb499`) | RunPod RTX A5000, `tf215-cuda118` | Done, no error; hit finder 14 rallies; Jev 14 / 0 failed; 9.2 min claim → done incl. ~2 min start. **The pod-code PR can merge before the orchestrator PR** |
+| `d9804af1` one-part session, part 4 | Console without the interface languages (`ac58c99`) | RunPod (stock image) | Done; 13 hit-finder clips; Jev 13 / 0 failed; the dead-time clip (Jev 0.35; 0.25 in Run A) out of the top 10 and the share page; 10 delivered; machine gone in < 5 min |
+| `49a26f0c` one-part session, part 4 | Console release head `4fe28e0` (bilingual; content identical to `feat/jev-guard` `d54399d`) | **Google T4** n1-standard-8 spot (RunPod had nothing free) | Done; 12 hit-finder clips; Jev 12 / 0 failed; dead-time clip Jev 0.33, vetoed; 10 delivered; VM gone within ~5 min |
+
+**First Google T4 timing (measured, one 10-min part, stage_timings):** VM start ~2.1 min; convert 0.9 min; ball model 2.8 min (RTX 4000 Ada 1.2); hit finder 2.5 min (1.5); badges 1.0 min; cut 0.6 min; work start → done **8.1 min** (RTX 4000 Ada ~5.7). Keeps one camera's 10-min cadence with ~2 min to spare; not a two-camera machine.
+
+**Reading.**
+- The new pod code runs on both images, so the merge order between the pod-code and orchestrator PRs is not critical.
+- The Google fallback (T4 list, `17fd3ed`) works end to end on its first real use.
+- Rallies differ by GPU type on the same part: 12 on the T4, 13 on the RTX 4000 Ada (the open GPU-dependence item).
+- Jev's score for the same clip moved between runs (0.25, 0.35, 0.33): every time under 0.4 here, but a clip near the cut can land on either side.
+- **Badge fix not exercised:** one part clears no badge bar under the old or new rule (replayed locally). It rests on its unit tests and the replay of Run A's five parts (Killer Shot no longer awarded to the vetoed clip).
