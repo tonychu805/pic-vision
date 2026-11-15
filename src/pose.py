@@ -8,9 +8,12 @@ export size, decode boxes + 17 keypoints, class-agnostic NMS, scale back to
 the frame. Output per frame matches the pose caches the badge bars were set
 on: a list of {"box": [x0,y0,x1,y1], "court": [x_ft, y_ft], "kp": [[x,y,c]*17]}.
 
-Only rally windows are posed (pose_frames), never the whole footage -- pose
-is the expensive model and badges only look at rallies.
+Badges pose only rally windows (pose_frames). The hit finder
+(src/hit_finder.py) poses every frame, twice: the whole frame and, through
+CropModel, a close-up of the far court.
 """
+import os
+
 import cv2
 import numpy as np
 
@@ -21,6 +24,16 @@ PAD_VALUE = 114
 # Batches decoded + letterboxed ahead of the GPU in pose_video. A batch of 8
 # 736x1280 uint8 frames is ~22 MB, so this bounds memory at ~90 MB.
 PREFETCH_BATCHES = 4
+
+
+def prepare_workers():
+    """Threads that letterbox batches in parallel (cv2 releases the GIL). 2026-11-15: on a Google L4 one thread
+    prepared 112 frames/s while the model alone does 277, so the GPU waited; the output is the same either way.
+    PIC_VISION_POSE_PREP_WORKERS overrides; default leaves two CPUs for decoding and the rest."""
+    if os.environ.get("PIC_VISION_POSE_PREP_WORKERS"):
+        return max(1, int(os.environ["PIC_VISION_POSE_PREP_WORKERS"]))
+    from src.cpus import usable_cpus
+    return min(4, max(1, usable_cpus() - 2))
 FPS = 30.0
 # Frames posed around each rally: the serve happens up to ~1.5 s before the
 # first net crossing (First Strike), and the last hit up to ~0.5 s after.
@@ -109,6 +122,31 @@ class PoseModel:
         return [decode(out[i], scale, pad) for i, (scale, pad) in enumerate(meta)]
 
 
+class CropModel:
+    """A pose model run on one fixed crop of every frame; boxes and keypoints come back in frame pixels.
+
+    Same as eval_serve_detector.Crop, which the hit finder was trained with,
+    but it keeps the wrapped model's prepare/infer split (when it has one) so
+    pose_video still decodes ahead of the GPU."""
+
+    def __init__(self, model, box):
+        self.model, (self.x0, self.y0, self.x1, self.y1) = model, box
+        if hasattr(model, "prepare"):
+            self.prepare = lambda frames: model.prepare(self._crop(frames))
+            self.infer = lambda prepared: self._shift(model.infer(prepared))
+
+    def _crop(self, frames):
+        return [f[self.y0:self.y1, self.x0:self.x1] for f in frames]
+
+    def _shift(self, per_frame):
+        x0, y0 = self.x0, self.y0
+        return [[([b[0] + x0, b[1] + y0, b[2] + x0, b[3] + y0], [[k[0] + x0, k[1] + y0, k[2]] for k in kps])
+                 for b, kps in people] for people in per_frame]
+
+    def __call__(self, frames):
+        return self._shift(self.model(self._crop(frames)))
+
+
 def to_court(H, box):
     """Feet point (box bottom-centre) through the image->court homography."""
     v = H @ np.array([(box[0] + box[2]) / 2, box[3], 1.0])
@@ -144,6 +182,82 @@ def _batches(video, frames, batch):
         cap.release()
 
 
+def pose_video_passes(video, frames, models, H, batch=8, progress=None):
+    """Pose the same frames with several models (e.g. whole frame + far crop)
+    from ONE decode. Returns {name: {str(frame): [person, ...]}}.
+
+    pose_video once per model decodes the video once per model; on the pod
+    decoding is CPU work the GPU waits for (see pose_video), so the hit
+    finder's two passes paid for two full decodes. Each model sees exactly
+    the frames it would have seen alone, so the output is the same."""
+    out = {name: {} for name in models}
+    if not frames:
+        return out
+
+    def keep(name, idx, people_per_frame):
+        for fn, people in zip(idx, people_per_frame):
+            out[name][str(fn)] = [{"box": [float(v) for v in b], "court": to_court(H, b),
+                                   "kp": [[float(k[0]), float(k[1]), float(k[2])] for k in kp]}
+                                  for b, kp in people]
+
+    def report():
+        if progress:
+            progress(min(len(v) for v in out.values()), len(frames))
+
+    if not all(hasattr(m, "prepare") for m in models.values()):
+        for idx, imgs in _batches(video, frames, batch):
+            for name, m in models.items():
+                keep(name, idx, m(imgs))
+            report()
+        return out
+
+    import queue
+    import threading
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=prepare_workers(), thread_name_prefix="pose-prepare")
+    q = queue.Queue(maxsize=max(PREFETCH_BATCHES, 2 * pool._max_workers))
+    stop = threading.Event()
+    DONE = object()
+
+    def put(item):
+        while not stop.is_set():
+            try:
+                q.put(item, timeout=0.5)
+                return True
+            except queue.Full:
+                continue
+        return False
+
+    def produce():
+        try:
+            for idx, imgs in _batches(video, frames, batch):
+                if not put((idx, pool.submit(lambda imgs=imgs: {name: m.prepare(imgs) for name, m in models.items()}))):
+                    return
+            put(DONE)
+        except BaseException as e:      # handed to the consumer, re-raised there
+            put(e)
+
+    worker = threading.Thread(target=produce, name="pose-prefetch-passes", daemon=True)
+    worker.start()
+    try:
+        while True:
+            item = q.get()
+            if item is DONE:
+                break
+            if isinstance(item, BaseException):
+                raise item
+            idx, prepared = item
+            prepared = prepared.result()          # in submission order, so batches stay in frame order
+            for name, m in models.items():
+                keep(name, idx, m.infer(prepared[name]))
+            report()
+    finally:
+        stop.set()
+        worker.join(timeout=5)
+        pool.shutdown(wait=False, cancel_futures=True)
+    return out
+
+
 def pose_video(video, frames, model, H, batch=8, progress=None):
     """Pose the given frame indices of `video`. Returns {str(frame): [person, ...]}.
 
@@ -174,7 +288,9 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
 
     import queue
     import threading
-    q = queue.Queue(maxsize=PREFETCH_BATCHES)
+    from concurrent.futures import ThreadPoolExecutor
+    pool = ThreadPoolExecutor(max_workers=prepare_workers(), thread_name_prefix="pose-prepare")
+    q = queue.Queue(maxsize=max(PREFETCH_BATCHES, 2 * pool._max_workers))
     stop = threading.Event()
     DONE = object()
 
@@ -191,7 +307,7 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
     def produce():
         try:
             for idx, imgs in _batches(video, frames, batch):
-                if not put((idx, model.prepare(imgs))):
+                if not put((idx, pool.submit(model.prepare, imgs))):
                     return
             put(DONE)
         except BaseException as e:      # handed to the consumer, re-raised there
@@ -207,8 +323,9 @@ def pose_video(video, frames, model, H, batch=8, progress=None):
             if isinstance(item, BaseException):
                 raise item
             idx, prepared = item
-            keep(idx, model.infer(prepared))
+            keep(idx, model.infer(prepared.result()))   # in submission order, so batches stay in frame order
     finally:
         stop.set()
         worker.join(timeout=5)
+        pool.shutdown(wait=False, cancel_futures=True)
     return out

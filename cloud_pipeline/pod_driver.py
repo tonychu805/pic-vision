@@ -94,6 +94,7 @@ import tempfile
 import threading
 import time
 import uuid
+from concurrent.futures import ThreadPoolExecutor
 
 import boto3
 import requests
@@ -106,6 +107,7 @@ from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
 from scripts.top_rallies_reel import build_top_rallies  # noqa: E402
 from src.drift import drift_span, find_bumps  # noqa: E402
+from src.ball_threshold import apply_adaptive_threshold  # noqa: E402
 from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
 
@@ -115,8 +117,57 @@ WORKDIR = "/workspace/job"
 # rally is. Turning this on is the production change under review.
 OCCLUSION_BRIDGE = True
 
-WEIGHTS_R2_KEY = "weights/weights_k14_epoch19.tar"
-WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
+# Ball detector: the k14 weights fine-tuned for two epochs on brickwall footage
+# with the wall randomly washed pale, so the far-side ball can be found against
+# a pale wall (PDSC Court 3 found no rallies on 2026-11-01; EXPERIMENTS.md
+# 2026-11-01). This swap is the change under review. The previous weights stay
+# in the bucket at weights/weights_k14_epoch19.tar; rolling back is reverting
+# these two lines and the three below.
+#
+# 2026-11-12: the same weights converted to PyTorch (scripts/tracknet_to_torch.py,
+# src/tracknet_torch.py), so the pod needs no TensorFlow and runs on a stock
+# image. A .pt key is downloaded as is; a .tar key (a Keras SavedModel) is
+# extracted and run through TensorFlow as before -- the rollback.
+#
+# 2026-11-12 (operator): back to the production k14 weights, converted. The
+# Court 3 fine-tune is unfinished, and the hit finder was trained and judged
+# on k14 ball positions from the whole frame at 0.5 -- so the crop and the
+# 0.40 cut below go back to production's values with it.
+WEIGHTS_R2_KEY = "weights/tracknet_k14_epoch19.pt"
+WEIGHTS_LOCAL = "/workspace/tracknet_k14_epoch19.pt"
+
+
+def fetch_weights(s3_in, workdir):
+    """The ball model at WEIGHTS_LOCAL, downloaded once per pod."""
+    if os.path.exists(WEIGHTS_LOCAL):
+        return
+    if WEIGHTS_R2_KEY.endswith(".tar"):
+        weights_tar = os.path.join(workdir, "weights.tar")
+        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
+        subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
+        os.remove(weights_tar)
+    else:
+        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, WEIGHTS_LOCAL + ".part")
+        os.replace(WEIGHTS_LOCAL + ".part", WEIGHTS_LOCAL)
+# pod_infer runs once at HEAT_LOW; src/ball_threshold.py then keeps the
+# HEAT_HIGH detections for a video that already detects the ball in at least
+# HEALTHY_DETECTION_RATE of its frames, and the HEAT_LOW ones otherwise. The
+# low value alone merges separate rallies on a venue that works (held-out
+# brickwall, 4 min: 15 rallies at 0.5; at 0.35, 9 with a 71 s blob; at 0.40, 12 with a
+# 35 s blob); the strict value alone finds almost nothing on Court 3. 0.40 over 0.35:
+# on the operator's rated candidates 70% (of 10) were real or part real against 57%
+# (of 21), at the price of fewer rallies. Both are small samples.
+# 0.5 (2026-11-12): production's single cut, with k14; equal to HEAT_HIGH, the adaptive
+# step changes nothing.
+HEAT_LOW = 0.5
+HEAT_HIGH = 0.5
+HEALTHY_DETECTION_RATE = 0.25
+# The model sees only the court and the airspace over it (src/court_crop.py), not the
+# whole frame: the far ball shrinks 2.4x instead of 3.75x on its way to the model's
+# 512x288 input. With the fine-tuned weights, 13 of 22 court-side and 8 of 12 wall-side
+# marked balls are found against 3 and 3 on the whole frame (EXPERIMENTS.md 2026-11-01).
+# Off (2026-11-12): the whole frame, as production and as the hit finder was judged on.
+CROP_TO_COURT = False
 # Badges (src/badges.py) need player pose: YOLOv8n-pose as TorchScript,
 # exported with the pod's Torch 2.1 runtime at 736x1280. The operator
 # selected the faster model after the staging replay, accepting possible
@@ -125,6 +176,22 @@ WEIGHTS_LOCAL = "/workspace/weights_k14_epoch19"
 BADGES = True
 POSE_R2_KEY = "weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript"
 POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
+# Hit finder (src/hit_finder.py, staging 2026-11-12): the top-rally clips and
+# the badges use rallies found from paddle swings instead of net crossings,
+# ranked by the same score. It poses EVERY frame twice with the same YOLOv8n
+# export, the pod's biggest new cost (about 3 min per 5-min part locally,
+# budget about 2.5). Model v0 is tournament-trained, not final. A failure or
+# no rally found falls back to the crossing rallies; full and burst reels
+# keep the crossing rallies either way.
+HIT_FINDER = True
+# Jev guardrail (staging, operator 2026-11-13): a vision model reads a 6-frame sheet of every
+# rally clip of the part and says how likely it is a real point. Every clip, not just the top
+# ten: the console gives a doubted clip's top-10 slot to the next one down, which must have
+# been checked too. The frames go to TypeSafe through the console, which holds the key; the pod
+# never does. Answers are only recorded on the clips (reels[].jev), nothing is dropped here,
+# and any failure means "not checked".
+JEV = True
+JEV_CUT = 0.4  # only the stats count of clips Jev doubts; the console decides what to do with it
 # Static Linux x86_64 builds from BtbN/FFmpeg-Builds (the `linux64-gpl`
 # variant), uploaded to R2 once by hand, not per job -- see runpod_pod.py's
 # _BOOTSTRAP_CMD comment for why this replaced an `apt-get install ffmpeg`
@@ -432,6 +499,7 @@ def _run_inference_streaming(cmd):
 
     deadline = time.time() + INFERENCE_TIMEOUT_SEC
     last_patch_at = 0.0
+    timing = None
     try:
         while True:
             remaining = deadline - time.time()
@@ -446,6 +514,11 @@ def _run_inference_streaming(cmd):
                 if line is None:  # sentinel: process's stdout closed, it's finished
                     break
                 _log(line)
+                if line.startswith("TIMING "):   # pod_infer's summary: kept in the job's stats
+                    try:
+                        timing = json.loads(line[len("TIMING "):])
+                    except ValueError:
+                        pass
 
             due = time.time() - last_patch_at >= PROGRESS_PATCH_INTERVAL_SEC
             if not due:
@@ -475,6 +548,7 @@ def _run_inference_streaming(cmd):
             proc.kill()
     if returncode != 0:
         raise subprocess.CalledProcessError(returncode, cmd)
+    return timing
 
 
 # --- Skipping the convert step (ADR-130) ---
@@ -535,7 +609,7 @@ def convert_skippable(video):
     return cfr_verdict(stream, pts)
 
 
-def measure_badges(s3_in, video, segments, calib):
+def measure_badges(s3_in, video, segments, crossings, calib, known=None):
     """Pose the rallies and measure them for badges; None if anything goes wrong.
 
     Measures only (src/badges.py measure()): every bar is relative to the
@@ -550,6 +624,8 @@ def measure_badges(s3_in, video, segments, calib):
         import numpy as np
         from src.badges import measure
         from src.pose import PoseModel, pose_frames, pose_video
+        from src.cpus import limit_threads
+        limit_threads()          # pool sizes from the pod's real CPUs, not the host's (src/cpus.py)
         started = time.time()
         if not os.path.exists(POSE_LOCAL):
             s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
@@ -565,8 +641,13 @@ def measure_badges(s3_in, video, segments, calib):
         cw, ch = calib.get("calibration_resolution") or (w, h)
         homography = np.array(calib["homography"]) @ np.diag([cw / w, ch / h, 1.0])
         frames = pose_frames(segments, n_frames)
+        # Frames the hit finder already posed whole-frame (same model and homography; on 11-13 part 1 the
+        # reused poses and the badge measures were identical to posing every frame here) are not posed again.
+        known = known or {}
+        poses = {str(f): known[str(f)] for f in frames if str(f) in known}
+        to_pose = [f for f in frames if str(f) not in poses]
 
-        _check_cancel("badges", f"measuring for badges: posing {len(frames)} rally frames...")
+        _check_cancel("badges", f"measuring for badges: posing {len(to_pose)} rally frames...")
         last = [time.time()]
 
         def progress(done, total):
@@ -576,9 +657,10 @@ def measure_badges(s3_in, video, segments, calib):
                 last[0] = time.time()
                 _check_cancel("badges", f"measuring for badges: posed {done}/{total} rally frames...")
 
-        poses = pose_video(video, frames, PoseModel(POSE_LOCAL), homography, progress=progress)
-        result = measure(poses, segments, w, h)
+        poses.update(pose_video(video, to_pose, PoseModel(POSE_LOCAL), homography, progress=progress))
+        result = measure(poses, segments, w, h, crossings)
         result["pose_frames"] = len(frames)
+        result["pose_reused"] = len(frames) - len(to_pose)
         result["pose_sec"] = round(time.time() - started, 1)
         _log(f"badges: measured {len(result['rallies'])} rallies, {len(result['swings'])} swings "
              f"from {len(frames)} posed frames in {result['pose_sec']}s")
@@ -588,6 +670,129 @@ def measure_badges(s3_in, video, segments, calib):
     except Exception as e:  # noqa: BLE001 -- see docstring
         _log(f"badges skipped: {type(e).__name__}: {e}")
         return None, None
+
+
+def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
+    """(rallies, info, poses): the hit finder's rallies, or `fallback` (the crossing
+    rallies) when it fails or finds none. info goes into the job's stats so
+    staging can compare the two finders part by part. poses are its whole-frame
+    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback."""
+    info = {"crossing_rallies": len(fallback)}
+    try:
+        from src import hit_finder
+        from src.pose import PoseModel
+        from src.cpus import limit_threads
+        info.update(threads=limit_threads())   # as pod_infer: the pod's real CPUs, not the host's
+        started = time.time()
+        if not os.path.exists(POSE_LOCAL):
+            s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
+        _check_cancel("hit_finder", "finding rallies from paddle swings...")
+        last = [time.time()]
+
+        def progress(kind, done, total):
+            if time.time() - last[0] >= PROGRESS_PATCH_INTERVAL_SEC:
+                last[0] = time.time()
+                _check_cancel("hit_finder", f"finding rallies from paddle swings: posed {done}/{total} frames...")
+
+        poses = {}
+        segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress,
+                                              keep_full=poses)
+        info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
+        _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
+             f"{found['posed']} of {found['frames']} frames posed (both passes, one decode) in {info['sec']}s")
+        if segs:
+            info["used"] = "hit_finder"
+            return segs, info, poses
+        _log("hit finder found no rallies; using the net-crossing rallies")
+    except Cancelled:
+        raise
+    except Exception as e:  # noqa: BLE001 -- the crossing rallies are a full answer on their own
+        _log(f"hit finder skipped: {type(e).__name__}: {e}")
+        info["error"] = f"{type(e).__name__}: {e}"
+    info["used"] = "crossings"
+    return fallback, info, {}
+
+
+def rally_finder(hit_finder_info):
+    """'hit_finder' when the top-rally clips came from the hit finder, else 'crossings'."""
+    return "hit_finder" if (hit_finder_info or {}).get("used") == "hit_finder" else "crossings"
+
+
+def reel_key(reel_id):
+    """Where a reel lands: the write credential covers <brand>/reels/ and nothing else."""
+    return f"{BRAND_ID}/reels/{reel_id}.mp4"
+
+
+def rally_key(start, end):
+    """A rally's identity across the pipeline: its unpadded start and end (clips carry them as rally_start/rally_end)."""
+    return round(float(start), 3), round(float(end), 3)
+
+
+def jev_checks(video, rallies, calib, poses=None):
+    """({rally_key: {"real", "kind"}}, stats): Jev's verdict on each rally ({"start", "end"}, unpadded).
+
+    Every sheet is redacted before it leaves (src/jev_sheet.py): off-court blurred, heads and faces blurred.
+    poses: the hit finder's whole-frame poses for the head boxes; without them the sheet frames are posed here.
+    Fail open: a rally Jev could not answer is left out, and any error returns ({}, None)."""
+    try:
+        t0 = time.time()
+        pose_model = None
+        if not poses:
+            try:
+                from src.pose import PoseModel
+                pose_model = PoseModel(POSE_LOCAL)
+            except Exception as e:  # noqa: BLE001 -- faces (YuNet) and the off-court blur still apply
+                _log(f"jev: no pose model for head boxes: {type(e).__name__}: {e}")
+
+        def ask(rally):
+            try:
+                from src.jev_sheet import contact_sheet
+                sheet = contact_sheet(video, rally["start"], rally["end"], calib, poses=poses, pose_model=pose_model)
+                r = requests.post(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/jev",
+                                  data=sheet,
+                                  headers={"Authorization": f"Bearer {JOB_TOKEN}", "Content-Type": "image/jpeg"},
+                                  timeout=30)
+                a = r.json() if r.status_code == 200 else None
+                real, kind = a["real"], a["kind"]
+                if isinstance(real, bool) or not isinstance(real, (int, float)) or not 0 <= real <= 1 \
+                        or not isinstance(kind, str):
+                    return None
+                return {"real": float(real), "kind": kind}
+            except Exception as e:
+                _log(f"jev: rally {rally['start']:.1f}-{rally['end']:.1f}: {type(e).__name__}: {e}")
+                return None
+
+        with ThreadPoolExecutor(max_workers=4) as pool:
+            answers = list(pool.map(ask, rallies))
+        found = {rally_key(r["start"], r["end"]): a for r, a in zip(rallies, answers) if a}
+        stats = {"checked": len(found), "flagged": sum(a["real"] < JEV_CUT for a in found.values()),
+                 "failed": len(rallies) - len(found), "sec": round(time.time() - t0, 1)}
+        _log(f"jev: {stats}")
+        return found, stats
+    except Exception as e:
+        _log(f"jev skipped: {type(e).__name__}: {e}")
+        return {}, None
+
+
+def in_background(fn, *args):
+    """Run fn(*args) on a daemon thread; the returned wait() gives its result (or raises its error)."""
+    box = {}
+
+    def target():
+        try:
+            box["value"] = fn(*args)
+        except BaseException as e:  # noqa: BLE001 -- re-raised by wait() in the caller's thread
+            box["error"] = e
+
+    t = threading.Thread(target=target, daemon=True)
+    t.start()
+
+    def wait():
+        t.join()
+        if "error" in box:
+            raise box["error"]
+        return box["value"]
+    return wait
 
 
 def clip_framings(video, csv_path, calib, clips, poses):
@@ -737,20 +942,21 @@ def run():
             _encode_h264(["-i", cfr_video, "-vf", "scale=-2:1080"],
                          ["-map", "0:v:0", "-map", "0:a:0?", "-c:a", "copy", proxy_video])
 
-    # --- Weights: same R2-cached tarball every pod-based run already used. ---
+    # --- Weights: the R2-cached ball model (fetch_weights). ---
     _check_cancel("inference", "fetching model weights...")
-    if not os.path.exists(WEIGHTS_LOCAL):
-        weights_tar = os.path.join(WORKDIR, "weights.tar")
-        s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
-        subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"],
-                       check=True)
+    fetch_weights(s3_in, WORKDIR)
 
     _log("running TrackNet inference...")
     csv_path = os.path.join(WORKDIR, "predictions.csv")
     infer_cmd = ["python3", os.path.join(REPO_ROOT, "scripts", "pod_infer.py"),
                  "--video", proxy_video, "--model", WEIGHTS_LOCAL,
-                 "--output", csv_path, "--calib", calib_path]
-    _run_inference_streaming(infer_cmd)
+                 "--output", csv_path, "--calib", calib_path,
+                 "--heat-threshold", str(HEAT_LOW)] + (["--crop-to-court"] if CROP_TO_COURT else [])
+    inference_timing = _run_inference_streaming(infer_cmd)
+    choice = apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH, healthy_rate=HEALTHY_DETECTION_RATE)
+    _log(f"ball found in {choice['rate_at_high']:.1%} of frames at confidence {HEAT_HIGH} and "
+         f"{choice['rate_at_low']:.1%} at {HEAT_LOW}; using "
+         + (f"{HEAT_HIGH} (the venue already detects the ball well)" if choice["cut"] else f"{HEAT_LOW}"))
 
     # --- Cut, same as pod_cut.py did over SSH -- called directly now,
     # same functions, no subprocess/SSH round trip needed for something
@@ -760,12 +966,24 @@ def run():
     # real outcome, far likelier now that a session is sent in 10-20 minute
     # parts (ADR-127): finish with no reels instead of crashing the job
     # (found in the 2026-09-23 auto-split rehearsal, ADR-129).
-    segments = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)["segments"]
+    detected = detect_candidates(proxy_video, csv_path, calib_path, occlusion_bridge=OCCLUSION_BRIDGE)
+    segments = detected["segments"]
     if not segments:
         _log("no rallies found in this footage; finishing with no reels")
         finish_with_no_rallies()
         return
-    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, calib) if BADGES else (None, None)
+    # Clips and badges must share one rally list: a badge finds its clip by
+    # the rally's own start/end (top_rallies_reel.py).
+    hit_finder_info, hit_poses = None, {}
+    if HIT_FINDER:
+        segments, hit_finder_info, hit_poses = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
+                                                                   detected["times_crossed"], segments)
+    # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
+    jev_wait = None
+    if JEV:
+        jev_wait = in_background(jev_checks, proxy_video, segments, calib, hit_poses)
+    badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib,
+                                           known=hit_poses) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
@@ -778,11 +996,11 @@ def run():
     has_burst = burst_result["chronological"] is not None
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
                                     session_id, n=None if BADGES else TOP_RALLIES_N, logo_path=logo_path,
-                                    occlusion_bridge=OCCLUSION_BRIDGE)
+                                    occlusion_bridge=OCCLUSION_BRIDGE,
+                                    segments=segments if HIT_FINDER else None)
     stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
-             "top_rallies": top_result["stats"]}
-    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
-
+             "top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
+             "inference": inference_timing}
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
     reel_id = os.environ.get("REEL_ID")
     burst_reel_id = os.environ.get("BURST_REEL_ID")
@@ -793,16 +1011,29 @@ def run():
     # attached to it at all; lib/reels.ts (console) still accepts that
     # exact old shape too, for the separate SSH-driven path that wasn't
     # migrated in the same change (see that file's own comment).
-    ranked_key = f"{BRAND_ID}/reels/{reel_id}.mp4"
-    s3_out.upload_file(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), OUTPUT_BUCKET, ranked_key)
-    reels = []
+    ranked_key = reel_key(reel_id)
+    burst_key = reel_key(burst_reel_id)
     # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
     # pre-minted by job_runner.py before this pod even started), the count
     # here is only known now, so each clip mints its own id at upload time.
-    for clip in top_result["manifest"]:
-        clip_reel_id = str(uuid.uuid4())
-        clip_key = f"{BRAND_ID}/reels/{clip_reel_id}.mp4"
-        s3_out.upload_file(os.path.join(reel_dir, "top", clip["file"]), OUTPUT_BUCKET, clip_key)
+    clip_ids = [str(uuid.uuid4()) for _ in top_result["manifest"]]
+    files = [(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), ranked_key)] + \
+        ([(os.path.join(reel_dir, "burst", "highlight.mp4"), burst_key)] if has_burst else []) + \
+        [(os.path.join(reel_dir, "top", clip["file"]), reel_key(cid))
+         for clip, cid in zip(top_result["manifest"], clip_ids)]
+    # The uploads run while framing is worked out and Jev finishes; nothing below reads them.
+    upload_pool = ThreadPoolExecutor(max_workers=4)
+    uploads = [upload_pool.submit(s3_out.upload_file, path, OUTPUT_BUCKET, key) for path, key in files]
+    framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
+    jev, stats["jev"] = jev_wait() if jev_wait else ({}, None)
+    for u in uploads:
+        u.result()
+    upload_pool.shutdown()
+
+    reels = []
+    for clip, clip_reel_id in zip(top_result["manifest"], clip_ids):
+        clip_key = reel_key(clip_reel_id)
+        verdict = jev.get(rally_key(clip["rally_start"], clip["rally_end"]))
         reels.append({
             "kind": "rally", "reel_id": clip_reel_id, "key": clip_key,
             "rank": clip["rank"],
@@ -824,11 +1055,13 @@ def run():
             # Where a 9:16 window sits over this clip as it plays (vertical
             # reels, src/framing.py); absent if framing failed.
             **({"framing": framings[clip["file"]]} if clip["file"] in framings else {}),
+            # Which finder produced the rally: the console exempts hit-finder
+            # clips from its sharper-cut score floor (reels.finder).
+            "finder": rally_finder(hit_finder_info),
+            **({"jev": verdict} if verdict else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
-        burst_key = f"{BRAND_ID}/reels/{burst_reel_id}.mp4"
-        s3_out.upload_file(os.path.join(reel_dir, "burst", "highlight.mp4"), OUTPUT_BUCKET, burst_key)
         reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
     # Retried, not best-effort: every reel above is already in R2 and this
@@ -953,11 +1186,7 @@ def prefetch_models():
     still missing, exactly as before."""
     try:
         s3_in, _ = _r2_clients()
-        if not os.path.exists(WEIGHTS_LOCAL):
-            weights_tar = os.path.join("/workspace", "weights.tar")
-            s3_in.download_file(BUCKET, WEIGHTS_R2_KEY, weights_tar)
-            subprocess.run(["tar", "-xf", weights_tar, "-C", "/workspace", "--no-same-owner"], check=True)
-            os.remove(weights_tar)
+        fetch_weights(s3_in, "/workspace")
         if BADGES and not os.path.exists(POSE_LOCAL):
             s3_in.download_file(BUCKET, POSE_R2_KEY, POSE_LOCAL)
         _log("warm start: models ready")

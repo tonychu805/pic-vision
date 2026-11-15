@@ -4,7 +4,8 @@ Each badge goes to at most one rally per session, no rally holds two, and a
 badge nobody clears is simply not awarded. Bars, all relative to the
 session's typical swing so they hold across cameras and levels:
 
-  Kitchen War    >= half the rally with a player at each kitchen line, <= 1 fast swing
+  Kitchen War    >= half the rally with a player at each kitchen line, <= 1 fast swing;
+                 of those, the longest and fastest kitchen battle wins (INTENSITY)
   Quick Hands    >= half the rally at the kitchens, >= 4 fast swings
   Hardest Swing  one swing >= 5x typical, not hit from the kitchen
   First Strike   the serve >= 3x typical swing AND >= 2x the session's typical serve
@@ -30,6 +31,11 @@ FPS = 30.0
 FAST = 2.0
 BARS = {"Kitchen War": 0.5, "Quick Hands": 4, "Hardest Swing": 5.0, "First Strike": 3.0, "Killer Shot": 3.5}
 FIRST_STRIKE_VS_SERVE = 2.0
+# Kitchen War goes to the qualifier with the most exchanges across the net
+# while both teams are at the kitchen, at the fastest pace: exchanges x
+# exchanges per standoff second (operator playback, EXPERIMENTS 2026-11-11).
+# The other badges pick by margin.
+PICK_BY_VALUE = {"Kitchen War"}
 BADGES = ("Kitchen War", "Quick Hands", "Hardest Swing", "First Strike", "Killer Shot")
 
 # Per-zone p90 of (swing / session median) over 2,073 swings in 12 sessions
@@ -135,7 +141,7 @@ def _kitchen_standoff(people):
     return any(12 <= y <= 18 for y in yy) and any(26 <= y <= 32 for y in yy)
 
 
-def measure(P, segments, W, H):
+def measure(P, segments, W, H, crossings=None):
     """One part's raw measurements -- what a pod sends; it decides nothing.
 
     Every bar is relative to the SESSION's typical swing and serve, which no
@@ -147,21 +153,29 @@ def measure(P, segments, W, H):
     part, fastest first), "rallies": [{"start", "end", "share", "serve":
     [speed, t, court_y] or None}]}. share = fraction of the rally with a
     player at each kitchen line; serve is None when the serve window wasn't
-    posed well enough to judge.
+    posed well enough to judge. With crossings (times the ball crossed the
+    net, seconds) each rally also carries "exchanges" (crossings while both
+    teams are at the kitchen) and "kitchen_s" (seconds of that standoff).
     """
     P = {f: [p for p in people if _player(p)] for f, people in P.items()}
     swings = [[round(p[0], 5), round(p[1], 3), round(p[5], 3)] for p in swing_peaks(P, W, H)]
     rallies = []
     for r in segments:
         fs = [f for f in range(int(r["start"] * FPS), int(r["end"] * FPS) + 1) if str(f) in P]
-        share = sum(_kitchen_standoff(P[str(f)]) for f in fs) / len(fs) if fs else 0.0
+        on = {f for f in fs if _kitchen_standoff(P[str(f)])}
+        share = len(on) / len(fs) if fs else 0.0
         window = range(int((r["start"] - 1.5) * FPS), int(r["start"] * FPS) + 1)
         serve = None
         if sum(1 for f in window if str(f) in P) >= 0.8 * len(window):
             b = serve_peak(P, window, W, H)
             if b:
                 serve = [round(b[0], 5), round(b[1], 3), round(b[5], 3)]
-        rallies.append({"start": r["start"], "end": r["end"], "share": round(share, 5), "serve": serve})
+        rally = {"start": r["start"], "end": r["end"], "share": round(share, 5), "serve": serve}
+        if crossings is not None:
+            rally["exchanges"] = sum(1 for t in crossings if r["start"] <= t <= r["end"]
+                                     and any(int(t * FPS) + d in on for d in (-1, 0, 1)))
+            rally["kitchen_s"] = round(len(on) / FPS, 3)
+        rallies.append(rally)
     return {"swings": swings, "rallies": rallies}
 
 
@@ -201,7 +215,7 @@ def decide(parts):
             rs = sorted((s for s in m["swings"] if r["start"] - 1.5 <= s[1] <= r["end"] + 0.5), key=lambda s: s[1])
             fast = [s for s in rs if adj(s) >= FAST]
             if share >= BARS["Kitchen War"] and len(fast) <= 1:
-                add("Kitchen War", k, i, share, share / BARS["Kitchen War"])
+                add("Kitchen War", k, i, intensity(r), share / BARS["Kitchen War"])
             if share >= BARS["Kitchen War"] and len(fast) >= BARS["Quick Hands"]:
                 add("Quick Hands", k, i, len(fast), len(fast) / BARS["Quick Hands"])
             for s in rs:
@@ -224,18 +238,35 @@ def decide(parts):
     return result
 
 
+def intensity(r):
+    """Kitchen War's pick: exchanges x exchanges per standoff second; the
+    kitchen share for a rally measured without crossings."""
+    if r.get("kitchen_s"):
+        return r["exchanges"] ** 2 / r["kitchen_s"]
+    return r["share"]
+
+
 def assess(P, segments, W, H):
     """Badges for one video on its own: decide() over a single part."""
     return decide([measure(P, segments, W, H)])
 
 
 def award(cands):
-    """Each badge to at most one rally, each rally at most one badge, biggest margin first."""
+    """Each badge to at most one rally, each rally at most one badge, biggest margin first.
+
+    A PICK_BY_VALUE badge takes its turn at its biggest margin, then takes its
+    highest-value rally still free.
+    """
     got, used = {}, set()
+    def key(c):
+        return (c.get("part", 0), c["rally"])
     for c in sorted(cands, key=lambda c: -c["margin"]):
-        key = (c.get("part", 0), c["rally"])
-        if c["badge"] in got or key in used:
+        if c["badge"] in got:
+            continue
+        if c["badge"] in PICK_BY_VALUE:
+            c = max((d for d in cands if d["badge"] == c["badge"] and key(d) not in used), key=lambda d: d["value"], default=None)
+        if c is None or key(c) in used:
             continue
         got[c["badge"]] = c
-        used.add(key)
+        used.add(key(c))
     return got

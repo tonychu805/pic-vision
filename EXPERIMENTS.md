@@ -5596,3 +5596,607 @@ Production awarded **Quick Hands** at rally 0 (7.4 s), **Hardest Swing** at rall
 **Result.** All five jobs completed without retries. The last of the final ten vertical clips uploaded at 08:17:33, and part 5 finalized the set at 08:17:38: **1:52 after the footage ended**, versus 1:46 in the prior silent replay. The share page returned HTTP 200, rendered ten selected reels, and had its sound control enabled. `ffprobe` confirmed every selected vertical file is 608×1080 H.264 with 48 kHz AAC. Five-second decodes of all ten had measurable audio (mean volume −23.1 to −26.0 dB); a cloud 720p clip sampled before desktop replacement also had 48 kHz AAC. Rally and swing counts match the silent run in all five parts.
 
 **Interpretation and limits.** This staging file replay demonstrates working audio through cloud and desktop output. The six-second difference in final wait is too small to attribute to AAC: machine startup, job queueing, and network timing differed between runs. Part upload time increased by about a second for the full-size parts. This test uses the sample video's soundtrack, not a real camera microphone, and does not test packaged desktop capture, iPhone playback controls, or GPU billing. The production branches remain unchanged.
+
+## 2026-11-01 — Why PDSC Court 3 finds no rallies: the far-side ball is lost against the pale wall
+
+**Question.** The 2026-11-01 field test at PDSC Court 3 produced "no rallies found" on every production reel job (three parts of the 02:51 UTC session, finished 03:03, 03:04 and 03:05 UTC). Players were on the court (checked on a still). Why does the shipped pipeline find nothing here when it finds rallies on brickwall?
+
+**Setup.** All runs are local replays of the pod's own steps (30 fps CFR, k14 TrackNet weights, `detect_candidates` at shipped `gap_sec=3.0`, `min_crossings=6`) on the venue recordings: the 02:51 UTC session (2880x1620, six parts, 16-300 s each) and the 03:12 UTC session (1080p, twelve parts, 66-301 s each). Calibration is the console's `live-snapshot` fit at 2880x1620 (RMSE 0.46 ft; it lines up with the net in the frame). "Crop" means cropping the 1080p frame to the court region (x 432-1536, y 300-921) before the model, which cuts the downscale into the 512x288 model input from about 3.75x to 2.2x; the calibration was transformed into crop coordinates. Frame rate was ruled out first: both recordings are a true 30 fps (9,000 frames per 300 s, 10-12 near-duplicate frames per 1,800).
+
+**Result 1: crop finds more crossings but almost no rallies.** Across all 18 parts, full-frame found 0 rallies. Crop found 4 candidate rallies, all in parts 9 and 11, and no more than 55 net crossings per part (needs 6 within one exchange).
+
+| Recording | Net crossings per part, full-frame | Net crossings per part, crop |
+|---|---|---|
+| 02:51 (parts 0-5) | 8, 2, 10, 6, 0, 0 | 30, 18, 20, 23, 2, 0 |
+| 03:12 (parts 0-11) | 8, 4, 12, 0, 4, 4, 2, 12, 4, 4, 4, 18 | 28, 22, 22, 0, 26, 20, 22, 35, 29, 36, 22, 55 |
+
+Ball detected in only about 6-14% of frames in every run. Part 9 crop: one rally, 246.8-255.1 s (6 crossings). Part 11 crop: 102.9-110.9 s (7 crossings), 237.1-242.1 s (6), and 231.2-233.8 s with 10 crossings in 2.6 s, which is not physically a rally (tracker flipping). None of these was watched in playback beyond the part 9 window below.
+
+**Result 2: the pipeline works on brickwall.** Today's code on 3 minutes of `brickwall_semi_30fps`: ball detected in 36.9% of frames, 130 crossings, 7 rallies. Cached full sessions: brickwall-SEMI 31.6% of frames, 31 rallies found against 38 hand-labelled; brickwall_30fps 32.7%, 44 found against 49 labelled. Court 3: about 6-14%, 0 rallies. Brickwall has dark navy walls; Court 3 has a pale cream wall behind the far baseline, and its camera is higher and wider-angle.
+
+**Result 3: washing the brickwall wall to cream reproduces the failure.** Same clip, same code, rows above the far baseline blended 85% toward cream (ball keeps 15% of its contrast): ball detected in 13.3% of frames (from 36.9%), detections above the far baseline 1,292 -> 42, crossings 130 -> 49, rallies 7 -> 4. This is a stress test, not a copy of Court 3 (it also faded the players and background).
+
+**Result 4: hand-marked ball positions in a real rally (part 9 of the 03:12 session, 4:07-4:13).** The operator marked the ball in 60 consecutive steps (0.1 s apart, three flip frames per step): ball marked in 34 steps (12 above the far baseline, i.e. against the wall; 22 against court/net), "can't see ball" in 26. The operator reported the far-side ball over the wall is barely visible by eye. Labels: `eval/labels/pdsc_court3_20261101_ball_marks.jsonl` (also holds the 31 earlier stills, 8 with a ball marked; coordinates are in the crop frame above; frames count from the part's start at 30 fps). A hit is a detection within 20 px of the mark in the same frame +-1. "Ghost steps" are steps with no visible ball where a detection still fired.
+
+| Method (applied to the court crop) | Wall-side balls found | Court-side balls found | Ghost steps (of 26) |
+|---|---|---|---|
+| Baseline crop | 1 / 12 | 10 / 22 | 0 |
+| Far-side 640x360 tile (~1.25x downscale) | 2 / 12 | 6 / 22 | 0 |
+| Global saturation x2.5 + contrast x1.15 (part 0, whole part) | 771 vs 759 detections, 24 vs 28 crossings, 0 rallies | | |
+| c1 local contrast (CLAHE) | 2 / 12 | 10 / 22 | 1 |
+| c2 contrast stretch around the wall's brightness | 3 / 12 | 12 / 22 | 1 |
+| c3 green boost on the wall rows | 3 / 12 | 11 / 22 | 0 |
+| c4 steep curve darkening the wall | 1 / 12 | 12 / 22 | 0 |
+| v1 static wall replaced by dark navy (moving pixels kept, estimated from a per-pixel median) | 7 / 12 | 10 / 22 | 11 |
+| v2 soft background difference | 2 / 12 | 12 / 22 | 2 |
+| v3 / v4 small moving blobs only | 3-4 / 12 | 0-4 / 22 | 25-26 |
+| v1 + neighbour filter (keep a dot only with 2 neighbours within 3 frames) | 5 / 12 | 10 / 22 | 0 |
+
+The v1 ghost dots are scattered noise: median jump 364 px between consecutive 0.1 s steps, against 14 px (90th percentile 31 px) for the marked real ball. The neighbour filter was tuned on these same 60 marks, so its numbers are optimistic.
+
+**Result 5: no end-to-end gain yet.** v1 + neighbour filter over whole parts: part 0 found one unverified candidate (4:23-4:31, 6 crossings, baseline found none); part 9 found none, losing the 4:07-4:15 rally the baseline found and the operator labelled. Detection stays near 11% of frames. The unfiltered v1 run first looked like a 5.6x gain (4,258 detections, 2 rallies in part 0); the operator watched the overlay and saw dots "popping all over", which the ghost-step count above confirms.
+
+**Result 6: first-pass stills.** 31 stills chosen by whole-court motion (not by the detector): ball marked in only 8; TrackNet found 0 of 8 within 18 px (a 20 px match in the right frame on one, one more at 18 px four frames off). Too few to split wall from court; motion peaks also catch serves and resets.
+
+**Conclusion and limits.** The pale wall behind the far baseline is a major cause: the far-side ball is detected 1 time in 12 against the wall and 10 in 22 against the court, and the same pipeline loses most of its detections on a known-good clip when that clip's wall is washed pale. One measured ball (resting at the net) is as bright as the wall (brightness 173 vs wall 156-208; purple court 68-125) and differs only faintly in hue. Higher resolution on the far side did not help against the wall, and none of the contrast tweaks recovers more than 3 of 12 wall-side balls. Simple preprocessing recovers some wall-side balls but has not produced more rallies end to end. This does not say the wall is the only cause: Court 3's camera is higher and wider than brickwall's, so the far ball is smaller, and one rally of 12 wall-side balls is a small sample. Not an ADR: no decision settled. No pod or pipeline code changed; the replays used ad-hoc scripts that are not committed. Not scored at IoU>=0.5 (no rally-level labels for this footage). A fine-tune of the detector on this venue's footage is the remaining software route and needs far more marked frames than the 91 rows here.
+
+**Corrections made during the investigation (kept so they are not re-learned).** A colour-and-motion tracker (yellow-green blobs) reported a ball in 97% of frames and 4 "rallies"; its picks were an orange fence, a hand and an arm, so it proves nothing. An early reading that the wall was not the main cause was based on the crop run recovering wall-region detections and was wrong. Parts the notes called "quiet" were just short (66, 91, 105, 138, 182 s, 16 s); detection rate per minute matches the long parts.
+
+## 2026-11-01 (later) — Fine-tuning the ball detector against the pale wall, and a per-video confidence cut
+
+**Question.** The wall entry above found the far-side ball is lost against Court 3's pale wall and that no inference-time tweak (threshold, contrast, zoom, static-wall replacement) fixes it. Can the detector itself be taught, in software only, to find the ball there without breaking the venue that works?
+
+**Setup.** k14 weights (`weights_k14_epoch19`) fine-tuned on 3,866 three-frame samples cut from `brickwall_30fps` and `brickwall_semi` (1,954 + 1,912). Labels are pseudo-labels: the cached k14 detections kept only with Conf >= 0.5, inside the court wedge, and confirmed by 2 neighbours within 3 frames (about 1,500 of each video's trios chosen to hold a kept ball, half with the ball above the far baseline, plus 500 trios with none). Augmentation: with p = 0.7 the rows above the far baseline are blended toward cream (alpha 0.08-0.45 of the original), plus brightness x0.85-1.15 and a horizontal flip; frames are court-masked as the pod does. Adam 3e-5, batch 8, 483 steps per epoch, 4 epochs, loss 6e-5 -> 5e-5 (the loss barely moves, so it says little). Checkpoints e1-e4 were kept. No Court 3 frame, and none of `brickwall_mid_atlantic`, was in training. Tested on the operator's 60-step marks (part 9, 4:07-4:13), on three full Court 3 parts, and on 4 minutes (240-480 s) of the held-out `brickwall_mid_atlantic_30fps`. Ad-hoc scripts, not committed.
+
+**Result 1: marked balls (crop, threshold 0.35).** Original 2/12 wall-side, 12/22 court-side, 2 ghost steps of 26. e1 5/12, 14/22, 0. **e2 7/12, 17/22, 0.** e3 5/12, 10/22, 0. A swing from 24 to 15 of 34 between epochs 2 and 3 means this test is too small to rank checkpoints; it only says every fine-tuned checkpoint beat the original.
+
+**Result 2: whole parts, pod conditions (full 1080p frame, original calibration, no crop).** Ball found in % of frames / net crossings / rallies, parts 9 | 0 | 11:
+
+| Model, threshold | Part 9 | Part 0 | Part 11 |
+|---|---|---|---|
+| Original, 0.5 (production) | 9.3 / 4 / 0 | 8.3 / 8 / 0 | 9.8 / 18 / 0 |
+| e2, 0.5 | 14.4 / 81 / 3 | 18.7 / 65 / 3 | 22.0 / 77 / 4 |
+| **e2, 0.35** | 38.4 / 176 / 10 | 47.0 / 126 / 11 | 42.7 / 115 / 10 |
+| e4, 0.5 | 10.2 / 59 / 0 | 10.9 / 50 / 1 | 15.1 / 61 / 2 |
+| e4, 0.35 | 25.1 / 144 / 10 | 26.4 / 122 / 7 | 30.1 / 113 / 5 |
+
+Epoch 2 is ahead of epoch 4 on every part at both thresholds, so epoch 2 was chosen; the cropped runs (same three parts) agreed in direction. The cropped evaluation of all four epochs is in the run logs, not repeated here.
+
+**Result 3: the operator's verdicts on the candidate rallies.** Crop-run e2 on part 9 (11 candidates): 7 real, 2 part-real/cut wrong, 2 not (a failed serve, 25 crossings in 23 s; dead time, 8 crossings in 2 s), so 9 of 11 were real play. Pod-conditions e2 at 0.35 (31 candidates; verdicts interim, 9 given when this was committed, all part 9): 4 real, 1 part real, 4 not. That sample is worse than the cropped one, and most of the 31 are unrated; `eval/labels/pdsc_court3_20261101_rally_verdicts.jsonl` holds what was given. Recall is unknown: nobody counted the real plays in the parts.
+
+**Result 4: the lower threshold hurts the venue that works.** Held-out brickwall, 4 min: original 0.5: 28.9% of frames, 197 crossings, 12 rallies. e2 0.5: 30.6%, 197, 15 (no regression). e2 0.35: 49.7%, 283, **9, including a 72 s (80 crossings) and a 45 s (77 crossings) blob** that join separate rallies.
+
+**Result 5: one run can serve both thresholds.** Cutting an e2 run made at 0.35 down to Conf >= 0.5 reproduces the run made at 0.5: found-frame share identical (30.6 / 14.4 / 18.8 vs 30.6 / 14.4 / 18.7), rallies 15 vs 15, 2 vs 3, 3 vs 3. `src/ball_threshold.py` therefore keeps the strict cut when at least 25% of frames hold a Conf >= 0.5 detection, else the low one. On the four videos here: Court 3 parts 9 / 0 / 11 found 14.4 / 18.8 / 22.1% at 0.5, so the low cut, giving 10 / 11 / 10 rallies (longest 23 / 11 / 30 s); held-out brickwall found 30.6%, so the strict cut, giving 15 rallies (longest 16 s).
+
+**Conclusion and limits.** Fine-tuning with a pale-wall augmentation is the first change that raises both wall-side and court-side detection and turns Court 3 from no rallies into about 10 candidates a part, without the crop. It is not shown to be good. The Court 3 candidates are noisier than the cropped ones (4 not-real of the first 9 rated), recall is unmeasured, and the pale-wall hit rate is from 12 marked balls. The threshold rule has a thin margin: Court 3 part 11 sits at 22.1% against the 25% line, brickwall at 30.6%, and only those two venues were checked (not PGC, IMG_7743 or any other). The training labels inherit the original detector's blind spots, and epoch-to-epoch scores swung enough (e3) that picking e2 is a judgement on a small test. No IoU scoring (no rally-level labels beyond the verdicts above). Candidate change: the e2 weights (`weights/pdsc_court3_ft_e2_20261101.tar`, 46,551,040 bytes, sha256 41859a8ba2f1e95b578b973da73d8da2ab57ccaf98335ddf0d7b79a4ce65f6e6; an unpacked copy reproduced the scored epoch-2 output byte for byte) plus `--heat-threshold` in `pod_infer.py` and the per-video cut in `pod_driver.py`. It has not run on the pod; staging is the next gate (CLAUDE.md). Rolling back means reverting the driver's two weights lines and three threshold constants; the previous weights stay in the bucket.
+
+## 2026-11-01 (night) — Cropping to the court before the model; low cut 0.40; false-dot labels and a verifier that did not help
+
+**Correction to the entry above.** Every score on the operator's marked balls was made on a hand-cropped court view (x 432-1536, y 300-921 of the 1080p frame), but the pod runs the whole frame, and the "pod conditions" runs and the staging package above were whole-frame. Scored on the same marks (part 9, epoch 2, 0.40), whole frame found 3 of 12 wall-side and 3 of 22 court-side balls and the crop 8 and 13. The operator's candidate verdicts agree: 9 of 11 real play for the cropped candidates, 12 of 21 for the whole-frame ones. So the crop is part of the fix, and the change now includes it. Whole-frame detection rates (27-47% of frames) were mostly dots that are not the ball.
+
+**Change.** `src/court_crop.py` (tests in `tests/test_court_crop.py`): a fixed crop box from the calibration's clicked court points (court corners, 4% margin, 0.7 court heights of airspace above the far baseline, widened to 16:9, kept inside the frame) and `grid_to_calibration`, which maps a detection on the crop's 512x288 grid back to the calibration's pixels, so tracker, rally rules and reel cutter are unchanged. `scripts/pod_infer.py --crop-to-court` (off by default; without it the output is byte-identical to before, checked on part 9) and `CROP_TO_COURT = True` in `pod_driver.py`. On Court 3 the box is x 357-1565, y 218-897 (1208x679, shrink into the model 2.36x against 3.75x for the whole frame). The earlier docstring said this box matched the court gate; it does not (the gate reaches y 280-1076, below the near baseline). Boxes tried on the 60 marks (part 9, 0.40): this box 8/12 wall-side, 13/22 court-side, 4 ghost steps; the gate's own bounding box (1415x796, 2.76x) 7/12, 9/22, 1; the original hand box (1104x621, 2.16x) 8/12, 13/22, 1. The marked window has no serve, so balls behind the near baseline, outside this box, were not tested. Low cut set to 0.40 (the operator's choice; 70% of 10 rated candidates real or part real against 57% of 21 at 0.35, small samples).
+
+**Whole flow, crop path, real `pod_infer`, epoch-2 weights.** Share of frames with a dot at Conf >= 0.5 / at the 0.35 run, and what the 25% rule picks: part 9 12.4 / 29.6 (low cut), part 0 15.6 / 37.5 (low), part 5 11.1 / 28.4 (low), held-out brickwall 30.6 / 49.6 (strict). Net crossings / rallies at cuts 0.35, 0.40, 0.50: part 9 160/12, 120/8, 81/2; part 0 143/8, 119/8, 88/6; part 5 73/5, 65/6, 42/1. Held-out brickwall (4 min): 0.50 gives 15 rallies, longest 16 s (unchanged by the crop); 0.40 gives 12, longest 35 s; 0.35 gives 9, longest 71 s. Matching the new candidates to the operator's earlier verdicts is thin: most land on unrated windows (part 9 at 0.40: 1 real, 1 part, 2 not, 4 unrated; part 0: 1, 1, 1, 5; part 5, bridge on: 2 real, 1 not, 3 unrated). The operator then rated the 9 unrated ones, so all 22 candidates at 0.40 (parts 9, 0, 5; part 5 with the bridge on) have a verdict: part 9 6 real / 0 part / 2 not, part 0 3 / 3 / 2, part 5 3 / 1 / 2; together **12 real, 4 part real, 6 not: 73% real or part real, 55% real only** (against 57% for the whole-frame candidates and no rallies from production). The 6 false ones are dead time, failed serves and dead balls. Recall is still unmeasured (nobody counted the real plays in these parts).
+
+**Dot labels (300 random dots from the whole-frame 0.40 simulated run, 10 parts, part 11 excluded; operator labels in `eval/labels/pdsc_court3_20261101_dot_labels.jsonl`; x, y are in the calibration's 2880x1620 pixels, frame counts from the part's start at 30 fps, and the dots came from the whole-frame 0.40 simulated run).** 112 were the ball (37%), 180 not, 8 unsure. Share that are the ball by detector confidence: 0.40-0.45 10% (78 dots), 0.45-0.50 18% (56), 0.50-0.60 43% (93), 0.60-0.80 84% (63). Crops show the false dots sit on grey and white shirts, shoes, hair, net mesh and posts, ceiling lights and wall specks; some real balls are on the floor in dead time (dead ball). Dead time and rallies have the same dot density (9.9 and 8.7 per second), median confidence (0.51 and 0.52) and neighbour structure; ball-track features, swing counts and ball-motion chains separate nothing or remove every dot.
+
+**Verifier (not shipped).** A classifier on a crop of each dot separates ball from not-ball: leave-one-part-out AUC 0.82 for confidence alone, 0.99 with all features, 0.98 from the crop alone, 0.93 among dots below 0.5. End to end it did not help: it keeps about one dot in three, the real ball is then found in about 10% of frames, and the shipped rally rule finds no rallies. A relaxed rule tuned on parts 0 and 9 looked clean (5 real, 0 not) and found neither real rally in held-out part 5. At a 0.15 detector threshold plus verifier: 4/12 wall-side, 2/22 court-side, 2 ghost steps, no better. Darkening or washing the wall, CLAHE, a green boost, contrast stretches and a static-background fill were also scored (on the marks, then whole parts) and none beat the plain crop; the dark-fill variants add ghost dots. On the cropped window at a 0.10 threshold the ball is the top blob in 27 of 34 marked frames and in the list in 30, so the one-dot-per-frame output is not what loses the ball.
+
+**Limits.** The dot labels were drawn from whole-frame output, so the verifier was trained on whole-frame dots. One venue's marks, one rally window (12 wall-side balls), no serve in it; candidate precision from the operator's clips is 57-70% on 10-21 rated clips and the cropped candidates are mostly unrated; the 25% rule has been checked on two venues only. The verifier is not part of the change.
+
+## 2026-11-01 (late) — The whole day's footage through the new setup, the top 10, clip start times, and a badge preview
+
+**Setup.** The branch's whole flow (fine-tuned epoch 2 weights, `--crop-to-court`, low cut 0.40, the 25% per-video rule, occlusion bridge on, shipped rally rules), run locally through the real `scripts/pod_infer.py` on every part of the two recordings: 03:12 UTC (1080p, parts 0-10; part 11, a coaching lesson, left out) and 02:51 UTC (2880x1620 shrunk to a 1080p proxy, parts 0-5). Every part picked the low cut.
+
+**Result 1: rallies found.** 113 candidates in 65.0 min of footage (913 s of rally, 23% of the footage). 03:12 parts 0-10: 8, 13, 11, 0 (66 s), 8, 6, 8, 10, 11, 8, 4 = 87. 02:51 parts 0-5: 9, 2, 5, 10, 0 (91 s), 0 (16 s) = 26. Production found none on the first three 02:51 parts; this finds 9, 2 and 5. Three parts found none and were not watched. From the operator's earlier ratings (73% of candidates real or part real) the real count is about 80, not 113.
+
+**Result 2: top 10 by the pipeline's own score (`score_segments`, absolute 0-100, across all parts).** The operator graded all 10: 7 real rally and a good highlight (#1, 2, 4, 5, 6, 9, 10), 2 real rally but not a highlight (#3, 8), 1 not a rally (#7). Nine of 10 real, 7 of 10 good highlights. Labels: `eval/labels/pdsc_court3_20261101_top10_and_badges.jsonl`.
+
+**Result 3: where the clip starts.** The operator typed the true serve time for 16 real or part-real candidates (parts 9, 0, 5) on clips cut 10 s before the system's first counted crossing (`eval/labels/pdsc_court3_20261101_cut_times.jsonl`, with the earlier start/end feedback). The reel starts 3 s before the first crossing. The serve was before the system's start in 14 of 16 clips (median 2.8 s earlier, up to 9 s). Share of serves inside a lead of 3, 4, 5, 6, 7 and 9.5 s: 9, 10, 11, 12, 14 and 16 of 16; average extra footage before the serve at 3, 5 and 7 s: 1.9, 3.3 and 4.4 s. One clip's 9 s may be the previous rally's serve (it opens 1 s into the clip and the operator had rated its start fine). With the 3 s lead, 10 of 16 starts were judged fine, 4 too late and 2 too early; 9 of 16 ends fine, 4 late by 3-7 s, 2 early. The operator rated the end as less important than the start. Nothing predicted the bad cuts: crossing gaps inside a rally look the same in good and bad clips, a baseline-swing "serve finder" anchored to the rally start (last strong baseline swing, 5 s window) lands within 1 / 2 / 3 s of the real serve in 5 / 8 / 9 of 16 cases against 5 / 8 / 10 for just guessing 2 s before the start, and any-swing counts fill every window (players move constantly). A longer start lead is the only lever found; it is not implemented (the reel builder shares one padding value for both ends).
+
+**Result 4: badges (preview, not shipped).** The badge step (`src/badges.py`, pod `measure` over every rally, then the session-wide `decide`) on the 03:12 rallies, with ultralytics `yolov8n-pose.pt` as a stand-in for the pod's TorchScript export: 768 swings, typical speed 2.12; awarded Hardest Swing (part 1, 195.9-213.1 s, 1.5x its bar), Killer Shot (part 7, 9.6-18.7 s, 1.39x), First Strike (part 1, 238.7-245.6 s, 1.06x); 7 candidates, none for Kitchen War or Quick Hands. The operator rated the first two real rallies where the badge does not fit; the third was not graded. The bars were set on yolov8x pose caches and were not re-checked for this venue or the nano model.
+
+**Limits.** All of this is a local replay: nothing ran on a pod or the staging site. 113 is a count of candidates; recall is unmeasured and three empty parts were not watched. The top-10 ranking was graded on one session's best 10 clips only. The start-lead table is from 16 clips of one venue.
+
+## 2026-11-12 — Hit finder on the pod path (staging branch `feat/hit-finder-pod`): equivalence and speed
+
+**What.** `src/hit_finder.py` is a port of `scripts/hit_detector.py` (feat/ball-recall-eval 2abdf2d) for the pod, with the model frozen as `src/hit_finder_v0.json` (sklearn HistGradientBoosting refit exactly as the research `fit()`: both practice videos, YOLOv8n poses, 4,422 labelled swings; exported trees, no sklearn on the pod; setting cut 0.7, gap 3 s). v0 is tournament-trained, not the final model (option A retrain pending).
+
+**Checks (measured, local RTX 2000 Ada).**
+- Frozen trees vs sklearn `predict_proba` on 113 embedded rows: worst difference 2.5e-16.
+- Port vs research code, same cached ultralytics v8n poses and ball predictions, the 9 PGC test parts at 720p: identical rally lists on all 9 (156 rallies, start/end within 1e-9), each side on its own branch's `src/`.
+- Full pod path on pgc_eda301d9_0925T1201_s004 (10 min, 720p): the pod's TorchScript YOLOv8n (736x1280, fp16) on every frame, whole frame + far close-up -> 22 rallies vs the research run's 22, all 22 matched at IoU 0.5; 14 real of 16 labelled for both (greedy IoU 0.5 match); 1,171 vs 1,174 swing candidates.
+- Pose time on that part, decode included: 138 s whole frame + 148 s far close-up = 291 s per 10 min of footage, about 2.4 min per 5-min part (budget about 2.5, EXPERIMENTS 2026-11-10). The pod's GPU is not measured.
+
+**Not checked.** One part only for the pod path; the pod's own card; picture-level playback of the clips it cuts. Staging gives the per-part comparison: each job's stats carry `hit_finder` (rallies, crossing rallies, candidates, seconds, which list was used).
+
+## 2026-11-12 — Hit finder, first staging pod run (one part, Court 3)
+
+**Run.** Stand-alone staging job `cb940d72` (no recording session, so the 11:13 share was not re-ranked) on the 11:13 Court 3 recording, part 3 (session-002.mkv, 5 min, 1080p), pod code `3bb1543`, RTX 4000 Ada. Same footage as job `6f9f79e2` on the crossing rallies (11-02). Court 3 is outside the hit finder's training and test footage (far ball hard to see), so this is a function and speed check, not a quality verdict.
+
+**Measured.** Job done, no error, hit-finder rallies used (not the fallback). Pod start (claim to check-in) 2.5 min; inference 80 s; **hit_finder stage 223.6 s** (both passes, 9,000 frames each); badges 32 s; cut 34 s. 543 swing candidates, 80 accepted, **4 rallies against 9 crossing rallies**. Share `ac293ab1`: all 6 videos load.
+
+| Hit finder (score) | Crossing rallies (score, 11-02) |
+|---|---|
+| 192-210 s (61.4) | 192-206 (51.0) |
+| 162-174 (54.8) | 162-174 (53.4) |
+| 45-59 (48.5) | none |
+| 180-193 (33.3) | none |
+| none | 236-261 (78.1, in the 11:13 share's top 10), 16-34, 61-80, 119-136, 221-238, 5-17, 138-151 |
+
+**Reading.** Speed: 3.7 min per 5-min part on the pod's card, about 1.5x the 2.5-min budget and slower than locally (2.4 min at 720p; this part is 1080p). With inference and the rest, one pod takes longer than the footage lasts, so a continuous session falls behind unless more pods run. Quality: unknown until playback; the crossing finder's best clip of this part (236-261) is not among the hit finder's 4.
+
+## 2026-11-12 — TrackNet in PyTorch vs TensorFlow 2.15: same detections, same rallies
+
+**Why.** Pods pulled our 9.3 GB TensorFlow image and stalled on hosts without it (four pods "awaiting_container" past 4 min on 2026-11-12). TensorFlow was there only for TrackNet. `src/tracknet_torch.py` rebuilds the network from the Keras layer list (incl. Keras BatchNormalization(axis=-1) on channels-first data = per-column); `scripts/tracknet_to_torch.py` converts the weights.
+
+**Run (local RTX 2000 Ada).** `scripts/pod_infer.py` on each part twice: the Keras SavedModel in TF 2.15.1 (fp16 + XLA, as the pod) and the converted `.pt` in PyTorch (fp16). The 9 PGC test parts at 720p with k14 on the whole frame at 0.5 (production), and Court 3 11:13 part 3 (1080p) with the Court 3 fine-tune, court crop, 0.40 + adaptive cut (the staging settings then). Rallies by `detect_candidates(occlusion_bridge=True)`; real = matched to v5 labels at IoU 0.5 (greedy).
+
+| | TF 2.15 | PyTorch |
+|---|---|---|
+| Frames where the ball is seen by one only | 71 of 163,674 (0.04%) | |
+| Rallies (10 parts) | 80 | 80, 78 identical (start/end within 0.05 s) |
+| Real rallies, 9 PGC parts (89 labelled) | 39 | 39 |
+| Heatmaps, 64 real inputs | | max diff 8e-4 fp32, 4e-3 fp16; 0 pixels flip across 0.5 |
+| Speed, one 10-min 720p part | 222 fps | 176 fps |
+
+**Reading.** Equivalent for every downstream use measured: same rallies on 8 of 10 parts, the two differences net zero on labelled rallies. PyTorch is about 20% slower than TF with XLA locally; not tuned. The pod's speed is measured on staging.
+
+## 2026-11-12 — Staging end to end on four footage types: stock image, PyTorch ball model, hit finder, stand-in desktop
+
+**Setup.** Staging pod code `dd07e83` (k14 in PyTorch, whole frame, 0.5; hit finder every 2nd frame), staging orchestrator `feat/stock-pod-image` (runpod/pytorch 2.1 image + pinned pip installs). Four stand-alone jobs queued together; then `desktop/scripts/sample-high-res.mjs` (the desktop's own trim/crop/upload code, run on the workstation as the staging test agent) on each share's top 10, from the original 1080p footage. Test-data changes: part_index set on the test clips (stand-alone jobs leave it null, which the heartbeat requires); a fresh token hash on the staging test agent.
+
+| | PGC eda301d9 | PGC c199a97c | Court 3 11:13 p3 | Brickwall SEMI |
+|---|---|---|---|---|
+| Footage | 10 min 720p | 10 min 720p | 5 min 1080p | 10 min 720p |
+| GPU | RTX 2000 Ada | RTX A5000 | RTX A5000 | RTX A5000 |
+| Claim to first check-in | 27 s | 19 s | 19 s | 84 s |
+| Inference (PyTorch) | 3.4 min | 6.3 min | 3.8 min | 5.5 min |
+| Hit finder | 2.2 min | 2.6 min | not run | 2.7 min |
+| Check-in to done | 8.2 min | 11.5 min | 4.5 min | ~12 min |
+| Rallies: hit finder / crossings | 21 / 11 | 17 / 5 | 0 / 0 ("no rallies found") | 24 / ? |
+| Desktop step, top 10 (workstation) | 84 s | 73 s | - | 119 s |
+
+**Reading.** Start-up is fixed for this sample (4 of 4 within 84 s; the custom image had 4 stuck starts the same morning). Inference is now the slowest stage and varies 2x by host: the faster A5000 cards were slower than the RTX 2000 Ada, so per-call overhead or the host CPU limits, not the GPU (not profiled). Only the RTX 2000 Ada run kept up with real time. Court 3: k14 on the whole frame finds no crossing rallies, and the pod stops before the hit finder (by design today). The desktop step is 7-16 s per clip here; an N100 is not measured. All 30 verticals and every clip load on the three shares. Clip quality not judged (no playback yet).
+
+## 2026-11-12 — Pod inference: thread pools sized to the pod's real CPUs (+ CUDA graph): 2-5x faster
+
+**Change** (`92c50a7`, staging): `pod_infer.py` sizes OpenCV's threads to the CPUs the pod may really use (affinity, capped by the cgroup quota), torch CPU threads 2, the PyTorch forward pass as one CUDA graph, and a TIMING line kept in the job's stats (`stats.inference`). Locally: predictions.csv byte-identical, no speed change (local time is GPU compute).
+
+**Run.** The same three stand-alone staging jobs as earlier the same day, re-queued (same footage, calibration, pod image).
+
+| 10 min of footage | GPU | CPUs reported / usable | Inference before -> after | Hit finder before -> after | Check-in to done before -> after |
+|---|---|---|---|---|---|
+| PGC eda301d9 | RTX 2000 Ada | 48 / 5 | 3.4 -> 1.7 min | 2.2 -> 3.0 min | 8.2 -> 8.2 min |
+| PGC c199a97c | RTX A5000 | 96 / 7 | 6.3 -> 1.2 min | 2.6 -> 2.9 min | 11.5 -> 6.7 min |
+| Brickwall SEMI | RTX A5000 | 96 / 7 | 5.5 -> 1.2 min | 2.7 -> 3.3 min | ~12 -> 9.5 min |
+
+TIMING (A5000): 46.8 s in the model, 14.5 s waiting for frames, 5.5 s post-processing, 270 fps. RTX 2000 Ada: 92.9 s in the model, 0.2 s waiting, 184 fps (GPU-bound there, as locally).
+
+**Reading.** Confirmed: inside the container the pod reported the host's 48-96 CPUs while 5-7 were usable, and the thread pools sized to the host count were the slowdown; sized correctly, inference is 2-5x faster and A5000 hosts are now the fastest. Which of the two changes did it is not separated (the CUDA graph gave nothing locally). The hit finder, untouched, is now the slowest stage (2.9-3.3 min per 10 min, over its ~2.4 budget) and runs in pod_driver's own process with the same unbounded thread pools -- the same fix there is the likely next step (not yet tested). Rallies hit finder / crossings: 21/11, 17/5, 24/20.
+
+## 2026-11-12 — Hit finder thread limit: no gain (pose is GPU-bound); RunPod capacity shortage
+
+**Change** (`e2dca5c`, staging): the same thread sizing (src/cpus.py) before the hit finder and badges in pod_driver; the hit finder's stats split pose_sec / features_sec.
+
+**Run 3** (same three stand-alone jobs, queued 11:08 UTC). Only PGC c199a97c got a GPU (RTX A5000, after 9 min 37 s of "no instances currently available" on every card under the $0.50/hr cap); PGC eda301d9 and Brickwall were still waiting after 20+ min.
+
+| PGC c199a97c, 10 min | Run 2 | Run 3 |
+|---|---|---|
+| Inference | 1.2 min | 1.3 min |
+| Hit finder | 2.9 min | 3.1 min (pose 181.3 s, features 2.1 s; cv2 threads 7) |
+| Check-in to done | 6.7 min | 7.3 min |
+
+**Reading.** The hit finder is GPU-bound on pose: 18,000 pose inferences (9,000 frames x 2 passes) in 181 s, about 100/s, as the v8n model does locally; threads were not its cost and the change gave nothing (kept: harmless, consistent). The pipeline keeps up on an A5000 (7.3 min per 10 min); the hit finder is ~1.5 min of pose per 5-min part, inside the 2.5-min pose budget (EXPERIMENTS 2026-11-10). The new limit is GPU supply: RunPod had nothing under the price cap for 10-20+ min.
+
+## 2026-11-12 — Google Cloud L4 as a second GPU vendor: works, ~1.2x slower than a RunPod A5000
+
+**Why.** RunPod had no GPU under the $0.50/hr cap for 10-20+ min in run 3 (above); testing a second vendor as a fallback (operator: Vast and Google, keep a cap).
+
+**Run.** A stand-alone benchmark (not the pod driver; scratch `vendor_bench/bench.py`): the pod's two GPU stages on PGC eda301d9 0925T1201 s004 (10 min, 1080p) -- `scripts/pod_infer.py` (k14 .pt, 0.5, whole frame), then `detect_candidates` and `hit_finder.find_rallies` with the v8n 736x1280 TorchScript pose. Google VM: spot, asia-east1-a, Google's stock image `pytorch-2-9-cu129-ubuntu-2204-nvidia-580` (torch 2.9.1; it lacks ffprobe -- apt-installed; the pod fetches its own). Code at `5110201`. Deleted after.
+
+| Machine | CPUs | Ball model | Hit finder | Both GPU stages | Rallies |
+|---|---|---|---|---|---|
+| Workstation RTX 2000 Ada (reference) | 16 | 1.7 min | 2.7 min | 4.4 min | 21 |
+| Google L4, g2-standard-4 | 4 | 2.6 min | 3.9 min | 6.5 min | 21 |
+| Google L4, g2-standard-8 | 8 | 2.0 min | 3.3 min | 5.4 min | 21 |
+| RunPod A5000 (run 2/3 above, in the real pod) | 7 | 1.2 min | 2.9-3.1 min | 4.1-4.4 min | -- |
+
+Ball model TIMING on the L4: 58 s in the model (faster than the RTX 2000 Ada's 95 s), but 52-81 s waiting for frames -- CPU-bound on decode with 4-8 vCPUs. Rallies: 19 of 21 identical to the workstation, 2 with end times 0.6 and 3.1 s apart (different torch/GPU); identical between the 4- and 8-CPU runs.
+
+Start-up: VM request to SSH + CUDA ready 136 s (first boot, 100 GB disk from a large image); a stopped VM restarted in 30 s. Download from the internet 36 MB/s (one GitHub file). Price not confirmed: Google's pricing API refused this account; third-party pages disagree on g2-standard-8 spot in asia-east1 ($0.39-0.74/hr), on demand ~$0.99/hr. Read the real charge from the project's bill.
+
+**Reading.** Google's L4 runs our pipeline unchanged on its own stock image, with the same rallies. It is slower than an A5000 per part (+1.0-1.3 min of GPU stages per 10 min on 8 CPUs, +2.1-2.4 on 4) but would still keep up (A5000 check-in to done 6.7-7.3 min per 10 min, so ~8-8.5 on an L4-8, estimated). As a fallback when RunPod has nothing it is usable; as the main vendor it is slower and, at spot prices above ~$0.50, over the cap. Not tested: the real pod driver on Google (R2 keys, job flow), spot reclaim mid-part, and Vast (needs an account).
+
+## 2026-11-13 — Vast as a second vendor, and cutting start-up time on Vast and Google
+
+**Vast speed.** The same benchmark (`vendor_bench`) on public footage, not venue footage: Vast's machines under $0.50 are almost all individuals' computers (1 datacenter offer under the cap), so PGC footage was not sent. Brickwall SEMI, first 600 s, re-encoded to 2 Mb/s 1080p. Vast RTX 3090, US, $0.19/hr, `pytorch/pytorch:2.4.1-cuda12.4-cudnn9-runtime`.
+
+| Machine | CPUs usable | Ball model | Hit finder | Both | Rallies |
+|---|---|---|---|---|---|
+| Workstation RTX 2000 Ada (reference) | 16 | 2.0 min | 2.8 min | 4.8 min | 21 |
+| Vast RTX 3090 | 23 (of 96 reported) | 1.9 min | 2.9 min | 4.8 min | 21 |
+
+The 3090 host downloaded from the internet at 0.7 MB/s (one GitHub file; Google's L4 got 36 MB/s) -- one sample, but a home line that slow would take ~3 min to fetch a 10-min part.
+
+**Start-up, request to "running"** (Vast's status; SSH-ready not separately timed on Vast):
+
+| Vendor, image | n | Time |
+|---|---|---|
+| Vast, `pytorch/pytorch` (generic, not cached on the host) | 1 | 8 min 42 s (image pull + Vast's own apt/locale setup layer) |
+| Vast, Vast's own template "PyTorch (Vast)" (`vastai/pytorch:cuda-13.x-auto`) | 5 fresh hosts (CZ, US x4) | 29, 45, 54, 80, 104 s |
+| Google L4, Google's DL image, to SSH + GPU ready | 2 | 136 s, 180 s |
+| Google L4, our prepared image (ffmpeg + pip extras baked in), to SSH + GPU + ffprobe ready | 1 | 89 s (62 s of it the create call) |
+| Google L4, stopped VM restarted | 1 | 30 s |
+| RunPod stock image (2026-11-12, above) | 4 | 19-84 s |
+
+Vast offer listings carry no field saying which images a host already has; the first run of the 5-host test lost 4 timings to a script bug (`vastai destroy` read the loop's stdin) and was redone on fresh hosts. Vast spend for all of this: $0.18. Google test VMs and the image deleted after.
+
+**Reading.** Start-up is set by whether the host already has the image, and we choose that by choosing the image: Vast's own template starts like RunPod's stock image (under 2 min on 5/5), a generic image does not. On Google, the VM itself is the floor (~60 s for the create call); a prepared image saves the installs (~1.5 min total), a stopped VM restarts in 30 s. A Vast template's torch is newer (cu13) than the pod's 2.1 -- our code ran on torch 2.4 and 2.9 here, not yet on the template's version.
+
+## 2026-11-13 — Google fallback in the orchestrator: a real staging job ran end to end on Google
+
+**Change** (console `feat/gce-fallback` `42aad50` + `106acfc`, staging orchestrator only; pic-vision `8bb1989` image script). When RunPod has no machine, the orchestrator rents a Google spot L4 (`g2-standard-8`, asia-east1 a/b/c) booted from our prepared image family `pic-vision-pod`; the VM's startup script runs the same start command as a RunPod pod. A machine that never checks in is followed by Google first. Production has no Google settings and is unchanged. No vendor race: two machines would both process the same part.
+
+**Run.** Staging orchestrator deployed with the test switch `RUNPOD_DISABLED`, so RunPod reports no capacity. Pod code: staging.json (`e2dca5c`).
+- Job f32d6a7a (PGC c199a97c): Google VM created and our code started; failed at download -- its footage had been deleted from the staging bucket after yesterday's run (a test-data gap, not the fallback).
+- Job 0cf24639 (PGC eda301d9, `session-005.mkv` re-uploaded -- a different file from the 11-12 run, so its rallies are not comparable): claimed 17:00:00 UTC, code running 17:00:52, done 17:12:19, 17 reels; the cleanup deleted the VM ~2 min after. No VM or disk left.
+
+| Stage | Google L4 g2-standard-8 |
+|---|---|
+| Claim to code running | 52 s |
+| convert | 2.0 min |
+| inference | 2.5 min (TIMING: 57 s model, 74 s waiting for frames) |
+| hit finder | 3.5 min (pose 205 s; 15 rallies, 12 from crossings) |
+| badges + cut + upload | 3.2 min |
+| Check-in to done | 11.5 min per 10 min of play |
+
+**Reading.** The fallback works end to end: create, boot, start, process, report, clean up, all automatic. Start-up is fast (52 s claim to running). Processing is slower than a RunPod A5000 (6.7-7.3 min per 10 min, 11-12) and does not keep up with a 10-minute part cadence (11.5 min), so it suits a fallback, not the main path. Not tested: RunPod-first then Google on a real shortage, a spot VM reclaimed mid-part, the real Google price. The Workflow's ~50-request budget is near its limit when both vendors are tried (counted in budget.test.ts).
+
+## 2026-11-13 — Google fallback on 16 CPUs: 9.3 min per 10-min part; NVENC missing on our Google image
+
+**Run.** Same job as above (0cf24639, PGC eda301d9 `session-005.mkv` re-uploaded), staging orchestrator deployed with `RUNPOD_DISABLED` and `GCP_MACHINE_TYPE=g2-standard-16` for this run only, restored after. The VM came up in asia-east1-b (zones are tried a, b, c; why a was skipped is not logged here). Pipeline log from the VM's serial console (`/mnt/fast_scratch/pic-vision-scratch/gce16_log.txt`).
+
+| Stage | g2-standard-8 (above) | g2-standard-16 |
+|---|---|---|
+| convert | 2.0 min | 1.2 min |
+| ball model | 2.5 min (74 s waiting for frames) | 1.9 min (54 s waiting) |
+| hit finder | 3.5 min | 3.2 min |
+| badges | 1.4 min | 1.4 min |
+| clips + upload | ~1.8 min | ~1.4 min |
+| Pipeline start to done | 11.5 min (check-in to done) | 9.3 min (first log line to done) |
+
+**Found:** `NVENC is unavailable on this GPU/host, encoding on the CPU with libx264 instead` -- on Google every encode (the 30 fps convert and every clip) runs on the CPU, though the L4 has NVENC. Likely the image's driver install lacks the NVIDIA encode library (libnvidia-encode); not yet checked. That is a large share of the CPU-bound time on both machine sizes.
+
+**Not explained yet:** the same file gave 15 rallies (12 from net crossings) on the 8-CPU run and 18 (8 from crossings) on the 16-CPU run; ball found in 26.3% of frames here (the 8-CPU figure was not kept). Net-crossing rallies depend only on the ball track, so the ball model's input or output differed between the runs. One guess: libx264's output depends on its thread count, so the converted video differs between 8 and 16 CPUs (and between Google's CPU encode and RunPod's NVENC). Unverified.
+
+**Reading.** 16 CPUs bring Google under the 10-min part cadence (9.3 min), but the bigger fix is likely NVENC on the image, which would help either size. The run-to-run rally difference needs checking before Google results are trusted like RunPod's.
+
+## 2026-11-13 — Google fallback with NVENC on the image: 9.8 min per 10-min part on 8 CPUs
+
+**Cause of the CPU encodes (measured):** Google's image installs only the driver's compute library (`libnvidia-compute-580-server`), not `libnvidia-encode`. Adding `libnvidia-encode-580-server` and `libnvidia-decode-580-server` at the driver's exact version made `h264_nvenc` work; `scripts/build_gce_pod_image.sh` now installs them and fails the build if an NVENC encode doesn't work. New image `pic-vision-pod-20261113-0237`; the old one deleted.
+
+**Run.** Same job (0cf24639, `session-005.mkv` re-uploaded), staging in test mode (`RUNPOD_DISABLED`), g2-standard-8, restored after. No NVENC warning in the log (`/mnt/fast_scratch/pic-vision-scratch/gce8nvenc_log.txt`).
+
+| Stage | 8 CPUs, CPU encode | 16 CPUs, CPU encode | 8 CPUs, NVENC |
+|---|---|---|---|
+| convert | 2.0 min | 1.2 min | 0.8 min |
+| ball model | 2.5 min | 1.9 min | 2.2 min |
+| hit finder | 3.5 min | 3.2 min | 3.7 min |
+| badges | 1.4 min | 1.4 min | 1.7 min |
+| clips + upload | ~1.8 min | ~1.4 min | ~1.2 min |
+| Pipeline start to done | 11.5 min | 9.3 min | 9.8 min |
+| Rallies (from net crossings) | 15 (12) | 18 (8) | 17 (8) |
+
+**Encode determinism, locally** (`/mnt/fast_scratch/pic-vision-scratch/x264det`): libx264 at the pod's settings is byte-identical run to run at the same thread count, but differs between 8 and 16 threads, and NVENC differs again. The ball model on each: 4,737 / 4,762 / 4,653 frames with a ball, crossing rallies 8 / 8 / 8 (local calibration, not the job's). So encoding moves the ball track slightly but did not change the rally count here. The first Google run's 12 crossing rallies is the outlier (1 of 3 Google runs); cause not found.
+
+**Reading.** NVENC buys the cheaper 8-CPU machine what 16 CPUs bought: under the 10-min part cadence (9.8 min). The ball model is still CPU-bound on decode (69 s waiting); GPU decode is the next lever if needed. Hit finder and badges vary ~10-20% run to run on the same machine type.
+
+## 2026-11-13 — Ball model's mask and resize on the GPU: Google part 9.8 -> 8.6 min, ball model no longer waits
+
+**Change** (`28da754`, staging pod code): when the PyTorch model runs on CUDA, the court mask, crop and resize to 512x288 run on the GPU (`gpu_prep` in `scripts/pod_infer.py`); decoding stays cv2 on the CPU. `PIC_VISION_INFER_GPU_PREP=0` forces the old path. Measured locally first: mask + resize cost 6.5-7.0 ms of CPU per frame, decode 2.9-4.0 ms.
+
+**Equivalence, locally** (RTX 2000 Ada, old vs new path, same file; `/mnt/fast_scratch/pic-vision-scratch/gpuprep/compare_cpuall.json`):
+
+| Part | Frames whose detection differs | Crossing rallies (identical) | Hit-finder rallies (identical) |
+|---|---|---|---|
+| PGC eda301d9, NVENC encode | 33 of 17,940 | 8 / 8 (8) | 18 / 18 (15) |
+| PGC eda301d9 s004 | 33 of 18,000 | 14 / 14 (12) | 21 / 21 (21) |
+| Brickwall SEMI 600 s | 45 of 18,003 | 20 / 20 (19) | 21 / 21 (20) |
+
+Speed locally: no change with 4+ cores (the RTX 2000 Ada is the limit); with 2 cores the ball model went 174-177 s -> 112 s.
+
+**Google run.** Job 0cf24639 (same re-uploaded file), staging in test mode (`RUNPOD_DISABLED`), g2-standard-8 with NVENC, restored after. Timings from the job's stage_timings and stats.
+
+| Stage | 8 CPUs + NVENC (above) | + mask/resize on GPU |
+|---|---|---|
+| convert | 0.8 min | 0.7 min |
+| ball model | 2.2 min (wait for frames 69 s) | 1.3 min (wait 3.9 s; decode 58 s now overlaps the model's 56 s) |
+| hit finder | 3.7 min | 3.7 min |
+| badges | 1.7 min | 1.7 min |
+| clips + upload | ~1.2 min | ~1.0 min |
+| Check-in to done | 9.8 min | 8.6 min |
+| Rallies (from crossings) | 17 (8) | 17 (8) |
+
+**Reading.** The ball model on Google is now GPU-bound (3.9 s of waiting, from 69 s), so GPU decode would buy little there now. The slowest stage is the hit finder's pose (GPU-bound, 3.7 min). The Google fallback does a 10-min part in 8.6 min, comfortably inside the cadence. Same rally count as the previous Google run.
+
+## 2026-11-13 — One real session through staging: speed passes; both finders' top 10s fail on the booking's warm-up
+
+**Setup** (pre-registered in `progress/11.13 plan - staging session test.md`; bars set before the run).
+
+- **Footage.** PGC eda301d9 recording `2026-09-25T08-40-00-655Z`: 8 parts (7 × 600 s + 122 s), 1080p30, never used in staging or in the 11-11 fresh-footage check.
+- **Drift.** Within 1.6 px of the calibration frame on every part.
+- **Calibration.** The eda301d9 one from 25 Sep 10:01, frame 521.3 s, RMSE 0.56 ft. Not `calib/pgc_court_b_0926_calib.json`, which doesn't fit this camera.
+- **Code.** Staging pod code `28da754` (hit finder on, badges on). Staging orchestrator `8b7be0ec` in normal mode (RunPod first, Google backup).
+- **Replay.** A new driver played the venue desktop on the real clock through the agent API (create job → presigned PUT → complete). Part N was sent at T0 + N × 10 min, and the session end was reported at the last part's close. The stand-in desktop (`sample-high-res.mjs --camera`) ran alongside. Test camera `pgc-eda301d9-test`, session `e462535d`, share `3bb2d260`. Staging test agent `part_minutes` was 10 for the run, restored to 5.
+
+**Speed (measured).**
+
+| Part | Machine | Upload | Queued → done |
+|---|---|---|---|
+| warm job | Google L4 spot (RunPod had nothing at 06:12) | — | ready 06:14, 4 min before part 1 |
+| 1 | same Google L4 | 35 s | 10.2 min |
+| 2–7 | same Google L4 | 30–32 s (~37 Mbps) | 8.3–9.3 min, each done 1–2 min before the next part finished uploading |
+| 8 (122 s) | RunPod RTX 4000 Ada (new pod; the warm L4 was busy with part 7) | 6 s | 3.6 min |
+
+- Session end → top 10 decided: 7.5 min (bar ≤ 15).
+- All 10 delivered clips sharp + vertical (stand-in desktop, 9.5–13 s each).
+- Machines removed 2–3 min after their last part (Google VM deleted 07:29, no disk left).
+- No Workflow lost its reads.
+- Speed bars: all pass.
+
+**RunPod supply (measured).**
+
+- **Stock sampling.** 61 samples every 2 min (06:38–08:37 UTC) of secure-cloud stock for the orchestrator's cards. In 12 (20%), nothing under the $0.50 cap was listed. That was 8 of the last 15, 08:09–08:35. Every listing under the cap was "Low" (105 of 105).
+- **Concurrent creates.** Three jobs sent at 07:35–07:36:
+  - the 1st got an RTX 4000 Ada;
+  - the 2nd was refused for that card ("There are no instances currently available") and got an A5000;
+  - the 3rd was refused for 6 card types in a row and got the last option, an RTX 2000 Ada.
+- **Reading.** "Low" is about one machine per card type.
+
+**Determinism (measured).** Part 3 (`session-002.mkv`) ran 4 times, always 18 hit-finder and 10 crossing rallies.
+
+| Run | Machine | Compared with the RTX 4000 Ada run |
+|---|---|---|
+| repeat 1 | RunPod RTX 4000 Ada | reference |
+| repeat 3 | RunPod RTX 2000 Ada | identical clip times and scores |
+| session | Google L4 | 14 of 18 identical; 4 boundaries shifted 1–3 s |
+| repeat 2 | RunPod A5000 | ~11 of 18 identical (one split, one dropped, one added) |
+
+- One rally scored 63.1 / 69.7 / 78.2 across machines, so the top 10 can depend on the machine.
+- Cause not tested. A guess: the GPU's own encode in the convert step (NVENC output differs by GPU generation; libx264 output differed by thread count locally, 11-13).
+- This also explains the 11-13 "12 vs 8" Google outlier class: machine-dependent, not random.
+
+**Rally finding: blind playback by the operator.**
+
+- **Clips.** 20 clips: the session's 10 delivered clips (hit finder, staging), and 10 by production's crossing finder from the same code locally (`HIT_FINDER = False`, top 10 by score; production also puts badged clips first, but there were none). Both sets were cut identically from the source (no logo, same pad), shuffled, key kept apart.
+- **Verdicts.** 19 of 20 scored. c13 (hit finder, part 4, 500–522 s) has no verdict.
+
+| | Real | Part | No rally | Glued | Starts late | Ends early |
+|---|---|---|---|---|---|---|
+| Hit finder (9 scored) | 2 | 0 | **7** | 0 | 0 | 0 |
+| Crossings (10) | 2 | 0 | **6** | 2 | 0 | 0 |
+
+Bars:
+
+| Bar | Result |
+|---|---|
+| Hit finder ≥ 9/10 real, 0 no-rally | **FAIL** (2/9) |
+| Hit finder ≥ crossings | 2 = 2. Met only nominally; both fail |
+| ≤ 1 starts late | Pass, but only 4 real clips to judge |
+
+**Where the failures are.**
+
+- **Part 1.** All 13 clips from part 1's first ~5.5 min were "no rally" (6 crossing, 7 hit finder), plus one glued crossing clip at 299–333 s. That stretch is the start of the booking.
+- **Why it ranks first.** The pod's badge measures put the 16 hit-finder "rallies" there at 14.3 s average, against 8.5 s for the other 102. The score rewards long continuous hitting.
+- **Serve detection doesn't help.** A serve was "detected" on 15 of the 16, so it does not separate them.
+- **Outside part 1.** Hit finder 2/2 real (+1 unscored). Crossings 2 real + 2 glued (part 4 555–595 s, part 1 299–333 s).
+- **Not judged.** Whether the stretch is warm-up or drills is the reading of a "no rally" verdict whose options were "warm-up / drill / dead". Not separately labelled.
+
+**Badges.** 0 awarded across 118 rally clips.
+- Kitchen War is unreachable here: max kitchen share 0.21 against the 0.5 bar, max 1 exchange.
+- Every measured rally has its clip (start times match), so it is not a matching bug.
+- The speed badges (Hardest Swing, Killer Shot, First Strike) were not replayed through the console's `decide()`. Whether any should have fired is open.
+
+**Reading.**
+- **Speed and operations.** Ready: one warm machine keeps a 10-min rhythm, the Google backup took over a real RunPod shortage unaided, and cleanup is clean.
+- **Rally finding.** Not ready, and this is **not specific to the hit finder.** Production's crossing finder fails the same way on the same stretch: its top 10 for this session would have shown 6 non-rallies. The ranking puts long continuous non-game hitting at the start of a booking above real points.
+- **Before either finder ships to more venues, the top 10 needs a warm-up/drill guard.** Earlier candidates:
+  - the 10-13 "pause between rallies" rule, which removed practice on fitted clips and was then tried on 8 unseen PGC segments;
+  - the hit finder's "deep start" rule, which clearly did not catch this stretch.
+- **Next.** Pick a guard by testing it against this session's verdicts. These are now labelled negatives at the top of a ranking, the exact case that matters.
+
+## 2026-11-13 — Jev guard on staging: removes every ball-machine clip, keeps every real rally judged; two Google-backup failures seen live
+
+**Setup.**
+- **Code.** Staging pod code `84142dc` (pic-vision `feat/jev-guard`): every rally clip of a part gets a 6-frame contact sheet, identical to Test K's, and the pod sends it with its job token to the staging console. Console `feat/jev-guard` (`2bec788`): the endpoint calls TypeSafe jev-1.14 with Test K's exact questions. Staging DB migration `20261113100000_reels_jev`: `reels.jev_real/jev_kind`, and a clip with real < 0.4 is not delivered and not returned to the share page.
+- **Approval.** PGC frames to TypeSafe allowed by the operator, from staging only (endpoint needs `JEV_IMAGES=on`, set in Netlify Branch deploys only).
+- **Runs.** Parts 1, 3, 4 and 5 of the 25 Sep 08:40 recording, as stand-alone jobs. They hold all 19 clips the operator judged earlier the same day (entry above).
+
+**Measured.**
+
+| Part | Clips checked | Failed | Under 0.4 | Jev time |
+|---|---|---|---|---|
+| 1 (ball machine 0–217 s) | 25 | 0 | 15 | 45.1 s |
+| 3 | 18 | 0 | 0 | 30.8 s |
+| 4 | 12 | 0 | 0 | 14.2 s |
+| 5 | 17 | 0 | 0 | 26.7 s |
+
+- **Ball-machine stretch.** Every clip scored 0.03–0.26 (kinds "practice" / "not_play"). The 7 hit-finder clips judged "no rally" scored 0.05, 0.12, 0.26, 0.19, 0.10, 0.07, 0.10: **7 of 7 removed.** The 6 crossing-finder "no rally" clips lie inside the same stretch, and every hit-finder clip there was removed. The crossing clips themselves were not sent: the pod runs the hit finder.
+- **Real rallies judged real.** Part 3 290–316 s (0.68) and 375–395 s (0.62), part 4 283–314 s (0.67), part 5 368–386 s (0.57): **4 of 4 kept.** The unscored c13 (part 4 500–522 s) scored 0.63.
+- **Glued crossing clips.**
+  - Part 4 555–595 s: overlapping hit-finder clips 0.53 and 0.62, kept.
+  - Part 1 299–333 s: 314–334 s at 0.41, kept.
+- **Outside the machine stretch.** All 57 clips scored 0.35–0.72. One under the cut: part 1 468–478 s at 0.35, kind "real_point", not judged. One exactly at 0.40 (part 3 145–158 s, "not_play"), kept because the cut is strict.
+- **Cost of the step.** 14–45 s per part. The scores agree with Test K: ball machine 0.06–0.25 then, 0.03–0.26 now.
+
+**Google backup failures, live (staging orchestrator `8b7be0ec`).**
+- **Instant failure.** Two jobs (parts 3, 4, first round) failed in seconds: "no GPU capacity after 1 attempt... neither RunPod nor Google". RunPod had nothing, and Google's quota of 1 L4 was held by part 1.
+- **Phantom machine.** Part 5 (first round) recorded `gce-asia-east1-c-6dss0dro`, whose insert ended `QUOTA_EXCEEDED`; the VM never existed. The orchestrator counts a create it cannot confirm as created. That design is deliberate, so a VM that may exist is watched; the inference is that Google's operation wait did not return DONE in time. The cleanup then saw the machine missing and failed the part ("the GPU machine stopped without reporting how this part ended") instead of retrying.
+- **Spot reclaim mid-part.** Part 3 (second round) VM `gce-asia-east1-a-dbkpchmj` was created at 10:56:10 and reclaimed by Google at 11:01:04 (`compute.instances.preempted`). The part failed with the same message and is not retried. It finished only because the test loop resent it.
+
+**Reading.**
+- **The Jev guard does what it is for.** On this footage it removed the whole ball-machine stretch and no rally the operator judged real. It is tested on one session, with 4 judged real rallies, so it is a strong first result, not a measured false-drop rate. Test K/L's 1 in 98 remains the best estimate.
+- **Not covered.** Warm-ups without a machine (Test K/L: 0 of 13 caught).
+- **Before the Google backup can carry real sessions:** a part lost to a reclaim or to an unconfirmed create must be retried, and both vendors being full must wait rather than fail at once. A larger Google quota alone fixes neither.
+
+## 2026-11-13 — imajev-4b (local, open) vs Jev as the top-10 guard: FAIL on the general-junk bar; ties Jev on ball machines; 10x slower
+
+**Why.** Jev sends player frames to TypeSafe. imajev (github.com/mohit67890/imajev @ `318e8da`) is an open, Jev-contract model: LoRA + readout on Qwen3.5-4B, Apache-2.0, image input, runs locally. Checked first: kyegomez/open-jev is untrained (random weights, text only), so it was not testable.
+
+**Pre-registered** (`/mnt/fast_scratch/pic-vision-scratch/imajev_eval/PREREGISTERED.md`, written before any call).
+- **Inputs.** Test K + Test L's exact contact sheets and Jev's questions, byte-identical. imajev takes the image as an upload, so the state says "the attached image".
+- **Server.** The adapter's own `calibration.json`, 1 rotation, torch backend, local RTX 2000 Ada.
+- **Rule.** Flag when real < 0.4.
+- **Bars.** Real flagged <= 2 of 98; ball machine 6 of 6; not-real flagged >= 16 of 50.
+
+**Result: FAIL** (bar 3).
+
+| 165 judged clips | imajev-4b | Jev |
+|---|---|---|
+| Real flagged (of 98) | **0** | 1 |
+| Ball machine flagged (of 6) | **6** | 6 |
+| Not-real flagged (of 50) | **9** (bar 16) | 18 |
+| Serve + return only flagged (of 17) | 1 | 1 |
+| Seconds per clip | **4.2** (median; one GPU, serial) | ~0.4 (TypeSafe; pod sends 4 in parallel) |
+
+- **What it caught.** Ball machine 6/6, coaching 1/1, feeding 1/1, failed serve + toss 1/1.
+- **What it missed.** Warm-ups 0/13 and failed serves 0/5; Jev also missed warm-ups.
+- **Scores.** Real 0.56–0.90, not-real 0.15–0.87.
+- **Trade-off at other cuts** (descriptive, in-sample, real/not flagged): 0.3 gave 0/4, 0.5 gave 0/10, 0.6 gave 1/17. That is close to Jev's 1/18 at 0.4. A 0.6 cut needs its own pre-registered test on fresh clips.
+
+**Today's 28 judged clips** (extra, descriptive; sheets built from the source footage over each clip's rally window).
+
+| | imajev-4b, cut 0.4 | imajev-4b, cut 0.6 |
+|---|---|---|
+| Ball-machine "no rally" (13) | 12 | 13 |
+| Real (12) | 0 | 0 |
+
+10 of the 13 ball-machine clips were labelled ball_machine or practice.
+
+**Decision (operator, 2026-11-13).** Keep Jev for the guard. imajev runs on the pod's own GPU one clip at a time, so on 10–25 clips a part it would add about a minute or more where the 10-minute rhythm has almost no margin. Jev adds 14–45 s in all, off the GPU. imajev stays the local fallback if Jev is ruled out on privacy. It would first need a pre-registered test at 0.6 and a speed fix (the 2B model, batching, or a faster pod card; none measured).
+
+## 2026-11-13 (evening) — Full session with Jev on (staging): the share-page top 10 passes, 9 of 10 real
+
+**Setup.** Same replay as the morning session test (25 Sep 08:40, 8 parts on the real clock, session `d080a9a5`, share `536e0fde`), staging pod code `84142dc` (hit finder + Jev on every rally clip), console `2bec788`, staging DB with `20261113100000_reels_jev`. Top 10 rebuilt exactly as the share page picks it (Jev < 0.4 left out, then by score; no badges assumed — the DB was unreachable to confirm), cut blind from the source footage, judged by the operator on playback.
+
+**Result (bars pre-registered 11-13 morning): PASS on all three.**
+| | Morning, no Jev (hit finder) | Evening, Jev on |
+|---|---|---|
+| Real | 2 of 9 | **9 of 10** (c06 "real, starts late", confirmed by the operator) |
+| No rally | 7 | **0** |
+| Part of a rally | 0 | 1 (part 3 21-50 s, Jev 0.44 "not_play", ends early) |
+| Starts late | 0 | 1 (bar <= 1) |
+- Jev: 116 clips checked, 0 failed, 15 removed (13 in the ball-machine stretch, 1 each in parts 6 and 7, unjudged), 19-40 s per part.
+- Speed: parts done 8.5-12 min after upload on one warm machine; the 10-minute rhythm held, with little margin. Session end to top 10: 8.5 min.
+
+**Reading.** With Jev, the session's top 10 on this footage meets the bar the morning run failed. One session, one venue; the guard covers ball-machine drills, not ordinary warm-ups. Production still runs the crossing finder without any guard; what ships is the operator's call (privacy for Jev, and whether the hit finder goes with it).
+
+## 2026-11-15 — Jev on redacted contact sheets: the wide-margin blur keeps Jev's answers; the tight one loses real rallies
+
+**Why.** Jev contact sheets send six unblurred frames of each rally to TypeSafe, the open privacy item for production. The question is whether Jev still works when faces, heads and everything off the court are blurred before a sheet leaves the pod.
+
+**Redaction** (scratch `jev_blur/build_sheets.py`). It runs on each full-resolution frame before the 784×441 resize.
+- **Outside the court is blurred**, using a downscale/upscale soften (factor 24). "The court" is the camera's calibrated footprint expanded by a margin, plus players' standing height above it (7.5 ft, scaled with depth).
+- **Two margins:**
+  - tight: 2 ft past the sidelines, 3 ft past the baselines;
+  - wide: 4 ft past the sidelines, 10 ft past the baselines, which keeps the area behind the baselines where a ball machine stands.
+- **Heads are blurred** inside the court area, from the staging YOLOv8n pose model's head keypoints.
+- **Faces are blurred** inside the court area, from OpenCV Zoo YuNet (MIT, from `../pic-vision-redaction`, score >= 0.35).
+- The layout is otherwise identical to `src/jev_sheet.py`.
+
+**Clips.**
+- Test K's 95 clips whose session video and calibration are cached: 60 real, 25 not real (6 of them ball machine), 10 serve + return only.
+- 11-13's 28 judged clips: 12 real, 13 ball-machine "no rally", 3 other.
+- Test K's 30 fresh clips and Test L were left out: no calibration for their cameras.
+
+Jev jev-1.14, Test K's exact questions; only blurred sheets were sent (246 calls).
+
+| Cut 0.4 | Unblurred Jev (Test K) | Blurred, wide | Blurred, tight |
+|---|---|---|---|
+| Real flagged | 1 of 60 | **1 of 72** (the same clip: 0.24 unblurred, 0.19 blurred) | 3 of 72 |
+| Ball machine flagged | 6 of 6 | **19 of 19** | 19 of 19 |
+| Other not-real flagged | 2 of 19 | 1 of 19 | 3 of 19 |
+| Score shift vs unblurred (Test K, median / max) | — | +0.000 / 0.20 | -0.010 / 0.21 |
+
+**Reading.**
+- **Wide margin.** Redacting the sheets with the wide margin leaves Jev's decisions unchanged on these clips.
+- **Tight margin.** It cut into the area behind the baselines and removed two more real rallies.
+- **Verification so far.** The redaction was checked by eye on sample sheets: neighbouring court, wall and spectators blurred; ball machine and loose balls kept. It was not audited frame by frame.
+- **Scope.** One venue (PGC), a tested set rather than a coverage guarantee.
+- **Next.** Build the wide-margin redaction into the pod's sheet step, re-pass it on staging, and leave the production privacy call to the operator.
+
+## 2026-11-15 — Run A: one fresh session through staging with redacted Jev sheets; every bar passes (top 10 = 10 of 10 real)
+
+**Setup** (bars pre-registered in root `progress/11.15 plan - staging e2e review and GPU strategy.md`, revised for this footage before the run started).
+
+- **Footage.** PGC Court B eda301d9 `2026-09-25T11-01-06-540Z` (25 Sep 19:01 Taiwan time), never on staging. The hit finder (v0) was trained on the two tournament practice videos only, so this is unseen footage. Drift ≤ 0.1 px against the camera's calibration; test camera `pgc-eda301d9-test`.
+- **Code.** Staging pod code `c7b3727` (hit finder, Jev on **redacted** sheets, parallel pose prep, badge pose reuse, Jev overlapped, parallel uploads). Staging console `2bec788`. Staging orchestrator `cdec7765`, from console `feat/gce-gpu-list` `17fd3ed`: RunPod Secure first, Google fallback limited to machines under the $0.50 cap (T4 n1-standard-8 only; never used in this run).
+- **Replay.** Recording session `a42e7331`, share `c3c95b55`, started 07:31:45 UTC. Parts sent on the real clock through the agent API, stand-in desktop alongside. Staging agent `part_minutes` 10, restored to 5 after.
+- **Stopped early (operator).** The driver was stopped after part 5 because speed was already shown; the session end was reported with 5 parts (`end_session.mjs`, same call the desktop makes). Part 6 was never sent.
+
+**Speed (measured).** All parts ran on one warm RunPod Secure **RTX 4000 Ada**, rented at 07:36 before part 1.
+
+| Part | Upload | Claimed → done | Hit finder | Rallies (from crossings) | Jev checked / failed / under 0.4 |
+|---|---|---|---|---|---|
+| 1 | 32 s | 6.3 min | 94 s (pose 88 s) | 15 (9) | 15 / 0 / 0 |
+| 2 | 36 s | 5.7 min | 88 s | 13 | 13 / 0 / 0 |
+| 3 | 32 s | 5.5 min | 89 s | 13 | 13 / 0 / 0 |
+| 4 | 31 s | 5.6 min | — | 13 | 13 / 0 / 1 |
+| 5 | 33 s | 5.7 min | — | 13 | 13 / 0 / 0 |
+
+- Median **5.7 min** per 10-min part (bar ≤ 7.5). Part 1 stages: convert 38 s, ball model 72 s, hit finder 94 s, badges 77 s, cut 48 s; Jev (45 s) overlapped.
+- Against the 11-13 session (Google L4, 8.3-9.3 min per part): hit finder 3.7 → 1.5 min, badges 1.7 → 1.3 min. On 11-13 the hit finder was 3.2-3.5 min on RunPod A5000s too, so most of the gain is the parallel pose prep (`6f87491`), not the card. Not separated on one machine.
+- Session end (08:28:21) → top 10 decided: seconds (last top-10 clip synced 08:28:26; bar ≤ 15 min).
+- Cleanup: at 08:34:09 RunPod listed 0 pods (the run's pod 404) and Google 0 instances. Checked 6 min after the last part, not at 5.
+
+**Top 10, blind (operator, playback).** 16 clips shuffled with no labels: the share page's 10 delivered clips plus every clip Jev doubted (under 0.4, or a kind other than `real_point`). Clips cut from the original parts at the reels' clip times. Key: scratch `runa-1101/review_key.json`, verdicts `runa-1101/verdicts.jsonl`.
+
+| | Count |
+|---|---|
+| Top 10 real | **10 of 10** (bar ≥ 9) |
+| Top 10 non-rally | **0** (bar 0) |
+| Top 10 starting late | 1 (rank 10, part 3, score 44.5) |
+
+**Jev on all 67 rallies.** 0 failed calls, 0 unanswered (bar 0 failed). The doubted clips, against the operator's verdicts:
+
+| Jev | Kept? | Verdict |
+|---|---|---|
+| not_play 0.25 | removed (under 0.4) | dead time |
+| practice 0.54 | kept, outside top 10 | dead time (ball tossed back) |
+| not_play 0.56 | kept, outside top 10 | no rally |
+| not_play 0.52 | kept, outside top 10 | no rally |
+| not_play 0.53 | kept, outside top 10 | real |
+| not_play 0.57 | kept, outside top 10 | real (short point) |
+
+The 0.4 cut removed 1 clip, correctly, and no real rally. Three dead-time clips sat just above it (0.52-0.56); they ranked too low for the top 10. Filtering on `kind != real_point` as well would have removed those 3 and 2 real ones, so no change is proposed from one session.
+
+**Redaction.**
+- Code path (`c7b3727`): one place sends sheets (`pod_driver.py` `jev_checks` → console `/jev` → TypeSafe); `src/jev_sheet.contact_sheet` always redacts, with no switch. The console route forwards and stores nothing; only `jev_real`/`jev_kind` are kept on the reel. `tests/test_jev.py` 16 passed.
+- Weaker path (not taken in this run): if the pose model cannot load, sheets go out with YuNet face boxes and the off-court blur only. This run used the hit finder's poses.
+- Sent sheets are not stored, so 4 were rebuilt with the same code (`runa-1101/rebuild_sheets.py`; original part file instead of the 30 fps convert, poses from the pose model on each sheet frame): part 1 top rally, part 1 not_play 0.56, part 4 practice 0.54, part 4 not_play 0.25. Off-court, the neighbouring court, the chairs area and every head/face zoomed at 3-4x were blurred, including people walking behind the near baseline.
+- **Gap:** on a player close to the camera the head box covers the face but not always the top of the head; hair shows above the blur (practice sheet, frames 3-5). No face was identifiable in the frames checked. Candidate fix: a larger head box for large (near) people in `head_boxes`, tested before use.
+
+**Reading.**
+- Every pre-registered bar passes on unseen footage: top 10 (10/10), Jev (0 failures, no real rally removed), redaction (with the head-box gap above), speed (median 5.7 min), session end → top 10 (seconds), cleanup (0 machines at 6 min).
+- **Limits.** One session, one camera, 5 of 6 parts (50 min); no warm-up without a ball machine checked; Google T4 never exercised; RunPod had stock the whole run.
+- **Next.** Operator: the production privacy call on Jev with redacted sheets. Then the production PR stack (each PR with this staging evidence). The head-box fix and the orchestrator's wait-and-retry (checklist item 5) are separate staging changes.
+
+## 2026-11-15 (later) — Release checks: new pod code on production's old image; the console release on staging; first Google T4 job
+
+Three single jobs before the production push (release plan: root `progress/11.15 release plan - hit finder, Jev, stock image.md`). Footage: PGC eda301d9, 25 Sep 19:01 recording.
+
+| Job | What it checks | Machine | Result |
+|---|---|---|---|
+| `0cd9caa4` stand-alone, part 6 | Pod code `c7b3727` on **production's old 9.3 GB image**: production's orchestrator (`origin/main` `ea838aa`) deployed to staging for this job, then staging restored (`17fd3ed`, version `2b8cb499`) | RunPod RTX A5000, `tf215-cuda118` | Done, no error; hit finder 14 rallies; Jev 14 / 0 failed; 9.2 min claim → done incl. ~2 min start. **The pod-code PR can merge before the orchestrator PR** |
+| `d9804af1` one-part session, part 4 | Console without the interface languages (`ac58c99`) | RunPod (stock image) | Done; 13 hit-finder clips; Jev 13 / 0 failed; the dead-time clip (Jev 0.35; 0.25 in Run A) out of the top 10 and the share page; 10 delivered; machine gone in < 5 min |
+| `49a26f0c` one-part session, part 4 | Console release head `4fe28e0` (bilingual; content identical to `feat/jev-guard` `d54399d`) | **Google T4** n1-standard-8 spot (RunPod had nothing free) | Done; 12 hit-finder clips; Jev 12 / 0 failed; dead-time clip Jev 0.33, vetoed; 10 delivered; VM gone within ~5 min |
+
+**First Google T4 timing (measured, one 10-min part, stage_timings):** VM start ~2.1 min; convert 0.9 min; ball model 2.8 min (RTX 4000 Ada 1.2); hit finder 2.5 min (1.5); badges 1.0 min; cut 0.6 min; work start → done **8.1 min** (RTX 4000 Ada ~5.7). Keeps one camera's 10-min cadence with ~2 min to spare; not a two-camera machine.
+
+**Reading.**
+- The new pod code runs on both images, so the merge order between the pod-code and orchestrator PRs is not critical.
+- The Google fallback (T4 list, `17fd3ed`) works end to end on its first real use.
+- Rallies differ by GPU type on the same part: 12 on the T4, 13 on the RTX 4000 Ada (the open GPU-dependence item).
+- Jev's score for the same clip moved between runs (0.25, 0.35, 0.33): every time under 0.4 here, but a clip near the cut can land on either side.
+- **Badge fix not exercised:** one part clears no badge bar under the old or new rule (replayed locally). It rests on its unit tests and the replay of Run A's five parts (Killer Shot no longer awarded to the vetoed clip).

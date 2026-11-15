@@ -126,3 +126,37 @@ def test_n_none_cuts_every_rally_each_carrying_its_own_unpadded_times(monkeypatc
     result = top_rallies_reel.build_top_rallies("v", "p", str(calib_path), str(tmp_path), session_id="t", n=None)
     assert len(result["manifest"]) == len(segments) == 3
     assert sorted(c["rally_start"] for c in result["manifest"]) == sorted(s["start"] for s in segments)
+
+
+def _fake_cut(video, scored, out_dir, **kwargs):
+    return [{"file": f"rally_{i:03d}.mp4", "score": s["score"], "start": s["start"], "end": s["end"]}
+            for i, s in enumerate(sorted(scored, key=lambda s: s["start"]), 1)]
+
+
+def test_given_rallies_replace_the_detected_ones(monkeypatch, tmp_path):
+    # The hit finder's rallies (pod_driver HIT_FINDER): ranked and cut instead
+    # of the detected ones, still scored on the detected crossings.
+    monkeypatch.setattr(rallies, "load_predictions", lambda csv, fps: _fake_track(3))
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(top_rallies_reel, "cut_clips", _fake_cut)
+    calib_path = tmp_path / "calib.json"
+    calib_path.write_text(json.dumps({}))
+    given = [{"start": 1.0, "end": 4.0}, {"start": 41.0, "end": 45.0}]
+    result = top_rallies_reel.build_top_rallies("video.mp4", "predictions.csv", str(calib_path), str(tmp_path),
+                                                session_id="test", n=10, segments=given)
+    assert sorted((c["start"], c["end"]) for c in result["manifest"]) == [(1.0, 4.0), (41.0, 45.0)]
+    assert result["stats"]["n_candidates"] == 2
+
+
+def test_without_given_rallies_the_detected_ones_are_cut(monkeypatch, tmp_path):
+    monkeypatch.setattr(rallies, "load_predictions", lambda csv, fps: _fake_track(3))
+    monkeypatch.setattr(rallies, "court_wedge", lambda calib: (lambda x, y: True))
+    monkeypatch.setattr(rallies, "net_line_y", lambda calib: 50.0)
+    monkeypatch.setattr(top_rallies_reel, "cut_clips", _fake_cut)
+    calib_path = tmp_path / "calib.json"
+    calib_path.write_text(json.dumps({}))
+    result = top_rallies_reel.build_top_rallies("video.mp4", "predictions.csv", str(calib_path), str(tmp_path),
+                                                session_id="test", n=10)
+    assert result["stats"]["n_candidates"] == 3
+    assert (1.0, 4.0) not in [(c["start"], c["end"]) for c in result["manifest"]]

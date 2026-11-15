@@ -284,15 +284,16 @@ def test_the_shared_files_the_pod_reads_are_covered_by_its_read_credential():
 
 def test_every_reel_the_pod_uploads_lands_in_its_venues_reel_folder():
     # The write credential covers <brand>/reels/ and nothing else. Every
-    # upload_file call must use a key built under that prefix, or the final
-    # upload of a real job 403s -- the most expensive place to find out.
+    # upload must use a key built under that prefix, or the final upload of
+    # a real job 403s -- the most expensive place to find out.
+    assert pod_driver.reel_key("abc") == f"{pod_driver.BRAND_ID}/reels/abc.mp4"
     source = inspect.getsource(pod_driver.run)
-    # upload_file(os.path.join(...), OUTPUT_BUCKET, <key var>) -- the join()
-    # has its own parentheses, so a plain [^)]* would stop inside it.
-    uploads = re.findall(r"s3_out\.upload_file\(os\.path\.join\([^)]*\),\s*OUTPUT_BUCKET,\s*(\w+)\)", source)
-    assert len(uploads) == 3, f"expected the full, top-rally and burst uploads, found {uploads}"
-    for var in uploads:
-        assert re.search(rf'{var}\s*=\s*f"\{{BRAND_ID\}}/reels/', source), f"{var} is not built under <brand>/reels/"
+    # The uploads are the (path, key) pairs in `files`: the full reel, the burst and every clip, each keyed by reel_key.
+    files = source[source.index("files = "):source.index("upload_pool = ")]
+    assert re.findall(r"\(os\.path\.join\([^)]*\),\s*(\w+(?:\(\w+\))?)\)", files) == ["ranked_key", "burst_key", "reel_key(cid)"]
+    for var in ("ranked_key", "burst_key"):
+        assert re.search(rf"{var}\s*=\s*reel_key\(", source), f"{var} is not built by reel_key"
+    assert "BRAND_ID}/reels" not in source, "a key is built by hand instead of reel_key"
 
 
 def test_reads_use_the_read_client_and_writes_use_the_write_client():
@@ -301,8 +302,16 @@ def test_reads_use_the_read_client_and_writes_use_the_write_client():
     source = inspect.getsource(pod_driver.run)
     assert not re.search(r"s3_out\.download_file", source)
     assert not re.search(r"s3_in\.upload_file", source)
-    assert len(re.findall(r"s3_in\.download_file", source)) == 3
-    assert len(re.findall(r"s3_out\.upload_file", source)) == 3
+    assert len(re.findall(r"s3_in\.download_file", source)) == 2
+    # Every reel goes up through one call, submitted to the upload pool with the write client.
+    assert re.findall(r"s3_out\.upload_file", source) == ["s3_out.upload_file"]
+    assert re.search(r"submit\(s3_out\.upload_file, path, OUTPUT_BUCKET, key\)", source)
+    # The ball model's download moved into fetch_weights (2026-11-12): run()
+    # must hand it the read client, and it must only read with it.
+    assert re.search(r"fetch_weights\(s3_in,", source)
+    weights = inspect.getsource(pod_driver.fetch_weights)
+    assert len(re.findall(r"s3_in\.download_file", weights)) == 2      # .tar and .pt branches
+    assert not re.search(r"upload_file|s3_out", weights)
 
 
 # --- NVENC -> libx264 fallback (2026-09-21) ---------------------------------
@@ -622,3 +631,22 @@ def test_a_failed_pod_is_marked_done_too(monkeypatch, tmp_path):
 def _done_marker_in_tmp(monkeypatch, tmp_path):
     """No test ever reads or writes the real /workspace marker."""
     monkeypatch.setattr(pod_driver, "DONE_MARKER", str(tmp_path / "pod_driver_done"))
+
+
+def test_the_ball_detector_runs_at_productions_single_cut():
+    # 2026-11-12 (operator): k14 at production's 0.5, which the hit finder was judged on.
+    # The per-video step stays wired (HEAT_LOW < HEAT_HIGH turns it back on); at equal
+    # values it changes nothing.
+    assert pod_driver.HEAT_LOW == pod_driver.HEAT_HIGH == 0.5
+    source = inspect.getsource(pod_driver.run)
+    assert '"--heat-threshold", str(HEAT_LOW)' in source
+    assert "apply_adaptive_threshold(csv_path, csv_path, high=HEAT_HIGH" in source
+
+
+def test_the_ball_model_sees_the_whole_frame_with_k14():
+    # 2026-11-12 (operator): the Court 3 crop went with the unfinished Court 3 weights; k14
+    # runs on the whole frame, as production and as the hit finder was judged on. The flag
+    # stays wired for the Court 3 work.
+    assert pod_driver.CROP_TO_COURT is False
+    assert "k14" in pod_driver.WEIGHTS_R2_KEY
+    assert '"--crop-to-court"' in inspect.getsource(pod_driver.run)
