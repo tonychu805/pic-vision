@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { THEME_OPTIONS, applyTheme, readTheme } from "../lib/theme.js";
+import { useI18n } from "../i18n.jsx";
 
 // Three icon buttons in the sidebar footer rather than a row in a settings
 // page: this app deliberately has no general Settings tab (Scan options
@@ -12,6 +13,7 @@ import { THEME_OPTIONS, applyTheme, readTheme } from "../lib/theme.js";
 // an effect: unlike the console this is a plain client render with no
 // hydration to mismatch, so there's nothing to defer.
 export default function ThemeToggle({ collapsed }) {
+  const { t } = useI18n();
   const [preference, setPreference] = useState(readTheme);
 
   const choose = (value) => {
@@ -22,12 +24,11 @@ export default function ThemeToggle({ collapsed }) {
   return (
     <div
       role="radiogroup"
-      aria-label="Colour theme"
+      aria-label={t("theme.label")}
       style={{
         display: "flex",
         gap: 2,
         padding: 2,
-        marginBottom: 8,
         borderRadius: "var(--radius-md)",
         background: "color-mix(in srgb, var(--color-text) 4%, transparent)",
         justifyContent: collapsed ? "center" : "stretch",
@@ -41,7 +42,7 @@ export default function ThemeToggle({ collapsed }) {
             type="button"
             role="radio"
             aria-checked={active}
-            title={`${option.label} theme`}
+            title={t("theme.title", { name: t(option.labelKey) })}
             onClick={() => choose(option.value)}
             style={{
               flex: 1,

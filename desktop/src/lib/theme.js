@@ -16,9 +16,9 @@
 // module exists and so cannot import it. Change both together.
 export const THEME_KEY = "pv-theme";
 export const THEME_OPTIONS = [
-  { value: "system", label: "System", icon: "ph-desktop" },
-  { value: "light", label: "Light", icon: "ph-sun" },
-  { value: "dark", label: "Dark", icon: "ph-moon" },
+  { value: "system", labelKey: "theme.system", icon: "ph-desktop" },
+  { value: "light", labelKey: "theme.light", icon: "ph-sun" },
+  { value: "dark", labelKey: "theme.dark", icon: "ph-moon" },
 ];
 
 export function readTheme() {

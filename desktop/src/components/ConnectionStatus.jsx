@@ -1,4 +1,5 @@
 import { heartbeatStatus } from "../lib/heartbeatStatus.js";
+import { useI18n } from "../i18n.jsx";
 
 // PIC-92: the line at the top of the Cloud page saying whether this
 // machine is actually reporting to the console.
@@ -14,7 +15,8 @@ const STATUS_ICON = { ok: "ph-check-circle", pending: "ph-clock-clockwise", lost
 const STATUS_COLOR = { ok: "var(--color-success)", pending: "var(--text-3)", lost: "var(--color-danger)" };
 
 export default function ConnectionStatus({ connection, onReconnect, reconnecting = false }) {
-  const status = heartbeatStatus(connection);
+  const { t } = useI18n();
+  const status = heartbeatStatus(connection, Date.now(), t);
   // Loading and not-registered have their own layouts in CloudPage; this
   // component is only ever asked about a machine that has a connection.
   if (!status) return null;
@@ -29,7 +31,7 @@ export default function ConnectionStatus({ connection, onReconnect, reconnecting
       </p>
       {status.canReconnect && onReconnect && (
         <button type="button" className="btn btn-primary" style={{ marginTop: 10 }} onClick={onReconnect} disabled={reconnecting}>
-          {reconnecting ? "Reconnecting…" : "Reconnect this machine"}
+          {reconnecting ? t("conn.reconnecting") : t("conn.reconnect")}
         </button>
       )}
     </>

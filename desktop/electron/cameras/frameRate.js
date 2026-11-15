@@ -26,6 +26,10 @@
 // against a shortfall nobody has measured. Only 30 and 15 were ever scored;
 // 25-28 is unmeasured, so between the two floors the camera records and the
 // operator is told, rather than the session being thrown away.
+import { translator } from "../i18n/index.js";
+
+const english = translator("en");
+
 export const MIN_FPS = 30;
 
 // Compared with slack, for two honest reasons. 29.97 is a real, extremely
@@ -52,8 +56,9 @@ const number = (v) => (typeof v === "number" && Number.isFinite(v) && v > 0 ? v 
 // to change a setting that is already correct wastes their time and costs
 // trust, so the two cases get different messages.
 //
-// Measured wins the decision, since detection quality depends on the
-// frames that actually arrive, not on what the camera intended to send.
+// Measured wins what the venue is told, since detection quality depends on
+// the frames that actually arrive. It does not decide the block on its own
+// when the camera reports a correct setting (see isBlocked).
 export function effectiveFps(camera) {
   const p = camera?.profile;
   return number(p?.measuredFps) ?? number(p?.fps);
@@ -65,6 +70,21 @@ function isNetworkShortfall(camera) {
   const configured = number(camera?.profile?.fps);
   const measured = number(camera?.profile?.measuredFps);
   return configured !== null && configured >= WARN_BELOW_FPS && measured !== null;
+}
+
+// Blocks on a camera *set* too low, never on a network shortfall
+// (operator, 2026-11-09). The measured rate comes from one 5-second probe,
+// refreshed every 10 minutes, so a single Wi-Fi blip on a camera set to 30
+// refused every recording until the next probe -- booked sessions included.
+// A real drop during recording is still caught: the pod judges the whole
+// recording and refuses one that is mostly below the floor
+// (src/video_quality.py). An RTSP camera reports no setting, so what arrived
+// is the only evidence of it and still blocks.
+function isBlocked(camera) {
+  const configured = number(camera?.profile?.fps);
+  const measured = number(camera?.profile?.measuredFps);
+  if (configured !== null) return configured < BLOCK_BELOW_FPS && (measured === null || measured < BLOCK_BELOW_FPS);
+  return measured !== null && measured < BLOCK_BELOW_FPS;
 }
 
 // A frame rate as a person should read it: whole when it is whole (30,
@@ -90,64 +110,58 @@ export function formatFps(v) {
 export function frameRateLevel(camera) {
   const effective = effectiveFps(camera);
   if (effective === null) return "unknown";
-  if (effective < BLOCK_BELOW_FPS) return "blocked";
+  if (isBlocked(camera)) return "blocked";
   if (effective < WARN_BELOW_FPS) return "low";
   return "ok";
 }
 
 // "is set to 25 fps" only when the camera said so. An RTSP camera reports no
 // setting at all -- only how many frames arrived was counted.
-function rateClause(camera, effective) {
+function rateClause(camera, effective, tr) {
   const configured = number(camera?.profile?.fps);
-  return configured !== null ? `is set to ${formatFps(configured)} fps` : `is sending about ${formatFps(effective)} fps`;
+  return configured !== null
+    ? tr("fps.isSetTo", { fps: formatFps(configured) })
+    : tr("fps.isSending", { fps: formatFps(effective) });
 }
 
 // Only ever blocks on a frame rate we actually know. What stays unknown --
 // a sample clip (no camera at all), or a stream whose probe failed -- passes
 // rather than being guessed at, since blocking a real setup over missing
 // data is worse than the problem.
-export function frameRateProblem(camera) {
+//
+// `tr` is the translator; the operator-facing page passes its own, and
+// everything else (the log, thrown errors) stays in English.
+export function frameRateProblem(camera, tr = english) {
+  if (!isBlocked(camera)) return null;
   const effective = effectiveFps(camera);
-  if (effective === null || effective >= BLOCK_BELOW_FPS) return null;
-
-  const label = camera?.label ?? "This camera";
-
-  if (isNetworkShortfall(camera)) {
-    return (
-      `${label} is set to ${formatFps(number(camera.profile.fps))} fps but only about ${formatFps(effective)} fps are reaching this computer. ` +
-      `Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) — at 15 fps it finds only half the rallies. ` +
-      `The camera's own settings are fine — this is a network problem: ` +
-      `check its Wi-Fi signal, or connect it by cable, then try again.`
-    );
-  }
-
-  const where = camera?.hostname ? `http://${camera.hostname}` : "the camera's own settings page";
-  return (
-    `${label} ${rateClause(camera, effective)}. Rally detection needs at least ${BLOCK_BELOW_FPS} fps (${MIN_FPS} is best) — ` +
-    `at 15 fps it finds only half the rallies. ` +
-    `Sign in to the camera at ${where}, set the video frame rate to ${MIN_FPS}, ` +
-    `then try again.`
-  );
+  const label = camera?.label ?? tr("fps.thisCamera");
+  const where = camera?.hostname ? tr("fps.where.host", { host: camera.hostname }) : tr("fps.where.settings");
+  return tr("fps.blocked.settings", {
+    label,
+    clause: rateClause(camera, effective, tr),
+    block: BLOCK_BELOW_FPS,
+    best: MIN_FPS,
+    where,
+  });
 }
 
 // Between the two floors: go ahead, but say so. No figure for how many
 // rallies are lost, because none was ever measured at these rates.
-export function frameRateWarning(camera) {
+export function frameRateWarning(camera, tr = english) {
   const effective = effectiveFps(camera);
-  if (effective === null || effective >= WARN_BELOW_FPS || effective < BLOCK_BELOW_FPS) return null;
+  if (effective === null || effective >= WARN_BELOW_FPS || isBlocked(camera)) return null;
 
-  const label = camera?.label ?? "This camera";
+  const label = camera?.label ?? tr("fps.thisCamera");
   if (isNetworkShortfall(camera)) {
-    return (
-      `${label} is set to ${formatFps(number(camera.profile.fps))} fps but only about ${formatFps(effective)} fps are reaching this computer. ` +
-      `Recording anyway, but rally detection is tuned for ${MIN_FPS} fps and may miss some rallies — ` +
-      `check the camera's Wi-Fi signal, or connect it by cable.`
-    );
+    return tr(effective < BLOCK_BELOW_FPS ? "fps.warn.networkLow" : "fps.warn.network", {
+      label,
+      best: MIN_FPS,
+      block: BLOCK_BELOW_FPS,
+      configured: formatFps(number(camera.profile.fps)),
+      effective: formatFps(effective),
+    });
   }
-  return (
-    `${label} ${rateClause(camera, effective)}. Recording anyway, but rally detection is tuned for ${MIN_FPS} fps ` +
-    `and may miss some rallies — set the camera's video frame rate to ${MIN_FPS} when you can.`
-  );
+  return tr("fps.warn.settings", { label, best: MIN_FPS, clause: rateClause(camera, effective, tr) });
 }
 
 // Throws below the hard floor; otherwise returns the soft warning (or null)

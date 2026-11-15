@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError, describeRegisterError } from "../lib/ipcError.js";
 import ConnectionStatus from "../components/ConnectionStatus.jsx";
+import { useI18n } from "../i18n.jsx";
 
 // Connection status UI for cloud.js's first real outbound link to
 // pic-vision-cloud-console (ADR-071) -- a real page, not a PreviewBanner
@@ -65,6 +66,7 @@ function DetailRow({ label, value, mono, hint, children }) {
 // because that's the "about this install" block -- and because the first
 // thing a support conversation needs is which version they're on.
 function UpdateRow() {
+  const { t } = useI18n();
   const [version, setVersion] = useState("");
   const [result, setResult] = useState(null);
   const [checking, setChecking] = useState(false);
@@ -89,13 +91,13 @@ function UpdateRow() {
   };
 
   const hint =
-    result?.status === "outdated" ? `Version ${result.latest} is available`
-    : result?.status === "current" ? "This is the latest version"
-    : result?.status === "unknown" ? "Couldn't check for updates just now"
+    result?.status === "outdated" ? t("cloud.updateAvailable", { latest: result.latest })
+    : result?.status === "current" ? t("cloud.updateCurrent")
+    : result?.status === "unknown" ? t("cloud.updateUnknown")
     : undefined;
 
   return (
-    <DetailRow label="Version" value={version || "…"} mono hint={hint}>
+    <DetailRow label={t("cloud.version")} value={version || "…"} mono hint={hint}>
       {result?.status === "outdated" ? (
         <button
           type="button"
@@ -103,7 +105,7 @@ function UpdateRow() {
           style={{ fontSize: "var(--fs-fine)", padding: 0, color: "var(--color-accent)" }}
           onClick={() => window.systemAPI?.openExternal?.(result.downloadUrl)}
         >
-          Download<i className="ph ph-arrow-square-out" style={{ fontSize: 12 }} />
+          {t("cloud.download")}<i className="ph ph-arrow-square-out" style={{ fontSize: 12 }} />
         </button>
       ) : (
         <button
@@ -113,7 +115,7 @@ function UpdateRow() {
           onClick={check}
           disabled={checking}
         >
-          {checking ? "Checking…" : "Check for updates"}
+          {checking ? t("cloud.checkingUpdates") : t("cloud.checkUpdates")}
         </button>
       )}
     </DetailRow>
@@ -121,6 +123,7 @@ function UpdateRow() {
 }
 
 export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, onConnectionChanged }) {
+  const { t, lang } = useI18n();
   const [connection, setConnection] = useState(undefined); // undefined = loading
   const [registering, setRegistering] = useState(false);
   const [error, setError] = useState("");
@@ -134,7 +137,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
   // used for the warning below.
   const [otherAgentNames, setOtherAgentNames] = useState([]);
 
-  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(cleanIpcError(err)));
+  const refresh = () => window.cloudAPI.status().then(setConnection).catch((err) => setError(cleanIpcError(err, t)));
   useEffect(() => {
     if (!CLOUD_API_MISSING) {
       refresh();
@@ -185,7 +188,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setAgentNameField(saved);
       setSavedName(saved);
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
     }
     setSavingName(false);
   };
@@ -203,7 +206,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       // the time an error reaches the renderer the HTTP status that
       // distinguishes "you aren't signed in" from "the console's database
       // hiccupped" is already gone (PIC-93).
-      setError(describeRegisterError(err));
+      setError(describeRegisterError(err, t));
     }
     setRegistering(false);
   };
@@ -214,7 +217,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       setConnection(null);
       onConnectionChanged?.();
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
     }
   };
 
@@ -224,7 +227,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
       await window.authAPI.signOut();
       onSignedOut?.();
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
       setSigningOut(false);
     }
   };
@@ -232,9 +235,9 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
   if (CLOUD_API_MISSING) {
     return (
       <div className="page">
-        <div className="page-title" style={{ marginBottom: 14 }}>Cloud console</div>
+        <div className="page-title" style={{ marginBottom: 14 }}>{t("cloud.titleMissing")}</div>
         <p style={{ fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
-          This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).
+          {t("cloud.notLoaded")}
         </p>
       </div>
     );
@@ -242,10 +245,9 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
 
   return (
     <div className="page">
-      <div className="page-title" style={{ marginBottom: 4 }}>This machine</div>
+      <div className="page-title" style={{ marginBottom: 4 }}>{t("cloud.title")}</div>
       <p className="page-sub" style={{ marginBottom: 16 }}>
-        Signing in is what connects this machine to a venue — there is no separate step. It keeps reporting on its
-        own from then on, including while nobody is signed in here.
+        {t("cloud.intro")}
       </p>
 
       {/* One error line for the whole page. It used to live inside the
@@ -268,7 +270,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           sign-out. */}
       <div className="card" style={{ maxWidth: 420, marginBottom: 12 }}>
         {connection === undefined ? (
-          <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>Checking connection…</p>
+          <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: 0 }}>{t("cloud.checking")}</p>
         ) : connection ? (
           <>
             {/* Re-rendered by the 5s poll above, so "Last check-in 2
@@ -277,35 +279,34 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
             <ConnectionStatus connection={connection} onReconnect={retryRegister} reconnecting={registering} />
             {session?.user && (
               <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "6px 0 0" }}>
-                Signed in as {session.user.email}
+                {t("cloud.signedInAs", { email: session.user.email })}
               </p>
             )}
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 12 }}>
               <button type="button" className="btn btn-secondary" onClick={signOut} disabled={signingOut}>
-                {signingOut ? "Signing out…" : "Sign out"}
+                {signingOut ? t("cloud.signingOut") : t("cloud.signOut")}
               </button>
               <span style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", lineHeight: 1.45 }}>
                 {/* Not "and reporting" once the console has removed it
                     (2026-09-29): the card above has just said it stopped. */}
-                {connection.removed ? "This machine keeps recording." : "This machine keeps recording and reporting."}
+                {connection.removed ? t("cloud.keepsRecording") : t("cloud.keepsRecordingReporting")}
               </span>
             </div>
           </>
         ) : (
           <>
             <p style={{ fontSize: "var(--fs-body)", color: "var(--text-3)", margin: "0 0 12px" }}>
-              This machine isn't attached to a venue. That normally happens by itself when you sign in — if it
-              didn't (the console was unreachable), or you removed it from a venue on purpose, connect it here.
+              {t("cloud.notAttached")}
             </p>
             <button type="button" className="btn btn-primary" onClick={retryRegister} disabled={registering}>
-              {registering ? "Connecting…" : "Connect to the cloud console"}
+              {registering ? t("cloud.connecting") : t("cloud.connect")}
             </button>
           </>
         )}
       </div>
 
       <div className="card" style={{ maxWidth: 420, marginBottom: 20 }}>
-        <div className="section-label">Agent name</div>
+        <div className="section-label">{t("cloud.agentName")}</div>
         <div style={{ display: "flex", gap: 8 }}>
           <input
             className="input"
@@ -321,7 +322,7 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
             onClick={saveAgentName}
             disabled={savingName || !agentName.trim() || agentName.trim() === savedName}
           >
-            {savingName ? "Saving…" : "Save"}
+            {savingName ? t("cloud.saving") : t("cloud.save")}
           </button>
         </div>
         {nameClashesWithAnotherMachine && (
@@ -332,22 +333,19 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           // Cameras, Schedule and Reels print this name to tell two
           // venues' "Court 1"s apart.
           <p style={{ fontSize: "var(--fs-fine)", color: "var(--color-warning, var(--color-danger))", margin: "8px 0 0", lineHeight: 1.5 }}>
-            Another machine at this venue is already called "{agentName.trim()}". The console shows
-            this name to tell cameras at different machines apart, so two the same makes them hard to
-            distinguish. You can still save it.
+            {t("cloud.nameClash", { name: agentName.trim() })}
           </p>
         )}
         <p style={{ fontSize: "var(--fs-fine)", color: "var(--text-4)", margin: "8px 0 0", lineHeight: 1.5 }}>
-          What this machine is called on the console's "Connected agents" list. Naming it after where it sits
-          ("Front desk Mac") makes it easier to tell apart once a venue has more than one.
+          {t("cloud.nameHint")}
         </p>
       </div>
 
       {/* Read-only from here down. No surface fill and no input boxes --
           a readOnly <input> is what made the Device ID look editable. */}
       <div className="card-quiet" style={{ maxWidth: 420 }}>
-        <div className="section-label section-label-quiet">Details</div>
-        <DetailRow label="Device ID" value={deviceId} mono hint="Fixed — identifies this machine to the console across re-registrations." />
+        <div className="section-label section-label-quiet">{t("cloud.details")}</div>
+        <DetailRow label={t("cloud.deviceId")} value={deviceId} mono hint={t("cloud.deviceIdHint")} />
         <UpdateRow />
         {connection && (
           <>
@@ -355,8 +353,8 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
                 rename (this field used to be called that) still has the
                 old name in its local electron-store JSON -- there's no
                 migration step for it, so both names need to keep working. */}
-            <DetailRow label="Registered" value={new Date(connection.connectedAt ?? connection.pairedAt).toLocaleString()} />
-            <DetailRow label="Reporting to" value={connection.consoleUrl} mono />
+            <DetailRow label={t("cloud.registered")} value={new Date(connection.connectedAt ?? connection.pairedAt).toLocaleString(lang)} />
+            <DetailRow label={t("cloud.reportingTo")} value={connection.consoleUrl} mono />
           </>
         )}
       </div>
@@ -371,20 +369,20 @@ export default function CloudPage({ session, onSignedOut, connectionEpoch = 0, o
           {confirmingRemove ? (
             <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
               <span className="text-3" style={{ fontSize: "var(--fs-body)" }}>
-                Stop this machine reporting to {connection.brandName}?
+                {t("cloud.removeConfirm", { brand: connection.brandName })}
               </span>
-              <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} onClick={() => setConfirmingRemove(false)}>Cancel</button>
+              <button className="btn btn-secondary" style={{ fontSize: "var(--fs-fine)" }} onClick={() => setConfirmingRemove(false)}>{t("common.cancel")}</button>
               <button
                 className="btn btn-primary"
                 style={{ fontSize: "var(--fs-fine)", color: "var(--color-danger)", borderColor: "var(--color-danger)" }}
                 onClick={async () => { await disconnect(); setConfirmingRemove(false); }}
               >
-                Remove it
+                {t("cloud.removeIt")}
               </button>
             </div>
           ) : (
             <button className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", padding: 0 }} onClick={() => setConfirmingRemove(true)}>
-              Remove this machine from {connection.brandName}
+              {t("cloud.removeFrom", { brand: connection.brandName })}
             </button>
           )}
         </div>

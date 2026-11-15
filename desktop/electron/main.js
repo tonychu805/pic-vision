@@ -43,6 +43,7 @@ import { runChecks } from "./diagnostics.js";
 import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
 import { installCrashReporting } from "./crashReport.js";
+import { getLanguage, setLanguage, tm } from "./language.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -142,7 +143,16 @@ function registerCameraHandlers() {
     return revealStreamUri(id);
   });
   ipcMain.handle("cameras:add", async (_event, config) => {
-    return publicCamera(await addCamera(config));
+    try {
+      return publicCamera(await addCamera(config));
+    } catch (err) {
+      // Resolves with a classification instead of rejecting, but only for
+      // this one state -- the renderer's RTSP fallback ladder depends on
+      // every other failure still rejecting exactly as before.
+      const { state, detail } = classifyProbeError(err, "onvif");
+      if (state === "untrustedCert") return { untrustedCert: true, detail };
+      throw err;
+    }
   });
   ipcMain.handle("cameras:remove", async (_event, id) => {
     return removeCamera(id);
@@ -199,7 +209,7 @@ function registerCameraHandlers() {
     const automaticRanges = info.networks?.length
       ? info.networks
       : info.cidr ? [{ cidr: info.cidr, addresses: [info.address] }] : [];
-    if (automaticRanges.length === 0) throw new Error("No active IPv4 network found to scan");
+    if (automaticRanges.length === 0) throw new Error(tm("main.noIpv4"));
     const timeoutMs = getTimeoutMs();
     // Started now, awaited after the sweep: SSDP is a fixed listening
     // window, so running it alongside the port scan costs nothing, and
@@ -272,7 +282,7 @@ function registerCameraHandlers() {
   // one the renderer gets to name.
   ipcMain.handle("cameras:explainEmptyScan", async () => {
     const { cidr, address } = getNetworkInfo();
-    return explainEmptyScan({ cidr, address });
+    return explainEmptyScan({ cidr, address }, (key, vars) => tm(key, vars));
   });
   // RTSP-direct fallback (2026-09-01) -- for cameras where ONVIF doesn't
   // work at all but a real stream exists anyway. See store.js's own
@@ -599,6 +609,11 @@ function registerWindowControlHandlers() {
   ipcMain.handle("app:reportRendererError", async (_event, message, stack) => {
     recordExit("renderer-error", { message, stack });
   });
+  // The saved language (or the system's, else Traditional Chinese) and its
+  // change. `lang` is a string checked against the supported list in
+  // language.js -- no stored entity, nothing to restore.
+  ipcMain.handle("language:get", async () => getLanguage());
+  ipcMain.handle("language:set", async (_event, lang) => setLanguage(lang));
   ipcMain.handle("window:minimize", () => focused()?.minimize());
   ipcMain.handle("window:maximize", () => {
     const win = focused();

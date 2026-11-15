@@ -12,6 +12,7 @@
 // 2026-09-03, "operator's call").
 import Store from "electron-store";
 import { hostCount, MAX_HOSTS } from "./cameras/networkSweep.js";
+import { tm } from "./language.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -47,10 +48,10 @@ export function addExtraRange(input) {
   if (BARE_IP_RE.test(trimmed)) {
     trimmed = trimmed.replace(/\.\d{1,3}$/, ".0") + "/24";
   }
-  if (!CIDR_RE.test(trimmed)) throw new Error("Enter an address like 192.168.1.50 or a range like 192.168.1.0/24");
+  if (!CIDR_RE.test(trimmed)) throw new Error(tm("main.scan.badRange"));
   const count = hostCount(trimmed);
   if (count > MAX_HOSTS) {
-    throw new Error(`${trimmed} covers ${count} addresses (cap is ${MAX_HOSTS}) -- narrow it to the block your cameras actually sit on`);
+    throw new Error(tm("main.scan.tooMany", { range: trimmed, count, cap: MAX_HOSTS }));
   }
   const ranges = getExtraRanges();
   if (ranges.includes(trimmed)) return ranges;
@@ -72,7 +73,7 @@ export function getTimeoutMs() {
 export function setTimeoutMs(ms) {
   const n = Number(ms);
   if (!Number.isFinite(n) || n < MIN_TIMEOUT_MS || n > MAX_TIMEOUT_MS) {
-    throw new Error(`Timeout must be between ${MIN_TIMEOUT_MS} and ${MAX_TIMEOUT_MS} ms`);
+    throw new Error(tm("main.scan.badTimeout", { min: MIN_TIMEOUT_MS, max: MAX_TIMEOUT_MS }));
   }
   store.set("timeoutMs", n);
   return n;

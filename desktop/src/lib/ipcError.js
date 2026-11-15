@@ -25,13 +25,17 @@
 //    comment for why the classification has to happen on the main-process
 //    side instead, at the one place that still has the HTTP status.
 
+import { translator } from '../../electron/i18n/index.js'
+
+const english = translator('en')
+
 const IPC_WRAPPER = /^Error invoking remote method '[^']*':\s*(?:[A-Za-z]*Error:\s*)?([\s\S]*)$/
 
 /** The message without Electron's IPC plumbing around it. */
-export function cleanIpcError(err) {
+export function cleanIpcError(err, tr = english) {
   const raw = String(err?.message ?? err ?? '').trim()
   const unwrapped = raw.match(IPC_WRAPPER)?.[1] ?? raw
-  return unwrapped.trim() || 'Something went wrong.'
+  return unwrapped.trim() || tr('err.somethingWrong')
 }
 
 // Nothing answered: the connection never got far enough for anything to
@@ -44,24 +48,17 @@ const NOTHING_ANSWERED = /network timeout|timed out|etimedout|econnrefused|ehost
  * the ONVIF attempt and the generic RTSP path list came up empty.
  * Returns { title, body } -- the dialog's own heading and paragraph.
  */
-export function describeAddFailure(err, hostname) {
-  const where = hostname ? `at ${hostname}` : 'at that address'
-  if (NOTHING_ANSWERED.test(cleanIpcError(err))) {
+export function describeAddFailure(err, hostname, tr = english) {
+  const where = hostname ? tr('err.whereHost', { host: hostname }) : tr('err.whereThere')
+  if (NOTHING_ANSWERED.test(cleanIpcError(err, tr))) {
     return {
-      title: `Nothing answered ${where}`,
-      body:
-        `Check the address is right, and that the camera is powered on and on the same network as this machine. ` +
-        `If the address is correct and it still doesn't answer, and your camera's app shows a video stream address ` +
-        `(sometimes called an "RTSP URL" or "stream URL"), you can paste it here to add it directly.`,
+      title: hostname ? tr('err.nothingAnswered', { host: hostname }) : tr('err.nothingAnsweredThere'),
+      body: tr('err.nothingAnswered.body'),
     }
   }
   return {
-    title: "Couldn't connect automatically",
-    body:
-      `The camera answered ${where}, but not in a way this app could set up on its own — it might have ONVIF turned ` +
-      `off. Check its own app or settings for a network option called "ONVIF" and make sure it's on, then try again ` +
-      `above. In the meantime, if your camera's app shows you a video stream address (sometimes called an "RTSP URL" ` +
-      `or "stream URL"), you can paste it here to add it directly.`,
+    title: tr('err.cantAuto.title'),
+    body: tr('err.cantAuto.body', { where }),
   }
 }
 
@@ -84,13 +81,13 @@ export function describeAddFailure(err, hostname) {
 // three words below) is genuinely unclassified -- shown via `cleanIpcError`
 // rather than silently guessed at, so a real, unanticipated failure still
 // says something rather than nothing.
-const REGISTER_ERROR_MESSAGES = {
-  network: "Couldn't reach the cloud console — check your internet connection and try again.",
-  auth: "Your sign-in may have expired. Sign out and sign back in, then try connecting again.",
-  server: "The cloud console is having trouble right now. Try again in a few minutes.",
+const REGISTER_ERROR_KEYS = {
+  network: 'err.register.network',
+  auth: 'err.register.auth',
+  server: 'err.register.server',
 }
 
-export function describeRegisterError(err) {
-  const code = cleanIpcError(err)
-  return REGISTER_ERROR_MESSAGES[code] ?? code
+export function describeRegisterError(err, tr = english) {
+  const code = cleanIpcError(err, tr)
+  return REGISTER_ERROR_KEYS[code] ? tr(REGISTER_ERROR_KEYS[code]) : code
 }

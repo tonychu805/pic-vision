@@ -32,6 +32,9 @@ import dgram from "node:dgram";
 import { neighborIps } from "./vendorLookup.js";
 import { hostCount, ipInCidr } from "./networkSweep.js";
 import { probeSsdp } from "./ssdp.js";
+import { translator } from "../i18n/index.js";
+
+const english = translator("en");
 
 const MDNS_ADDR = "224.0.0.251";
 const MDNS_PORT = 5353;
@@ -131,7 +134,7 @@ export function countSubnetNeighbors(cidr, ownAddress) {
  * `node --test` without sockets or an ARP table (the constraint
  * probeResult.js and frameRate.js already carry).
  */
-export function verdictFor({ cidr, neighbors = 0, ssdpResponders = 0, mdns = null }) {
+export function verdictFor({ cidr, neighbors = 0, ssdpResponders = 0, mdns = null }, tr = english) {
   const facts = {
     cidr,
     addressesChecked: cidr ? hostCount(cidr) : 0,
@@ -143,10 +146,8 @@ export function verdictFor({ cidr, neighbors = 0, ssdpResponders = 0, mdns = nul
   if (!cidr) {
     return {
       state: "off-network",
-      title: "Not connected to a network",
-      detail:
-        "This computer isn't on a network right now, so there was nothing to search. " +
-        "Join the venue's Wi-Fi and scan again.",
+      title: tr("scan.offNetwork.title"),
+      detail: tr("scan.offNetwork.detail"),
       facts,
     };
   }
@@ -158,48 +159,38 @@ export function verdictFor({ cidr, neighbors = 0, ssdpResponders = 0, mdns = nul
 
   if (!anyPeerSeen) {
     const nothingAtAll = neighbors === 0
-      ? "no other device on it is visible from here at all"
-      : "the only thing visible from here is the router itself";
+      ? tr("scan.isolated.nothingAtAll")
+      : tr("scan.isolated.routerOnly");
     return {
       state: "isolated",
-      title: "This network keeps devices apart",
-      detail:
-        `You're on ${cidr}, and after checking every address on it, ${nothingAtAll} — ` +
-        "no camera, and no device of any other kind either. That's how guest Wi-Fi is " +
-        "normally set up, and nothing in picvision can get around it. " +
-        "Ask the venue to put this computer on the same network as their cameras — " +
-        "their main or camera network, not the guest one.",
+      title: tr("scan.isolated.title"),
+      detail: tr("scan.isolated.detail", { cidr, seen: nothingAtAll }),
       facts,
     };
   }
 
   return {
     state: "no-cameras",
-    title: "Devices here, but none of them a camera",
-    detail:
-      `You're on ${cidr}, and ${describeCount(neighbors, ssdpResponders, mdnsPeers)} — ` +
-      "but nothing answered as a camera. Either the cameras are on a different network, " +
-      "or their streaming hasn't been switched on: most cloud cameras keep it off until " +
-      "the owner turns it on in the camera's own app. If you know the camera's address, " +
-      "you can add it by hand.",
+    title: tr("scan.noCameras.title"),
+    detail: tr("scan.noCameras.detail", { cidr, seen: describeCount(neighbors, ssdpResponders, mdnsPeers, tr) }),
     facts,
   };
 }
 
 // The neighbour count includes the router, so it's described rather than
 // presented as a bare device count that would be off by one.
-function describeCount(neighbors, ssdpResponders, mdnsPeers) {
+function describeCount(neighbors, ssdpResponders, mdnsPeers, tr) {
   if (neighbors > 0) {
     return neighbors === 1
-      ? "the only thing visible from here is the router"
-      : `${neighbors} other devices are visible from here (the router among them)`;
+      ? tr("scan.count.routerOnly")
+      : tr("scan.count.others", { n: neighbors });
   }
   // Nothing in the neighbour cache, but something answered a multicast
   // question -- so a count of announcers is all we can honestly give.
   const announced = Math.max(ssdpResponders, mdnsPeers);
   return announced === 1
-    ? "one other device announced itself"
-    : `${announced} other devices announced themselves`;
+    ? tr("scan.count.oneAnnounced")
+    : tr("scan.count.manyAnnounced", { n: announced });
 }
 
 /**
@@ -208,7 +199,7 @@ function describeCount(neighbors, ssdpResponders, mdnsPeers) {
  * cost nothing on the normal path -- and are spent at the one moment the
  * operator is stuck and has nothing else to look at.
  */
-export async function explainEmptyScan({ cidr, address, listenMs = DEFAULT_LISTEN_MS } = {}) {
+export async function explainEmptyScan({ cidr, address, listenMs = DEFAULT_LISTEN_MS } = {}, tr = english) {
   // Both are fixed listening windows, so they run together rather than
   // back to back (the same reasoning main.js's scan already applies to
   // probeSsdp alongside the port sweep).
@@ -219,5 +210,5 @@ export async function explainEmptyScan({ cidr, address, listenMs = DEFAULT_LISTE
   // Read last: the sweep that just ran is what populated the neighbour
   // cache, and entries age out, so later is better than earlier.
   const neighbors = countSubnetNeighbors(cidr, address);
-  return verdictFor({ cidr, neighbors, ssdpResponders: responders.size, mdns });
+  return verdictFor({ cidr, neighbors, ssdpResponders: responders.size, mdns }, tr);
 }

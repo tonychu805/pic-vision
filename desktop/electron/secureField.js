@@ -13,7 +13,7 @@
 // everything in plaintext, so "no worse than before" is the floor here,
 // not a regression to guard against.
 import { safeStorage } from "electron";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 
 export const PREFIX = "enc:v1:";
 
@@ -52,7 +52,7 @@ export function encryptField(value) {
       warnedThisLaunch = true;
       logEvent(
         "secure_storage_unavailable",
-        "This machine's secure storage isn't available -- saved passwords and tokens are not encrypted",
+        msg("log.secureStorageUnavailable"),
         "safeStorage.isEncryptionAvailable() returned false (no OS keyring/Secret Service running is common on a headless or minimal Linux box)",
       );
     }

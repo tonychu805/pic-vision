@@ -13,7 +13,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { FFMPEG } from "./binaries.js";
-import { logEvent } from "./activityLog.js";
+import { logEvent, msg } from "./activityLog.js";
 import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
@@ -197,7 +197,7 @@ async function maybeCropVertical(label, fetchReq, clipPath) {
     await cropVertical(clipPath, verticalPath, framing, partStartSec - clipStartSec);
     return verticalPath;
   } catch (err) {
-    logEvent("vertical_reel_failed", `${label}: couldn't make the phone-shaped version of a rally clip`, `${reelId}: ${err.message}`);
+    logEvent("vertical_reel_failed", msg("log.verticalFailed", { label }), `${reelId}: ${err.message}`);
     return null;
   }
 }
@@ -242,7 +242,7 @@ async function processOne(camera, fetchReq) {
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
     await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
     await deliverHighRes(fetchReq, outPath, { label: camera.label });
-    logEvent("high_res_reel_synced", `${camera.label}: sent a sharper version of a rally clip`, reelId);
+    logEvent("high_res_reel_synced", msg("log.highResSynced", { label: camera.label }), reelId);
   } finally {
     rmSync(path.dirname(outPath), { recursive: true, force: true });
   }
@@ -260,7 +260,7 @@ export async function processPendingHighResFetches(fetches) {
     try {
       await processOne(camera, fetchReq);
     } catch (err) {
-      logEvent("high_res_reel_failed", `${camera.label}: couldn't send a sharper version of a rally clip`, err.message);
+      logEvent("high_res_reel_failed", msg("log.highResFailed", { label: camera.label }), err.message);
     } finally {
       inFlight.delete(fetchReq.reelId);
     }

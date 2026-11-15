@@ -15,6 +15,8 @@
 // windowAPI.close/minimize/maximize stay exposed in the preload -- a
 // Windows or Linux build has no native controls with frame:false and would
 // need them back.
+import { useI18n } from "../i18n.jsx";
+
 const isMac = window.platformAPI?.platform === "darwin";
 
 // Width of macOS's traffic lights plus their inset, measured against the
@@ -23,6 +25,7 @@ const isMac = window.platformAPI?.platform === "darwin";
 const MAC_TRAFFIC_LIGHT_WIDTH = 78;
 
 export default function TitleBar() {
+  const { t } = useI18n();
   return (
     <div
       style={{
@@ -46,17 +49,17 @@ export default function TitleBar() {
           textAlign: "center",
         }}
       >
-        picvision ai — Court Cameras
+        {t("titlebar.title")}
       </div>
       {!isMac && (
         <div style={{ display: "flex", gap: 2, color: "var(--text-3)", WebkitAppRegion: "no-drag" }}>
-          <button onClick={() => window.windowAPI.minimize()} style={winBtnStyle} aria-label="Minimize">
+          <button onClick={() => window.windowAPI.minimize()} style={winBtnStyle} aria-label={t("titlebar.minimize")}>
             <i className="ph ph-minus" style={{ fontSize: 13 }} />
           </button>
-          <button onClick={() => window.windowAPI.maximize()} style={winBtnStyle} aria-label="Maximize">
+          <button onClick={() => window.windowAPI.maximize()} style={winBtnStyle} aria-label={t("titlebar.maximize")}>
             <i className="ph ph-square" style={{ fontSize: 11 }} />
           </button>
-          <button onClick={() => window.windowAPI.close()} style={winBtnStyle} aria-label="Close">
+          <button onClick={() => window.windowAPI.close()} style={winBtnStyle} aria-label={t("titlebar.close")}>
             <i className="ph ph-x" style={{ fontSize: 13 }} />
           </button>
         </div>

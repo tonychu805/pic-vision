@@ -1,5 +1,7 @@
 import { useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
+import { useI18n } from "../i18n.jsx";
+import LanguageSwitch from "../components/LanguageSwitch.jsx";
 // Same logo Sidebar.jsx already uses -- pic-vision-cloud-console/app/sign-in
 // uses this identical file at public/pic-vision-logo-white.png, so both
 // surfaces show the same mark.
@@ -36,6 +38,7 @@ const CONSOLE_SIGN_UP_URL = "https://console.picvisionai.com/sign-in";
 const AUTH_API_MISSING = typeof window !== "undefined" && typeof window.authAPI?.signIn !== "function";
 
 export default function SignInPage({ onSignedIn }) {
+  const { t } = useI18n();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -49,7 +52,7 @@ export default function SignInPage({ onSignedIn }) {
       const session = await window.authAPI.signIn(email.trim(), password);
       onSignedIn(session);
     } catch (err) {
-      setError(cleanIpcError(err));
+      setError(cleanIpcError(err, t));
       setSubmitting(false);
     }
   };
@@ -75,37 +78,42 @@ export default function SignInPage({ onSignedIn }) {
         <div style={{ maxWidth: 380 }}>
           <div style={{ width: 40, height: 2, background: "var(--color-accent)", marginBottom: 20 }} />
           <h1 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 38, lineHeight: 1.15, margin: "0 0 16px" }}>
-            Every rally, cut by morning.
+            {t("signin.headline")}
           </h1>
           <p className="text-muted" style={{ fontSize: "var(--fs-strong)", lineHeight: 1.6 }}>
-            This machine handles the cameras at your court. Sign in with your brand's account to connect it.
+            {t("signin.lead")}
           </p>
         </div>
         <div style={{ display: "flex", gap: 20, fontSize: "var(--fs-fine)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--text-4)" }}>
-          <span>Brand operations</span>
-          <span>Camera fleet</span>
-          <span>Reel delivery</span>
+          <span>{t("signin.tag1")}</span>
+          <span>{t("signin.tag2")}</span>
+          <span>{t("signin.tag3")}</span>
         </div>
       </div>
 
-      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40 }}>
+      <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, position: "relative" }}>
+        {/* The first screen anyone sees, and the default is Chinese: someone who
+            reads English needs the switch BEFORE they can sign in. */}
+        <div style={{ position: "absolute", top: 16, right: 16 }}>
+          <LanguageSwitch />
+        </div>
         <div style={{ width: "min(340px, 100%)" }}>
           <div style={{ fontSize: "var(--fs-fine)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-accent-300)", marginBottom: 8 }}>
-            Desktop sign in
+            {t("signin.eyebrow")}
           </div>
-          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 24, margin: "0 0 6px" }}>Sign in to your brand</h2>
+          <h2 style={{ fontFamily: "var(--font-heading)", fontWeight: 500, fontSize: 24, margin: "0 0 6px" }}>{t("signin.title")}</h2>
           <p className="text-muted" style={{ fontSize: "var(--fs-strong)", margin: "0 0 24px" }}>
-            Use the same email and password as your picvision cloud console account.
+            {t("signin.sub")}
           </p>
 
           {AUTH_API_MISSING ? (
             <p style={{ fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>
-              This feature isn't loaded yet -- fully quit and restart the app (not just reload the window).
+              {t("signin.notLoaded")}
             </p>
           ) : (
             <form onSubmit={submit}>
               <div className="field" style={{ marginBottom: 14 }}>
-                <label>Work email</label>
+                <label>{t("signin.email")}</label>
                 <input
                   className="input"
                   type="email"
@@ -116,7 +124,7 @@ export default function SignInPage({ onSignedIn }) {
                 />
               </div>
               <div className="field" style={{ marginBottom: 12 }}>
-                <label>Password</label>
+                <label>{t("signin.password")}</label>
                 <input
                   className="input"
                   type="password"
@@ -152,7 +160,7 @@ export default function SignInPage({ onSignedIn }) {
               {error && <p className="text-muted" style={{ fontSize: "var(--fs-body)", marginBottom: 14 }}>{error}</p>}
 
               <button type="submit" className="btn btn-primary" disabled={submitting || !email.trim() || !password} style={{ width: "100%", marginBottom: 8 }}>
-                {submitting ? "Signing in…" : "Sign in"}
+                {submitting ? t("signin.submitting") : t("signin.submit")}
               </button>
               {/* "Continue with single sign-on" stood here, permanently
                   disabled -- a mockup control for a feature that doesn't
@@ -161,18 +169,18 @@ export default function SignInPage({ onSignedIn }) {
           )}
 
           <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 20 }}>
-            Don't have an account yet?{" "}
+            {t("signin.noAccount")}{" "}
             {/* A real link now (2026-09-29); it was plain text. */}
             <a
               href={CONSOLE_SIGN_UP_URL}
               onClick={(e) => { e.preventDefault(); window.systemAPI?.openExternal?.(CONSOLE_SIGN_UP_URL); }}
               style={{ color: "var(--color-accent-300)" }}
             >
-              Create one on the cloud console
+              {t("signin.createLink")}
             </a>
           </p>
           <p className="text-muted" style={{ fontSize: "var(--fs-fine)", marginTop: 6 }}>
-            Once signed in, this machine connects to the cloud console automatically.
+            {t("signin.autoConnect")}
           </p>
         </div>
       </div>

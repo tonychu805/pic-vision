@@ -1,5 +1,7 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
+import { useI18n } from "../i18n.jsx";
+import LanguageSwitch from "../components/LanguageSwitch.jsx";
 
 // Real scan configuration (2026-09-05) -- replaces the original mockup's
 // 4-panel layout. Only two of those panels mapped onto something real:
@@ -25,28 +27,29 @@ const BARE_IP_RE = /^(\d{1,3}\.){3}\d{1,3}$/;
 const CIDR_RE = /^(\d{1,3}\.){3}\d{1,3}\/(\d{1,2})$/;
 const MAX_HOSTS = 512; // must match networkSweep.js's MAX_HOSTS
 
-function describeRange(input) {
+function describeRange(input, t) {
   const trimmed = input.trim();
   if (BARE_IP_RE.test(trimmed)) {
     const base = trimmed.replace(/\.\d{1,3}$/, ".0");
-    return { ok: true, text: `Will add ${base}/24 — 254 addresses` };
+    return { ok: true, text: t("settings.where.willAdd", { base }) };
   }
   const match = trimmed.match(CIDR_RE);
   if (!match) return null;
   const prefix = Number(match[2]);
   if (prefix > 32) return null;
   const count = Math.max(0, 2 ** (32 - prefix) - 2);
-  if (count > MAX_HOSTS) return { ok: false, text: `= ${count} addresses — too many (cap is ${MAX_HOSTS}), narrow this` };
-  return { ok: true, text: `= ${count} addresses` };
+  if (count > MAX_HOSTS) return { ok: false, text: t("settings.where.tooMany", { count, cap: MAX_HOSTS }) };
+  return { ok: true, text: t("settings.where.count", { count }) };
 }
 
 export default function SettingsPage() {
+  const { t } = useI18n();
   const [localNetworks, setLocalNetworks] = useState([]);
   const [extraRanges, setExtraRanges] = useState([]);
   const [newRange, setNewRange] = useState("");
   const [rangeError, setRangeError] = useState("");
   const [addingRange, setAddingRange] = useState(false);
-  const rangeHint = newRange.trim() ? describeRange(newRange) : null;
+  const rangeHint = newRange.trim() ? describeRange(newRange, t) : null;
 
   const [timeoutMs, setTimeoutMsField] = useState("");
   const [savedTimeoutMs, setSavedTimeoutMs] = useState(null);
@@ -80,7 +83,7 @@ export default function SettingsPage() {
       setExtraRanges(await window.scanSettingsAPI.addRange(newRange));
       setNewRange("");
     } catch (err) {
-      setRangeError(cleanIpcError(err));
+      setRangeError(cleanIpcError(err, t));
     }
     setAddingRange(false);
   };
@@ -101,7 +104,7 @@ export default function SettingsPage() {
       setTimeoutSaved(true);
       setTimeout(() => setTimeoutSaved(false), 2200);
     } catch (err) {
-      setTimeoutError(cleanIpcError(err));
+      setTimeoutError(cleanIpcError(err, t));
     }
     setSavingTimeout(false);
   };
@@ -114,35 +117,35 @@ export default function SettingsPage() {
           whether a booked recording happens at all -- and nobody looks for
           those under "Scan options". The Cameras page's scan icon still
           opens this page. */}
-      <div className="page-title" style={{ marginBottom: 16 }}>Settings</div>
+      <div className="page-title" style={{ marginBottom: 16 }}>{t("settings.title")}</div>
 
       {/* One column, not a 1fr 1fr grid: the right-hand panel holds a
           single number field and ended about a third of the way down the
           left one, leaving a large empty block beside a tall panel. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
+        <LanguageCard />
         <PowerCard />
         <AutoSplitCard />
 
         <div>
-          <div className="page-title" style={{ fontSize: "var(--fs-strong)", margin: "10px 0 2px" }}>Finding cameras</div>
+          <div className="page-title" style={{ fontSize: "var(--fs-strong)", margin: "10px 0 2px" }}>{t("settings.finding.title")}</div>
           <p className="page-sub" style={{ margin: 0 }}>
-            "Scan" checks every directly attached network on this computer. Add a range only when cameras live on a
-            separate routed VLAN.
+            {t("settings.finding.sub")}
           </p>
         </div>
 
         <div className="card">
-          <div className="section-label">Where to look</div>
+          <div className="section-label">{t("settings.where.title")}</div>
           {localNetworks.length === 0 ? (
             <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
               <i className="ph ph-wifi-high" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
-              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>detecting…</span>
+              <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{t("settings.where.detecting")}</span>
             </div>
           ) : localNetworks.map((network) => (
             <div key={network.cidr} style={{ display: "flex", alignItems: "center", gap: 10, padding: "7px 0", borderBottom: "1px solid var(--hairline)" }}>
               <i className="ph ph-network" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{network.cidr}</span>
-              <span className="text-4" style={{ fontSize: "var(--fs-fine)" }}>{network.interfaceNames?.join(", ") || "this machine"} — always scanned</span>
+              <span className="text-4" style={{ fontSize: "var(--fs-fine)" }}>{t("settings.where.alwaysScanned", { interfaces: network.interfaceNames?.join(", ") || t("settings.where.thisMachine") })}</span>
             </div>
           ))}
           {extraRanges.map((cidr) => (
@@ -150,20 +153,20 @@ export default function SettingsPage() {
               <i className="ph ph-network" style={{ fontSize: 15, color: "var(--color-accent-300)" }} />
               <span style={{ fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)", flex: 1 }}>{cidr}</span>
               <button type="button" className="btn btn-ghost" style={{ fontSize: "var(--fs-fine)", padding: 0 }} onClick={() => removeRange(cidr)}>
-                Remove
+                {t("settings.where.remove")}
               </button>
             </div>
           ))}
           <form onSubmit={addRange} style={{ display: "flex", gap: 8, marginTop: 12 }}>
             <input
               className="input"
-              placeholder="192.168.1.50 or 192.168.1.0/24"
+              placeholder={t("settings.where.placeholder")}
               value={newRange}
               onChange={(e) => { setNewRange(e.target.value); setRangeError(""); }}
               style={{ flex: 1, fontFamily: "var(--font-mono)" }}
             />
             <button className="btn btn-secondary" disabled={addingRange || !newRange.trim() || rangeHint?.ok === false}>
-              {addingRange ? "Adding…" : "Add"}
+              {addingRange ? t("settings.where.adding") : t("settings.where.add")}
             </button>
           </form>
           {rangeHint && (
@@ -173,27 +176,20 @@ export default function SettingsPage() {
           )}
           {rangeError && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "8px 0 0" }}>{rangeError}</p>}
           <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
-            Only extends the RTSP port sweep — useful if your cameras sit on a separate VLAN from this machine.
-            ONVIF discovery can't reach a different subnet no matter what's added here.
+            {t("settings.where.note")}
           </p>
           <details className="text-3" style={{ marginTop: 10, fontSize: "var(--fs-fine)" }}>
-            <summary style={{ cursor: "pointer" }}>Want automatic discovery to reach that VLAN too?</summary>
+            <summary style={{ cursor: "pointer" }}>{t("settings.where.vlanQ")}</summary>
             <p style={{ lineHeight: 1.5, margin: "8px 0 0" }}>
-              That's a network setting, not something this app can turn on. Ask whoever manages the network to enable
-              "IGMP Proxy," "Multicast Routing," or "PIM" between the two VLANs on the router/switch that separates
-              them — usually under a Routing/Advanced/Multicast section. Most basic consumer routers don't offer
-              this; it's typically a prosumer/enterprise feature (Ubiquiti, pfSense, small-business Cisco/Netgear).
-              If it's not available, a small relay device on both networks (e.g. a Raspberry Pi running an
-              open-source multicast-relay tool) can do the same job. See the desktop README's "Cameras on a
-              different network" section for the full writeup.
+              {t("settings.where.vlanA")}
             </p>
           </details>
         </div>
 
         <div className="card">
-          <div className="section-label">How long to wait</div>
+          <div className="section-label">{t("settings.wait.title")}</div>
           <div className="field">
-            <label>Wait for each device before moving on</label>
+            <label>{t("settings.wait.label")}</label>
             <input
               className="input"
               type="number"
@@ -205,18 +201,17 @@ export default function SettingsPage() {
               onKeyDown={(e) => e.key === "Enter" && saveTimeout()}
               style={{ maxWidth: 140 }}
             />
-            <span className="text-4" style={{ fontSize: "var(--fs-fine)", marginLeft: 8 }}>milliseconds</span>
+            <span className="text-4" style={{ fontSize: "var(--fs-fine)", marginLeft: 8 }}>{t("settings.wait.unit")}</span>
           </div>
-          {savingTimeout && <span className="text-3" style={{ fontSize: "var(--fs-fine)" }}>Saving…</span>}
+          {savingTimeout && <span className="text-3" style={{ fontSize: "var(--fs-fine)" }}>{t("settings.wait.saving")}</span>}
           {timeoutSaved && !savingTimeout && (
             <span style={{ fontSize: "var(--fs-fine)", color: "var(--color-success)" }}>
-              <i className="ph ph-check" style={{ fontSize: 12, marginRight: 4 }} />Saved
+              <i className="ph ph-check" style={{ fontSize: 12, marginRight: 4 }} />{t("settings.wait.saved")}
             </span>
           )}
           {timeoutError && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{timeoutError}</p>}
           <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
-            How long to wait for a reply from each address while checking the network. Lower is faster but can miss
-            a slow-to-respond camera; higher is more thorough but takes longer on a large network.
+            {t("settings.wait.note")}
           </p>
         </div>
       </div>
@@ -228,6 +223,7 @@ export default function SettingsPage() {
 // Saves on change, like the Appearance-style switches elsewhere: a setting
 // that needs a separate Save press reads as on while it isn't.
 function AutoSplitCard() {
+  const { t } = useI18n();
   const [minutes, setMinutes] = useState(null);
   const [error, setError] = useState("");
 
@@ -245,23 +241,17 @@ function AutoSplitCard() {
 
   return (
     <div className="card">
-      <div className="section-label">Send in parts while recording</div>
+      <div className="section-label">{t("settings.parts.title")}</div>
       <div className="field">
-        <label>Send each part to the cloud every</label>
-        <select className="input" style={{ maxWidth: 180 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
-          <option value={0}>Off (send when recording stops)</option>
-          <option value={5}>5 minutes</option>
-          <option value={10}>10 minutes</option>
-          <option value={20}>20 minutes</option>
-          <option value={30}>30 minutes</option>
-          <option value={60}>60 minutes</option>
+        <label>{t("settings.parts.label")}</label>
+        <select className="input" style={{ maxWidth: 280 }} value={minutes ?? 0} disabled={minutes === null} onChange={(e) => change(e.target.value)}>
+          <option value={0}>{t("settings.parts.off")}</option>
+          {[5, 10, 20, 30, 60].map((n) => <option key={n} value={n}>{t("settings.parts.minutes", { n })}</option>)}
         </select>
       </div>
       {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{error}</p>}
       <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
-        While a camera records, each finished part is sent to the cloud straight away, so its highlights are ready
-        while play continues. When recording stops, the remainder is sent as the last part -- whether it was a
-        scheduled session or stopped by hand. Each part gets its own set of reels.
+        {t("settings.parts.note")}
       </p>
     </div>
   );
@@ -270,6 +260,7 @@ function AutoSplitCard() {
 // Keeping this computer ready for bookings (electron/power.js): awake while
 // the app runs, and the app opening at login. Both on by default.
 function PowerCard() {
+  const { t } = useI18n();
   const [settings, setSettings] = useState(null);
   const [error, setError] = useState(null);
   useEffect(() => { window.powerAPI?.get().then(setSettings).catch(() => setSettings(null)); }, []);
@@ -286,22 +277,37 @@ function PowerCard() {
   if (!settings) return null;
   return (
     <div className="card">
-      <div className="section-label">Keep this computer ready</div>
+      <div className="section-label">{t("settings.power.title")}</div>
       <label className="field" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={settings.keepAwake} onChange={(e) => change("setKeepAwake", e.target.checked)} />
-        Keep this computer awake while the app is open
+        {t("settings.power.awake")}
       </label>
       <label className="field" style={{ display: "flex", alignItems: "center", gap: 8 }}>
         <input type="checkbox" checked={settings.openAtLogin} disabled={!settings.loginItemAvailable}
           onChange={(e) => change("setOpenAtLogin", e.target.checked)} />
-        Open the app automatically when this computer starts
+        {t("settings.power.login")}
       </label>
       {error && <p style={{ color: "var(--color-danger)", fontSize: "var(--fs-fine)", margin: "6px 0 0" }}>{error}</p>}
       <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
-        A sleeping computer can't start a booked recording or keep one going. The screen can still turn off.
-        macOS still sleeps a MacBook when its lid is closed (unless it's plugged in with an external display) --
-        use a Mac mini or leave the lid open. For power cuts, also turn on "Start up automatically after a power
-        failure" in System Settings, and log in automatically.
+        {t("settings.power.note")}
+      </p>
+    </div>
+  );
+}
+
+// Which language the app shows. The choice is saved by the main process, so it
+// survives a restart and also decides what the tray menu says.
+function LanguageCard() {
+  const { t } = useI18n();
+  return (
+    <div className="card">
+      <div className="section-label">{t("settings.language.title")}</div>
+      <div className="field">
+        <label>{t("settings.language.label")}</label>
+        <LanguageSwitch />
+      </div>
+      <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
+        {t("settings.language.note")}
       </p>
     </div>
   );

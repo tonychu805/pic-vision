@@ -4,7 +4,7 @@
 // "Not answering" while live view played from both.
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { classifyProbeError, describeProbeState } from "./probeResult.js";
+import { classifyProbeError, describeProbeState, isUntrustedCertError } from "./probeResult.js";
 
 test("refused credentials are 'auth', not 'offline'", () => {
   // Verbatim from the app log: the RTSP probe's own thrown status line.
@@ -44,6 +44,41 @@ test("a missing sample-clip file is its own state", () => {
   assert.equal(classifyProbeError(new Error("Sample clip file is missing")).state, "missing");
 });
 
+test("isUntrustedCertError recognizes Node's own TLS verification codes", () => {
+  for (const code of [
+    "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+    "SELF_SIGNED_CERT_IN_CHAIN",
+    "DEPTH_ZERO_SELF_SIGNED_CERT",
+    "CERT_HAS_EXPIRED",
+    "CERT_NOT_YET_VALID",
+    "UNABLE_TO_GET_ISSUER_CERT_LOCALLY",
+    "UNABLE_TO_GET_ISSUER_CERT",
+    "ERR_TLS_CERT_ALTNAME_INVALID",
+  ]) {
+    assert.ok(isUntrustedCertError(Object.assign(new Error("tls"), { code })), code);
+  }
+  // A code from the same library that has nothing to do with certificates.
+  assert.equal(isUntrustedCertError(Object.assign(new Error("refused"), { code: "ECONNREFUSED" })), false);
+  assert.equal(isUntrustedCertError(null), false);
+  assert.equal(isUntrustedCertError(new Error("no code at all")), false);
+});
+
+test("an untrusted certificate is its own state, only for a camera with an ONVIF service", () => {
+  const certErr = Object.assign(new Error("unable to verify the first certificate"), {
+    code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE",
+  });
+  assert.equal(classifyProbeError(certErr, "onvif").state, "untrustedCert");
+  assert.equal(classifyProbeError(certErr).state, "untrustedCert"); // omitted connectionType defaults to ONVIF
+  // An RTSP-direct or sample-clip camera never goes through the HTTPS
+  // retry this code could only come from -- so it's never a real signal
+  // for one, same reasoning as the 'service' state above.
+  assert.equal(classifyProbeError(certErr, "rtsp").state, "offline");
+  assert.equal(classifyProbeError(certErr, "sampleClip").state, "offline");
+  // Credentials still outrank it, same as every other state here.
+  const authErr = Object.assign(new Error("RTSP/1.0 401 Unauthorized"), { code: "UNABLE_TO_VERIFY_LEAF_SIGNATURE" });
+  assert.equal(classifyProbeError(authErr, "onvif").state, "auth");
+});
+
 test("no answer, and anything unrecognised, is 'offline'", () => {
   assert.equal(classifyProbeError(new Error("Timed out")).state, "offline");
   assert.equal(classifyProbeError(new Error("No response")).state, "offline");
@@ -75,6 +110,7 @@ test("the raw message is carried in detail, never lost", () => {
 
 test("log wording names the camera and implies the fix", () => {
   assert.match(describeProbeState("auth", "Court 1"), /Court 1.*username or password/);
+  assert.match(describeProbeState("untrustedCert", "Court 4"), /Court 4.*certificate/);
   assert.match(describeProbeState("service", "Court 2"), /streaming may still work/);
   assert.match(describeProbeState("offline", "Court 3"), /didn't answer/);
 });

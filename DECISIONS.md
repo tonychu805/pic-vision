@@ -3393,6 +3393,66 @@ The desktop reports an aggregate per-camera local-source state over its existing
 
 **Verification.** Desktop lint, renderer production build, and focused system/network-sweep tests pass (9 tests). Still required before release: an installed-artifact scan on a machine with both wired and Wi-Fi venue networks, including a camera on each subnet.
 
+## ADR-154 — Fixed glare is the main cause of lost ball tracking on glare courts; the still-site filter (v2) stays off until a glare-gated, longer-dwell version passes on fresh footage
+
+**Date:** 2026-10-17 · **Status:** decided; nothing switched on · **Project:** pic-vision (PIC-226)
+
+**Context.** Bounce finding passed on its first court (14 of 33 hand-labelled bounces, 42%) and collapsed on a second (c199a97c 9/26 s002: 4 of 36). On 2026-10-16 a chain of pre-registered tests asked why and whether a filter fixes it. All are in `EXPERIMENTS.md` 2026-10-16 (bounce chunk 2, discarded ball points, overlay review, glare removed before tracking, Test E, Test E2 and its follow-up).
+
+**What was learned.**
+1. **Fixed glare captures the tracker.** On the second court, four 20 px cells (a court reflection near (925, 652) and a white object on the back shutter near (1080, 280)) hold ~60% of all detections. Removing just those cells before tracking lifts bounces found from 4 to 10 of 36, with no labelled bounce on a removed cell.
+2. **Without glare the current finder is near the bar.** A third, exhaustively labelled stretch (eda301d9 9/26 s000 min 2-6, 98 bounces, 0% glare) gives 34 of 98 (35%) against the 40% bar. The second court's failure was mainly glare, not zoom or the bounce rule.
+3. **Glare can be removed dynamically, but slow balls look like glare.** Test E (tracklet-level stillness) removed only 41% of the glare because glare chained into "moving" tracklets. Test E2 (per-point stillness: >= 6 points within 12 px in +-90 frames, kept only on a straight moving path) removed 87% of it and all 8 known glare fake rallies, but also dropped 7% of detections on glare-free footage: soft bounces near the kitchen and a ball dribbling to rest. It failed its pre-registered bars: chunk 3 30 vs 34 (allowed 33), real field rallies lost 4 of 60 (allowed 3).
+4. **On the worst glare court, part of today's rally recall is luck.** All 4 lost real rallies are on glare court 34fab44c (it lost all 4 of its real clips). In two, 44% of today's tracked path is glare; operator playback agrees ("half of the time the ring focuses on the wrong object"). One survives shifted to the IoU edge; one is unexplained. Clean field courts lost none.
+5. **Method lessons.** Pre-register before labels exist and amend only before scoring (chunk 3 was amended twice: multi-ball practice, then the Tapo C200 camera de3d1953, which drops frames). Keep instructions to a reviewer fixed for the whole pass (the overlay review's 3-of-14 agreement came from wording drift). Labels across overlapping CVAT jobs can be duplicated; dedupe across job boundaries only.
+
+**Decision.**
+- `drop_still_v2` is **not** switched on, and neither is the fixed static mask. Production detection is unchanged.
+- The glare finding is accepted as a main cause, and the slow-ball failure as the known weakness of a short-window still-site rule.
+- The next version (Linear PIC-231), if pursued, must (a) apply only where glare is measured (static-cell share; 0% on 13 clean field courts vs 26-40% on glare courts), and (b) require a site to stay lit for minutes, not seconds, so a slow ball cannot qualify. It must be pre-registered and scored on footage not used in this work: all three labelled bounce stretches have now been used for diagnosis.
+- Weak ball detection on court 34fab44c is a separate problem (detector yield), not something a glare filter can fix.
+
+**Data kept.** Hand labels: `eval/labels/bounces/cvat_eda301d9_0925T0821_s000.json` (33), `cvat_c199a97c_0926T0538_s002.json` (36), `cvat_eda301d9_0926T0538_s000_120-360.json` (98). Code: `scripts/tracklets_first.py` (+ tests), `scripts/eval_tracklets_first.py`, `scripts/eval_tracklets_first_v2.py`, `scripts/check_static_removed_bounces.py`.
+
+## ADR-155 — The Tapo C200 at PGC court 1 (camera de3d1953) is excluded from all new evaluation samples
+
+**Date:** 2026-10-17 · **Status:** decided (operator) · **Project:** pic-vision (PIC-226)
+
+**Context.** Across the two fresh, operator-judged samples (`EXPERIMENTS.md` 2026-10-13 fresh sessions, verdicts; 2026-10-17 Test L), 22 of 43 clips from de3d1953 were not rallies, against 3 of 27 on the other two cameras (eda301d9 1 of 17, c199a97c 2 of 10). de3d1953 has no fixed glare (0% static-cell share on all 22 scale sessions), so detector noise from glare does not explain it. The camera is also the one that drops frames (it failed the decode guard and had to be re-encoded, which duplicates frames and distorts speed; bounce chunk 3b was abandoned for this) and has no manual shutter control (ADR-002 context). The operator's reasons for its bad clips were mostly real play that is not a point: warm-ups, practice, failed serves.
+
+**Decision (operator).** No new test sample, labelling chunk or tuning pool uses footage from de3d1953. New sampling scripts filter sessions through `scripts/footage_rules.py` `usable()` (tests in `tests/test_footage_rules.py`).
+
+**What this does not change.**
+- Past experiments keep the footage they were registered with; their recorded numbers are not re-scored without it. Any "without the Tapo" re-reading of an old result is post-hoc and must say so.
+- Production is untouched: if PGC keeps recording court 1 on this camera, its sessions still get reels, and their quality is no longer measured by our tests.
+
+**Caveat.** Camera and day are confounded: every judged de3d1953 clip is from 2026-09-25 and every other judged clip from 2026-09-26. Part of the junk may be that day's play (more warm-ups and practice) rather than the camera. Removing the camera also removes most 09-25 footage from future samples, so warm-up and practice clips will be rarer in tests than they may be in real use.
+
+## ADR-156 — Paddle hits are not found from the ball track alone; a track-turn hit finder is not pursued further at the current track quality
+
+**Date:** 2026-10-19 · **Status:** decided (from a pre-registered test) · **Project:** pic-vision (PIC-226)
+
+**Context.** The first exhaustive hit marks (two minutes of PGC chunk 3c, 44 hits) showed that the ball detector sees about half the hits at contact, and almost none on the near side. A finder for sharp turns and speed-ups in the tracked path, developed on minute 1 (7 of 22 hits), found 2 of 22 on the held-out minute 2, with 2 of 27 picks right (`EXPERIMENTS.md` 2026-10-19 hit turn finder).
+
+**Decision.** No more tuning of rules on the ball track to find hits. Hit finding is reopened only through (a) a better ball track near contact (the ball is lost or jumps exactly where the paddle meets it), or (b) a player cue that doesn't need the ball (wrist position, arm-swing timing), tested against the exhaustive hit marks in `eval/labels/hits/`.
+
+**What this does not change.** The bounce finder and the court-zone result (`EXPERIMENTS.md` 2026-10-18 zone test) are unaffected. Wrist proximity stays a live but weak cue for sorting hit from bounce (AUC 0.83, below its bar).
+
+**Caveat.** Two minutes of one camera, tile-arm detections. A better detector could change the ceiling; this decision is about rules on today's track.
+
+## ADR-157 — Paddle-hit candidates come from arm swings (pose wrist speed), checked against the ball track
+
+**Date:** 2026-10-19 · **Status:** decided (from pre-registered tests) · **Project:** pic-vision (PIC-226)
+
+**Context.** Hits can't be found from the ball track (ADR-156). A wrist-speed swing rule passed on held-out minute 2 (narrowly) and replicated on minute 3. Adding a ball check (ball in play, ball not seen far from the swinger) passed all five checks on held-out minute 3: 18 of 27 hits, near side 7 of 12, 56% of picks real (`EXPERIMENTS.md` 2026-10-19 arm-swing and swing + ball entries).
+
+**Decision.** The hit finder is `scripts/eval_swing_ball_hits.py`'s rule: yolov8x-pose wrist-speed swings, kept when the ball is in play and not far from the swinging player. Further hit work (hit counts, shot timelines, hit-vs-bounce sorting) starts from these candidates, not from the bounce finder's boxes or ball-track turns.
+
+**What this does not change.** It is still a research rule (scripts/), not in the reel pipeline. Wrist proximity for sorting bounce boxes (2026-10-18) is superseded as the main route but not retested.
+
+**Caveat.** One court, one session, three minutes, one operator, tile-arm detections. Running full-frame pose on every frame costs GPU time not yet measured against the reel budget. Next checks: another court (glare court c199a97c) and production detections.
+
+**Update 2026-10-19.** Both next checks done and passed (`EXPERIMENTS.md` 2026-10-19 production-detections and second-court/glare entries): production detector 36/71 hits (51%, precision held); glare court 16/29 (55%), all four pre-registered checks. The finder generalizes across both courts at this venue; recall tracks detector quality. Still one venue; a different venue is untested.
 ## ADR-158 — Exclude the frame-dropping Tapo court-1 camera and coaching/drill sessions from serve/eval samples (consolidates and extends ADR-155)
 
 **Date.** 2026-10-23
@@ -3575,3 +3635,39 @@ the cloud pod path is unchanged.
 **Evidence.** On the seven-rally blind sample, YOLOv8n was 4.26× faster in pose inference than YOLOv8x but changed keypoints and raw badge measurements (ADR-162). The staged five-part shared-session replay completed all ten vertical highlights with audio 1:52 after footage ended. All five parts completed without retries, but that one replay is not a controlled production latency or badge-parity study; see `EXPERIMENTS.md`, 2026-10-31 audio replay.
 
 **Follow-up.** Watch production end-to-end wait and badge outcomes after rollout. Revert to the prior pod-code pointer if the faster model causes unacceptable badge results or reliability issues.
+
+## ADR-165 — Adopt one canonical schema per label kind; stop inventing a shape per tool
+
+**Date.** 2026-11-03
+
+**Context.** A 2026-11-03 audit (triggered by checking whether the Court 3 ball-model fine-tune's labels could be trusted) found rally presence/quality tracked by three independent, disagreeing systems (`label_web.py`, a scratchpad `labels.json`, CVAT's `scale-dropped-review`), and every other label kind — bounce, hit, serve — exported from CVAT in its own ad-hoc shape (nested `bounces`/`hits` arrays, no stable id, no explicit time origin, no provenance). `sessions.jsonl` and `FOOTAGE_INVENTORY.md` went stale because nothing generated them from the label files themselves. Separately, and worse: `label_web.py`'s grade pass can run `rallies.splice()` and delete a presence row outright when a candidate is judged not a rally, with no record — a direct violation of the project's own two-layer-labeling rule.
+
+**Decision.** One schema per label kind, not a database and not a single file: `eval/labels/<kind>/<source>.jsonl`, each row sharing an envelope (`id`, `time`, `provenance`) and a kind-specific payload. Full spec in `TECH_SPEC.md` §11.5. Rally presence and rally quality are split into two separate files linked by `id`, so a quality verdict of "not a rally" is a normal row in the quality file, not a deletion from the presence file. Any collection surface — CVAT, an extended `label_web.py`, a one-off scratch tool — may keep existing as long as it writes this shape.
+
+**Consequences.** This is a schema for *new* labels going forward; existing files (`eval/labels/bounces/*`, `eval/labels/hits/*`, the per-session rally `.jsonl` files, `sessions.jsonl`) are not migrated by this decision alone — each either gets a small adapter script or is read as a legacy format until it's next touched. `sessions.jsonl` and `FOOTAGE_INVENTORY.md`'s per-source table are intended to become generated output of a script over `eval/labels/**/*.jsonl`, not hand-maintained — not built yet.
+
+**Follow-up.** Add a schema-validation test under `tests/`; extend `label_web.py` with a generic item/label mode built on this schema and fix the grade-pass deletion bug as part of that; write the generator that replaces `sessions.jsonl`/`FOOTAGE_INVENTORY.md`. See `progress/11.03 progress overview.md` for the full priority list.
+
+## ADR-170 — A network shortfall never blocks recording; only a camera set below 25 fps does
+
+**Date:** 2026-11-09 · **Status:** console part merged (pic-vision-cloud-console #28, 2026-11-09); desktop part in pic-vision #57, reaches venues with the next desktop release. Amends ADR-131 and ADR-087.
+
+**Why.** The desktop measures a camera's frame rate from one 5-second probe, refreshed every 10 minutes, and that measurement decided the block. A Wi-Fi blip during the probe on a camera set to 30 fps refused recording and calibration until the next probe, booked sessions included (operator report). The console's Start button used the same rule.
+
+**Decision (operator).** Block only a camera whose *setting* is below 25 fps: an ONVIF camera reporting a setting under 25 (unless what arrives is at least 25), or a camera that reports no setting (RTSP) whose measured rate is under 25. A camera set correctly whose frames arrive below 25 records, with a network warning that says such parts may not be processed. The pod's whole-recording check (`src/video_quality.py`: refused when more than half of it is below 25 fps) stays the gate for a real drop. The console's notification bell still raises it (as a network warning, not a block) whenever under 25 fps is arriving from a camera set correctly; 25-28 fps stays off the bell. Silencing single blips would need a probe history the console does not store (a new column), left as a follow-up.
+
+**Measuring schedule (same day, operator).** The first 5-second probe after a camera is added or the app starts can land while the stream settles, and it stood for 10 minutes, exactly when someone is about to record. Now (`desktop/electron/cameras/measureSchedule.js`): 15-second probes; re-measured at every 60-second check-in for the first 10 minutes after an add or app start, then every 10 minutes; a start that the stored reading would refuse gets one fresh probe first, and a start that would go ahead is not delayed. Staging caught a first version measuring every other check-in (a reading stamped at the end of its probe was 45 s old at the next one); the settling limit is 30 s.
+
+**Staging end to end, 2026-11-09** (fix branch app paired to the staging console, two RTSP test cameras streaming a brickwall clip at 15 fps): the camera reporting no setting showed "Frame rate too low" and the console's Start was disabled; the camera stored as set to 30 showed "Low frame rate", the console's Start was enabled, and the operator's Start (14:36:49 UTC) recorded within 2 s, a 41.5 s file at 15 fps, stopped cleanly; the bell listed both with the agreed wording (operator). Re-measures at 14:34:58, 14:35:56, 14:36:58, paused while recording. Desktop suite 397/397, including `frameRate-recording.test.js` (real probe, real ffmpeg; its set-to-30 case fails on the old rule).
+
+**Checked.** Desktop `npm test` 385/385 (3 of the new tests fail on the old rule); console frame-rate and notification tests 17/17; the console suite's one failure (`nextPartEnv`, reads `pod_driver.py` from a sibling checkout path) fails the same way on `origin/main`. Real recording path, 2026-11-09: the app's own `startRecording` against a local RTSP test stream sending 15 fps (brickwall clip; measured 15.0 by the app's probe): camera set to 30 now records (a 14 s file, with the network warning), where `origin/main` refused it; camera set to 15 and an RTSP camera at 15 are refused on both; 30 fps records on both.
+
+## ADR-171 — The desktop app speaks English and Traditional Chinese, default Traditional Chinese
+
+**Date.** 2026-11-11
+
+**Context.** The venues using the desktop app are in Taiwan; the app was English only. The operator decided the desktop app and the cloud console are both bilingual, and that they reuse the player share page's approach (pic-vision-reel `lib/i18n.ts`): our own two string tables, no i18n package.
+
+**Decision.** `desktop/electron/i18n/` holds the dictionaries (one file per screen area, English and Traditional Chinese side by side), `t()`, `pickLang()` and `missingKeys()`. It is Electron-free so the main process and the Vite-built renderer share it. The language is the operator's saved choice, else the system language (`app.getLocale()`; any Chinese is Traditional, anything we don't have is Traditional Chinese), and is saved in the app's settings (`language.json`, via `electron/language.js`). The renderer holds it in a React context and switches in place, with no reload; the switch is in the sidebar, on Settings, and on the sign-in screen. The main process translates its own wording (tray menu, file dialog, scan/settings validation errors) with `tm()`, and the tray redraws on a change. Not translated, on purpose: camera names and anything the operator typed, and the Log's event text (a record that support reads in the same words).
+
+**Consequences.** `npm test` fails if a key is missing from either language, a placeholder differs between them, the code uses a key that doesn't exist, or a key is no longer used. Code that produces words (`cameraView.js`, `heartbeatStatus.js`, `ipcError.js`, `frameRate.js`, `networkPresence.js`) takes the translator as its last argument and defaults to English, so its logic tests are unchanged. Error text that other code matches on (e.g. the address refusals in `store.js`, "Sample clip file is missing") stays English in main; the screen maps it to a translation. The Chinese wording was written by the model and has not had a native-speaker pass: have the operator read it before a release.

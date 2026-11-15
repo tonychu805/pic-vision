@@ -12,6 +12,7 @@
 // none of them correspond to anything this app actually does.
 import { randomUUID } from "node:crypto";
 import Store from "electron-store";
+import { t } from "./i18n/index.js";
 
 // configFileMode 0600: owner-only. electron-store passes its options
 // straight to conf, which otherwise writes every file 0666 (0664 after
@@ -27,9 +28,21 @@ const store = new Store({ name: "activityLog", configFileMode: 0o600 });
 // list instead of video files.
 const MAX_EVENTS = 200;
 
+// A translatable piece of text: msg("log.signedIn", { email }). The entry keeps
+// the English rendering (the record, and the fallback if a key is ever
+// removed) plus the key and values, so the Log page can show it in the
+// language selected at the time of viewing. Plain strings are for raw
+// technical text -- error messages, paths -- that is shown as written.
+export const msg = (key, vars = {}) => ({ key, vars });
+const isMsg = (x) => x !== null && typeof x === "object" && typeof x.key === "string";
+const english = (x) => (isMsg(x) ? t("en", x.key, x.vars) : x);
+
 export function logEvent(type, title, detail = null) {
   const events = store.get("events", []);
-  events.unshift({ id: randomUUID(), type, title, detail, at: new Date().toISOString() });
+  const event = { id: randomUUID(), type, title: english(title), detail: english(detail), at: new Date().toISOString() };
+  if (isMsg(title)) Object.assign(event, { titleKey: title.key, titleVars: title.vars });
+  if (isMsg(detail)) Object.assign(event, { detailKey: detail.key, detailVars: detail.vars });
+  events.unshift(event);
   store.set("events", events.slice(0, MAX_EVENTS));
 }
 

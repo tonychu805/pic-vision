@@ -14,6 +14,10 @@
 // page then maps to strings itself. If the wording is wrong, these tests
 // are wrong; there is no second copy of the decision in the JSX.
 
+import { translator } from "../../electron/i18n/index.js";
+
+const english = translator("en");
+
 const MINUTE = 60_000;
 const HOUR = 60 * MINUTE;
 const DAY = 24 * HOUR;
@@ -29,21 +33,21 @@ const STALE_AFTER_MS = 3 * MINUTE;
  * question. A future timestamp (a machine whose clock is behind the
  * console's) reads as "just now" rather than as a negative age.
  */
-export function timeAgo(iso, now = Date.now()) {
+export function timeAgo(iso, now = Date.now(), tr = english) {
   const then = Date.parse(iso);
   if (Number.isNaN(then)) return null;
   const elapsed = now - then;
-  if (elapsed < MINUTE) return "just now";
+  if (elapsed < MINUTE) return tr("ago.justNow");
   if (elapsed < HOUR) {
     const minutes = Math.floor(elapsed / MINUTE);
-    return `${minutes} minute${minutes === 1 ? "" : "s"} ago`;
+    return minutes === 1 ? tr("ago.minute") : tr("ago.minutes", { n: minutes });
   }
   if (elapsed < DAY) {
     const hours = Math.floor(elapsed / HOUR);
-    return `${hours} hour${hours === 1 ? "" : "s"} ago`;
+    return hours === 1 ? tr("ago.hour") : tr("ago.hours", { n: hours });
   }
   const days = Math.floor(elapsed / DAY);
-  return `${days} day${days === 1 ? "" : "s"} ago`;
+  return days === 1 ? tr("ago.day") : tr("ago.days", { n: days });
 }
 
 /**
@@ -57,7 +61,7 @@ export function timeAgo(iso, now = Date.now()) {
  * layout (still loading, and not registered) rather than inventing a
  * status line for them.
  */
-export function heartbeatStatus(connection, now = Date.now()) {
+export function heartbeatStatus(connection, now = Date.now(), tr = english) {
   if (!connection) return null;
 
   const { brandName, lastAttemptOk, lastHeartbeatAt, removed } = connection;
@@ -69,8 +73,8 @@ export function heartbeatStatus(connection, now = Date.now()) {
   if (removed) {
     return {
       tone: "lost",
-      title: `Removed from ${brandName}`,
-      detail: `This machine was removed in the cloud console, so it has stopped reporting and won't pick up commands. Recordings already on it are kept. If that was a mistake, reconnect it.`,
+      title: tr("hb.removed.title", { brand: brandName }),
+      detail: tr("hb.removed.detail"),
       canReconnect: true,
     };
   }
@@ -81,8 +85,8 @@ export function heartbeatStatus(connection, now = Date.now()) {
   if (lastAttemptOk == null) {
     return {
       tone: "pending",
-      title: `Connecting to ${brandName}…`,
-      detail: "Waiting for this machine's first check-in.",
+      title: tr("hb.pending.title", { brand: brandName }),
+      detail: tr("hb.pending.detail"),
     };
   }
 
@@ -98,32 +102,32 @@ export function heartbeatStatus(connection, now = Date.now()) {
   if (lastAttemptOk && Number.isFinite(lastMs) && now - lastMs > STALE_AFTER_MS) {
     return {
       tone: "lost",
-      title: `Not checking in to ${brandName}`,
-      detail: `Last successful check-in ${timeAgo(lastHeartbeatAt, now)}, and nothing has failed since -- something is stuck. Restarting the app clears it.`,
+      title: tr("hb.stuck.title", { brand: brandName }),
+      detail: tr("hb.stuck.detail", { ago: timeAgo(lastHeartbeatAt, now, tr) }),
     };
   }
 
   if (lastAttemptOk) {
-    const ago = lastHeartbeatAt ? timeAgo(lastHeartbeatAt, now) : null;
+    const ago = lastHeartbeatAt ? timeAgo(lastHeartbeatAt, now, tr) : null;
     return {
       tone: "ok",
-      title: `Connected to ${brandName}`,
+      title: tr("hb.ok.title", { brand: brandName }),
       // Checks in every 30 seconds, so this reads "just now" almost always;
       // it earns its place on the rare occasion it doesn't.
-      detail: ago ? `Last check-in ${ago}.` : "Checked in.",
+      detail: ago ? tr("hb.ok.detail", { ago }) : tr("hb.ok.detailNone"),
     };
   }
 
-  const ago = lastHeartbeatAt ? timeAgo(lastHeartbeatAt, now) : null;
+  const ago = lastHeartbeatAt ? timeAgo(lastHeartbeatAt, now, tr) : null;
   return {
     tone: "lost",
-    title: "Connection lost",
+    title: tr("hb.lost.title"),
     // Never checked in successfully vs. checked in an hour ago are
     // different problems -- the first is usually a wrong console URL or a
     // revoked machine, the second a network that dropped.
     detail: ago
-      ? `Last successful check-in ${ago}. The Log tab has the reason.`
-      : `This machine has not checked in to ${brandName} successfully yet. The Log tab has the reason.`,
+      ? tr("hb.lost.detail", { ago })
+      : tr("hb.lost.detailNever", { brand: brandName }),
   };
 }
 
@@ -136,13 +140,13 @@ export function heartbeatStatus(connection, now = Date.now()) {
  * Derived from heartbeatStatus so the two can never disagree; only the
  * wording is shorter, since the sidebar is 196px wide.
  */
-export function sidebarConnection(connection, now = Date.now()) {
-  if (connection === undefined) return { tone: "pending", title: "Checking…", detail: null };
-  if (connection === null) return { tone: "lost", title: "Not connected", detail: "Sign in to connect this machine" };
-  const full = heartbeatStatus(connection, now);
-  if (full.canReconnect) return { tone: "lost", title: "Removed from venue", detail: "Open This machine to reconnect" };
-  if (full.tone === "ok") return { tone: "ok", title: "Connected", detail: full.detail };
-  if (full.tone === "pending") return { tone: "pending", title: "Connecting…", detail: "Waiting for the first check-in" };
-  if (connection.lastAttemptOk) return { tone: "lost", title: "Not checking in", detail: "Open This machine for details" };
-  return { tone: "lost", title: "Connection lost", detail: "Open This machine for details" };
+export function sidebarConnection(connection, now = Date.now(), tr = english) {
+  if (connection === undefined) return { tone: "pending", title: tr("side.checking"), detail: null };
+  if (connection === null) return { tone: "lost", title: tr("side.notConnected"), detail: tr("side.notConnectedDetail") };
+  const full = heartbeatStatus(connection, now, tr);
+  if (full.canReconnect) return { tone: "lost", title: tr("side.removed"), detail: tr("side.removedDetail") };
+  if (full.tone === "ok") return { tone: "ok", title: tr("side.connected"), detail: full.detail };
+  if (full.tone === "pending") return { tone: "pending", title: tr("side.connecting"), detail: tr("side.connectingDetail") };
+  if (connection.lastAttemptOk) return { tone: "lost", title: tr("side.notChecking"), detail: tr("side.detailsHint") };
+  return { tone: "lost", title: tr("side.lost"), detail: tr("side.detailsHint") };
 }

@@ -8,21 +8,23 @@ import logoOnDark from "../assets/pic-vision-logo-white.png";
 import logoOnLight from "../assets/pic-vision-logo.png";
 import ThemeToggle from "./ThemeToggle.jsx";
 import { sidebarConnection } from "../lib/heartbeatStatus.js";
+import LanguageSwitch from "./LanguageSwitch.jsx";
+import { useI18n } from "../i18n.jsx";
 
 // Settings is back as a peer (2026-09-29). It left when all it held was the
 // Scan button's options; it has since gained "Keep this computer ready" and
 // "Send in parts while recording", which decide whether a booked recording
 // happens at all -- not something to file under the Cameras page's scan icon.
 const NAV_ITEMS = [
-  { key: "cameras", label: "Cameras", icon: "ph-video-camera" },
-  { key: "log", label: "Log", icon: "ph-list-bullets" },
-  { key: "diagnostics", label: "Diagnostics", icon: "ph-gauge" },
+  { key: "cameras", labelKey: "nav.cameras", icon: "ph-video-camera" },
+  { key: "log", labelKey: "nav.log", icon: "ph-list-bullets" },
+  { key: "diagnostics", labelKey: "nav.diagnostics", icon: "ph-gauge" },
   // "This machine" rather than "Cloud console": the page is about this
   // machine's identity and who it reports for, and sign-in IS the
   // connection (ADR-096) -- naming it after the remote thing implied a
   // second place to go and connect.
-  { key: "cloud", label: "This machine", icon: "ph-cloud" },
-  { key: "settings", label: "Settings", icon: "ph-gear-six" },
+  { key: "cloud", labelKey: "nav.cloud", icon: "ph-cloud" },
+  { key: "settings", labelKey: "nav.settings", icon: "ph-gear-six" },
 ];
 
 function navButtonStyle(active) {
@@ -43,6 +45,7 @@ function navButtonStyle(active) {
 }
 
 export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch = 0 }) {
+  const { t } = useI18n();
   const [network, setNetwork] = useState(null);
   const [brandName, setBrandName] = useState(null);
   // The console connection, for the status box: undefined until the first
@@ -107,14 +110,15 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
       {NAV_ITEMS.map((item) => (
         <button key={item.key} style={navButtonStyle(nav === item.key)} onClick={() => onNavigate(item.key)}>
           <i className={`ph ${item.icon}`} style={{ fontSize: 17 }} />
-          {item.label}
+          {t(item.labelKey)}
           {item.key === "cameras" && (
             <span style={{ marginLeft: "auto", fontSize: "var(--fs-fine)", opacity: 0.6 }}>{deviceCount}</span>
           )}
         </button>
       ))}
 
-      <div style={{ marginTop: "auto" }}>
+      <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
+        <LanguageSwitch compact />
         <ThemeToggle />
       </div>
 
@@ -137,9 +141,9 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
           color: "inherit",
           font: "inherit",
         }}
-        title={network?.cidr ? `Network: ${network.cidr}${network.interfaceName ? ` (${network.interfaceName})` : ""}` : undefined}
+        title={network?.cidr ? (network.interfaceName ? t("sidebar.networkWithInterface", { cidr: network.cidr, iface: network.interfaceName }) : t("sidebar.network", { cidr: network.cidr })) : undefined}
       >
-        <SidebarConnectionLine status={sidebarConnection(connection)} />
+        <SidebarConnectionLine status={sidebarConnection(connection, Date.now(), t)} />
       </button>
 
       {/* Bottom-left, matching pic-vision-cloud-console's sidebar footer

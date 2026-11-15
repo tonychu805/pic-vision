@@ -22,6 +22,9 @@ export async function load(url, ctx, next) {
     return { format: "module", shortCircuit: true, source: `
       export const app = {
         isPackaged: false, getPath: () => "/tmp", dock: { setIcon() {} },
+        // English, so tests that read the main process's own wording see the
+        // same words as before the app had two languages.
+        getLocale: () => "en-US",
         on() {}, emit() {}, quit() {}, exit() {},
         // Never resolves on purpose. This harness checks that modules parse
         // and link, not that the app boots -- resolving here would run
