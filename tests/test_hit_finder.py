@@ -136,6 +136,18 @@ def test_the_pod_falls_back_when_the_hit_finder_finds_nothing(pod, monkeypatch):
     assert segs == CROSSING_RALLIES and info["used"] == "crossings" and "error" not in info
 
 
+def test_the_far_close_up_poses_come_back_for_the_archive_without_joining_the_badges(pod, monkeypatch):
+    # Far players the whole-frame pass misses were left unblurred in the staging archive (2026-11-15).
+    def find(*a, keep_full=None, keep_far=None, **k):
+        keep_full.update({"0": ["near"]})
+        keep_far.update({"0": ["far"]})
+        return [{"start": 2.0, "end": 8.0}], {"candidates": 4, "accepted": 4, "frames": 900, "posed": 450}
+    monkeypatch.setattr(HF, "find_rallies", find)
+    far = {}
+    assert pod.hit_finder_segments(None, "v.mp4", "p.csv", {}, [3.0], CROSSING_RALLIES, far_poses=far)[2] == {"0": ["near"]}
+    assert far == {"0": ["far"]}
+
+
 def test_the_hit_finders_whole_frame_poses_come_back_for_badges(pod, monkeypatch):
     def find(*a, keep_full=None, **k):
         keep_full.update({"0": ["p"], "2": ["q"]})

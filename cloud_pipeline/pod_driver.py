@@ -682,11 +682,12 @@ def measure_badges(s3_in, video, segments, crossings, calib, known=None):
         return None, None
 
 
-def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
+def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback, far_poses=None):
     """(rallies, info, poses): the hit finder's rallies, or `fallback` (the crossing
     rallies) when it fails or finds none. info goes into the job's stats so
     staging can compare the two finders part by part. poses are its whole-frame
-    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback."""
+    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback. far_poses, a dict,
+    receives the far close-up's poses (frame pixels) for the redacted archive."""
     info = {"crossing_rallies": len(fallback)}
     try:
         from src import hit_finder
@@ -706,7 +707,7 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
 
         poses = {}
         segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress,
-                                              keep_full=poses)
+                                              keep_full=poses, keep_far=far_poses)
         info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
         _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
              f"{found['posed']} of {found['frames']} frames posed (both passes, one decode) in {info['sec']}s")
@@ -995,10 +996,11 @@ def run():
         return
     # Clips and badges must share one rally list: a badge finds its clip by
     # the rally's own start/end (top_rallies_reel.py).
-    hit_finder_info, hit_poses = None, {}
+    hit_finder_info, hit_poses, far_poses = None, {}, {}
     if HIT_FINDER:
         segments, hit_finder_info, hit_poses = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
-                                                                   detected["times_crossed"], segments)
+                                                                   detected["times_crossed"], segments,
+                                                                   far_poses=far_poses)
     # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
     jev_wait = None
     if JEV:
@@ -1098,7 +1100,7 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
-    archive_part(s3_out, proxy_video, hit_poses)
+    archive_part(s3_out, proxy_video, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
 def archive_part(s3_out, video, poses):

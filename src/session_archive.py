@@ -3,8 +3,9 @@
 
 Every face is blurred, players included, and nothing else (operator, 2026-11-15: faces, not zones). Two finders,
 because YuNet alone misses most small or turned-away faces on court: every posed person's head (the hit finder's
-poses, every 2nd frame; a frame between two posed frames takes both neighbours' people) and every face YuNet finds
-(scanned every 3rd frame, the last boxes held between scans). Heads get a wider box than the Jev sheets' because
+poses, every 2nd frame, whole frame and far close-up; a frame between two posed frames takes both neighbours'
+people) and every face YuNet finds (scanned every 6th frame, the last boxes held between scans; YuNet is most of
+the time). Heads get a wider box than the Jev sheets' because
 hair showed above it on near players (Run A, 2026-11-15).
 
 All or nothing: a part is refused unless every frame was decoded, redacted and encoded. Nothing here ever falls
@@ -23,9 +24,9 @@ import numpy as np
 from src import jev_sheet
 
 FPS = 30
-FACE_EVERY = 3
+FACE_EVERY = 6
 POSE_STRIDE = 2
-VERSION = "archive-v1-faces"
+VERSION = "archive-v2-faces"
 
 
 class ArchiveRefused(Exception):
@@ -86,7 +87,10 @@ def _redact_range(job):
         dec = subprocess.Popen(["ffmpeg", "-v", "error", "-ss", f"{start / FPS:.6f}", "-i", src, "-frames:v", str(count),
                                 "-vf", f"scale={out_w}:{out_h}", "-f", "rawvideo", "-pix_fmt", "bgr24", "-"],
                                stdout=subprocess.PIPE)
-        quality = ["-cq", "26", "-preset", "p4"] if "nvenc" in enc else ["-crf", "26", "-preset", "veryfast"]
+        # A bitrate cap, not a quality target, for NVENC: -cq 26 gave 1.6 Mbit/s (122 MB per 10 min) on staging,
+        # 3x libx264 -crf 26. 0.6 Mbit/s is about 45 MB per 10 min.
+        quality = ["-b:v", "600k", "-maxrate", "800k", "-bufsize", "1600k", "-preset", "p4"] if "nvenc" in enc \
+            else ["-crf", "26", "-preset", "veryfast"]
         out = subprocess.Popen(["ffmpeg", "-y", "-v", "error", "-f", "rawvideo", "-pix_fmt", "bgr24",
                                 "-s", f"{out_w}x{out_h}", "-r", str(FPS), "-i", "-", "-an", "-c:v", enc, *quality,
                                 "-pix_fmt", "yuv420p", part_path],
