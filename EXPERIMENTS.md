@@ -4346,3 +4346,59 @@ Jev jev-1.14, Test K's exact questions; only blurred sheets were sent (246 calls
 - **Verification so far.** The redaction was checked by eye on sample sheets: neighbouring court, wall and spectators blurred; ball machine and loose balls kept. It was not audited frame by frame.
 - **Scope.** One venue (PGC), a tested set rather than a coverage guarantee.
 - **Next.** Build the wide-margin redaction into the pod's sheet step, re-pass it on staging, and leave the production privacy call to the operator.
+
+## 2026-11-15 — Run A: one fresh session through staging with redacted Jev sheets; every bar passes (top 10 = 10 of 10 real)
+
+**Setup** (bars pre-registered in root `progress/11.15 plan - staging e2e review and GPU strategy.md`, revised for this footage before the run started).
+
+- **Footage.** PGC Court B eda301d9 `2026-09-25T11-01-06-540Z` (25 Sep 19:01 Taiwan time), never on staging. The hit finder (v0) was trained on the two tournament practice videos only, so this is unseen footage. Drift ≤ 0.1 px against the camera's calibration; test camera `pgc-eda301d9-test`.
+- **Code.** Staging pod code `c7b3727` (hit finder, Jev on **redacted** sheets, parallel pose prep, badge pose reuse, Jev overlapped, parallel uploads). Staging console `2bec788`. Staging orchestrator `cdec7765`, from console `feat/gce-gpu-list` `17fd3ed`: RunPod Secure first, Google fallback limited to machines under the $0.50 cap (T4 n1-standard-8 only; never used in this run).
+- **Replay.** Recording session `a42e7331`, share `c3c95b55`, started 07:31:45 UTC. Parts sent on the real clock through the agent API, stand-in desktop alongside. Staging agent `part_minutes` 10, restored to 5 after.
+- **Stopped early (operator).** The driver was stopped after part 5 because speed was already shown; the session end was reported with 5 parts (`end_session.mjs`, same call the desktop makes). Part 6 was never sent.
+
+**Speed (measured).** All parts ran on one warm RunPod Secure **RTX 4000 Ada**, rented at 07:36 before part 1.
+
+| Part | Upload | Claimed → done | Hit finder | Rallies (from crossings) | Jev checked / failed / under 0.4 |
+|---|---|---|---|---|---|
+| 1 | 32 s | 6.3 min | 94 s (pose 88 s) | 15 (9) | 15 / 0 / 0 |
+| 2 | 36 s | 5.7 min | 88 s | 13 | 13 / 0 / 0 |
+| 3 | 32 s | 5.5 min | 89 s | 13 | 13 / 0 / 0 |
+| 4 | 31 s | 5.6 min | — | 13 | 13 / 0 / 1 |
+| 5 | 33 s | 5.7 min | — | 13 | 13 / 0 / 0 |
+
+- Median **5.7 min** per 10-min part (bar ≤ 7.5). Part 1 stages: convert 38 s, ball model 72 s, hit finder 94 s, badges 77 s, cut 48 s; Jev (45 s) overlapped.
+- Against the 11-13 session (Google L4, 8.3-9.3 min per part): hit finder 3.7 → 1.5 min, badges 1.7 → 1.3 min. On 11-13 the hit finder was 3.2-3.5 min on RunPod A5000s too, so most of the gain is the parallel pose prep (`6f87491`), not the card. Not separated on one machine.
+- Session end (08:28:21) → top 10 decided: seconds (last top-10 clip synced 08:28:26; bar ≤ 15 min).
+- Cleanup: at 08:34:09 RunPod listed 0 pods (the run's pod 404) and Google 0 instances. Checked 6 min after the last part, not at 5.
+
+**Top 10, blind (operator, playback).** 16 clips shuffled with no labels: the share page's 10 delivered clips plus every clip Jev doubted (under 0.4, or a kind other than `real_point`). Clips cut from the original parts at the reels' clip times. Key: scratch `runa-1101/review_key.json`, verdicts `runa-1101/verdicts.jsonl`.
+
+| | Count |
+|---|---|
+| Top 10 real | **10 of 10** (bar ≥ 9) |
+| Top 10 non-rally | **0** (bar 0) |
+| Top 10 starting late | 1 (rank 10, part 3, score 44.5) |
+
+**Jev on all 67 rallies.** 0 failed calls, 0 unanswered (bar 0 failed). The doubted clips, against the operator's verdicts:
+
+| Jev | Kept? | Verdict |
+|---|---|---|
+| not_play 0.25 | removed (under 0.4) | dead time |
+| practice 0.54 | kept, outside top 10 | dead time (ball tossed back) |
+| not_play 0.56 | kept, outside top 10 | no rally |
+| not_play 0.52 | kept, outside top 10 | no rally |
+| not_play 0.53 | kept, outside top 10 | real |
+| not_play 0.57 | kept, outside top 10 | real (short point) |
+
+The 0.4 cut removed 1 clip, correctly, and no real rally. Three dead-time clips sat just above it (0.52-0.56); they ranked too low for the top 10. Filtering on `kind != real_point` as well would have removed those 3 and 2 real ones, so no change is proposed from one session.
+
+**Redaction.**
+- Code path (`c7b3727`): one place sends sheets (`pod_driver.py` `jev_checks` → console `/jev` → TypeSafe); `src/jev_sheet.contact_sheet` always redacts, with no switch. The console route forwards and stores nothing; only `jev_real`/`jev_kind` are kept on the reel. `tests/test_jev.py` 16 passed.
+- Weaker path (not taken in this run): if the pose model cannot load, sheets go out with YuNet face boxes and the off-court blur only. This run used the hit finder's poses.
+- Sent sheets are not stored, so 4 were rebuilt with the same code (`runa-1101/rebuild_sheets.py`; original part file instead of the 30 fps convert, poses from the pose model on each sheet frame): part 1 top rally, part 1 not_play 0.56, part 4 practice 0.54, part 4 not_play 0.25. Off-court, the neighbouring court, the chairs area and every head/face zoomed at 3-4x were blurred, including people walking behind the near baseline.
+- **Gap:** on a player close to the camera the head box covers the face but not always the top of the head; hair shows above the blur (practice sheet, frames 3-5). No face was identifiable in the frames checked. Candidate fix: a larger head box for large (near) people in `head_boxes`, tested before use.
+
+**Reading.**
+- Every pre-registered bar passes on unseen footage: top 10 (10/10), Jev (0 failures, no real rally removed), redaction (with the head-box gap above), speed (median 5.7 min), session end → top 10 (seconds), cleanup (0 machines at 6 min).
+- **Limits.** One session, one camera, 5 of 6 parts (50 min); no warm-up without a ball machine checked; Google T4 never exercised; RunPod had stock the whole run.
+- **Next.** Operator: the production privacy call on Jev with redacted sheets. Then the production PR stack (each PR with this staging evidence). The head-box fix and the orchestrator's wait-and-retry (checklist item 5) are separate staging changes.
