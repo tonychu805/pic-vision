@@ -11,7 +11,10 @@ os.environ.setdefault("OUTPUT_BUCKET", "test-output-bucket")
 os.environ.setdefault("BRAND_ID", "test-brand-id")
 
 from cloud_pipeline import pod_driver  # noqa: E402
-from src.jev_sheet import contact_sheet  # noqa: E402
+from src.jev_sheet import contact_sheet, keep_polygon, redact  # noqa: E402
+
+# A camera whose whole 96x54 frame is the 20 x 44 ft court: no off-court blur in the content tests.
+CALIB = {"homography": [[20 / 96, 0, 0], [0, 44 / 54, 0], [0, 0, 1]], "calibration_resolution": [96, 54]}
 
 
 @pytest.fixture
@@ -39,14 +42,14 @@ class Reply:
 
 
 def test_contact_sheet_is_a_decodable_jpeg_of_the_validated_size(video):
-    jpg = contact_sheet(video, 2.0, 12.0)
+    jpg = contact_sheet(video, 2.0, 12.0, CALIB)
     im = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
     assert im.shape == (1323, 1568, 3)
 
 
 def test_contact_sheet_shows_the_rally_not_the_whole_video(video):
     def tile_means(start, end):
-        im = cv2.imdecode(np.frombuffer(contact_sheet(video, start, end), np.uint8), cv2.IMREAD_GRAYSCALE)
+        im = cv2.imdecode(np.frombuffer(contact_sheet(video, start, end, CALIB), np.uint8), cv2.IMREAD_GRAYSCALE)
         return [int(im[300 + (i // 2) * 441, 700 + (i % 2) * 784]) for i in range(6)]
     early, late = tile_means(0.0, 6.0), tile_means(12.0, 18.0)
     assert early == sorted(early) and late == sorted(late)
@@ -60,7 +63,7 @@ def test_valid_answers_come_back_for_every_rally(video, monkeypatch):
         sent.append((url, headers, len(data)))
         return Reply(200, {"real": 0.3 if len(sent) % 2 else 0.9, "kind": "real_point"})
     monkeypatch.setattr(pod_driver.requests, "post", post)
-    found, stats = pod_driver.jev_checks(video, clips(12))
+    found, stats = pod_driver.jev_checks(video, clips(12), CALIB)
     assert sorted(found) == sorted(pod_driver.rally_key(c["start"], c["end"]) for c in clips(12))
     assert len(sent) == 12
     url, headers, size = sent[0]
@@ -85,14 +88,14 @@ def raises(*a, **k):
 ], ids=["503", "raises", "bad-json", "out-of-range", "no-kind", "non-numeric"])
 def test_jev_trouble_leaves_every_clip_unchecked(video, monkeypatch, post):
     monkeypatch.setattr(pod_driver.requests, "post", post)
-    found, stats = pod_driver.jev_checks(video, clips(4))
+    found, stats = pod_driver.jev_checks(video, clips(4), CALIB)
     assert found == {}
     assert stats["checked"] == 0 and stats["failed"] == 4 and stats["flagged"] == 0
 
 
 def test_a_clip_whose_video_cannot_be_read_fails_open(tmp_path, monkeypatch):
     monkeypatch.setattr(pod_driver.requests, "post", lambda *a, **k: Reply(200, {"real": 0.9, "kind": "x"}))
-    found, stats = pod_driver.jev_checks(str(tmp_path / "missing.mp4"), clips(2))
+    found, stats = pod_driver.jev_checks(str(tmp_path / "missing.mp4"), clips(2), CALIB)
     assert found == {} and stats["failed"] == 2
 
 
@@ -102,7 +105,7 @@ def test_one_failed_clip_does_not_lose_the_others(video, monkeypatch):
     def post(*a, **k):
         return Reply(503) if next(calls) == 0 else Reply(200, {"real": 0.8, "kind": "real_point"})
     monkeypatch.setattr(pod_driver.requests, "post", post)
-    found, stats = pod_driver.jev_checks(video, clips(3))
+    found, stats = pod_driver.jev_checks(video, clips(3), CALIB)
     assert len(found) == 2 and stats["checked"] == 2 and stats["failed"] == 1
 
 
@@ -120,3 +123,34 @@ def test_in_background_returns_the_value_or_raises_the_error():
         raise ValueError("no")
     with pytest.raises(ValueError):
         pod_driver.in_background(boom)()
+
+
+def _noise(h=200, w=400):
+    return np.random.default_rng(0).integers(0, 256, (h, w, 3), dtype=np.uint8)
+
+
+def test_redaction_blurs_off_the_court_and_keeps_the_court():
+    frame = _noise()
+    court = np.array([[[100, 50]], [[300, 50]], [[300, 150]], [[100, 150]]], np.int32)
+    out = redact(frame, court, [], [])
+    assert (out[60:140, 110:290] == frame[60:140, 110:290]).all(), "the court must be untouched"
+    assert out[:40].std() < frame[:40].std() / 3, "off-court must be blurred"
+
+
+def test_redaction_blurs_a_players_head_and_a_detected_face():
+    frame = _noise()
+    court = np.array([[[0, 0]], [[399, 0]], [[399, 199]], [[0, 199]]], np.int32)
+    person = {"box": [180, 40, 220, 160], "kp": [[200, 55, 0.9]] * 5 + [[0, 0, 0]] * 12}
+    out = redact(frame, court, [person], [(20, 20, 60, 60)])
+    assert out[45:65, 190:210].std() < frame[45:65, 190:210].std() / 3, "head must be blurred"
+    assert out[25:55, 25:55].std() < frame[25:55, 25:55].std() / 3, "face must be blurred"
+    assert (out[120:160, 300:380] == frame[120:160, 300:380]).all(), "the rest of the court is untouched"
+
+
+def test_the_keep_area_covers_the_court_and_room_behind_the_baselines_but_not_far_beyond():
+    calib = {"homography": [[0.1, 0, 0], [0, 0.1, 0], [0, 0, 1]], "calibration_resolution": [1000, 1000]}   # 10 px per ft
+    poly = keep_polygon(calib, 1000, 1000)
+    inside = lambda x, y: cv2.pointPolygonTest(poly, (float(x), float(y)), False) >= 0
+    assert inside(100, 220)                     # centre of the court (10, 22 ft)
+    assert inside(100, 440 + 80)                # 8 ft behind a baseline: where a ball machine stands
+    assert not inside(100 + 200 + 60 + 50, 220) # 11 ft past a sideline: the next court

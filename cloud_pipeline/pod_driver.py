@@ -728,18 +728,28 @@ def rally_key(start, end):
     return round(float(start), 3), round(float(end), 3)
 
 
-def jev_checks(video, rallies):
+def jev_checks(video, rallies, calib, poses=None):
     """({rally_key: {"real", "kind"}}, stats): Jev's verdict on each rally ({"start", "end"}, unpadded).
 
+    Every sheet is redacted before it leaves (src/jev_sheet.py): off-court blurred, heads and faces blurred.
+    poses: the hit finder's whole-frame poses for the head boxes; without them the sheet frames are posed here.
     Fail open: a rally Jev could not answer is left out, and any error returns ({}, None)."""
     try:
         t0 = time.time()
+        pose_model = None
+        if not poses:
+            try:
+                from src.pose import PoseModel
+                pose_model = PoseModel(POSE_LOCAL)
+            except Exception as e:  # noqa: BLE001 -- faces (YuNet) and the off-court blur still apply
+                _log(f"jev: no pose model for head boxes: {type(e).__name__}: {e}")
 
         def ask(rally):
             try:
                 from src.jev_sheet import contact_sheet
+                sheet = contact_sheet(video, rally["start"], rally["end"], calib, poses=poses, pose_model=pose_model)
                 r = requests.post(f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/jev",
-                                  data=contact_sheet(video, rally["start"], rally["end"]),
+                                  data=sheet,
                                   headers={"Authorization": f"Bearer {JOB_TOKEN}", "Content-Type": "image/jpeg"},
                                   timeout=30)
                 a = r.json() if r.status_code == 200 else None
@@ -971,7 +981,7 @@ def run():
     # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
     jev_wait = None
     if JEV:
-        jev_wait = in_background(jev_checks, proxy_video, segments)
+        jev_wait = in_background(jev_checks, proxy_video, segments, calib, hit_poses)
     badge_measures, poses = measure_badges(s3_in, proxy_video, segments, detected["times_crossed"], calib,
                                            known=hit_poses) if BADGES else (None, None)
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")

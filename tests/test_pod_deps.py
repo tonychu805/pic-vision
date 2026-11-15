@@ -84,6 +84,8 @@ def test_every_module_the_pod_imports_is_in_the_tarball():
     bundled = set(pod_deps.POD_DEPS_FILES)
     missing = set()
     for rel in [pod_deps.POD_DRIVER, *pod_deps.POD_DEPS_FILES]:
+        if not rel.endswith(".py"):
+            continue                      # data files (the hit finder's trees, the face model) import nothing
         text = open(os.path.join(pod_deps.REPO_ROOT, rel)).read()
         names = re.findall(r"^\s*(?:from|import)\s+((?:src|scripts)(?:\.\w+)+)", text, re.M)
         names += [f"src.{m}" for grp in re.findall(r"^\s*from\s+src\s+import\s+([\w, ]+)", text, re.M) for m in re.split(r"[,\s]+", grp) if m]
@@ -92,3 +94,9 @@ def test_every_module_the_pod_imports_is_in_the_tarball():
             if path not in bundled:
                 missing.add(f"{rel}: {n}")
     assert not missing, sorted(missing)
+
+
+def test_the_face_model_the_jev_sheets_load_ships_in_the_tarball():
+    from src import jev_sheet
+    rel = os.path.relpath(jev_sheet.YUNET, pod_deps.REPO_ROOT)
+    assert rel in pod_deps.POD_DEPS_FILES and os.path.getsize(jev_sheet.YUNET) > 100_000
