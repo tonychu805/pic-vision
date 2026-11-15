@@ -115,3 +115,29 @@ def test_a_failed_encode_leaves_no_file(tmp_path):
         sa.redact_video(str(src), str(dst), CALIB, {str(f): [] for f in range(0, 6, 2)}, out_height=H, workers=2,
                         encoders=("no_such_encoder",))
     assert not dst.exists()
+
+
+def test_a_stop_request_ends_the_copy_quickly_and_keeps_nothing(tmp_path):
+    # Delivery first (staging 2026-11-16: a part failed while the machine archived): when the session's next
+    # part arrives, the archive must give way at once.
+    import time
+    n = 600
+    src = tmp_path / "long.mp4"
+    write_video(src, checker(n))
+    dst = tmp_path / "archive.mp4"
+    started = time.time()
+    with pytest.raises(sa.ArchiveRefused, match="stopped"):
+        sa.redact_video(str(src), str(dst), CALIB, {str(f): [] for f in range(0, n, 2)}, out_height=H, workers=2,
+                        encoders=("libx264",), should_stop=lambda: True, stop_check_sec=0.2)
+    assert time.time() - started < 5, "stopped promptly"
+    assert not dst.exists()
+
+
+def test_a_copy_that_is_never_asked_to_stop_completes(tmp_path):
+    n = 12
+    src = tmp_path / "part.mp4"
+    write_video(src, checker(n))
+    dst = tmp_path / "archive.mp4"
+    res = sa.redact_video(str(src), str(dst), CALIB, {str(f): [] for f in range(0, n, 2)}, out_height=H, workers=2,
+                          encoders=("libx264",), should_stop=lambda: False, stop_check_sec=0.2)
+    assert res["frames"] == n and dst.exists()

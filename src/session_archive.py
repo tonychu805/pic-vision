@@ -17,6 +17,7 @@ import shutil
 import subprocess
 import sys
 import tempfile
+import threading
 from concurrent.futures import ThreadPoolExecutor
 
 import cv2
@@ -115,18 +116,29 @@ def _redact_range(job):
     raise ArchiveRefused(last_err)
 
 
-def _run_worker(job):
+def _run_worker(job, stop):
     spec = job["path"] + ".json"
     with open(spec, "w") as fh:
         json.dump({**job, "encoders": list(job["encoders"])}, fh)
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    r = subprocess.run([sys.executable, "-m", "src.session_archive", spec], cwd=root, capture_output=True, text=True)
-    if r.returncode != 0:
-        raise ArchiveRefused(r.stderr.strip().splitlines()[-1] if r.stderr.strip() else f"worker exited {r.returncode}")
-    return int(r.stdout.strip().splitlines()[-1])
+    # Output to files: a pipe nobody reads while the worker is watched could fill and stall it.
+    with open(spec + ".out", "w+") as out, open(spec + ".err", "w+") as err:
+        proc = subprocess.Popen([sys.executable, "-m", "src.session_archive", spec], cwd=root, stdout=out, stderr=err)
+        while proc.poll() is None:
+            if stop.wait(0.2):
+                proc.kill()
+                proc.wait()
+                raise ArchiveRefused("stopped: the session's next part is waiting")
+        out.seek(0)
+        err.seek(0)
+        stdout, stderr = out.read(), err.read()
+    if proc.returncode != 0:
+        raise ArchiveRefused(stderr.strip().splitlines()[-1] if stderr.strip() else f"worker exited {proc.returncode}")
+    return int(stdout.strip().splitlines()[-1])
 
 
-def redact_video(src, dst, calib, poses, out_height=720, workers=None, encoders=("h264_nvenc", "libx264")):
+def redact_video(src, dst, calib, poses, out_height=720, workers=None, encoders=("h264_nvenc", "libx264"),
+                 should_stop=None, stop_check_sec=30):
     """Write the fully redacted copy of `src` to `dst`. Returns {frames, seconds, bytes, version}.
 
     Raises ArchiveRefused, leaving no `dst`, unless every frame made it through."""
@@ -144,8 +156,22 @@ def redact_video(src, dst, calib, poses, out_height=720, workers=None, encoders=
                   for i, (a, b) in enumerate(zip(bounds, bounds[1:]))]
         # Each range runs as its own program, not a forked or spawned child: the pod's process already runs threads
         # (torch, Jev, uploads) a fork can deadlock on, and spawn re-imports pod_driver.py, which needs a job.
-        with ThreadPoolExecutor(max_workers=workers) as pool:
-            written = sum(pool.map(_run_worker, ranges))
+        # Delivery first: should_stop() (is the session's next part waiting?) is asked every stop_check_sec, and
+        # a yes ends every worker at once and keeps nothing.
+        stop, finished = threading.Event(), threading.Event()
+
+        def watch():
+            while not finished.wait(stop_check_sec):
+                if should_stop and should_stop():
+                    stop.set()
+                    return
+        watcher = threading.Thread(target=watch, daemon=True)
+        watcher.start()
+        try:
+            with ThreadPoolExecutor(max_workers=workers) as pool:
+                written = sum(pool.map(lambda r: _run_worker(r, stop), ranges))
+        finally:
+            finished.set()
         if written != n:
             raise ArchiveRefused(f"redacted {written} of {n} frames")
         listing = os.path.join(tmp, "parts.txt")

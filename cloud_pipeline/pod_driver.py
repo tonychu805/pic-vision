@@ -1103,6 +1103,15 @@ def run():
     archive_part(s3_out, proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
+def next_part_waiting(url, headers):
+    """Is this session's next part waiting? The archive gives way to it (delivery first). False when unsure."""
+    try:
+        r = requests.get(url, params={"probe": "next-part"}, headers=headers, timeout=10)
+        return r.status_code == 200 and r.json().get("waiting") is True
+    except Exception:  # noqa: BLE001 -- a failed probe must not stop a copy, nor fail the part
+        return False
+
+
 def archive_part(s3_out, video, calib, poses):
     """Upload this part's redacted copy when the console wants one (src/session_archive.py), after the part is
     reported done so players never wait on it. Never raises: a missing copy must not fail a finished part, and
@@ -1121,7 +1130,7 @@ def archive_part(s3_out, video, calib, poses):
         from src.cpus import usable_cpus
         from src.session_archive import redact_video
         started = time.time()
-        res = redact_video(video, out, calib, poses, workers=usable_cpus())
+        res = redact_video(video, out, calib, poses, workers=usable_cpus(), should_stop=lambda: next_part_waiting(url, headers))
         redacted_sec = time.time() - started
         s3_out.upload_file(out, OUTPUT_BUCKET, key, ExtraArgs={"ContentType": "video/mp4"})
         r = requests.post(url, headers=headers, timeout=30, json={

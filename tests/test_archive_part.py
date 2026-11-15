@@ -43,7 +43,7 @@ def setup(monkeypatch, tmp_path, get_status, redact):
     return posts
 
 
-def written(src, dst, calib, poses, workers):
+def written(src, dst, calib, poses, workers, **kwargs):
     open(dst, "wb").write(b"x" * 10)
     return {"frames": 300, "seconds": 10.0, "bytes": 10, "version": "v"}
 
@@ -57,7 +57,7 @@ def test_archive_off_here_does_nothing(monkeypatch, tmp_path):
 
 
 def test_a_refused_part_uploads_nothing_releases_its_machine_and_does_not_raise(monkeypatch, tmp_path):
-    def refuse(src, dst, calib, poses, workers):
+    def refuse(src, dst, calib, poses, workers, **kwargs):
         open(dst, "wb").write(b"partial")
         raise session_archive.ArchiveRefused("no poses")
     posts = setup(monkeypatch, tmp_path, 200, refuse)
@@ -76,3 +76,28 @@ def test_a_redacted_copy_goes_to_its_key_and_is_reported(monkeypatch, tmp_path):
     (url, body), = posts
     assert url.endswith("/archive") and body == {"key": KEY, "bytes": 10, "frames": 300, "seconds": 10.0, "version": "v"}
     assert not os.path.exists(tmp_path / "archive.mp4")
+
+
+def test_the_archive_asks_the_console_whether_the_next_part_is_waiting(monkeypatch):
+    asked = []
+
+    def get(url, params=None, **k):
+        asked.append(params)
+        return Reply(200, {"waiting": True})
+    monkeypatch.setattr(pod_driver.requests, "get", get)
+    assert pod_driver.next_part_waiting("https://c/api/runner/jobs/j/archive", {}) is True
+    assert asked == [{"probe": "next-part"}]
+    monkeypatch.setattr(pod_driver.requests, "get", lambda *a, **k: Reply(200, {"waiting": False}))
+    assert pod_driver.next_part_waiting("u", {}) is False
+    monkeypatch.setattr(pod_driver.requests, "get", lambda *a, **k: (_ for _ in ()).throw(OSError("down")))
+    assert pod_driver.next_part_waiting("u", {}) is False, "an unreachable console never stops a copy"
+
+
+def test_a_copy_stopped_for_the_next_part_uploads_nothing_and_releases_the_machine(monkeypatch, tmp_path):
+    def stopped(src, dst, calib, poses, workers, should_stop=None, **k):
+        assert should_stop is not None
+        raise session_archive.ArchiveRefused("stopped: the session's next part is waiting")
+    posts = setup(monkeypatch, tmp_path, 200, stopped)
+    s3 = S3()
+    pod_driver.archive_part(s3, "video.mp4", {}, {})
+    assert s3.uploads == [] and [p[1] for p in posts] == ["DELETE"]
