@@ -1128,7 +1128,7 @@ def archive_part(s3_out, video, calib, poses):
             "key": key, "bytes": res["bytes"], "frames": res["frames"], "seconds": res["seconds"], "version": res["version"]})
         r.raise_for_status()
         _log(f"archive: {res['frames']} frames redacted in {redacted_sec:.0f}s, {res['bytes'] / 1e6:.1f} MB, "
-             f"stored in {time.time() - started:.0f}s -> {key}")
+             f"stored in {time.time() - started:.0f}s")   # no key: nothing may pair this part with its copy
     except Exception as e:  # noqa: BLE001 -- see docstring
         _log(f"archive: no redacted copy kept for this part: {type(e).__name__}: {e}")
         if asked:
