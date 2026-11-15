@@ -1108,12 +1108,14 @@ def archive_part(s3_out, video, poses):
     out = os.path.join(WORKDIR, "archive.mp4")
     headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
     url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive"
+    asked = False
     try:
         r = requests.get(url, headers=headers, timeout=30)
         if r.status_code == 503:
             return
         r.raise_for_status()
         key = r.json()["key"]
+        asked = True   # the console now keeps this machine until we report or give up
         from src.cpus import usable_cpus
         from src.session_archive import redact_video
         started = time.time()
@@ -1127,6 +1129,11 @@ def archive_part(s3_out, video, poses):
              f"stored in {time.time() - started:.0f}s -> {key}")
     except Exception as e:  # noqa: BLE001 -- see docstring
         _log(f"archive: no redacted copy kept for this part: {type(e).__name__}: {e}")
+        if asked:
+            try:
+                requests.delete(url, headers=headers, timeout=30)
+            except Exception:  # noqa: BLE001 -- the console's own time limit frees the machine anyway
+                pass
     finally:
         if os.path.exists(out):
             os.remove(out)

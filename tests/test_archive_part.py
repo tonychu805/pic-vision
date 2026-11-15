@@ -38,6 +38,7 @@ def setup(monkeypatch, tmp_path, get_status, redact):
     monkeypatch.setattr(pod_driver, "WORKDIR", str(tmp_path))
     monkeypatch.setattr(pod_driver.requests, "get", lambda *a, **k: Reply(get_status, {"key": KEY}))
     monkeypatch.setattr(pod_driver.requests, "post", lambda url, **k: posts.append((url, k["json"])) or Reply(200, {}))
+    monkeypatch.setattr(pod_driver.requests, "delete", lambda url, **k: posts.append((url, "DELETE")) or Reply(200, {}))
     monkeypatch.setattr(session_archive, "redact_video", redact)
     return posts
 
@@ -55,14 +56,15 @@ def test_archive_off_here_does_nothing(monkeypatch, tmp_path):
     assert calls == [] and s3.uploads == [] and posts == []
 
 
-def test_a_refused_part_uploads_nothing_and_does_not_raise(monkeypatch, tmp_path):
+def test_a_refused_part_uploads_nothing_releases_its_machine_and_does_not_raise(monkeypatch, tmp_path):
     def refuse(src, dst, poses, workers):
         open(dst, "wb").write(b"partial")
         raise session_archive.ArchiveRefused("no poses")
     posts = setup(monkeypatch, tmp_path, 200, refuse)
     s3 = S3()
     pod_driver.archive_part(s3, "video.mp4", {})
-    assert s3.uploads == [] and posts == []
+    assert s3.uploads == []
+    assert [p[1] for p in posts] == ["DELETE"], "the console is told to stop holding the machine"
     assert not os.path.exists(tmp_path / "archive.mp4")
 
 
