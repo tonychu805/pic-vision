@@ -1098,6 +1098,38 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
+    archive_part(s3_out, proxy_video, hit_poses)
+
+
+def archive_part(s3_out, video, poses):
+    """Upload this part's redacted copy when the console wants one (src/session_archive.py), after the part is
+    reported done so players never wait on it. Never raises: a missing copy must not fail a finished part, and
+    nothing unblurred is ever kept in its place."""
+    out = os.path.join(WORKDIR, "archive.mp4")
+    headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
+    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive"
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code == 503:
+            return
+        r.raise_for_status()
+        key = r.json()["key"]
+        from src.cpus import usable_cpus
+        from src.session_archive import redact_video
+        started = time.time()
+        res = redact_video(video, out, poses, workers=usable_cpus())
+        redacted_sec = time.time() - started
+        s3_out.upload_file(out, OUTPUT_BUCKET, key, ExtraArgs={"ContentType": "video/mp4"})
+        r = requests.post(url, headers=headers, timeout=30, json={
+            "key": key, "bytes": res["bytes"], "frames": res["frames"], "seconds": res["seconds"], "version": res["version"]})
+        r.raise_for_status()
+        _log(f"archive: {res['frames']} frames redacted in {redacted_sec:.0f}s, {res['bytes'] / 1e6:.1f} MB, "
+             f"stored in {time.time() - started:.0f}s -> {key}")
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"archive: no redacted copy kept for this part: {type(e).__name__}: {e}")
+    finally:
+        if os.path.exists(out):
+            os.remove(out)
 
 
 def finish_with_no_rallies():
