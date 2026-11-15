@@ -6273,3 +6273,19 @@ Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than
 **Limits.** One rally window at one venue for the marks (34 balls); one held-out venue for rallies, at a small zoom; crossing-based candidates only, not the hit finder production uses first; the k14 production weights, not the fine-tuned e2 weights.
 
 **Addendum (same day): no admissible labelled footage has room for a box.** Measured with each video's real resolution (a calibration without `calibration_resolution` is at the video's own size, as the pod treats it), the suggested box (`court_crop_box`, margin 0.08, airspace 0.9) is 1.00x on brickwall-SEMI, brickwall_30fps (1280x720), brickwall_mid_atlantic (1280x640), austin_rally2, pb_draft_cup and lifetime_fall_classic, and 1.04x on PGC Court B 09-26 (court 35-85% wide, but the lob airspace needs nearly the full height). A first brickwall_30fps run assumed a 1080p calibration for a 720p video and was discarded; re-run correctly, whole frame gives 43 rallies, 36 of 49 matched, precision 0.84, recall 0.73 (the documented 44-of-49 run, within one), and the box equals the frame. So the only real box test remains brickwall-SEMI at 1.14x, no change within one rally. The detection gate needs a labelled session from a camera that is actually too far back. Script: `scripts/view_box_brickwall30_eval.py`.
+
+## 2026-11-15 — Faces-blurred archive copy of each part, on staging: stored, recorded, 2.4 min and 46 MB per part
+
+**What.** After a part is reported done, the pod writes a 720p silent copy with every face blurred (src/session_archive.py: the hit finder's head boxes, whole frame and far close-up, widened for hair, plus YuNet faces) and nothing else (operator: faces, not zones), uploads it to the reels bucket under `archive/<venue>/<job>/part.mp4`, and the console records a `session_archives` row (30-day delete date). All frames or nothing; the unblurred upload is deleted as before. Staging only (`ARCHIVE_REDACTED=on` on the staging branch site).
+
+**Runs** (PGC eda301d9, 19:01 recording, part 4, one-part sessions on staging):
+
+| Job | Card | Archive time after done | Size | Outcome |
+|---|---|---|---|---|
+| 78a1c29b | Google T4 | none | none | Machine removed mid-archive by the orchestrator's 90 s idle cleanup. Fixed: the job's `archiving_until` keeps the machine (console) |
+| ca260504 | RTX 2000 Ada | 4.8 min | 122 MB (NVENC -cq 26, 1.6 Mbit/s) | Stored. A far main-court player's face visible in 2 of 4 frames checked; YuNet was 79% of the time (local profile) |
+| 465157c3 | RTX 2000 Ada | **2.4 min** | **46 MB** (0.6 Mbit/s cap) | Stored, row written, raw deleted, machine removed ~35 s after. Far player blurred at the same two moments (far close-up poses added; faces scanned every 6th frame) |
+
+Locally (i7-7820X, 6 workers, libx264): 147 s per part with faces every 3rd frame, 98 s every 6th.
+
+**Gaps (checked by eye on 4 frames per run, not audited).** People on the neighbouring court and seated spectators are mostly not blurred: too small for YuNet and not posed. That is the faces-only choice; zones would cover them. A large over-blur box sometimes covers part of the net. A part whose session's next part is already waiting keeps no copy (console answers 409), so delivery never waits.
