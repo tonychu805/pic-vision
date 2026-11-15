@@ -1100,10 +1100,10 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
-    archive_part(s3_out, proxy_video, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
+    archive_part(s3_out, proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
-def archive_part(s3_out, video, poses):
+def archive_part(s3_out, video, calib, poses):
     """Upload this part's redacted copy when the console wants one (src/session_archive.py), after the part is
     reported done so players never wait on it. Never raises: a missing copy must not fail a finished part, and
     nothing unblurred is ever kept in its place."""
@@ -1121,7 +1121,7 @@ def archive_part(s3_out, video, poses):
         from src.cpus import usable_cpus
         from src.session_archive import redact_video
         started = time.time()
-        res = redact_video(video, out, poses, workers=usable_cpus())
+        res = redact_video(video, out, calib, poses, workers=usable_cpus())
         redacted_sec = time.time() - started
         s3_out.upload_file(out, OUTPUT_BUCKET, key, ExtraArgs={"ContentType": "video/mp4"})
         r = requests.post(url, headers=headers, timeout=30, json={

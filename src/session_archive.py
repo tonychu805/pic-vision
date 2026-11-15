@@ -1,7 +1,8 @@
 """The redacted copy of a part that is kept after its reels are made (operator decisions 2026-11-15,
 ../pic-vision-redaction/docs/redacted-archive-design.md).
 
-Every face is blurred, players included, and nothing else (operator, 2026-11-15: faces, not zones). Two finders,
+Everyone off the main court is blurred (operator, 2026-11-16: the area outside src/jev_sheet.py's keep polygon,
+the court plus 4 ft / 10 ft margins and standing height, as the Jev sheets), and every face on it. Two finders,
 because YuNet alone misses most small or turned-away faces on court: every posed person's head (the hit finder's
 poses, every 2nd frame, whole frame and far close-up; a frame between two posed frames takes both neighbours'
 people) and every face YuNet finds (scanned every 6th frame, the last boxes held between scans; YuNet is most of
@@ -26,7 +27,7 @@ from src import jev_sheet
 FPS = 30
 FACE_EVERY = 6
 POSE_STRIDE = 2
-VERSION = "archive-v2-faces"
+VERSION = "archive-v3-court-faces"
 
 
 class ArchiveRefused(Exception):
@@ -67,19 +68,12 @@ def frame_count(path):
     return n, w, h
 
 
-def blur_boxes(frame, boxes):
-    out = frame.copy()
-    for x0, y0, x1, y1 in boxes:
-        if x1 > x0 and y1 > y0:
-            out[y0:y1, x0:x1] = jev_sheet._soften(out[y0:y1, x0:x1], 8)
-    return out
-
-
 def _redact_range(job):
     """Redact frames [start, start+count) into its own file; returns frames written."""
     start, count, part_path = job["start"], job["count"], job["path"]
     src, poses, in_h, out_w, out_h, encoders = job["src"], job["poses"], job["in_h"], job["out_w"], job["out_h"], job["encoders"]
     cv2.setNumThreads(1)
+    polygon = jev_sheet.keep_polygon(job["calib"], out_w, out_h)
     yunet = cv2.FaceDetectorYN.create(jev_sheet.YUNET, "", (out_w, out_h), 0.35, 0.3, 5000)
     scale = out_h / in_h
     last_err = None
@@ -107,7 +101,7 @@ def _redact_range(job):
                     _, det = yunet.detect(frame)
                     faces = jev_sheet.face_boxes(det, out_w, out_h) or faces
                 boxes = archive_boxes(people_at(poses, f), faces, scale, out_w, out_h)
-                out.stdin.write(np.ascontiguousarray(blur_boxes(frame, boxes)).tobytes())
+                out.stdin.write(np.ascontiguousarray(jev_sheet.redact(frame, polygon, [], boxes)).tobytes())
                 done += 1
             out.stdin.close()
         except BrokenPipeError:
@@ -132,7 +126,7 @@ def _run_worker(job):
     return int(r.stdout.strip().splitlines()[-1])
 
 
-def redact_video(src, dst, poses, out_height=720, workers=None, encoders=("h264_nvenc", "libx264")):
+def redact_video(src, dst, calib, poses, out_height=720, workers=None, encoders=("h264_nvenc", "libx264")):
     """Write the fully redacted copy of `src` to `dst`. Returns {frames, seconds, bytes, version}.
 
     Raises ArchiveRefused, leaving no `dst`, unless every frame made it through."""
@@ -145,7 +139,7 @@ def redact_video(src, dst, poses, out_height=720, workers=None, encoders=("h264_
     tmp = tempfile.mkdtemp(prefix="archive-", dir=os.path.dirname(os.path.abspath(dst)))
     try:
         ranges = [{"start": int(a), "count": int(b - a), "path": os.path.join(tmp, f"{i:03d}.mp4"), "src": src,
-                   "in_h": in_h, "out_w": out_w, "out_h": out_h, "encoders": tuple(encoders),
+                   "in_h": in_h, "calib": calib, "out_w": out_w, "out_h": out_h, "encoders": tuple(encoders),
                    "poses": {k: v for k, v in poses.items() if a - 1 <= int(k) <= b}}
                   for i, (a, b) in enumerate(zip(bounds, bounds[1:]))]
         # Each range runs as its own program, not a forked or spawned child: the pod's process already runs threads

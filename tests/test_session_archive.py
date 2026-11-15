@@ -9,6 +9,11 @@ import pytest
 from src import session_archive as sa
 
 W, H, FPS = 640, 360, 30
+CALIB = {
+    # court ft -> image px at 640x360: the 20x44 ft court spans x 220..420, y 60..324.
+    "homography": np.linalg.inv(np.array([[10.0, 0, 220], [0, -6.0, 324], [0, 0, 1]])).tolist(),
+    "calibration_resolution": [W, H],
+}
 def person(x, y):
     return {"box": [x - 10, y, x + 10, y + 60], "kp": [[x, y + 6, 0.9]] * 5 + [[x, y + 20, 0.9]] * 12}
 
@@ -66,14 +71,14 @@ def test_head_boxes_reach_above_the_head_for_hair():
     assert y0 < 100 - 10 and x0 < 310 and x1 > 330
 
 
-def test_the_redacted_video_blurs_heads_only_and_keeps_every_frame(tmp_path):
+def test_the_redacted_video_blurs_heads_and_everyone_off_court_keeps_the_court_and_every_frame(tmp_path):
     n = 20
     src = tmp_path / "part.mp4"
     write_video(src, checker(n))
     poses = {str(f): [person(320, 120)] for f in range(0, n, 2)}
     dst = tmp_path / "archive.mp4"
 
-    res = sa.redact_video(str(src), str(dst), poses, out_height=H, workers=3, encoders=("libx264",))
+    res = sa.redact_video(str(src), str(dst), CALIB, poses, out_height=H, workers=3, encoders=("libx264",))
 
     assert res["frames"] == n
     out = read_frames(dst)
@@ -84,7 +89,7 @@ def test_the_redacted_video_blurs_heads_only_and_keeps_every_frame(tmp_path):
         court = (slice(250, 300), slice(240, 280))
         outside = (slice(150, 250), slice(20, 120))
         assert detail(out[i][head]) < 0.2 * detail(orig[i][head]), f"head blurred in frame {i}"
-        assert detail(out[i][outside]) > 0.5 * detail(orig[i][outside]), f"off-court left sharp in frame {i}"
+        assert detail(out[i][outside]) < 0.2 * detail(orig[i][outside]), f"off-court blurred in frame {i}"
         assert detail(out[i][court]) > 0.5 * detail(orig[i][court]), f"court kept sharp in frame {i}"
 
 
@@ -94,7 +99,7 @@ def test_frames_stay_in_order_across_workers(tmp_path):
     src = tmp_path / "ramp.mp4"
     write_video(src, frames)
     dst = tmp_path / "archive.mp4"
-    sa.redact_video(str(src), str(dst), {str(f): [] for f in range(0, n, 2)}, out_height=H, workers=4,
+    sa.redact_video(str(src), str(dst), CALIB, {str(f): [] for f in range(0, n, 2)}, out_height=H, workers=4,
                     encoders=("libx264",))
     centre = [int(f[180, 320].mean()) for f in read_frames(dst)]
     assert len(centre) == n
@@ -107,6 +112,6 @@ def test_a_failed_encode_leaves_no_file(tmp_path):
     write_video(src, checker(6))
     dst = tmp_path / "archive.mp4"
     with pytest.raises(sa.ArchiveRefused):
-        sa.redact_video(str(src), str(dst), {str(f): [] for f in range(0, 6, 2)}, out_height=H, workers=2,
+        sa.redact_video(str(src), str(dst), CALIB, {str(f): [] for f in range(0, 6, 2)}, out_height=H, workers=2,
                         encoders=("no_such_encoder",))
     assert not dst.exists()
