@@ -1,0 +1,5688 @@
+{
+  "$schema": "http://cyclonedx.org/schema/bom-1.7.schema.json",
+  "bomFormat": "CycloneDX",
+  "specVersion": "1.7",
+  "serialNumber": "urn:uuid:6e86413b-435d-48fc-b825-a2cc6c531ac0",
+  "version": 1,
+  "metadata": {
+    "timestamp": "2026-11-16T10:17:29.408Z",
+    "lifecycles": [
+      {
+        "phase": "build"
+      }
+    ],
+    "tools": {
+      "components": [
+        {
+          "type": "application",
+          "name": "pnpm",
+          "version": "11.24.0"
+        }
+      ]
+    },
+    "component": {
+      "type": "library",
+      "name": "my-project",
+      "version": "0.1.0",
+      "purl": "pkg:npm/my-project@0.1.0",
+      "bom-ref": "pkg:npm/my-project@0.1.0"
+    }
+  },
+  "components": [
+    {
+      "type": "library",
+      "name": "client-s3",
+      "version": "3.1125.0",
+      "purl": "pkg:npm/%40aws-sdk/client-s3@3.1125.0",
+      "bom-ref": "pkg:npm/%40aws-sdk/client-s3@3.1125.0",
+      "group": "@aws-sdk",
+      "description": "AWS SDK for JavaScript S3 Client for Node.js, Browser and React Native",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/client-s3/-/client-s3-3.1125.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "9749e939bb63620a837d41e289f9d6185b80b8c56ae6be0055fe02fa363eb6127fda202bfde1ea023051e1c95b997c52a09e70dfe6451913f2722fc20a4528ca"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/clients/client-s3"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ssr",
+      "version": "0.12.7",
+      "purl": "pkg:npm/%40supabase/ssr@0.12.7",
+      "bom-ref": "pkg:npm/%40supabase/ssr@0.12.7",
+      "group": "@supabase",
+      "description": "Use the Supabase JavaScript library in popular server-side rendering (SSR) frameworks.",
+      "authors": [
+        {
+          "name": "Supabase, Inc."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/ssr/-/ssr-0.12.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c2206d1227b52a44498bd46b6566374768a64615f5258eea3325021f6cfd014935e6041e6cd12994cfaeadb08a6a677169324b5d453a2e5a6426c6b18688c212"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/ssr#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/ssr.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/ssr/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "s3-request-presigner",
+      "version": "3.1125.0",
+      "purl": "pkg:npm/%40aws-sdk/s3-request-presigner@3.1125.0",
+      "bom-ref": "pkg:npm/%40aws-sdk/s3-request-presigner@3.1125.0",
+      "group": "@aws-sdk",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/s3-request-presigner/-/s3-request-presigner-3.1125.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "5862b8b3d5d6939ed9bf37d4c348f59bdc602aa0849591d5a793fcd0c40908657c037469cb67c08c32ab7dab9742f0511dd102a628d7a5a8e923ff97f13b2ff8"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/s3-request-presigner"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "1.5.0",
+      "purl": "pkg:npm/%40base-ui/react@1.5.0",
+      "bom-ref": "pkg:npm/%40base-ui/react@1.5.0",
+      "group": "@base-ui",
+      "description": "Base UI is a library of headless ('unstyled') React components and low-level hooks. You gain complete control over your app's CSS and accessibility features.",
+      "authors": [
+        {
+          "name": "MUI Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@base-ui/react/-/react-1.5.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "cf581202571e775c98fa233e9870c4b48903f1423711bb39d8cb813f1bd5e9fe6146eb64fb1bc21ffc2e07b843a83ccaf491b9168333e6786baad4acd708edd4"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://base-ui.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mui/base-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mui/base-ui/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "supabase-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/supabase-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/supabase-js@2.114.0",
+      "group": "@supabase",
+      "description": "Isomorphic Javascript SDK for Supabase",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/supabase-js/-/supabase-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "baf9aa936cb1569efb73f2e35b325ac35fc721dfb66b7b1c93889d6c1cb79ce4eba37ea5ee755c1dd4ff5c43478fb162fc8240bc0b09ad34a04c47a06d84f1bd"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/supabase-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "clsx",
+      "version": "2.1.1",
+      "purl": "pkg:npm/clsx@2.1.1",
+      "bom-ref": "pkg:npm/clsx@2.1.1",
+      "description": "A tiny (239B) utility for constructing className strings conditionally.",
+      "authors": [
+        {
+          "name": "Luke Edwards"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/clsx/-/clsx-2.1.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "7989b441606d52b0566561b4777f3a386030d7a67df793e2395a3607b6e35926c779d1a5e5ed1959aabae6438681448d7ac1080e407d2126d383f24af5d84264"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lukeed/clsx#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lukeed/clsx.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lukeed/clsx/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "class-variance-authority",
+      "version": "0.7.1",
+      "purl": "pkg:npm/class-variance-authority@0.7.1",
+      "bom-ref": "pkg:npm/class-variance-authority@0.7.1",
+      "description": "Class Variance Authority 🧬",
+      "authors": [
+        {
+          "name": "Joe Bell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/class-variance-authority/-/class-variance-authority-0.7.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "29afbd4ebbadbfb1bc33a593e927a2456cfbf762b9a84a881841b35ca84013ac4e58063aa4f1fc53ef48637a0232fea4a9398bb2fed787fdb0d918a091e3ccb2"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/joe-bell/cva#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/joe-bell/cva.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/joe-bell/cva/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lucide-react",
+      "version": "1.17.0",
+      "purl": "pkg:npm/lucide-react@1.17.0",
+      "bom-ref": "pkg:npm/lucide-react@1.17.0",
+      "description": "A Lucide icon library package for React applications.",
+      "authors": [
+        {
+          "name": "Eric Fennis"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lucide-react/-/lucide-react-1.17.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f4503d7af768c7f2502f93d3e7b7dd035c7fca0f13ee49c9f7cfb38d32f751f2b36baa5f9505148775ed6902072af9ec270d659ac1321d596de63721631390e7"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://lucide.dev"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lucide-icons/lucide.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lucide-icons/lucide/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "next",
+      "version": "16.4.6",
+      "purl": "pkg:npm/next@16.4.6",
+      "bom-ref": "pkg:npm/next@16.4.6",
+      "description": "The React Framework",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/next/-/next-16.4.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4192626216992c9328d8aa64406408c2f99defd595b0059e608539e786bc77bcc0ad2dec8bf211cb7941355febb58844ef4a0bc1d2d884f0172cfc7c1f0730b4"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://nextjs.org"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vercel/next.js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/vercel/next.js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "19.2.4",
+      "purl": "pkg:npm/react-dom@19.2.4",
+      "bom-ref": "pkg:npm/react-dom@19.2.4",
+      "description": "React package for working with the DOM.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react-dom/-/react-dom-19.2.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "01725d2e8f2480c6e2998f793b668a42ab33da25a2f63320289851040c44084e081717dc6b30762e6ce5a08a226c92370b5d88958db4f8a15a2effbbd5b50979"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://react.dev/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/facebook/react.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/facebook/react/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.2.4",
+      "purl": "pkg:npm/react@19.2.4",
+      "bom-ref": "pkg:npm/react@19.2.4",
+      "description": "React is a JavaScript library for building user interfaces.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/react/-/react-19.2.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f677e9da16290b03a300dfbc4d914686d584c20bd61d7a84487f2a4fcf404ff956925a4b38ddb62dcf2912d9e9b19cfb5666b069b494d200a39e3f1a0b47ae1d"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://react.dev/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/facebook/react.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/facebook/react/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tailwind-merge",
+      "version": "3.4.0",
+      "purl": "pkg:npm/tailwind-merge@3.4.0",
+      "bom-ref": "pkg:npm/tailwind-merge@3.4.0",
+      "description": "Merge Tailwind CSS classes without style conflicts",
+      "authors": [
+        {
+          "name": "Dany Castillo"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tailwind-merge/-/tailwind-merge-3.4.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b9268ee209d6f9bdd8d9a5a859f1695fadaf9f6b11dec91f85b8ec12768123cd560f5c012e51d97b9b167f402a8e4b0d7584db18111dd146ac40c4f748d575e6"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/dcastil/tailwind-merge"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/dcastil/tailwind-merge.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/dcastil/tailwind-merge/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tw-animate-css",
+      "version": "1.4.0",
+      "purl": "pkg:npm/tw-animate-css@1.4.0",
+      "bom-ref": "pkg:npm/tw-animate-css@1.4.0",
+      "description": "TailwindCSS v4.0 compatible replacement for `tailwindcss-animate`.",
+      "authors": [
+        {
+          "name": "Luca Bosin"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tw-animate-css/-/tw-animate-css-1.4.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "edbce23a546a1f4849c7cd21ff799b89c2d6ee8f2a2ec1f9f9168b476b7e3873370f426558638340a4387316caed696f994c69723e8a82ee842aa8eb1857b741"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/Wombosvideo/tw-animate-css#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/Wombosvideo/tw-animate-css.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/Wombosvideo/tw-animate-css/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "checksums",
+      "version": "3.1000.29",
+      "purl": "pkg:npm/%40aws-sdk/checksums@3.1000.29",
+      "bom-ref": "pkg:npm/%40aws-sdk/checksums@3.1000.29",
+      "group": "@aws-sdk",
+      "description": "Checksum algorithms and flexible checksums middleware for the AWS SDK",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/checksums/-/checksums-3.1000.29.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0edbb482be1d9c04d900fc0461ba42b06f8ca4b33b380962cb68137a9105430975bd9e832f740c1f616f78c6b71cbbcfb0e76126c3d10772adc5586987d4fbe4"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/checksums"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "version": "3.977.9",
+      "purl": "pkg:npm/%40aws-sdk/core@3.977.9",
+      "bom-ref": "pkg:npm/%40aws-sdk/core@3.977.9",
+      "group": "@aws-sdk",
+      "description": "Core functions & classes shared by multiple AWS SDK clients.",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/core/-/core-3.977.9.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "adea8f14442b6710d9a5e1a3e0f14c7a905e4792c660746aabf2f49a8b53ce0164091040e2b15d6955c348b632187871573eec4f63c39cf37d0a5b8649f83224"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/core"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-node",
+      "version": "3.972.82",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-node@3.972.82",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-node@3.972.82",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that sources credentials from a Node.JS environment. ",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-node/-/credential-provider-node-3.972.82.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ce70e410e19707c5b7906d4b25428fddfa01658ffda8b3347a297f0f15974a9dfb5ec76c44b40713f77f39a08619580aa40eb39d1dfc87ff88364f1da3516388"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-node"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "middleware-sdk-s3",
+      "version": "3.972.75",
+      "purl": "pkg:npm/%40aws-sdk/middleware-sdk-s3@3.972.75",
+      "bom-ref": "pkg:npm/%40aws-sdk/middleware-sdk-s3@3.972.75",
+      "group": "@aws-sdk",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/middleware-sdk-s3/-/middleware-sdk-s3-3.972.75.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c0c22c36e99154a68d30a86f53fb3d56b744c04f12ea04b35e9e11ca0146e4110c9c69245dff1c8e1f337fb70a241a540e9a935aac1bcf98ac120a7dac7e8b9e"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/middleware-sdk-s3"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "version": "3.974.5",
+      "purl": "pkg:npm/%40aws-sdk/types@3.974.5",
+      "bom-ref": "pkg:npm/%40aws-sdk/types@3.974.5",
+      "group": "@aws-sdk",
+      "description": "Types for the AWS SDK",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/types/-/types-3.974.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2e4c0b2f604b6c2eb034d9b825a1fd99b12a04c74e64272de95018aa174de14d71ad633e7d425011f6c7c10803ca96a93964d1b65936e5a91be5a7ccd0ff0221"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/types"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "signature-v4-multi-region",
+      "version": "3.996.46",
+      "purl": "pkg:npm/%40aws-sdk/signature-v4-multi-region@3.996.46",
+      "bom-ref": "pkg:npm/%40aws-sdk/signature-v4-multi-region@3.996.46",
+      "group": "@aws-sdk",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/signature-v4-multi-region/-/signature-v4-multi-region-3.996.46.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2fedb1653c9eff64fde9fde5c02c2cd19c3a186d891d95bd7bc16956018179e13148ac9ea19e82591a419a5ffb0cd88afcedba8eb80f33d17e032f15920cd459"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/signature-v4-multi-region"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "version": "3.33.3",
+      "purl": "pkg:npm/%40smithy/core@3.33.3",
+      "bom-ref": "pkg:npm/%40smithy/core@3.33.3",
+      "group": "@smithy",
+      "authors": [
+        {
+          "name": "AWS Smithy Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/core/-/core-3.33.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0ac39e2aaffd900df2e95247b7effe5530ad05ac49e0e4c5a60ae321484fa4320ac41722d64d9b25a400485da1fc42d6aee946a7eb7dec367499ebdf003f2276"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/core"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "fetch-http-handler",
+      "version": "5.7.2",
+      "purl": "pkg:npm/%40smithy/fetch-http-handler@5.7.2",
+      "bom-ref": "pkg:npm/%40smithy/fetch-http-handler@5.7.2",
+      "group": "@smithy",
+      "description": "Provides a way to make requests",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/fetch-http-handler/-/fetch-http-handler-5.7.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "9d9c964e64a92445e5e95b5654c049bdeffbc75d8366eeac217d73d5af9931a1e541046cf59a6ee8d6d37bf826c585d5469923c720d8a59e60c7620ce9ffd693"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/fetch-http-handler"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-http-handler",
+      "version": "4.11.3",
+      "purl": "pkg:npm/%40smithy/node-http-handler@4.11.3",
+      "bom-ref": "pkg:npm/%40smithy/node-http-handler@4.11.3",
+      "group": "@smithy",
+      "description": "Provides a way to make requests",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/node-http-handler/-/node-http-handler-4.11.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "da3635b52a4445f3df5aac81576a47fa21856a0855b0826ccc936c4fb871b50621549a560f27342ea39623e9d73b13801da11f6783d75eda75c16d531a91e190"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/node-http-handler"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tslib",
+      "version": "2.8.1",
+      "purl": "pkg:npm/tslib@2.8.1",
+      "bom-ref": "pkg:npm/tslib@2.8.1",
+      "description": "Runtime library for TypeScript helper functions",
+      "authors": [
+        {
+          "name": "Microsoft Corp."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "0BSD"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/tslib/-/tslib-2.8.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a0916ef781d06fe29576e49440bef09e99aa9df98bb0e03f9c087a6fa107d30084a0ad3f98f79753a737c0a0d5f373243ae1cf447b525ca294f7d2016b34bfdb"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://www.typescriptlang.org/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/Microsoft/tslib.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/Microsoft/TypeScript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "version": "4.17.2",
+      "purl": "pkg:npm/%40smithy/types@4.17.2",
+      "bom-ref": "pkg:npm/%40smithy/types@4.17.2",
+      "group": "@smithy",
+      "authors": [
+        {
+          "name": "AWS Smithy Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/types/-/types-4.17.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "14e2a9559a1bf4c3d39f6ce74731ab9ec307bfb04eb0a570dd788ffdc3b260b0d567da8aa789e27c88920ae514fdf223e55bb450e031085afea9102d1b435490"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/types"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "cookie",
+      "version": "1.1.1",
+      "purl": "pkg:npm/cookie@1.1.1",
+      "bom-ref": "pkg:npm/cookie@1.1.1",
+      "description": "HTTP server cookie parsing and serialization",
+      "authors": [
+        {
+          "name": "Roman Shtylman"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/cookie/-/cookie-1.1.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "7a2f00a2cee36b4c1e469173267100f541c9ffb5d09aa8256d1c277f60138dc07d5aaf3be15287f647e38e2acce94854dbf1397c561a77297284595d72a4a275"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jshttp/cookie#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jshttp/cookie.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jshttp/cookie/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "runtime",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/runtime@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/runtime@7.29.7",
+      "group": "@babel",
+      "description": "babel's modular runtime helpers",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/runtime/-/runtime-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "36af0e8465a264864657a84b1e8c8028b2dc26284fff115e04c189a14af14d7da9b08f1d0a27f32e16484856fe5564b7c053110e6086c3947e74ec920aa3cb87"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-runtime"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "utils",
+      "version": "0.2.9",
+      "purl": "pkg:npm/%40base-ui/utils@0.2.9",
+      "bom-ref": "pkg:npm/%40base-ui/utils@0.2.9",
+      "group": "@base-ui",
+      "description": "A collection of React utility functions for Base UI.",
+      "authors": [
+        {
+          "name": "MUI Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@base-ui/utils/-/utils-0.2.9.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c7f3c30c2633a2a3e98eb7726f755ccb295323622351712d6031a2e5fa21ecab2798d24821a57003618b8031f5769b351a05e225b03ad2133e032b937d0cc8bf"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/mui/base-ui#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mui/base-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mui/base-ui/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react-dom",
+      "version": "2.1.8",
+      "purl": "pkg:npm/%40floating-ui/react-dom@2.1.8",
+      "bom-ref": "pkg:npm/%40floating-ui/react-dom@2.1.8",
+      "group": "@floating-ui",
+      "description": "Floating UI for React DOM",
+      "authors": [
+        {
+          "name": "atomiks"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@floating-ui/react-dom/-/react-dom-2.1.8.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "702e766c7c0cfe7fc2c52f3b147d3259d9e0119ae376d2d6fea56bba8ebcaa0fa9acaed943860676eb761b20d5a6819e0187bf87cf7dad578e566e8e8b8d24d8"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://floating-ui.com/docs/react-dom"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/floating-ui/floating-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/floating-ui/floating-ui"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "utils",
+      "version": "0.2.11",
+      "purl": "pkg:npm/%40floating-ui/utils@0.2.11",
+      "bom-ref": "pkg:npm/%40floating-ui/utils@0.2.11",
+      "group": "@floating-ui",
+      "description": "Utilities for Floating UI",
+      "authors": [
+        {
+          "name": "atomiks"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@floating-ui/utils/-/utils-0.2.11.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "46207fc8887bf29708c65ea52cc1b40a0057019d98d1e547a8c3d8ba0bbef54d00793e9805e889a5fee56dd24d22e8053f94888f0351828e03851d50c62dba1a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://floating-ui.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/floating-ui/floating-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/floating-ui/floating-ui"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "use-sync-external-store",
+      "version": "1.6.0",
+      "purl": "pkg:npm/use-sync-external-store@1.6.0",
+      "bom-ref": "pkg:npm/use-sync-external-store@1.6.0",
+      "description": "Backwards compatible shim for React's useSyncExternalStore. Works with any React that supports hooks.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/use-sync-external-store/-/use-sync-external-store-1.6.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "3e9e864b018ffcdacf22bc551402243907b2c3c9457a73878a34169144eb0efac5e002eaca53f60bf28291e4bd76950cdcabd84508676b9bedec82fde7e650f7"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/facebook/react#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/facebook/react.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/facebook/react/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "tz",
+      "version": "1.4.1",
+      "purl": "pkg:npm/%40date-fns/tz@1.4.1",
+      "bom-ref": "pkg:npm/%40date-fns/tz@1.4.1",
+      "group": "@date-fns",
+      "description": "date-fns timezone utils",
+      "authors": [
+        {
+          "name": "Sasha Koss"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@date-fns/tz/-/tz-1.4.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "3f92d4361b5b8fa61f2378898f0e442fd794006e8e8ad0f45b77d641ca508c345cfd022c2f4b5136e3b53dc0ef3dc7162f57d24d75dd13576cfa5f790d5fce14"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/date-fns/tz#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/date-fns/tz.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/date-fns/tz/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "react",
+      "version": "19.2.14",
+      "purl": "pkg:npm/%40types/react@19.2.14",
+      "bom-ref": "pkg:npm/%40types/react@19.2.14",
+      "group": "@types",
+      "description": "TypeScript definitions for react",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/react/-/react-19.2.14.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "8a57131ff52788290c76d7b192808dd1b23ba4c7090ef99014fbee3ef98469803f3527c54c081d5122c0a158da4499bbfba3ef70cfaad7360ec12e304d8305f7"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/react"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "auth-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/auth-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/auth-js@2.114.0",
+      "group": "@supabase",
+      "description": "Official SDK for Supabase Auth",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/auth-js/-/auth-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ee9740137d581f29ccd5bdab6eb6d5b50738ba0e4b714bc04def6edc46b394264c63a8daafb6792472658fbfea70ee59e8a0184f6eac4ebe66bd51de3deb82fe"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/auth-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "date-fns",
+      "version": "4.1.0",
+      "purl": "pkg:npm/date-fns@4.1.0",
+      "bom-ref": "pkg:npm/date-fns@4.1.0",
+      "description": "Modern JavaScript date utility library",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/date-fns/-/date-fns-4.1.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "524ab4a306d05f16bf537106b6c755064475c3b28e43980806a747da192f927cd93d8bc1c5bfda6ba13c2fbb668c5b64c1906edd45c16e32203e8fc4cf8c5a36"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/date-fns/date-fns#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/date-fns/date-fns.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/date-fns/date-fns/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "functions-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/functions-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/functions-js@2.114.0",
+      "group": "@supabase",
+      "description": "JS SDK to interact with Supabase Functions.",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/functions-js/-/functions-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "37787396adb1afa218924823d2d0b88f45372d656c86be54fc302f983e41bbc6d6d677b65cec313b1de9b3a63735ba6d0409730eb7b399e25ebe5651e00aac2c"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/functions-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "postgrest-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/postgrest-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/postgrest-js@2.114.0",
+      "group": "@supabase",
+      "description": "Isomorphic PostgREST client",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/postgrest-js/-/postgrest-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c8a01ee53738efe2cb9ba614d4e0075aac24c627659e5fef1c3307c7e54035c51a78c7cdcc32ab5d352e67904a086338fb58095a6fd4de7e16fb66919fc77c74"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/postgrest-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "storage-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/storage-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/storage-js@2.114.0",
+      "group": "@supabase",
+      "description": "Isomorphic storage client for Supabase.",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/storage-js/-/storage-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "95e2bb62c0d5a8829df6141125e2b4dd0459f12960d8913198d223f812fb7640f79be64d44427b21341dadced584d861f3e11bfde6e6d53b3800ea18e0b15288"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/storage-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "realtime-js",
+      "version": "2.114.0",
+      "purl": "pkg:npm/%40supabase/realtime-js@2.114.0",
+      "bom-ref": "pkg:npm/%40supabase/realtime-js@2.114.0",
+      "group": "@supabase",
+      "description": "Listen to realtime updates to your PostgreSQL database",
+      "authors": [
+        {
+          "name": "Supabase"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/realtime-js/-/realtime-js-2.114.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "81292e42b33f7ad025527c3d60c0c0d9efa234c08b7b37f4207c8ece67ad3aacbd28fb067b60b7a6e4ddff8c5a962ae7928fa9dc1132905565887698db25d5af"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/supabase-js/tree/master/packages/core/realtime-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/supabase-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/supabase-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "env",
+      "version": "16.4.6",
+      "purl": "pkg:npm/%40next/env@16.4.6",
+      "bom-ref": "pkg:npm/%40next/env@16.4.6",
+      "group": "@next",
+      "description": "Next.js dotenv file loading",
+      "authors": [
+        {
+          "name": "Next.js Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/env/-/env-16.4.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4ae9c18c9eadfa806d79c4b77538dd56e32152880fe700ffbeb18be4456e418335892e0ee6294be751e4889dec3e33334478820a1bebe1d6da4896d1ec5de5c4"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/vercel/next.js#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vercel/next.js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/vercel/next.js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helpers",
+      "version": "0.5.23",
+      "purl": "pkg:npm/%40swc/helpers@0.5.23",
+      "bom-ref": "pkg:npm/%40swc/helpers@0.5.23",
+      "group": "@swc",
+      "description": "External helpers for the swc project.",
+      "authors": [
+        {
+          "name": "강동윤"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@swc/helpers/-/helpers-0.5.23.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "e654ac30e4d751178f8250dfbee01052a9067a4f47836924b0e61acb69b4f9747ef9bd8d5982ffe2c5b2baf54122cf282a725ac64762f7085a2ffb2a375dda7f"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://swc.rs"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/swc-project/swc.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/swc-project/swc/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "baseline-browser-mapping",
+      "version": "2.11.37",
+      "purl": "pkg:npm/baseline-browser-mapping@2.11.37",
+      "bom-ref": "pkg:npm/baseline-browser-mapping@2.11.37",
+      "description": "A library for obtaining browser versions with their maximum supported Baseline feature set and Widely Available status.",
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/baseline-browser-mapping/-/baseline-browser-mapping-2.11.37.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "418a61faf7eeae66b184dc22f45a6b7e6b644f9731d8a7a0f05cd9d2f9e33bcba4b1c2326d5c9918c17076594a1a54c8eaac94f1c938dce33d51787e20526285"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/web-platform-dx/baseline-browser-mapping#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/web-platform-dx/baseline-browser-mapping.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/web-platform-dx/baseline-browser-mapping/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "caniuse-lite",
+      "version": "1.0.30001769",
+      "purl": "pkg:npm/caniuse-lite@1.0.30001769",
+      "bom-ref": "pkg:npm/caniuse-lite@1.0.30001769",
+      "description": "A smaller version of caniuse-db, with only the essentials!",
+      "authors": [
+        {
+          "name": "Ben Briggs"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "CC-BY-4.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001769.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0427c52f5b078a342504658132e272859521ce8ef07abe6c563f61a9e901ffbc67d18a72fa9111fde7426109b87b16d78f85a2c921a9e343fc52e4e1eb0d6cae"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/browserslist/caniuse-lite#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/browserslist/caniuse-lite.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/browserslist/caniuse-lite/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "postcss",
+      "version": "8.5.23",
+      "purl": "pkg:npm/postcss@8.5.23",
+      "bom-ref": "pkg:npm/postcss@8.5.23",
+      "description": "Tool for transforming styles with JS plugins",
+      "authors": [
+        {
+          "name": "Andrey Sitnik"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/postcss/-/postcss-8.5.23.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "839d39f3acebe1b666c0589395f94cbbc1346c34dbe48e607abb60c002a6b1d5254d022166dba7cd4943d564b3c1c5563e8015a6cac0eaf95f083ee85ef47082"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://postcss.org/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/postcss/postcss.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/postcss/postcss/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "styled-jsx",
+      "version": "5.1.6",
+      "purl": "pkg:npm/styled-jsx@5.1.6",
+      "bom-ref": "pkg:npm/styled-jsx@5.1.6",
+      "description": "Full CSS support for JSX without compromises",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/styled-jsx/-/styled-jsx-5.1.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a925720d378ca2d76f418a0758b346c111491c2fa2f99bdd051628b0e1600be5a0d6fc787eb376fd11bf340ed262aaaf28d2dfdfd3f62d2440da9bba9f45d864"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/vercel/styled-jsx#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vercel/styled-jsx.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/vercel/styled-jsx/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "swc-linux-x64-gnu",
+      "version": "16.4.6",
+      "purl": "pkg:npm/%40next/swc-linux-x64-gnu@16.4.6",
+      "bom-ref": "pkg:npm/%40next/swc-linux-x64-gnu@16.4.6",
+      "group": "@next",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@next/swc-linux-x64-gnu/-/swc-linux-x64-gnu-16.4.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a0ea5b35af17396d6a08677d56fcc2e1f6e4911c4496ceff588eadcfe6070b4c5103b2a957553b0eb02708f8f35723a4fe46abcd611ea4239c4c80e6c0af05c1"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/vercel/next.js#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vercel/next.js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/vercel/next.js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sharp",
+      "version": "0.35.5",
+      "purl": "pkg:npm/sharp@0.35.5",
+      "bom-ref": "pkg:npm/sharp@0.35.5",
+      "description": "High performance Node.js image processing, the fastest module to resize JPEG, PNG, WebP, GIF, AVIF and TIFF images",
+      "authors": [
+        {
+          "name": "Lovell Fuller"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/sharp/-/sharp-0.35.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "6309f83a7cc6ba4a7b08332ba74f11439d182a6bb01b8edbad980854f4ef05a6807d095197282b46a4abc5d0a22fd33e2e5ccb06227af0847542abf31f28c2ee"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://sharp.pixelplumbing.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lovell/sharp.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lovell/sharp/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "xml-builder",
+      "version": "3.972.40",
+      "purl": "pkg:npm/%40aws-sdk/xml-builder@3.972.40",
+      "bom-ref": "pkg:npm/%40aws-sdk/xml-builder@3.972.40",
+      "group": "@aws-sdk",
+      "description": "XML utilities for the AWS SDK",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/xml-builder/-/xml-builder-3.972.40.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c25166088194970178cf1fe49dcc3e6e6c53421d4779226ae26615fd5e5c65448969d0cfde45ef196f119f6d5c8a68ffef2f63bbee3ba185978bdeef17b73368"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/xml-builder"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "scheduler",
+      "version": "0.27.0",
+      "purl": "pkg:npm/scheduler@0.27.0",
+      "bom-ref": "pkg:npm/scheduler@0.27.0",
+      "description": "Cooperative scheduler for the browser environment.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/scheduler/-/scheduler-0.27.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "78dbfe5ab55b2aed5fdef6d8253ff1b62179b320391cf20cb5ff48818fe72a0d2c5aacc0504bea63fc66ece71973fa9a7cbc7f88ef4580e99e480a78bf9b62fd"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://react.dev/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/facebook/react.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/facebook/react/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lambda-invoke-store",
+      "version": "0.3.0",
+      "purl": "pkg:npm/%40aws/lambda-invoke-store@0.3.0",
+      "bom-ref": "pkg:npm/%40aws/lambda-invoke-store@0.3.0",
+      "group": "@aws",
+      "description": "Invoke scoped data storage for AWS Lambda Node.js Runtime Environment",
+      "authors": [
+        {
+          "name": "Amazon Web Services"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws/lambda-invoke-store/-/lambda-invoke-store-0.3.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b25e019baca230d62b64a92aa8315637451f9d68654bc8af2b1ad897eeadd2008baeaafccb707622a6596c54647da555a7b0bf6da029ca1ef53fe2de135036b1"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/awslabs/aws-lambda-invoke-store"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/awslabs/aws-lambda-invoke-store.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/awslabs/aws-lambda-invoke-store/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "signature-v4",
+      "version": "5.7.3",
+      "purl": "pkg:npm/%40smithy/signature-v4@5.7.3",
+      "bom-ref": "pkg:npm/%40smithy/signature-v4@5.7.3",
+      "group": "@smithy",
+      "description": "A standalone implementation of the AWS Signature V4 request signing algorithm",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/signature-v4/-/signature-v4-5.7.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ec89869be1641d12dc05a46db4800c67a6f325959bd9c246a188eae3a176523c9cba35b3acbf4610df61e30ede4325c962796dad48716db89e040211addaa9a3"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/signature-v4"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "bowser",
+      "version": "2.14.1",
+      "purl": "pkg:npm/bowser@2.14.1",
+      "bom-ref": "pkg:npm/bowser@2.14.1",
+      "description": "Lightweight browser detector",
+      "authors": [
+        {
+          "name": "Dustin Diaz"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/bowser/-/bowser-2.14.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b733e3cc2c7280029614e24fd35d68c451ece7b1f3221384ada70880078f138a6a0772e29002ca9d2cd4c94e0c1acf7f882114b879402538d373933ebbb6041a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/bowser-js/bowser"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/bowser-js/bowser.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/bowser-js/bowser/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-env",
+      "version": "3.972.70",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-env@3.972.70",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-env@3.972.70",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that sources credentials from known environment variables",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-env/-/credential-provider-env-3.972.70.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "1f8d3807b749976982ac1a9a843118b1a9c1d3185d0e9ead5e75dc4d49d79a6a72d90dc9d07a346d46a36768ebfd1770cc2c92e7d1a2f315c81703cb18197a53"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-env"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-http",
+      "version": "3.972.72",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-http@3.972.72",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-http@3.972.72",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider for containers and HTTP sources",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-http/-/credential-provider-http-3.972.72.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "5fdf3360ead539eba8b025feea4b5fdbd142d8dd861cf2e26bbaafea6ccfcd373e44f02e1d60834bef99e892bb78662a6ffbfab9a5bb6c05da3af0c17e897ed3"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-http"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-process",
+      "version": "3.972.70",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-process@3.972.70",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-process@3.972.70",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that sources credential_process from ~/.aws/credentials and ~/.aws/config",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-process/-/credential-provider-process-3.972.70.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "dabcb4ddf19126be2c5778c8fa87238f926a00b9c50faca63392a23420d932fabc6d7d8649b134be38b868ce374d50a5da75eaa8b459694c5dabf29e591018e1"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-process"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-sso",
+      "version": "3.973.14",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-sso@3.973.14",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-sso@3.973.14",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that exchanges a resolved SSO login token file for temporary AWS credentials",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-sso/-/credential-provider-sso-3.973.14.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "8e4860ffca1c000a1cd111722cc842c3eff3661ee0cacb5081de05e21ce735af0fe02739d353d09b177e8c62e2307a1d3c9fbb66fff7ce733ada06688f26ac98"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-sso"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-ini",
+      "version": "3.973.15",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-ini@3.973.15",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-ini@3.973.15",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that sources credentials from ~/.aws/credentials and ~/.aws/config",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-ini/-/credential-provider-ini-3.973.15.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "472920eace5c781bb29cc3865a0a28c0ee0dfb6ec97e7a9702755a4ae9d997484e3b55e8752af118dcfab0211b9e64b49407d06432b26f77dbaf8ea04aebfa4a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-ini"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-web-identity",
+      "version": "3.972.76",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-web-identity@3.972.76",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-web-identity@3.972.76",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that calls STS assumeRole for temporary AWS credentials",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-web-identity/-/credential-provider-web-identity-3.972.76.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "777006c95bbbe7d3c6af7e66101dacdb6c7194d100e6ba5dc6d48f26d85f3c526fa10f1db77e7b8953c40aa59f5315e9d6da0902f2a66ed7086151a281a1ac08"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-web-identity"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-imds",
+      "version": "4.5.2",
+      "purl": "pkg:npm/%40smithy/credential-provider-imds@4.5.2",
+      "bom-ref": "pkg:npm/%40smithy/credential-provider-imds@4.5.2",
+      "group": "@smithy",
+      "description": "AWS credential provider that sources credentials from the EC2 instance metadata service and ECS container metadata service",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@smithy/credential-provider-imds/-/credential-provider-imds-4.5.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "03db92767ef6a336d15128add1e89bd135bb9d7b8d3e569e334cdc1a427e9c4ead15c4836e79adc28c5b4c2141ba455072ccc3032bec77bfab4ddb8f4d7a7282"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/smithy-lang/smithy-typescript/tree/main/packages/credential-provider-imds"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/smithy-lang/smithy-typescript.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/smithy-lang/smithy-typescript/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "dom",
+      "version": "1.7.6",
+      "purl": "pkg:npm/%40floating-ui/dom@1.7.6",
+      "bom-ref": "pkg:npm/%40floating-ui/dom@1.7.6",
+      "group": "@floating-ui",
+      "description": "Floating UI for the web",
+      "authors": [
+        {
+          "name": "atomiks"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@floating-ui/dom/-/dom-1.7.6.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "f60652008e57337ebcf343cf326ffff5d7e2127818a02e809b68b3112d45178d3a605b23bf204c99e2768384808eedf15b0b6eca735114bdacf61831a4b23949"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://floating-ui.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/floating-ui/floating-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/floating-ui/floating-ui"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "reselect",
+      "version": "5.2.0",
+      "purl": "pkg:npm/reselect@5.2.0",
+      "bom-ref": "pkg:npm/reselect@5.2.0",
+      "description": "Selectors for Redux.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/reselect/-/reselect-5.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "02067750e666dd89dd7eb2783988e0ad3edb9829bfd62aa48ef11f1ffa188f387a3c3daac3842e4f78e39d722ba5db78313a4c5dc94c4f79576e6458f9745a93"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/reduxjs/reselect#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/reduxjs/reselect.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/reduxjs/reselect/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "csstype",
+      "version": "3.2.3",
+      "purl": "pkg:npm/csstype@3.2.3",
+      "bom-ref": "pkg:npm/csstype@3.2.3",
+      "description": "Strict TypeScript and Flow types for style based on MDN data",
+      "authors": [
+        {
+          "name": "Fredrik Nicol"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/csstype/-/csstype-3.2.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "cf51c629c632db103c00641fc2b9f43c0cbe3c1ed7fc64a3dd45495bda8aca7e37c566be825e675e6538aaa2cc4735952c50bc2aeb145fc4ffd240a2398a4021"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/frenic/csstype#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/frenic/csstype.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/frenic/csstype/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "iceberg-js",
+      "version": "0.8.1",
+      "purl": "pkg:npm/iceberg-js@0.8.1",
+      "bom-ref": "pkg:npm/iceberg-js@0.8.1",
+      "description": "A small, framework-agnostic JavaScript/TypeScript client for the Apache Iceberg REST Catalog",
+      "authors": [
+        {
+          "name": "mandarini"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/iceberg-js/-/iceberg-js-0.8.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "d5d8554195e17078deefbf7c21533ec68a3fd597557f338c21cf3fae05528a344adfc103a8e2681ae95af4dffc648e510fc413c4d42d2bf1a8ce9afea94a9144"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/iceberg-js#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/supabase/iceberg-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/iceberg-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "phoenix",
+      "version": "0.4.5",
+      "purl": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "bom-ref": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "group": "@supabase",
+      "description": "The official JavaScript client for the Phoenix web framework.",
+      "authors": [
+        {
+          "name": "Chris McCord"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@supabase/phoenix/-/phoenix-0.4.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "6809fd1fda2f572780a4acb5d4e58eaeb386abc0d5ebcc96787e2e77694df5fce7e1a3bc65be462cbf66d69520f672ea21c4fe6437c072c65ed04fe7a9dbf697"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/supabase/phoenix#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/supabase/phoenix.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/supabase/phoenix/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nanoid",
+      "version": "3.3.20",
+      "purl": "pkg:npm/nanoid@3.3.20",
+      "bom-ref": "pkg:npm/nanoid@3.3.20",
+      "description": "A tiny (116 bytes), secure URL-friendly unique string ID generator",
+      "authors": [
+        {
+          "name": "Andrey Sitnik"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/nanoid/-/nanoid-3.3.20.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b8a760d86dc63422909fd6f260ea716c6aab4f67c63b9291b7927ff1bde9a24f2b4faab119617a871332262118b407fe155c98b83f6145a0ea5f9b8f15827865"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/ai/nanoid#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/ai/nanoid.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/ai/nanoid/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "picocolors",
+      "version": "1.1.1",
+      "purl": "pkg:npm/picocolors@1.1.1",
+      "bom-ref": "pkg:npm/picocolors@1.1.1",
+      "description": "The tiniest and the fastest library for terminal output formatting with ANSI colors",
+      "authors": [
+        {
+          "name": "Alexey Raspopov"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c5c787dac9e1b5be4cf658aa0ec984c39ea57b7efa993664117fe311bfd1c4d1727a036e97b78db250973fd1438ff2dcbb45fc284c8c71e3f69eda5a1eb0c454"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/alexeyraspopov/picocolors#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/alexeyraspopov/picocolors.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/alexeyraspopov/picocolors/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "source-map-js",
+      "version": "1.2.2",
+      "purl": "pkg:npm/source-map-js@1.2.2",
+      "bom-ref": "pkg:npm/source-map-js@1.2.2",
+      "description": "Generates and consumes source maps",
+      "authors": [
+        {
+          "name": "Valentin 7rulnik Semirulnik"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BSD-3-Clause"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/source-map-js/-/source-map-js-1.2.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2868fff18e37c77e5a6550edb7e27898ad61a0b18750b3187d290e0c93508cd0c2de85b53ea3e8c4cc28d292d4b1633f5041b338dfcdc5e1f2c047cd5cd3f757"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/7rulnik/source-map-js"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/7rulnik/source-map-js.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/7rulnik/source-map-js/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "client-only",
+      "version": "0.0.1",
+      "purl": "pkg:npm/client-only@0.0.1",
+      "bom-ref": "pkg:npm/client-only@0.0.1",
+      "description": "This is a marker package to indicate that a module can only be used in Client Components.",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/client-only/-/client-only-0.0.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "215dcebb48d233366b777a59e3c9cb913f4303b020d699cfcda8908695bb73745b72aab3bf3cd5bbe2fc81fa8ca7ff08336310b528aa682c6badc7eef08f2b30"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://reactjs.org/"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/facebook/react/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "colour",
+      "version": "1.1.0",
+      "purl": "pkg:npm/%40img/colour@1.1.0",
+      "bom-ref": "pkg:npm/%40img/colour@1.1.0",
+      "group": "@img",
+      "description": "The ESM-only 'color' package made compatible for use with CommonJS runtimes",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/colour/-/colour-1.1.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4ddefaabb8f9ee8fed2d57604bbe3a7180117d2cb193c8847d1c5ec0bf61e0e3336216d6e1301ca69974993e1ecaa5dd761e8bfe3c2833be66a3b8b16bfa4279"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lovell/colour#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lovell/colour.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lovell/colour/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/core@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/core@7.29.7",
+      "group": "@babel",
+      "description": "Babel compiler core.",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/core/-/core-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4601c10afb636ce2b681748d04d22436811cf6aa1512d6aede18fc804a8a42e2f71d90226ca6ab585108dcb7e6e8460a90b6a53a1f1e4ab8fd6fe721f47fd504"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-core"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A%20core%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "detect-libc",
+      "version": "2.1.2",
+      "purl": "pkg:npm/detect-libc@2.1.2",
+      "bom-ref": "pkg:npm/detect-libc@2.1.2",
+      "description": "Node.js module to detect the C standard library (libc) implementation family and version",
+      "authors": [
+        {
+          "name": "Lovell Fuller"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/detect-libc/-/detect-libc-2.1.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "06d8f604e38ef37a375b21f9f5ef0c817b3111055c6ab9143a9118aee6c1d2eaf09cdd74c90dfae2bb22072535d67665a966199b4e62fe87fb8a8e26ce2841b5"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lovell/detect-libc#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/lovell/detect-libc.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lovell/detect-libc/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "7.8.5",
+      "purl": "pkg:npm/semver@7.8.5",
+      "bom-ref": "pkg:npm/semver@7.8.5",
+      "description": "The semantic version parser used by npm.",
+      "authors": [
+        {
+          "name": "GitHub Inc."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/npm/node-semver#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/npm/node-semver.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/npm/node-semver/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sharp-libvips-linux-x64",
+      "version": "1.3.4",
+      "purl": "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+      "bom-ref": "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+      "group": "@img",
+      "description": "Prebuilt libvips and dependencies for use with sharp on Linux (glibc) x64",
+      "authors": [
+        {
+          "name": "Lovell Fuller"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "LGPL-3.0-or-later"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-libvips-linux-x64/-/sharp-libvips-linux-x64-1.3.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "189fff4925db9f04837acd36ba60779c324b15c433c3c6b5f15f1fca1aabead579d79b4e10c7489a38f18f502869f311cf9e85dcf1e07ed9e3d5010a494d7393"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://sharp.pixelplumbing.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lovell/sharp-libvips.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lovell/sharp-libvips/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sharp-linux-x64",
+      "version": "0.35.5",
+      "purl": "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+      "bom-ref": "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+      "group": "@img",
+      "description": "Prebuilt sharp for use with Linux (glibc) x64",
+      "authors": [
+        {
+          "name": "Lovell Fuller"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@img/sharp-linux-x64/-/sharp-linux-x64-0.35.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "4b116d2d378922784003d43cdfa92ec76bd935e381404c7ae7caaf6dba1949caf4c08011ca6dc8706996ecaa550f9b1b560d0e8f2fae74541d6b2608672a0da2"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://sharp.pixelplumbing.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lovell/sharp.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lovell/sharp/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node",
+      "version": "24.10.4",
+      "purl": "pkg:npm/%40types/node@24.10.4",
+      "bom-ref": "pkg:npm/%40types/node@24.10.4",
+      "group": "@types",
+      "description": "TypeScript definitions for node",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@types/node/-/node-24.10.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "be70d5a583cccece30ba7976ee31eb7e6c288ce18ac9ad31c8cdec1fe504e62bf9b8f4babd7ed422887a9bebd07392c606ae761c128f227ff3712655cde0c466"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/tree/master/types/node"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/DefinitelyTyped/DefinitelyTyped.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/DefinitelyTyped/DefinitelyTyped/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "nested-clients",
+      "version": "3.997.44",
+      "purl": "pkg:npm/%40aws-sdk/nested-clients@3.997.44",
+      "bom-ref": "pkg:npm/%40aws-sdk/nested-clients@3.997.44",
+      "group": "@aws-sdk",
+      "description": "Nested clients for AWS SDK packages.",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/nested-clients/-/nested-clients-3.997.44.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "361120af28e5045f70dfc657a86ca6415dbc2219186b598a8656d89ea222b39ec06305865587d43e083fa82dab2d1a8e51f6e5c71fbe8abbe3bb5d245536bc57"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/nested-clients"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "token-providers",
+      "version": "3.1116.0",
+      "purl": "pkg:npm/%40aws-sdk/token-providers@3.1116.0",
+      "bom-ref": "pkg:npm/%40aws-sdk/token-providers@3.1116.0",
+      "group": "@aws-sdk",
+      "description": "A collection of token providers",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/token-providers/-/token-providers-3.1116.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ca0222bcaaa1f1a1f3364b9c3825c7c880600692cf7eb488d260aa5c5faf2c1b0f4d42aa8f4552a806341853deee5425e079ed8ce710f8a4b24bba145760b9e1"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages/token-providers"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "credential-provider-login",
+      "version": "3.972.77",
+      "purl": "pkg:npm/%40aws-sdk/credential-provider-login@3.972.77",
+      "bom-ref": "pkg:npm/%40aws-sdk/credential-provider-login@3.972.77",
+      "group": "@aws-sdk",
+      "description": "AWS credential provider that sources credentials from aws login cached tokens",
+      "authors": [
+        {
+          "name": "AWS SDK for JavaScript Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "Apache-2.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@aws-sdk/credential-provider-login/-/credential-provider-login-3.972.77.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "25be7dc5f1084a83799a66e703e1d8a9db6b497dc2802b49a287fe5790fcfd3814239e96eb718411de58e7c5a28d4dcebbaf9612068b0f57de5736915d5e480d"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/aws/aws-sdk-js-v3/tree/main/packages-internal/credential-provider-login"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/aws/aws-sdk-js-v3.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/aws/aws-sdk-js-v3/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "core",
+      "version": "1.7.5",
+      "purl": "pkg:npm/%40floating-ui/core@1.7.5",
+      "bom-ref": "pkg:npm/%40floating-ui/core@1.7.5",
+      "group": "@floating-ui",
+      "description": "Positioning library for floating elements: tooltips, popovers, dropdowns, and more",
+      "authors": [
+        {
+          "name": "atomiks"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@floating-ui/core/-/core-1.7.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "d488785935b2c34fa52b214c7011c66dbe54e45b6e1c9bae8e8cb2af9cd36964b911831e4fa25bd80b8379fb6c0ac12e7213be98cda28f9faaf5cae1c9dccb85"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://floating-ui.com"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/floating-ui/floating-ui.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/floating-ui/floating-ui"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "code-frame",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/code-frame@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/code-frame@7.29.7",
+      "group": "@babel",
+      "description": "Generate errors that contain a code frame that point to source locations.",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/code-frame/-/code-frame-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "02ea7b69439fa5b01483644e38937a230e5ff43301973bb4988926fe66a52d014dfd84203b8f300a3d0ac5adec10726f3d5160eec891faa4489f05dddaa8502b"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-code-frame"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "generator",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/generator@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/generator@7.29.7",
+      "group": "@babel",
+      "description": "Turns an AST into code.",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/generator/-/generator-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "0e45c3e4e250680408759d5bb775197449c7027f4899ddc8541757d375057bea27cbd3a3c39a73afd6152860d8d63b7e19c9ff1671a435ff2bf958f934e256b5"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-generator"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A%20generator%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-compilation-targets",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+      "group": "@babel",
+      "description": "Helper functions on Babel compilation targets",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-compilation-targets/-/helper-compilation-targets-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c1e9ba59a063e0d69561574d84b3cf55a7044ba649f8a0417d2913303dd86716cfdeb9b70e2f39b4953996369436168eca7b7e023d31aee858bb3401b7c9fbd6"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/babel/babel#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-module-transforms",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+      "group": "@babel",
+      "description": "Babel helper functions for implementing ES6 module transformations",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-module-transforms/-/helper-module-transforms-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "50f5154b25db3a1eb6eca8822064128305b319e04a2e4689f4f24476b9e0230312cf12d1e234b8f9fd5fd636fb57305b83c9c52da628b6f54f1424ea76b99302"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-helper-module-transforms"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helpers",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helpers@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helpers@7.29.7",
+      "group": "@babel",
+      "description": "Collection of helper functions used by Babel transforms.",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helpers/-/helpers-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "d64da500644c7c74dcc2e35870235499a51f7e642ff0a58c7e1da225451e465c25c07e0574d1bb99f3c8d7434f7cb1c9153844e13cabe26bfb9133593a23ee06"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-helpers"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "parser",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/parser@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/parser@7.29.7",
+      "group": "@babel",
+      "description": "A JavaScript parser",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/parser/-/parser-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "8673919e33ffd4fff31449dda1e5fe9feb7547059126226933f8ceec55b7d8a9fdaf9fac241d8958e758a382fa93bf23d79782c18dc69bfef7eb807510cc2d36"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-parser"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A+parser+%28babylon%29%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "template",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/template@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/template@7.29.7",
+      "group": "@babel",
+      "description": "Generate an AST from a string template.",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/template/-/template-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a6eabe19fdf9a08db815e375d4b92851016abfdbb035e5a9c57662fc98b7ad1228280cca9f145a67e1a48f4bca4bd6428931127e783537d2f23b25efa3e9be1a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-template"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A%20template%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "types",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/types@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/types@7.29.7",
+      "group": "@babel",
+      "description": "Babel Types is a Lodash-esque utility library for AST nodes",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/types/-/types-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "e33048c693f3a30899a6eb28164c865706a4751254cae1f93f143f3ebaa085f7455966acbe709d3df4171eb7a70da8be8322c046e9598d9a3008e8fa7e34f8a4"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-types"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A%20types%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "traverse",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/traverse@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/traverse@7.29.7",
+      "group": "@babel",
+      "description": "The Babel Traverse module maintains the overall tree state, and is responsible for replacing, removing, and adding nodes",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/traverse/-/traverse-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "12195f350b59f8d2b6db0e4133ad5c8ae8aad66e7c79ddf75abd576a7fff6514f2ea18239f0c827df458c33b065dd012252509d60b9920bb04ae1d5e41c97ecf"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-traverse"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues?utf8=%E2%9C%93&q=is%3Aissue+label%3A%22pkg%3A%20traverse%22+is%3Aopen"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "remapping",
+      "version": "2.3.5",
+      "purl": "pkg:npm/%40jridgewell/remapping@2.3.5",
+      "bom-ref": "pkg:npm/%40jridgewell/remapping@2.3.5",
+      "group": "@jridgewell",
+      "description": "Remap sequential sourcemaps through transformations to point at the original source code",
+      "authors": [
+        {
+          "name": "Justin Ridgewell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/remapping/-/remapping-2.3.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2c8f6effe95a606e03b354c3292256d983eb22571560ec22d9f502eb1078de5b9e0a383157895f7ce0990ad605887e9334e5feb50297c7ded3e082876e1c8711"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/remapping"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jridgewell/sourcemaps.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jridgewell/sourcemaps/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "convert-source-map",
+      "version": "2.0.0",
+      "purl": "pkg:npm/convert-source-map@2.0.0",
+      "bom-ref": "pkg:npm/convert-source-map@2.0.0",
+      "description": "Converts a source-map from/to  different formats and allows adding/changing properties.",
+      "authors": [
+        {
+          "name": "Thorsten Lorenz"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/convert-source-map/-/convert-source-map-2.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2afa78e7d1eb576144275080b22d4abbe318de46ac1f5f53172913cf6c5698c7aae9b936354dd75ef7c9f90eb59b4c64b56c2dfb51d261fdc966c4e6b3769126"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/thlorenz/convert-source-map"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/thlorenz/convert-source-map.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/thlorenz/convert-source-map/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "debug",
+      "version": "4.4.3",
+      "purl": "pkg:npm/debug@4.4.3",
+      "bom-ref": "pkg:npm/debug@4.4.3",
+      "description": "Lightweight debugging utility for Node.js and the browser",
+      "authors": [
+        {
+          "name": "Josh Junon"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/debug/-/debug-4.4.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "446c305a7c10be455f6af295b76d8518bc3ec5849dcc04709b4aeee83853540dee994e6165cdbc57790ee2cb6062bcab4e52e9baf808f468a28e5b408cd6dca8"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/debug-js/debug#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/debug-js/debug.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/debug-js/debug/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "gensync",
+      "version": "1.0.0-beta.2",
+      "purl": "pkg:npm/gensync@1.0.0-beta.2",
+      "bom-ref": "pkg:npm/gensync@1.0.0-beta.2",
+      "description": "Allows users to use generators in order to write common functions that can be both sync or async.",
+      "authors": [
+        {
+          "name": "Logan Smyth"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/gensync/-/gensync-1.0.0-beta.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "de137b35ab2462f3032d0639e609d6dcd43e99eb0401ea53aa583e5446e3ef3cea10c055361cdc19861ea85a3f4e5633e9e42215ca751dcb0264efa71a04bcce"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/loganfsmyth/gensync"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/loganfsmyth/gensync.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/loganfsmyth/gensync/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "semver",
+      "version": "6.3.1",
+      "purl": "pkg:npm/semver@6.3.1",
+      "bom-ref": "pkg:npm/semver@6.3.1",
+      "description": "The semantic version parser used by npm.",
+      "authors": [
+        {
+          "name": "GitHub Inc."
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "051ed5bc30951cefaadb10445ac9314ba0c9135a919dbec3c7352ba206fbd425a849f89c07162c88019df8a9749a6abf329ac6f7202b464cab4314cee978cccc"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/npm/node-semver#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/npm/node-semver.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/npm/node-semver/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "json5",
+      "version": "2.2.3",
+      "purl": "pkg:npm/json5@2.2.3",
+      "bom-ref": "pkg:npm/json5@2.2.3",
+      "description": "JSON for Humans",
+      "authors": [
+        {
+          "name": "Aseem Kishore"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/json5/-/json5-2.2.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "5e63967bb7b21d81f5e1c2dd54fa3283e18e1f7ad85fef8aa73af2949c125bdf2ddcd93e53c5ce97c15628e830b7375bf255c67facd8c035337873167f16acca"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "http://json5.org/"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/json5/json5.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/json5/json5/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "undici-types",
+      "version": "7.16.0",
+      "purl": "pkg:npm/undici-types@7.16.0",
+      "bom-ref": "pkg:npm/undici-types@7.16.0",
+      "description": "A stand-alone types package for Undici",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/undici-types/-/undici-types-7.16.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "673f9a6564a3f0b13ace8c43fb1ae387855f9081bc61ae8bbd8919aad5101893d98d8979df2a42694c16aa8ede234c7ae8a046791a3e9a504490c49e499dfc37"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://undici.nodejs.org"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/nodejs/undici.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/nodejs/undici/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-validator-identifier",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+      "group": "@babel",
+      "description": "Validate identifier/keywords name",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-validator-identifier/-/helper-validator-identifier-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "a9e8711a4463e7987f7dff0431a27e71887268a947231a980e7ebcdb0403ed1369f54ba3390b07a20dae4b4af6bf3af8a56fac5dff7435e79aca370d697ddf16"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/babel/babel#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "js-tokens",
+      "version": "4.0.0",
+      "purl": "pkg:npm/js-tokens@4.0.0",
+      "bom-ref": "pkg:npm/js-tokens@4.0.0",
+      "description": "A regex that tokenizes JavaScript.",
+      "authors": [
+        {
+          "name": "Simon Lydell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/js-tokens/-/js-tokens-4.0.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "45d2547e5704ddc5332a232a420b02bb4e853eef5474824ed1b7986cf84737893a6a9809b627dca02b53f5b7313a9601b690f690233a49bce0e026aeb16fcf29"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lydell/js-tokens#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lydell/js-tokens.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lydell/js-tokens/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "gen-mapping",
+      "version": "0.3.13",
+      "purl": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "bom-ref": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "group": "@jridgewell",
+      "description": "Generate source maps",
+      "authors": [
+        {
+          "name": "Justin Ridgewell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/gen-mapping/-/gen-mapping-0.3.13.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "da492dffb9e227a32010fc45d1b61d43a7ad65a03e7d0bc370b29c921cb5c8840ecdaa0a8c10634a3eb7fda2d58d8137aa146de5dbccfae5327c283a50a0816c"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/gen-mapping"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jridgewell/sourcemaps.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jridgewell/sourcemaps/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "trace-mapping",
+      "version": "0.3.31",
+      "purl": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "bom-ref": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "group": "@jridgewell",
+      "description": "Trace the original position through a source map",
+      "authors": [
+        {
+          "name": "Justin Ridgewell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/trace-mapping/-/trace-mapping-0.3.31.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "cf3351f9275048327373c8e869e3fc410a0242bf0db98c76748232b65d507811191c9f6e5ba85e6ecad881bcfc849c1441aa374d608cb667d5f0dbb5b7038b03"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/trace-mapping"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jridgewell/sourcemaps.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jridgewell/sourcemaps/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "jsesc",
+      "version": "3.1.0",
+      "purl": "pkg:npm/jsesc@3.1.0",
+      "bom-ref": "pkg:npm/jsesc@3.1.0",
+      "description": "Given some data, jsesc returns the shortest possible stringified & ASCII-safe representation of that data.",
+      "authors": [
+        {
+          "name": "Mathias Bynens"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/jsesc/-/jsesc-3.1.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "fec33774ed853b35e3290849ba8d10d7bdf07f628ea3cb7823cbc7cba945f69a14a7b6ca4f4fcd1c4f1f3d7db73f07e19f291faa70b6c51c4e9d5c395ee18868"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://mths.be/jsesc"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/mathiasbynens/jsesc.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/mathiasbynens/jsesc/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "compat-data",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/compat-data@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/compat-data@7.29.7",
+      "group": "@babel",
+      "description": "The compat-data to determine required Babel plugins",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/compat-data/-/compat-data-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "968713910c8abf0204801cd5ae7f3af7779b73dec5d94f191e36d7c035c9e459f64c2a4dc1394a71a28b91d1e8a7973f89c38513baaded0f490b986728d6ba1a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/babel/babel#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-validator-option",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-validator-option@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-validator-option@7.29.7",
+      "group": "@babel",
+      "description": "Validate plugin/preset options",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-validator-option/-/helper-validator-option-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "37d644aeb0fec96e607820ed06a9cea31991f3eb4d2a21aec4a943a6e2717ecaa96b674571ec5ace218013faa81cb8830eb79534cba9c46992a0d972bec03783"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/babel/babel#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "browserslist",
+      "version": "4.29.5",
+      "purl": "pkg:npm/browserslist@4.29.5",
+      "bom-ref": "pkg:npm/browserslist@4.29.5",
+      "description": "Share target browsers between different front-end tools, like Autoprefixer, Stylelint and babel-env-preset",
+      "authors": [
+        {
+          "name": "Andrey Sitnik"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/browserslist/-/browserslist-4.29.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "9214e62aee4d1984e8b6a718a3c05ec3693844013d3ee5d14854571b695006b084407c9e43fbd7ea028cc5fa24c32c01b0b89764c9c7b2658c1b5a673bc27bb9"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/browserslist/browserslist#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/browserslist/browserslist.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/browserslist/browserslist/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-module-imports",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+      "group": "@babel",
+      "description": "Babel helper functions for inserting module loads",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-module-imports/-/helper-module-imports-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "7a31f0ad0418726f719d38af4a19f62033a5233227377e005ec92fabd42272f0ad133ab5573725bbfb4a17c26ad4283c246d862fafc49a382c093ee55dea44de"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-helper-module-imports"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "lru-cache",
+      "version": "5.1.1",
+      "purl": "pkg:npm/lru-cache@5.1.1",
+      "bom-ref": "pkg:npm/lru-cache@5.1.1",
+      "description": "A cache object that deletes the least-recently-used items.",
+      "authors": [
+        {
+          "name": "Isaac Z. Schlueter"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/lru-cache/-/lru-cache-5.1.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "2a9340450037230bfe8d3034bad51555bae1f8996baf516fd1ee7a186cc014e5cdedd93f16f89a0d6f0b1e62b9d8395c1f858fda7ea023cbcdd5a7ac045828f7"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/isaacs/node-lru-cache#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git://github.com/isaacs/node-lru-cache.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/isaacs/node-lru-cache/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-string-parser",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-string-parser@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-string-parser@7.29.7",
+      "group": "@babel",
+      "description": "A utility package to parse strings",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-string-parser/-/helper-string-parser-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "3dbe628cfad9f3d1831fcdb6dcbe143fc8ba400a56c6cd3845b3d02537960d5d3f91e476137e8c78a9f2afa2d899452fa91448f88bfced2b85d56e84ac837363"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://babel.dev/docs/en/next/babel-helper-string-parser"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "helper-globals",
+      "version": "7.29.7",
+      "purl": "pkg:npm/%40babel/helper-globals@7.29.7",
+      "bom-ref": "pkg:npm/%40babel/helper-globals@7.29.7",
+      "group": "@babel",
+      "description": "A collection of JavaScript globals for Babel internal usage",
+      "authors": [
+        {
+          "name": "The Babel Team"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@babel/helper-globals/-/helper-globals-7.29.7.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "de7415500b6f90a1fdcda85f5a0c3de8973fb853a68c0084d64433f3613696a5a61c1823cdb365b02db69ee4137da86659e42d4eae6743fe0d9ddd80d708f8cc"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/babel/babel#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/babel/babel.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/babel/babel/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "ms",
+      "version": "2.1.3",
+      "purl": "pkg:npm/ms@2.1.3",
+      "bom-ref": "pkg:npm/ms@2.1.3",
+      "description": "Tiny millisecond conversion utility",
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/ms/-/ms-2.1.3.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "e85973b9b4cb646dc9d9afcd542025784863ceae68c601f268253dc985ef70bb2fa1568726afece715c8ebf5d73fab73ed1f7100eb479d23bfb57b45dd645394"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/vercel/ms#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/vercel/ms.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/vercel/ms/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "sourcemap-codec",
+      "version": "1.5.5",
+      "purl": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "bom-ref": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "group": "@jridgewell",
+      "description": "Encode/decode sourcemap mappings",
+      "authors": [
+        {
+          "name": "Justin Ridgewell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/sourcemap-codec/-/sourcemap-codec-1.5.5.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "71843ddf5d20aeac6e7966e5f96b885086a251a0dc8fb58eab97d58449633558117ce52163d7f2db34ef7e8a96b2779b87c4a5ef45527056c80af2672ca0743a"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jridgewell/sourcemaps/tree/main/packages/sourcemap-codec"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jridgewell/sourcemaps.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jridgewell/sourcemaps/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "resolve-uri",
+      "version": "3.1.2",
+      "purl": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "bom-ref": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "group": "@jridgewell",
+      "description": "Resolve a URI relative to an optional base URI",
+      "authors": [
+        {
+          "name": "Justin Ridgewell"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@jridgewell/resolve-uri/-/resolve-uri-3.1.2.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "6d12128022233f6d3fb5b5923d63048b9e1054f45913192e0fd9492fe508c542adc15240f305b54eb6f58ccb354455e8d42053359ff98690bd42f98a59da292b"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/jridgewell/resolve-uri#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/jridgewell/resolve-uri.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/jridgewell/resolve-uri/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "caniuse-lite",
+      "version": "1.0.30001826",
+      "purl": "pkg:npm/caniuse-lite@1.0.30001826",
+      "bom-ref": "pkg:npm/caniuse-lite@1.0.30001826",
+      "description": "A smaller version of caniuse-db, with only the essentials!",
+      "authors": [
+        {
+          "name": "Ben Briggs"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "CC-BY-4.0"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/caniuse-lite/-/caniuse-lite-1.0.30001826.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "c1307ef6d21b2eba3f0425f02ee355d667871382fd752e9d02b303c2061f3413cc61272a0a51f21ae9e1902483b4785effaf57974b0794a801559f9f36c62d58"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/browserslist/caniuse-lite#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/browserslist/caniuse-lite.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/browserslist/caniuse-lite/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "electron-to-chromium",
+      "version": "1.5.486",
+      "purl": "pkg:npm/electron-to-chromium@1.5.486",
+      "bom-ref": "pkg:npm/electron-to-chromium@1.5.486",
+      "description": "Provides a list of electron-to-chromium version mappings",
+      "authors": [
+        {
+          "name": "Kilian Valkhof"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/electron-to-chromium/-/electron-to-chromium-1.5.486.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "ae9c9bc3801ce1a93f027e86d4c7b6fbad71cf0a1ba300c6cae25eef54071ce569919bf87cf5686ec2e5ed61facc748abac00ca5a1f118a4e93afa72efeaf775"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/Kilian/electron-to-chromium#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/Kilian/electron-to-chromium.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/Kilian/electron-to-chromium/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "node-releases",
+      "version": "2.0.64",
+      "purl": "pkg:npm/node-releases@2.0.64",
+      "bom-ref": "pkg:npm/node-releases@2.0.64",
+      "description": "Node.js releases data",
+      "authors": [
+        {
+          "name": "Sergey Rubanov"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/node-releases/-/node-releases-2.0.64.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "cc03c22aa31c9eab369c6cba9e5926ec976e16c7a2049cb71171c62e1fbca4547e4f1182071c6210ddb5f9444e53908ac17fdfe139547188e233ebecfedb32c7"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/chicoxyzzy/node-releases#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/chicoxyzzy/node-releases.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/chicoxyzzy/node-releases/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "update-browserslist-db",
+      "version": "1.3.4",
+      "purl": "pkg:npm/update-browserslist-db@1.3.4",
+      "bom-ref": "pkg:npm/update-browserslist-db@1.3.4",
+      "description": "CLI tool to update caniuse-lite to refresh target browsers from Browserslist config",
+      "authors": [
+        {
+          "name": "Andrey Sitnik"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/update-browserslist-db/-/update-browserslist-db-1.3.4.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "b7cc289c839d4323a3b4f776564b6506ee908d355392ceaff1b4a2ee4774af656597c4cad4960366d45175b9821ce00ca6191982bccaf8bfaf5cae29c99f2de0"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/browserslist/update-db#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/browserslist/update-db.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/browserslist/update-db/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "yallist",
+      "version": "3.1.1",
+      "purl": "pkg:npm/yallist@3.1.1",
+      "bom-ref": "pkg:npm/yallist@3.1.1",
+      "description": "Yet Another Linked List",
+      "authors": [
+        {
+          "name": "Isaac Z. Schlueter"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "ISC"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/yallist/-/yallist-3.1.1.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "6b850641a58f1f9f663975189c01b67b09dc412e22e05e374efdc9a0033eb365430264bd36c2bc1a90cc2eb0873e4b054fb8772ba4cea14367da96fb4685f1e2"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/isaacs/yallist#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/isaacs/yallist.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/isaacs/yallist/issues"
+        }
+      ]
+    },
+    {
+      "type": "library",
+      "name": "escalade",
+      "version": "3.2.0",
+      "purl": "pkg:npm/escalade@3.2.0",
+      "bom-ref": "pkg:npm/escalade@3.2.0",
+      "description": "A tiny (183B to 210B) and fast utility to ascend parent directories",
+      "authors": [
+        {
+          "name": "Luke Edwards"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "MIT"
+          }
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/escalade/-/escalade-3.2.0.tgz",
+          "hashes": [
+            {
+              "alg": "SHA-512",
+              "content": "5948f6aa5c5a42d3b883a3eae5cdbd193716183c9df22b4bf334e58a98040b3dc97ac02288e2a8b5df0953aa2d0773c00a01bac64254c9585ba0c4be6e37bf8c"
+            }
+          ]
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/lukeed/escalade#readme"
+        },
+        {
+          "type": "vcs",
+          "url": "git+https://github.com/lukeed/escalade.git"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/lukeed/escalade/issues"
+        }
+      ]
+    }
+  ],
+  "dependencies": [
+    {
+      "ref": "pkg:npm/my-project@0.1.0",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/client-s3@3.1125.0",
+        "pkg:npm/%40aws-sdk/s3-request-presigner@3.1125.0",
+        "pkg:npm/%40base-ui/react@1.5.0",
+        "pkg:npm/%40supabase/ssr@0.12.7",
+        "pkg:npm/%40supabase/supabase-js@2.114.0",
+        "pkg:npm/class-variance-authority@0.7.1",
+        "pkg:npm/clsx@2.1.1",
+        "pkg:npm/lucide-react@1.17.0",
+        "pkg:npm/next@16.4.6",
+        "pkg:npm/react@19.2.4",
+        "pkg:npm/react-dom@19.2.4",
+        "pkg:npm/tailwind-merge@3.4.0",
+        "pkg:npm/tw-animate-css@1.4.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/client-s3@3.1125.0",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/checksums@3.1000.29",
+        "pkg:npm/%40aws-sdk/core@3.977.9",
+        "pkg:npm/%40aws-sdk/credential-provider-node@3.972.82",
+        "pkg:npm/%40aws-sdk/middleware-sdk-s3@3.972.75",
+        "pkg:npm/%40aws-sdk/signature-v4-multi-region@3.996.46",
+        "pkg:npm/%40aws-sdk/types@3.974.5",
+        "pkg:npm/%40smithy/core@3.33.3",
+        "pkg:npm/%40smithy/fetch-http-handler@5.7.2",
+        "pkg:npm/%40smithy/node-http-handler@4.11.3",
+        "pkg:npm/%40smithy/types@4.17.2",
+        "pkg:npm/tslib@2.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/ssr@0.12.7",
+      "dependsOn": [
+        "pkg:npm/cookie@1.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/s3-request-presigner@3.1125.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40base-ui/react@1.5.0",
+      "dependsOn": [
+        "pkg:npm/%40babel/runtime@7.29.7",
+        "pkg:npm/%40base-ui/utils@0.2.9",
+        "pkg:npm/%40floating-ui/react-dom@2.1.8",
+        "pkg:npm/%40floating-ui/utils@0.2.11",
+        "pkg:npm/use-sync-external-store@1.6.0",
+        "pkg:npm/%40date-fns/tz@1.4.1",
+        "pkg:npm/%40types/react@19.2.14",
+        "pkg:npm/date-fns@4.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/supabase-js@2.114.0",
+      "dependsOn": [
+        "pkg:npm/%40supabase/auth-js@2.114.0",
+        "pkg:npm/%40supabase/functions-js@2.114.0",
+        "pkg:npm/%40supabase/postgrest-js@2.114.0",
+        "pkg:npm/%40supabase/realtime-js@2.114.0",
+        "pkg:npm/%40supabase/storage-js@2.114.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/clsx@2.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/class-variance-authority@0.7.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lucide-react@1.17.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/next@16.4.6",
+      "dependsOn": [
+        "pkg:npm/%40next/env@16.4.6",
+        "pkg:npm/%40swc/helpers@0.5.23",
+        "pkg:npm/baseline-browser-mapping@2.11.37",
+        "pkg:npm/caniuse-lite@1.0.30001769",
+        "pkg:npm/postcss@8.5.23",
+        "pkg:npm/styled-jsx@5.1.6",
+        "pkg:npm/%40next/swc-linux-x64-gnu@16.4.6",
+        "pkg:npm/sharp@0.35.5"
+      ]
+    },
+    {
+      "ref": "pkg:npm/react-dom@19.2.4",
+      "dependsOn": [
+        "pkg:npm/scheduler@0.27.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/react@19.2.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tailwind-merge@3.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tw-animate-css@1.4.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/checksums@3.1000.29",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/core@3.977.9",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/xml-builder@3.972.40",
+        "pkg:npm/%40aws/lambda-invoke-store@0.3.0",
+        "pkg:npm/%40smithy/signature-v4@5.7.3",
+        "pkg:npm/bowser@2.14.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-node@3.972.82",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/credential-provider-env@3.972.70",
+        "pkg:npm/%40aws-sdk/credential-provider-http@3.972.72",
+        "pkg:npm/%40aws-sdk/credential-provider-ini@3.973.15",
+        "pkg:npm/%40aws-sdk/credential-provider-process@3.972.70",
+        "pkg:npm/%40aws-sdk/credential-provider-sso@3.973.14",
+        "pkg:npm/%40aws-sdk/credential-provider-web-identity@3.972.76",
+        "pkg:npm/%40smithy/credential-provider-imds@4.5.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/middleware-sdk-s3@3.972.75",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/types@3.974.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/signature-v4-multi-region@3.996.46",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/core@3.33.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/fetch-http-handler@5.7.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/node-http-handler@4.11.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/tslib@2.8.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/types@4.17.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/cookie@1.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/runtime@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40base-ui/utils@0.2.9",
+      "dependsOn": [
+        "pkg:npm/reselect@5.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40floating-ui/react-dom@2.1.8",
+      "dependsOn": [
+        "pkg:npm/%40floating-ui/dom@1.7.6"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40floating-ui/utils@0.2.11",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/use-sync-external-store@1.6.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40date-fns/tz@1.4.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40types/react@19.2.14",
+      "dependsOn": [
+        "pkg:npm/csstype@3.2.3"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/auth-js@2.114.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/date-fns@4.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/functions-js@2.114.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/postgrest-js@2.114.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/storage-js@2.114.0",
+      "dependsOn": [
+        "pkg:npm/iceberg-js@0.8.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40supabase/realtime-js@2.114.0",
+      "dependsOn": [
+        "pkg:npm/%40supabase/phoenix@0.4.5"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40next/env@16.4.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40swc/helpers@0.5.23",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/baseline-browser-mapping@2.11.37",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/caniuse-lite@1.0.30001769",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/postcss@8.5.23",
+      "dependsOn": [
+        "pkg:npm/nanoid@3.3.20",
+        "pkg:npm/picocolors@1.1.1",
+        "pkg:npm/source-map-js@1.2.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/styled-jsx@5.1.6",
+      "dependsOn": [
+        "pkg:npm/client-only@0.0.1",
+        "pkg:npm/%40babel/core@7.29.7"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40next/swc-linux-x64-gnu@16.4.6",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/sharp@0.35.5",
+      "dependsOn": [
+        "pkg:npm/%40img/colour@1.1.0",
+        "pkg:npm/detect-libc@2.1.2",
+        "pkg:npm/semver@7.8.5",
+        "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+        "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+        "pkg:npm/%40types/node@24.10.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/xml-builder@3.972.40",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/scheduler@0.27.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws/lambda-invoke-store@0.3.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/signature-v4@5.7.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/bowser@2.14.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-env@3.972.70",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-http@3.972.72",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-process@3.972.70",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-sso@3.973.14",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/nested-clients@3.997.44",
+        "pkg:npm/%40aws-sdk/token-providers@3.1116.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-ini@3.973.15",
+      "dependsOn": [
+        "pkg:npm/%40aws-sdk/credential-provider-login@3.972.77"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-web-identity@3.972.76",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40smithy/credential-provider-imds@4.5.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40floating-ui/dom@1.7.6",
+      "dependsOn": [
+        "pkg:npm/%40floating-ui/core@1.7.5"
+      ]
+    },
+    {
+      "ref": "pkg:npm/reselect@5.2.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/csstype@3.2.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/iceberg-js@0.8.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40supabase/phoenix@0.4.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/nanoid@3.3.20",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/picocolors@1.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/source-map-js@1.2.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/client-only@0.0.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40img/colour@1.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/core@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/code-frame@7.29.7",
+        "pkg:npm/%40babel/generator@7.29.7",
+        "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+        "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+        "pkg:npm/%40babel/helpers@7.29.7",
+        "pkg:npm/%40babel/parser@7.29.7",
+        "pkg:npm/%40babel/template@7.29.7",
+        "pkg:npm/%40babel/traverse@7.29.7",
+        "pkg:npm/%40babel/types@7.29.7",
+        "pkg:npm/%40jridgewell/remapping@2.3.5",
+        "pkg:npm/convert-source-map@2.0.0",
+        "pkg:npm/debug@4.4.3",
+        "pkg:npm/gensync@1.0.0-beta.2",
+        "pkg:npm/json5@2.2.3",
+        "pkg:npm/semver@6.3.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/detect-libc@2.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/semver@7.8.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40img/sharp-libvips-linux-x64@1.3.4",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40img/sharp-linux-x64@0.35.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40types/node@24.10.4",
+      "dependsOn": [
+        "pkg:npm/undici-types@7.16.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/nested-clients@3.997.44",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/token-providers@3.1116.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40aws-sdk/credential-provider-login@3.972.77",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40floating-ui/core@1.7.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/code-frame@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+        "pkg:npm/js-tokens@4.0.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/generator@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+        "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+        "pkg:npm/jsesc@3.1.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-compilation-targets@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/compat-data@7.29.7",
+        "pkg:npm/%40babel/helper-validator-option@7.29.7",
+        "pkg:npm/browserslist@4.29.5",
+        "pkg:npm/lru-cache@5.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-module-transforms@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/helper-module-imports@7.29.7"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/helpers@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/parser@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/template@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/types@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/helper-string-parser@7.29.7"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/traverse@7.29.7",
+      "dependsOn": [
+        "pkg:npm/%40babel/helper-globals@7.29.7"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40jridgewell/remapping@2.3.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/convert-source-map@2.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/debug@4.4.3",
+      "dependsOn": [
+        "pkg:npm/ms@2.1.3"
+      ]
+    },
+    {
+      "ref": "pkg:npm/gensync@1.0.0-beta.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/semver@6.3.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/json5@2.2.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/undici-types@7.16.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-validator-identifier@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/js-tokens@4.0.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40jridgewell/gen-mapping@0.3.13",
+      "dependsOn": [
+        "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40jridgewell/trace-mapping@0.3.31",
+      "dependsOn": [
+        "pkg:npm/%40jridgewell/resolve-uri@3.1.2"
+      ]
+    },
+    {
+      "ref": "pkg:npm/jsesc@3.1.0",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/compat-data@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-validator-option@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/browserslist@4.29.5",
+      "dependsOn": [
+        "pkg:npm/caniuse-lite@1.0.30001826",
+        "pkg:npm/electron-to-chromium@1.5.486",
+        "pkg:npm/node-releases@2.0.64",
+        "pkg:npm/update-browserslist-db@1.3.4"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-module-imports@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/lru-cache@5.1.1",
+      "dependsOn": [
+        "pkg:npm/yallist@3.1.1"
+      ]
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-string-parser@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40babel/helper-globals@7.29.7",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/ms@2.1.3",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40jridgewell/sourcemap-codec@1.5.5",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/%40jridgewell/resolve-uri@3.1.2",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/caniuse-lite@1.0.30001826",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/electron-to-chromium@1.5.486",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/node-releases@2.0.64",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/update-browserslist-db@1.3.4",
+      "dependsOn": [
+        "pkg:npm/escalade@3.2.0"
+      ]
+    },
+    {
+      "ref": "pkg:npm/yallist@3.1.1",
+      "dependsOn": []
+    },
+    {
+      "ref": "pkg:npm/escalade@3.2.0",
+      "dependsOn": []
+    }
+  ]
+}
