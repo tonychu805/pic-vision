@@ -46,12 +46,12 @@ macOS 13 is the floor Electron 44 imposes. A venue on an Intel Mac, or on
 Monterey, cannot run this -- adding `x64` back to the workflow matrix
 covers the first case, and pinning Electron 43 would cover the second.
 
-Download `PicVision-CameraManager-<version>-arm64.dmg`, open it, and drag
+Download `PicVision-DesktopApp-<version>-arm64.dmg`, open it, and drag
 the app to Applications.
 
 **The build is not code-signed yet** (PIC-84 -- an Apple Developer
 membership is the missing piece, not a technical blocker), so macOS
-refuses it on first launch: *"Pic Vision Camera Manager" can't be opened
+refuses it on first launch: *"PicVision Desktop App" can't be opened
 because Apple cannot check it for malicious software.* To allow it:
 
 1. Open the app once and dismiss the warning.
@@ -61,7 +61,7 @@ because Apple cannot check it for malicious software.* To allow it:
 
 Right-click → Open, the old advice, no longer works on macOS 15+. The
 terminal equivalent of the above is
-`xattr -cr "/Applications/Pic Vision Camera Manager.app"`.
+`xattr -cr "/Applications/PicVision Desktop App.app"`.
 
 Nothing else needs installing: ffmpeg is bundled, and the app runs no
 Python and holds no cloud credentials (ADR-084 -- see "What this app does
@@ -70,7 +70,7 @@ not do" below).
 ## Install it (Windows)
 
 **Windows 10 or 11, 64-bit (x64).** Download
-`PicVision-CameraManager-<version>-x64.exe` from the release page and run
+`PicVision-DesktopApp-<version>-x64.exe` from the release page and run
 it. It installs for the current user only -- no administrator prompt -- and
 adds a Start-menu entry.
 
@@ -90,7 +90,7 @@ A normal Stop, or quitting the app, is a clean stop.
 ## Install it (Windows)
 
 **Windows 10 or newer, 64-bit (x64).** Download
-`PicVision-CameraManager-<version>-x64.exe` from the release page and run
+`PicVision-DesktopApp-<version>-x64.exe` from the release page and run
 it. It installs per-user, so no administrator rights are needed.
 
 **The build is not code-signed**, so SmartScreen shows *"Windows protected

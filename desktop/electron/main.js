@@ -328,7 +328,7 @@ function registerCameraHandlers() {
         signal: AbortSignal.timeout(10_000),
       });
       if (!res.ok) throw new Error(`HTTP ${res.status}`);
-      return updateState(current, await res.json());
+      return updateState(current, await res.json(), process.platform === "win32" ? "windows" : "mac");
     } catch (err) {
       // Offline venue, DNS, console down. Reported as "couldn't check",
       // never as "up to date".

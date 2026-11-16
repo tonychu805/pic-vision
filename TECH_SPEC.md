@@ -1346,9 +1346,11 @@ pic-vision/
 │   │   │                                   # binary is missing: shipping without it
 │   │   │                                   # breaks recording and ADR-087's frame-rate
 │   │   │                                   # gate at a venue, silently.
-│   │   └── icon.png                      # 2026-09-05: app icon (1024x1024,
-│   │                                       # provided by the operator, cropped/
-│   │                                       # cleaned up from a screenshot).
+│   │   ├── icon.svg                      # 2026-11-16: the icon's source (Clubhouse greens:
+│   │   │                                 # deep green tile, cream disc, green ball; edit the
+│   │   │                                 # colors here, then re-render icon.png from it).
+│   │   └── icon.png                      # 2026-09-05: app icon (1024x1024); 2026-11-16 re-rendered
+│   │                                       # from icon.svg: rounded tile with a transparent margin.
 │   │                                       # electron-builder's own default
 │   │                                       # convention (package.json's
 │   │                                       # build.icon points here explicitly)

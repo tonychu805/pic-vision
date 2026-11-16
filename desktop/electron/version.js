@@ -48,20 +48,23 @@ export function compareVersions(a, b) {
  * reach GitHub or nothing is published yet, and reporting that as up to
  * date would be a claim we haven't earned.
  */
-export function updateState(currentVersion, release) {
+export function updateState(currentVersion, release, platform = "mac") {
   const base = { current: currentVersion, latest: null, downloadUrl: null, notes: null };
+  // The installer itself when the console names one for this platform (operator 2026-11-16: the button
+  // downloads, it doesn't open a GitHub page); the release page from consoles that don't send them yet.
+  const downloadUrl = (typeof release?.downloads?.[platform] === "string" && release.downloads[platform]) || release?.url;
   if (!release || typeof release.version !== "string" || !release.url) {
     return { ...base, status: "unknown" };
   }
   const comparison = compareVersions(currentVersion, release.version);
   if (comparison === null) {
-    return { ...base, status: "unknown", latest: release.version, downloadUrl: release.url };
+    return { ...base, status: "unknown", latest: release.version, downloadUrl };
   }
   return {
     status: comparison < 0 ? "outdated" : "current",
     current: currentVersion,
     latest: release.version,
-    downloadUrl: release.url,
+    downloadUrl,
     notes: release.notes ?? null,
   };
 }
