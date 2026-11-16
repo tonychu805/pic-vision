@@ -13,7 +13,8 @@
 //
 //   reel done before local midnight -> delete at that midnight
 //   reel succeeds after local midnight -> delete promptly
-//   no reel yet / failed             -> keep, surface "waiting for reel"
+//   no reel yet / failed             -> keep, surface "waiting for reel",
+//                                       but never past 30 days (MAX_KEEP_DAYS)
 //   recording now, or uploading      -> never
 //
 // A recording sent in parts counts as done when every piece has a reel.
@@ -32,6 +33,10 @@ import { logEvent, msg } from "./activityLog.js";
 // capture.js names a recording's folder new Date().toISOString() with ':'
 // and '.' made filesystem-safe. Anything else in there is not ours to judge.
 const RECORDING_DIR_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
+
+/** Raw footage is never kept on the venue computer longer than this (privacy policy). */
+export const MAX_KEEP_DAYS = 30;
+const DAY_MS = 86_400_000;
 
 /** When a recording started, from its folder name, or null. */
 export function recordingStartedAt(dirName) {
@@ -89,6 +94,10 @@ export function endOfVenueDay(at, timezone) {
  */
 export function retentionDecision({ endedAt, doneAt, busy, timezone }, now) {
   if (busy) return { action: "keep", reason: "in use" };
+  // The privacy policy and the venue notice promise raw footage is deleted 30
+  // days after recording. A reel that never succeeds can't hold it longer.
+  // Counted from the last captured segment, so never early; needs no timezone.
+  if (now >= endedAt + MAX_KEEP_DAYS * DAY_MS) return { action: "delete", reason: "30-day limit reached without a reel" };
   const deleteAt = endOfVenueDay(endedAt, timezone);
   if (deleteAt === null) return { action: "keep", reason: "venue timezone unavailable" };
   if (doneAt == null) return { action: "keep", reason: now >= deleteAt ? "waiting for reel after end of day" : "waiting for reel", deleteAt };
@@ -232,6 +241,7 @@ export function retentionSummary({ now = Date.now(), timezone = null } = {}) {
       deletesAt: null, readyToDelete: 0,
     };
     if (item.reason === "in use") summary.recording++;
+    else if (item.action === "delete" && item.doneAt == null) summary.readyToDelete++;
     else if (item.doneAt == null) {
       if (item.reason === "waiting for reel after end of day") summary.waitingAfterEndOfDay++;
       else summary.waitingForReel++;

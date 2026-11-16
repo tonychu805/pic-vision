@@ -36,6 +36,24 @@ test("a failed or unsent recording stays past midnight until its reel succeeds",
   assert.equal(result.reason, "waiting for reel after end of day");
 });
 
+// The privacy policy and the venue notice promise raw footage is gone 30 days
+// after recording. A reel that never succeeds must not hold it longer.
+test("a recording whose reel never succeeds is deleted 30 days after it was recorded", () => {
+  const endedAt = ago(31);
+  const at30 = endedAt + 30 * DAY;
+  assert.equal(retentionDecision({ endedAt, doneAt: null, busy: false, timezone: TIMEZONE }, at30 - 1).action, "keep");
+  const result = retentionDecision({ endedAt, doneAt: null, busy: false, timezone: TIMEZONE }, at30);
+  assert.equal(result.action, "delete");
+  assert.equal(result.reason, "30-day limit reached without a reel");
+});
+
+test("the 30-day limit holds without a venue timezone, but never touches a recording in use", () => {
+  assert.equal(retentionDecision({ endedAt: ago(30), doneAt: null, busy: false, timezone: null }, NOW).action, "delete");
+  assert.equal(retentionDecision({ endedAt: ago(30), doneAt: null, busy: true, timezone: TIMEZONE }, NOW).action, "keep");
+  // Paired: inside the limit, a missing timezone still keeps (no guessing at midnight).
+  assert.equal(retentionDecision({ endedAt: ago(29), doneAt: null, busy: false, timezone: null }, NOW).action, "keep");
+});
+
 // Paired with every delete above: nothing in use is ever removed.
 test("a recording in progress, or uploading, is never removed", () => {
   assert.equal(retentionDecision({ endedAt: ago(60), doneAt: ago(50), busy: true, timezone: TIMEZONE }, NOW).action, "keep");
@@ -160,10 +178,18 @@ test("the heartbeat summary distinguishes delete-tonight from footage held for a
   assert.equal(existsSync(heldForReel), true);
 });
 
+test("the heartbeat summary counts a recording past the 30-day limit as ready to delete, not as waiting", () => {
+  recording("cam-limit", 31);
+  const summary = retentionSummary({ now: NOW, timezone: TIMEZONE })["cam-limit"];
+  assert.equal(summary.readyToDelete, 1);
+  assert.equal(summary.waitingAfterEndOfDay, 0);
+});
+
 test("a sweep removes exactly the recordings the rules say, and nothing else", () => {
   const oldReel = recording("cam-1", 12, { doneDaysAgo: 8 });
   const recentReel = recording("cam-1", 0, { doneDaysAgo: 0 });
-  const neverSent = recording("cam-2", 40);
+  const neverSent = recording("cam-2", 40); // past the 30-day limit with no reel
+  const neverSentYet = recording("cam-2", 29); // inside it: still held for a retry
   const young = recording("cam-2", 5);
   const allPartsDone = recording("cam-3", 20, { parts: [{ segments: ["session-000.mkv", "session-001.mkv"], doneDaysAgo: 10 }, { segments: ["session-002.mkv"], doneDaysAgo: 9 }] });
   const partMissing = recording("cam-3", 21, { parts: [{ segments: ["session-000.mkv", "session-001.mkv"], doneDaysAgo: 10 }] });
@@ -178,6 +204,6 @@ test("a sweep removes exactly the recordings the rules say, and nothing else", (
   assert.equal(reelDoneAt(partFailed), null);
 
   retentionSweep({ now: NOW, timezone: TIMEZONE });
-  for (const gone of [oldReel, allPartsDone]) assert.equal(existsSync(gone), false, `${gone} should be removed`);
-  for (const kept of [recentReel, neverSent, young, partMissing, partFailed, notARecording, outside]) assert.equal(existsSync(kept), true, `${kept} should be kept`);
+  for (const gone of [oldReel, allPartsDone, neverSent]) assert.equal(existsSync(gone), false, `${gone} should be removed`);
+  for (const kept of [recentReel, neverSentYet, young, partMissing, partFailed, notARecording, outside]) assert.equal(existsSync(kept), true, `${kept} should be kept`);
 });
