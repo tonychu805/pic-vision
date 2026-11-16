@@ -43,7 +43,11 @@ contextBridge.exposeInMainWorld("cameraAPI", {
 
 contextBridge.exposeInMainWorld("languageAPI", {
   get: () => ipcRenderer.invoke("language:get"),
-  set: (lang) => ipcRenderer.invoke("language:set", lang),
+  onChange: (callback) => {
+    const listener = (_event, lang) => callback(lang);
+    ipcRenderer.on("language:changed", listener);
+    return () => ipcRenderer.removeListener("language:changed", listener);
+  },
 });
 
 contextBridge.exposeInMainWorld("powerAPI", {

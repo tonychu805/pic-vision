@@ -1,7 +1,6 @@
 import { useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
 import { useI18n } from "../i18n.jsx";
-import LanguageSwitch from "../components/LanguageSwitch.jsx";
 // Same logo Sidebar.jsx already uses -- pic-vision-cloud-console/app/sign-in
 // uses this identical file at public/pic-vision-logo-white.png, so both
 // surfaces show the same mark.
@@ -92,11 +91,6 @@ export default function SignInPage({ onSignedIn }) {
       </div>
 
       <div style={{ flex: 1, display: "flex", alignItems: "center", justifyContent: "center", padding: 40, position: "relative" }}>
-        {/* The first screen anyone sees, and the default is Chinese: someone who
-            reads English needs the switch BEFORE they can sign in. */}
-        <div style={{ position: "absolute", top: 16, right: 16 }}>
-          <LanguageSwitch />
-        </div>
         <div style={{ width: "min(340px, 100%)" }}>
           <div style={{ fontSize: "var(--fs-fine)", letterSpacing: "0.08em", textTransform: "uppercase", color: "var(--color-accent-300)", marginBottom: 8 }}>
             {t("signin.eyebrow")}

@@ -1,7 +1,6 @@
 import { useEffect, useState } from "react";
 import { cleanIpcError } from "../lib/ipcError.js";
 import { useI18n } from "../i18n.jsx";
-import LanguageSwitch from "../components/LanguageSwitch.jsx";
 
 // Real scan configuration (2026-09-05) -- replaces the original mockup's
 // 4-panel layout. Only two of those panels mapped onto something real:
@@ -123,7 +122,6 @@ export default function SettingsPage() {
           single number field and ended about a third of the way down the
           left one, leaving a large empty block beside a tall panel. */}
       <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: 560 }}>
-        <LanguageCard />
         <PowerCard />
         <AutoSplitCard />
 
@@ -295,20 +293,3 @@ function PowerCard() {
   );
 }
 
-// Which language the app shows. The choice is saved by the main process, so it
-// survives a restart and also decides what the tray menu says.
-function LanguageCard() {
-  const { t } = useI18n();
-  return (
-    <div className="card">
-      <div className="section-label">{t("settings.language.title")}</div>
-      <div className="field">
-        <label>{t("settings.language.label")}</label>
-        <LanguageSwitch />
-      </div>
-      <p className="text-4" style={{ fontSize: "var(--fs-fine)", margin: "10px 0 0", lineHeight: 1.5 }}>
-        {t("settings.language.note")}
-      </p>
-    </div>
-  );
-}

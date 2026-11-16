@@ -22,7 +22,7 @@ import { existsSync, readdirSync } from "node:fs";
 import { bookingEndsAt, startArrivedTooLate, noteBookingRecording, listBookingRecordings, findBookingRecording, updateBookingRecording, forgetBookingRecording, bookingsToFinish, sendDue, planAfterRestart } from "./bookingRecordings.js";
 import { runCloudJob, isPipelineRunning } from "./pipeline.js";
 import { logEvent, msg } from "./activityLog.js";
-import { tm } from "./language.js";
+import { followVenueLanguage, tm } from "./language.js";
 import { encryptField, decryptField } from "./secureField.js";
 import { isCommandChannelLive } from "./commandChannel.js";
 import { withDeadline } from "./deadline.js";
@@ -452,6 +452,7 @@ export async function registerAgentOnce(accessToken, userId, consoleUrl, timeout
   }
 
   store.delete("disconnectedByUser"); // a deliberate reconnection
+  followVenueLanguage(body.brandLanguage);
   const connection = {
     consoleUrl,
     agentId: body.agentId,
@@ -655,6 +656,7 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
     // paired agent within one heartbeat cycle, instead of only ever
     // reflecting whatever the brand was named at pairing time.
     const body = await res.json().catch(() => ({}));
+    followVenueLanguage(body.brandLanguage);
     if ((typeof body.brandName === "string" && body.brandName !== connection.brandName)
       || (typeof body.brandTimezone === "string" && body.brandTimezone !== connection.brandTimezone)) {
       saveConnection({
