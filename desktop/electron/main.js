@@ -43,7 +43,7 @@ import { runChecks } from "./diagnostics.js";
 import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
 import { installCrashReporting } from "./crashReport.js";
-import { getLanguage, setLanguage, tm } from "./language.js";
+import { getLanguage, onLanguageChange, tm } from "./language.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -613,7 +613,10 @@ function registerWindowControlHandlers() {
   // change. `lang` is a string checked against the supported list in
   // language.js -- no stored entity, nothing to restore.
   ipcMain.handle("language:get", async () => getLanguage());
-  ipcMain.handle("language:set", async (_event, lang) => setLanguage(lang));
+  // The venue changed its language in the console: every window redraws in it.
+  onLanguageChange((lang) => {
+    for (const win of BrowserWindow.getAllWindows()) win.webContents.send("language:changed", lang);
+  });
   ipcMain.handle("window:minimize", () => focused()?.minimize());
   ipcMain.handle("window:maximize", () => {
     const win = focused();

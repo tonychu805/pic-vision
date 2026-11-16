@@ -1,9 +1,6 @@
 // Settings page, and the sign-in screen (the first thing anyone sees).
 export const en = {
   "settings.title": "Settings",
-  "settings.language.title": "Language",
-  "settings.language.label": "Show the app in",
-  "settings.language.note": "Applies to this app only. It is remembered on this computer.",
   "settings.finding.title": "Finding cameras",
   "settings.finding.sub": "\"Scan\" checks every directly attached network on this computer. Add a range only when cameras live on a separate routed VLAN.",
   "settings.where.title": "Where to look",
@@ -56,9 +53,6 @@ export const en = {
 
 export const zhTW = {
   "settings.title": "設定",
-  "settings.language.title": "語言",
-  "settings.language.label": "應用程式顯示語言",
-  "settings.language.note": "只影響這個應用程式，並且會記在這台電腦上。",
   "settings.finding.title": "尋找攝影機",
   "settings.finding.sub": "「掃描」會檢查這台電腦直接連接的每一個網路。只有在攝影機位於另一個經過路由的 VLAN 時，才需要新增範圍。",
   "settings.where.title": "搜尋範圍",

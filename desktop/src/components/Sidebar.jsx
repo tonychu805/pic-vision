@@ -8,7 +8,6 @@ import logoOnDark from "../assets/pic-vision-logo-white.png";
 import logoOnLight from "../assets/pic-vision-logo.png";
 import ThemeToggle from "./ThemeToggle.jsx";
 import { sidebarConnection } from "../lib/heartbeatStatus.js";
-import LanguageSwitch from "./LanguageSwitch.jsx";
 import { useI18n } from "../i18n.jsx";
 
 // Settings is back as a peer (2026-09-29). It left when all it held was the
@@ -118,7 +117,6 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
       ))}
 
       <div style={{ marginTop: "auto", display: "flex", flexDirection: "column", gap: 8, marginBottom: 8 }}>
-        <LanguageSwitch compact />
         <ThemeToggle />
       </div>
 
