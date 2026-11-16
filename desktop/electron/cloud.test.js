@@ -177,7 +177,7 @@ test("a freshly registered machine is 'not checked in yet', not 'connected'", as
     // asserting the heartbeat's result, not registration's.
     // The whole ticket in one assertion: registration succeeded, and the
     // answer is still "unknown" rather than "connected".
-    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false, updateRequired: false, minimumVersion: null });
   });
 });
 
@@ -278,6 +278,24 @@ test("a connection that worked and then broke keeps the last time it worked", as
   });
 });
 
+test("the console's minimum version reaches the app (update banner), and clears when it no longer applies", async () => {
+  let reply = { brandName: "Test Venue", updateRequired: true, minimumVersion: "1.13.0" };
+  await withServer((req, res) => {
+    res.writeHead(200, { "content-type": "application/json" });
+    res.end(JSON.stringify(req.url.includes("register") ? { agentId: "agent-1", apiToken: "tok", brandName: "Test Venue" } : reply));
+  }, async (url) => {
+    await connectTo(url);
+    await settleFirstHeartbeat();
+    await sendHeartbeat();
+    assert.equal(getHeartbeatState().updateRequired, true);
+    assert.equal(getHeartbeatState().minimumVersion, "1.13.0");
+    reply = { brandName: "Test Venue", updateRequired: false, minimumVersion: null };
+    await sendHeartbeat();
+    assert.equal(getHeartbeatState().updateRequired, false);
+    disconnectCloud();
+  });
+});
+
 test("disconnecting clears the health, so a later connection can't inherit it", async () => {
   await withServer((req, res) => {
     res.writeHead(200, { "content-type": "application/json" });
@@ -290,7 +308,7 @@ test("disconnecting clears the health, so a later connection can't inherit it", 
     await sendHeartbeat();
     assert.equal(getHeartbeatState().lastAttemptOk, true);
     disconnectCloud();
-    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
+    assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false, updateRequired: false, minimumVersion: null });
   });
 });
 
@@ -321,7 +339,7 @@ test("a heartbeat with no connection stored is a no-op, not a failure", async ()
   // put "Connection lost" on a page whose real state is "not connected".
   disconnectCloud();
   await sendHeartbeat();
-  assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false });
+  assert.deepEqual(getHeartbeatState(), { lastAttemptOk: null, lastHeartbeatAt: null, removed: false, updateRequired: false, minimumVersion: null });
 });
 
 // --- the heartbeat tick's command sweep (2026-09-20, watchdog 2026-09-22) --

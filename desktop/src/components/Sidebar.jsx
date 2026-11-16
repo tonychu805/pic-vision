@@ -120,6 +120,23 @@ export default function Sidebar({ nav, onNavigate, deviceCount, connectionEpoch 
         <ThemeToggle />
       </div>
 
+      {/* Below the console's minimum desktop version (operator 2026-11-16): players can't start new check-ins
+          on this machine's courts until it is updated, so say so where the venue will see it. */}
+      {connection?.updateRequired && (
+        <div role="alert" style={{ padding: "10px 10px", marginBottom: 8, borderRadius: "var(--radius-md)", background: "var(--color-danger-bg)", border: "1px solid var(--color-danger)" }}>
+          <div style={{ fontWeight: 600, fontSize: "var(--fs-body)", color: "var(--color-danger)" }}>{t("sidebar.updateRequiredTitle")}</div>
+          <p style={{ margin: "4px 0 8px", fontSize: "var(--fs-fine)", lineHeight: 1.45 }}>{t("sidebar.updateRequiredBody")}</p>
+          <button
+            type="button"
+            className="btn btn-primary"
+            style={{ fontSize: "var(--fs-fine)", padding: "4px 10px" }}
+            onClick={() => window.updatesAPI?.check().then((r) => { if (r?.downloadUrl) window.systemAPI?.openExternal?.(r.downloadUrl); }).catch(() => {})}
+          >
+            {t("sidebar.updateRequiredDownload")}
+          </button>
+        </div>
+      )}
+
       {/* The console connection (2026-09-29), not the local network. This
           box used to say "Connected" about the LAN -- where anyone looks for
           "is this machine connected" -- and kept saying it while the console

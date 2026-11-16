@@ -71,3 +71,12 @@ test("an unreadable version or missing platform is omitted, never sent empty", (
   assert.deepEqual(agentBuildInfo("1.9.0", ""), { appVersion: "1.9.0" });
   assert.deepEqual(agentBuildInfo(null, null), {});
 });
+
+test("updateState links the installer for this platform when the console names one, else the release page", () => {
+  const release = { version: "1.13.0", url: "https://example.test/release", notes: null,
+    downloads: { mac: "https://example.test/app-arm64.dmg", windows: "https://example.test/setup.exe" } };
+  assert.equal(updateState("1.12.0", release, "mac").downloadUrl, "https://example.test/app-arm64.dmg");
+  assert.equal(updateState("1.12.0", release, "windows").downloadUrl, "https://example.test/setup.exe");
+  assert.equal(updateState("1.12.0", { ...release, downloads: { mac: null } }, "mac").downloadUrl, "https://example.test/release");
+  assert.equal(updateState("1.12.0", { version: "1.13.0", url: "https://example.test/release" }, "windows").downloadUrl, "https://example.test/release");
+})

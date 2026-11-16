@@ -160,6 +160,10 @@ let lastAttemptOk = null;
 // different thing from one that checked in an hour ago, and the operator
 // needs to tell them apart.
 let lastHeartbeatAt = null;
+// The console's minimum desktop version (operator 2026-11-16), from every heartbeat reply: below it, players
+// can't start new check-ins on this machine's courts, and the app shows a must-update banner.
+let updateRequired = false;
+let minimumVersion = null;
 
 // Removed from the venue in the console (2026-09-29). A removed machine's
 // token is refused (401) on every heartbeat, forever; before this it kept
@@ -186,10 +190,12 @@ let removedFromVenue = false;
  * The renderer gets state, not a message it would be tempted to print.
  */
 export function getHeartbeatState() {
-  return { lastAttemptOk, lastHeartbeatAt, removed: removedFromVenue };
+  return { lastAttemptOk, lastHeartbeatAt, removed: removedFromVenue, updateRequired, minimumVersion };
 }
 
 function resetHealth() {
+  updateRequired = false;
+  minimumVersion = null;
   lastAttemptOk = null;
   lastHeartbeatAt = null;
   consecutiveRejections = 0;
@@ -657,6 +663,8 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
     // reflecting whatever the brand was named at pairing time.
     const body = await res.json().catch(() => ({}));
     followVenueLanguage(body.brandLanguage);
+    if (typeof body.updateRequired === "boolean") updateRequired = body.updateRequired;
+    minimumVersion = typeof body.minimumVersion === "string" ? body.minimumVersion : null;
     if ((typeof body.brandName === "string" && body.brandName !== connection.brandName)
       || (typeof body.brandTimezone === "string" && body.brandTimezone !== connection.brandTimezone)) {
       saveConnection({
