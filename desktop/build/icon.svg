@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024">
+<!-- Source of icon.png (1024x1024). Re-render: node -e "require('sharp')(require('fs').readFileSync('icon.svg'),{density:72}).resize(1024,1024).png().toFile('icon.png')"
+     Colors are the Clubhouse theme (desktop/src/index.css): tile #276b4a to #1a4a33, disc #f3f1e9, ball #1f5a3f.
+     The tile is the standard macOS 824px rounded square inside the 1024 canvas; the margin and shadow are intentional. -->
+  <defs>
+    <linearGradient id="tile" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stop-color="#276b4a"/><stop offset="1" stop-color="#1a4a33"/></linearGradient>
+    <filter id="shadow" x="-10%" y="-10%" width="120%" height="125%"><feDropShadow dx="0" dy="12" stdDeviation="14" flood-color="#000" flood-opacity="0.30"/></filter>
+  </defs>
+  <rect x="100" y="100" width="824" height="824" rx="185" fill="url(#tile)" filter="url(#shadow)"/>
+  <circle cx="512" cy="512" r="290" fill="#f3f1e9"/>
+  <circle cx="512" cy="506" r="168" fill="#1f5a3f"/>
+  <ellipse cx="502" cy="401" rx="38" ry="27" fill="#f3f1e9"/>
+  <ellipse cx="430" cy="492" rx="33" ry="39" fill="#f3f1e9"/>
+  <ellipse cx="577" cy="489" rx="36" ry="40" fill="#f3f1e9"/>
+  <ellipse cx="507" cy="605" rx="37" ry="26" fill="#f3f1e9"/>
+  <g fill="none" stroke="#f3f1e9" stroke-width="8" stroke-linecap="round">
+    <path d="M381.3 436.5 A148 148 0 0 1 433.6 380.5"/>
+    <path d="M581.5 375.3 A148 148 0 0 1 634.7 423.2"/>
+    <path d="M420.9 622.6 A148 148 0 0 1 383.8 580.0"/>
+  </g>
+</svg>
