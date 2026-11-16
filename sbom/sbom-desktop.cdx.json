@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:3cf5e83f-0be3-4eba-8605-92709bcb9328",
+  "serialNumber": "urn:uuid:31227a21-30ff-403e-bae1-dcbc7f930677",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-16T09:16:21.693Z",
+    "timestamp": "2026-11-16T10:10:30.647Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -1464,14 +1464,14 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@1.1.21",
+      "bom-ref": "brace-expansion@1.1.22",
       "type": "library",
       "name": "brace-expansion",
-      "version": "1.1.21",
+      "version": "1.1.22",
       "scope": "optional",
       "author": "Julian Gruber",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@1.1.21",
+      "purl": "pkg:npm/brace-expansion@1.1.22",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -1485,7 +1485,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.21.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.22.tgz"
         },
         {
           "type": "vcs",
@@ -1503,7 +1503,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f73780f8a2d934dce0945d933ca450103cb1e986f2edd68092ecbc3223f3a573ec6035a2fc344cf239b0503c689108d8a81a6fe4380f8b00f88786594b2d548f"
+          "content": "08a2c34ee4ac374fabd5384cd16933cc123b7673c8eb11067dafc99d56082bd24d040d4dd4dc8fc17547a2bfff34a0ffcb7b03c69efae2c65d2e114aee91fc5d"
         }
       ],
       "licenses": [
@@ -2176,14 +2176,14 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@2.1.7",
+      "bom-ref": "brace-expansion@2.1.8",
       "type": "library",
       "name": "brace-expansion",
-      "version": "2.1.7",
+      "version": "2.1.8",
       "scope": "optional",
       "author": "Julian Gruber",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@2.1.7",
+      "purl": "pkg:npm/brace-expansion@2.1.8",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -2197,7 +2197,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.7.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.8.tgz"
         },
         {
           "type": "vcs",
@@ -2215,7 +2215,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "b996dec3536a7663c34cc27c6a1d72f9bfbd40426b7e45c593745c4d0c375f48d6ff1454bc52ac83509f41d49819d4db5d9584c6d53727771cc6d9dfc35162d2"
+          "content": "067943cc3610a29953b194af3e2f3a08dce66dc6f4ed7f2e7d1f1f935ce2bda8842655c9922ab5310c830959a559cb166e3e9a597a879ebc307af6eb9bf49a8a"
         }
       ],
       "licenses": [
@@ -2634,14 +2634,14 @@
       ]
     },
     {
-      "bom-ref": "@eslint/config-array@0.23.5",
+      "bom-ref": "@eslint/config-array@0.23.6",
       "type": "library",
       "name": "@eslint/config-array",
-      "version": "0.23.5",
+      "version": "0.23.6",
       "scope": "optional",
       "author": "Nicholas C. Zakas",
       "description": "General purpose glob-based configuration matching.",
-      "purl": "pkg:npm/%40eslint/config-array@0.23.5",
+      "purl": "pkg:npm/%40eslint/config-array@0.23.6",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -2655,7 +2655,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@eslint/config-array/-/config-array-0.23.5.tgz"
+          "url": "https://registry.npmjs.org/@eslint/config-array/-/config-array-0.23.6.tgz"
         },
         {
           "type": "vcs",
@@ -2673,13 +2673,64 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "63790a2ef0b576f4ce4fea0696a350d572ea2ba0f51d4d985cf739d8d98094965b30c583cc66173223d127c4d80f7f66b83fce4e395998d27889beddbd2acc04"
+          "content": "5ab4c7ee78a823d40f6383591a7b32c2679cb3025d81eab804233beaaa24f558234cedbd66053352f72e24b54f61540ce2e0db68f054d0cdf747d0c8c48f17df"
         }
       ],
       "licenses": [
         {
           "license": {
             "id": "Apache-2.0"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "minimatch@11.0.8",
+      "type": "library",
+      "name": "minimatch",
+      "version": "11.0.8",
+      "scope": "optional",
+      "author": "Isaac Z. Schlueter",
+      "description": "a glob matcher in javascript",
+      "purl": "pkg:npm/minimatch@11.0.8",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@eslint/config-array/node_modules/minimatch"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/minimatch/-/minimatch-11.0.8.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+ssh://git@github.com/isaacs/minimatch.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/isaacs/minimatch#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/isaacs/minimatch/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "9c542e6124d5ac6bf2b15069b39221fb405d9d814dfc28f70bcd7aafafa9ef22be147ad52c61383b837d005c3292b94d96f3361d8b7e45a775522ae8ea1f3c22"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BlueOak-1.0.0"
           }
         }
       ]
@@ -3541,6 +3592,44 @@
       ]
     },
     {
+      "bom-ref": "@isaacs/nonrecursive-glob-match@1.1.0",
+      "type": "library",
+      "name": "@isaacs/nonrecursive-glob-match",
+      "version": "1.1.0",
+      "scope": "optional",
+      "description": "a single-path-portion glob matcher not subject to recursive backtracking ReDoS",
+      "purl": "pkg:npm/%40isaacs/nonrecursive-glob-match@1.1.0",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/@isaacs/nonrecursive-glob-match"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/@isaacs/nonrecursive-glob-match/-/nonrecursive-glob-match-1.1.0.tgz"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "18f9bf0dbbe4e512e68519f15c86bb9d3a4ad31b65e04d308f432c96cb8d889d45211394fb6fbd960502fdd805ec4cb84025a17c4b20c6294c44c09d1cf7c37f"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BlueOak-1.0.0"
+          }
+        }
+      ]
+    },
+    {
       "bom-ref": "@jridgewell/gen-mapping@0.3.13",
       "type": "library",
       "name": "@jridgewell/gen-mapping",
@@ -4101,14 +4190,14 @@
       ]
     },
     {
-      "bom-ref": "@peculiar/asn1-schema@2.11.0",
+      "bom-ref": "@peculiar/asn1-schema@2.11.1",
       "type": "library",
       "name": "@peculiar/asn1-schema",
-      "version": "2.11.0",
+      "version": "2.11.1",
       "scope": "optional",
       "author": "PeculiarVentures, LLC",
       "description": "Decorators and helper APIs for declaring ASN.1 schemas in TypeScript.",
-      "purl": "pkg:npm/%40peculiar/asn1-schema@2.11.0",
+      "purl": "pkg:npm/%40peculiar/asn1-schema@2.11.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -4122,7 +4211,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@peculiar/asn1-schema/-/asn1-schema-2.11.0.tgz"
+          "url": "https://registry.npmjs.org/@peculiar/asn1-schema/-/asn1-schema-2.11.1.tgz"
         },
         {
           "type": "vcs",
@@ -4140,7 +4229,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f318786afa39dffbd73ba504bfdc9aa09f37858e7cd6079a2d3ca07fad4d3c85cfe407886423e3261a53698536dc86641be3692cdfc2f456335a9ee1a61213f4"
+          "content": "8da53d39a09c6d951dc97c7d84c113641f71a0d9b14c68ce185a9dddc3b02859292a7c8a77d5b1177baa8f83ef5f873238c3fd6d274783963230bdaab71fddfe"
         }
       ],
       "licenses": [
@@ -4254,14 +4343,14 @@
       ]
     },
     {
-      "bom-ref": "@peculiar/webcrypto@1.7.1",
+      "bom-ref": "@peculiar/webcrypto@1.7.2",
       "type": "library",
       "name": "@peculiar/webcrypto",
-      "version": "1.7.1",
+      "version": "1.7.2",
       "scope": "optional",
       "author": "PeculiarVentures",
       "description": "A WebCrypto Polyfill for NodeJS",
-      "purl": "pkg:npm/%40peculiar/webcrypto@1.7.1",
+      "purl": "pkg:npm/%40peculiar/webcrypto@1.7.2",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -4275,7 +4364,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/@peculiar/webcrypto/-/webcrypto-1.7.1.tgz"
+          "url": "https://registry.npmjs.org/@peculiar/webcrypto/-/webcrypto-1.7.2.tgz"
         },
         {
           "type": "vcs",
@@ -4293,7 +4382,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "3833a8bf4b0630931fde33e89ce9201aa3e49d3b2ef83750ee40fefa0cfc688f9a14c38c1c56d6000dad6aa5d755374ff8e4ce411ff39c6bd2a6691e23459361"
+          "content": "92d4d2002449e567697e31e3153d845894103da706bf570f0837c46dd9a90073b1745898a8f7b895f9d7180dc3f0383dff49073d84afc91960ba320e5654ddbd"
         }
       ],
       "licenses": [
@@ -6325,14 +6414,14 @@
       ]
     },
     {
-      "bom-ref": "app-builder-lib@26.18.0",
+      "bom-ref": "app-builder-lib@26.18.1",
       "type": "library",
       "name": "app-builder-lib",
-      "version": "26.18.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
       "description": "electron-builder lib",
-      "purl": "pkg:npm/app-builder-lib@26.18.0",
+      "purl": "pkg:npm/app-builder-lib@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -6346,7 +6435,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/app-builder-lib/-/app-builder-lib-26.18.0.tgz"
+          "url": "https://registry.npmjs.org/app-builder-lib/-/app-builder-lib-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -6364,7 +6453,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "971f8a92e09264771b1027f8477200702f55385934f9c314c258ceeb7b39cbccaa4b52f0d2c4469a33da5ac3f03f7cefde885961b32152f8d77a24175d98495c"
+          "content": "1f11dc490a32f119a21424b180acade4baf0c7c1c2511879f37e1345a1c48e40e4552db056ddd19e4403906d3369065f873dddf1642d17cceff75e314a6d19a4"
         }
       ],
       "licenses": [
@@ -6478,14 +6567,14 @@
       ]
     },
     {
-      "bom-ref": "semver@6.3.1",
+      "bom-ref": "semver@6.3.2",
       "type": "library",
       "name": "semver",
-      "version": "6.3.1",
+      "version": "6.3.2",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@6.3.1",
+      "purl": "pkg:npm/semver@6.3.2",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -6499,7 +6588,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-6.3.1.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-6.3.2.tgz"
         },
         {
           "type": "vcs",
@@ -6517,7 +6606,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "051ed5bc30951cefaadb10445ac9314ba0c9135a919dbec3c7352ba206fbd425a849f89c07162c88019df8a9749a6abf329ac6f7202b464cab4314cee978cccc"
+          "content": "198ac2003c29bbac95e4e02f721910dbb679c3033158010c83934d5a3c8787fe436e8145a9b75bbd8348bd9a2e429c57c9e30fa133a1d2f74f60a95fd19b3075"
         }
       ],
       "licenses": [
@@ -7540,13 +7629,13 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@5.0.9",
+      "bom-ref": "brace-expansion@5.0.13",
       "type": "library",
       "name": "brace-expansion",
-      "version": "5.0.9",
+      "version": "5.0.13",
       "scope": "optional",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@5.0.9",
+      "purl": "pkg:npm/brace-expansion@5.0.13",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -7560,7 +7649,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.9.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-5.0.13.tgz"
         },
         {
           "type": "vcs",
@@ -7578,7 +7667,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "49c43822ebc8105d533253fb66dfaf8c9ffff7394f6f64837315b13376e4f2ceade8619d27b28ed5d09c4e274e3c929e3d6df42c4ff6713ef00b23e1a3dfd6c6"
+          "content": "561ddd9856dce3065ea31eccf48ff42fd19f15df374aee3ec82724fce17d1a2fcffdd0079f4453ed7e0af51ee030d3210dc9370ef851e905ec9d07638e0c0dbd"
         }
       ],
       "licenses": [
@@ -7686,13 +7775,13 @@
       ]
     },
     {
-      "bom-ref": "builder-util@26.16.0",
+      "bom-ref": "builder-util@26.18.1",
       "type": "library",
       "name": "builder-util",
-      "version": "26.16.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
-      "purl": "pkg:npm/builder-util@26.16.0",
+      "purl": "pkg:npm/builder-util@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -7706,7 +7795,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/builder-util/-/builder-util-26.16.0.tgz"
+          "url": "https://registry.npmjs.org/builder-util/-/builder-util-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -7724,7 +7813,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "44bc89841ed28b7624cca47db9b42c956b975b7561b370867b58be49e8b1059d2a4ddd669375c19acb2f636d93941e824b96e5ca4a3c1aed49ce9624f1491802"
+          "content": "b7ed579f38fc8d0d859c95ad40e2950aecefdd01a3bcd844e9eafbe7ba2694a172b107b176b09523d78cfeebb8fb7f4888c0ad33697fdf43b562baaa6ede0743"
         }
       ],
       "licenses": [
@@ -7736,13 +7825,13 @@
       ]
     },
     {
-      "bom-ref": "builder-util-runtime@9.7.0",
+      "bom-ref": "builder-util-runtime@9.7.1",
       "type": "library",
       "name": "builder-util-runtime",
-      "version": "9.7.0",
+      "version": "9.7.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
-      "purl": "pkg:npm/builder-util-runtime@9.7.0",
+      "purl": "pkg:npm/builder-util-runtime@9.7.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -7756,7 +7845,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/builder-util-runtime/-/builder-util-runtime-9.7.0.tgz"
+          "url": "https://registry.npmjs.org/builder-util-runtime/-/builder-util-runtime-9.7.1.tgz"
         },
         {
           "type": "vcs",
@@ -7774,7 +7863,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "83f911e76d208801589125d3cdc985de4a90abbc22f05e8de92cde0e066ba9304df951dd9a058ec93743d720fb0004c321dff25cbbee3f7e02c56e3afc1c0277"
+          "content": "2cb027d0376acf4608cb2b02cac064835f2a11d0333004a20034999791bc829c6caaed5126b74502aa005bdb2ec20d061ca32aaf2708485483ffd46a4a6e5dea"
         }
       ],
       "licenses": [
@@ -9998,14 +10087,14 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@1.1.21",
+      "bom-ref": "brace-expansion@1.1.22",
       "type": "library",
       "name": "brace-expansion",
-      "version": "1.1.21",
+      "version": "1.1.22",
       "scope": "optional",
       "author": "Julian Gruber",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@1.1.21",
+      "purl": "pkg:npm/brace-expansion@1.1.22",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10019,7 +10108,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.21.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.22.tgz"
         },
         {
           "type": "vcs",
@@ -10037,7 +10126,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f73780f8a2d934dce0945d933ca450103cb1e986f2edd68092ecbc3223f3a573ec6035a2fc344cf239b0503c689108d8a81a6fe4380f8b00f88786594b2d548f"
+          "content": "08a2c34ee4ac374fabd5384cd16933cc123b7673c8eb11067dafc99d56082bd24d040d4dd4dc8fc17547a2bfff34a0ffcb7b03c69efae2c65d2e114aee91fc5d"
         }
       ],
       "licenses": [
@@ -10100,13 +10189,13 @@
       ]
     },
     {
-      "bom-ref": "dmg-builder@26.18.0",
+      "bom-ref": "dmg-builder@26.18.1",
       "type": "library",
       "name": "dmg-builder",
-      "version": "26.18.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
-      "purl": "pkg:npm/dmg-builder@26.18.0",
+      "purl": "pkg:npm/dmg-builder@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10120,7 +10209,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/dmg-builder/-/dmg-builder-26.18.0.tgz"
+          "url": "https://registry.npmjs.org/dmg-builder/-/dmg-builder-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -10138,7 +10227,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "a330860b9e308b60b54644b6bfaf72f65431be84350a887e893f029968b263ccb566e38a56fb8db289f61ddf8710eb3df8464d36c3816f32a0419e1236a59dd3"
+          "content": "8a10400215d44223be7c84068ab6122ee29f8066bcd7322b2338124a46e6d5f3dc134717aa7c4d2ed510831607a5ecf158e69e5f19a1f40b8f7a638d66e30a6e"
         }
       ],
       "licenses": [
@@ -10602,14 +10691,14 @@
       ]
     },
     {
-      "bom-ref": "electron@44.10.0",
+      "bom-ref": "electron@44.11.3",
       "type": "library",
       "name": "electron",
-      "version": "44.10.0",
+      "version": "44.11.3",
       "scope": "optional",
       "author": "Electron Community",
       "description": "Build cross platform desktop apps with JavaScript, HTML, and CSS",
-      "purl": "pkg:npm/electron@44.10.0",
+      "purl": "pkg:npm/electron@44.11.3",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10623,7 +10712,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/electron/-/electron-44.10.0.tgz"
+          "url": "https://registry.npmjs.org/electron/-/electron-44.11.3.tgz"
         },
         {
           "type": "vcs",
@@ -10641,7 +10730,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "b2ce2909fad0295e135a4b9562d581e0799ecac3d9801f7a71260d29866fd5454244fe2f40c18d5b9a28a456efc7a05b7dc7b55ed3f9a66e510ee29e869d2cbd"
+          "content": "c95cc904033b85f2bf8240f72c7bc50f881f1cb8f57fa70bdf2620cd7f291d0c96cb3f14f454df4e3f56385770ccb8f9b5afbfa082830f806c0532d88856b64e"
         }
       ],
       "licenses": [
@@ -10653,14 +10742,14 @@
       ]
     },
     {
-      "bom-ref": "electron-builder@26.18.0",
+      "bom-ref": "electron-builder@26.18.1",
       "type": "library",
       "name": "electron-builder",
-      "version": "26.18.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
       "description": "A complete solution to package and build a ready for distribution Electron app for MacOS, Windows and Linux with \u201cauto update\u201d support out of the box",
-      "purl": "pkg:npm/electron-builder@26.18.0",
+      "purl": "pkg:npm/electron-builder@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10674,7 +10763,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/electron-builder/-/electron-builder-26.18.0.tgz"
+          "url": "https://registry.npmjs.org/electron-builder/-/electron-builder-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -10692,7 +10781,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "012808b909ceab846e0fc8cc852f612342d2dc43114f523f33947abadaa27c1fc11cdf3421c0a305db7e0c40fe36634fbe606012dae51315d98ad35d03b9173a"
+          "content": "b80dd3a3d5ff0f8a33c0ff24fe8fcc09f2a2ff1113c8f5741648536aa760213ebbf6e7b1b10f10144f8f845f31e8f63c5b58c826bc3dff269d4ee3964e99807b"
         }
       ],
       "licenses": [
@@ -10704,13 +10793,13 @@
       ]
     },
     {
-      "bom-ref": "electron-builder-squirrel-windows@26.18.0",
+      "bom-ref": "electron-builder-squirrel-windows@26.18.1",
       "type": "library",
       "name": "electron-builder-squirrel-windows",
-      "version": "26.18.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
-      "purl": "pkg:npm/electron-builder-squirrel-windows@26.18.0",
+      "purl": "pkg:npm/electron-builder-squirrel-windows@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10724,7 +10813,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/electron-builder-squirrel-windows/-/electron-builder-squirrel-windows-26.18.0.tgz"
+          "url": "https://registry.npmjs.org/electron-builder-squirrel-windows/-/electron-builder-squirrel-windows-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -10742,7 +10831,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "6b67a58138a96e85cd22cc6a4b51ce987306a783dddcb26021939d2054ceb240526b0bf12b265661643577b28a0380ad20d49c85809810ace1c51aa22997aff5"
+          "content": "1199820683b59c96edcd33d33dc6d012aa352068aeda21880ffa9e153419b09d444cf3dd5c7652c6fbbd89ed3e5e18e34166cae09c7363252d441feac3e95255"
         }
       ],
       "licenses": [
@@ -10754,13 +10843,13 @@
       ]
     },
     {
-      "bom-ref": "electron-publish@26.18.0",
+      "bom-ref": "electron-publish@26.18.1",
       "type": "library",
       "name": "electron-publish",
-      "version": "26.18.0",
+      "version": "26.18.1",
       "scope": "optional",
       "author": "Vladimir Krivosheev",
-      "purl": "pkg:npm/electron-publish@26.18.0",
+      "purl": "pkg:npm/electron-publish@26.18.1",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -10774,7 +10863,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/electron-publish/-/electron-publish-26.18.0.tgz"
+          "url": "https://registry.npmjs.org/electron-publish/-/electron-publish-26.18.1.tgz"
         },
         {
           "type": "vcs",
@@ -10792,7 +10881,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "31a827a9a65200b4968dc74abb91c4561614643ff60432f7abb5f3aea5b0b9bea07ff51f0f722d3209ad8550eff70e72f44d201f50b7256a8a697c1fe9fe113a"
+          "content": "565024331f6480f3ff4c69f9ab9b200926302ad3145c11a15d3d97c058b7a7794c2590e0088584ae291605a23ab4983c3db31e5d9eaf2b5791dbe0f3719b1be7"
         }
       ],
       "licenses": [
@@ -11712,14 +11801,14 @@
       ]
     },
     {
-      "bom-ref": "eslint@10.11.0",
+      "bom-ref": "eslint@10.15.0",
       "type": "library",
       "name": "eslint",
-      "version": "10.11.0",
+      "version": "10.15.0",
       "scope": "optional",
       "author": "Nicholas C. Zakas",
       "description": "An AST-based pattern checker for JavaScript.",
-      "purl": "pkg:npm/eslint@10.11.0",
+      "purl": "pkg:npm/eslint@10.15.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -11733,7 +11822,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/eslint/-/eslint-10.11.0.tgz"
+          "url": "https://registry.npmjs.org/eslint/-/eslint-10.15.0.tgz"
         },
         {
           "type": "vcs",
@@ -11751,7 +11840,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "3fb6ba50412a6fd1bde4c600b6a926b136d55c8632cc87e5e8d18e209935eb63da6a117117278672b9576054a26a0102838b049bc22c78975904a477af1e8cb1"
+          "content": "fb95a0e29fb37b7b06d5612b62050eff71f521021f141ca6554034168fd74de04e2d2e9440851e929489f2c751927eceef08e1f386f9e70feba2a6af1f669272"
         }
       ],
       "licenses": [
@@ -11961,6 +12050,57 @@
         {
           "license": {
             "id": "MIT"
+          }
+        }
+      ]
+    },
+    {
+      "bom-ref": "minimatch@11.0.8",
+      "type": "library",
+      "name": "minimatch",
+      "version": "11.0.8",
+      "scope": "optional",
+      "author": "Isaac Z. Schlueter",
+      "description": "a glob matcher in javascript",
+      "purl": "pkg:npm/minimatch@11.0.8",
+      "properties": [
+        {
+          "name": "cdx:npm:package:path",
+          "value": "node_modules/eslint/node_modules/minimatch"
+        },
+        {
+          "name": "cdx:npm:package:development",
+          "value": "true"
+        }
+      ],
+      "externalReferences": [
+        {
+          "type": "distribution",
+          "url": "https://registry.npmjs.org/minimatch/-/minimatch-11.0.8.tgz"
+        },
+        {
+          "type": "vcs",
+          "url": "git+ssh://git@github.com/isaacs/minimatch.git"
+        },
+        {
+          "type": "website",
+          "url": "https://github.com/isaacs/minimatch#readme"
+        },
+        {
+          "type": "issue-tracker",
+          "url": "https://github.com/isaacs/minimatch/issues"
+        }
+      ],
+      "hashes": [
+        {
+          "alg": "SHA-512",
+          "content": "9c542e6124d5ac6bf2b15069b39221fb405d9d814dfc28f70bcd7aafafa9ef22be147ad52c61383b837d005c3292b94d96f3361d8b7e45a775522ae8ea1f3c22"
+        }
+      ],
+      "licenses": [
+        {
+          "license": {
+            "id": "BlueOak-1.0.0"
           }
         }
       ]
@@ -12856,14 +12996,14 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@2.1.7",
+      "bom-ref": "brace-expansion@2.1.8",
       "type": "library",
       "name": "brace-expansion",
-      "version": "2.1.7",
+      "version": "2.1.8",
       "scope": "optional",
       "author": "Julian Gruber",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@2.1.7",
+      "purl": "pkg:npm/brace-expansion@2.1.8",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -12877,7 +13017,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.7.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-2.1.8.tgz"
         },
         {
           "type": "vcs",
@@ -12895,7 +13035,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "b996dec3536a7663c34cc27c6a1d72f9bfbd40426b7e45c593745c4d0c375f48d6ff1454bc52ac83509f41d49819d4db5d9584c6d53727771cc6d9dfc35162d2"
+          "content": "067943cc3610a29953b194af3e2f3a08dce66dc6f4ed7f2e7d1f1f935ce2bda8842655c9922ab5310c830959a559cb166e3e9a597a879ebc307af6eb9bf49a8a"
         }
       ],
       "licenses": [
@@ -13111,14 +13251,14 @@
       ]
     },
     {
-      "bom-ref": "follow-redirects@1.16.1",
+      "bom-ref": "follow-redirects@1.16.3",
       "type": "library",
       "name": "follow-redirects",
-      "version": "1.16.1",
+      "version": "1.16.3",
       "scope": "optional",
       "author": "Ruben Verborgh",
       "description": "HTTP and HTTPS modules that follow redirects.",
-      "purl": "pkg:npm/follow-redirects@1.16.1",
+      "purl": "pkg:npm/follow-redirects@1.16.3",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -13132,7 +13272,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.16.1.tgz"
+          "url": "https://registry.npmjs.org/follow-redirects/-/follow-redirects-1.16.3.tgz"
         },
         {
           "type": "vcs",
@@ -13150,7 +13290,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "14dbc51b3a0c2d6984e988fdb296ffce377bca23421e2016f7f4e0f425eb43cc2ebb7d87b6524ec163b5d4e25a7e5e457d8dc3c53750d2f8f8db353592fbf98e"
+          "content": "b68392a2a37a779d568dfd5a38525872856fd5a343f6b8ff0b08cb534573e34a03b92a560dac8278a7b82692f934bd16745be838e088dc1468ebd1da8636d1d4"
         }
       ],
       "licenses": [
@@ -13773,14 +13913,14 @@
       ]
     },
     {
-      "bom-ref": "brace-expansion@1.1.21",
+      "bom-ref": "brace-expansion@1.1.22",
       "type": "library",
       "name": "brace-expansion",
-      "version": "1.1.21",
+      "version": "1.1.22",
       "scope": "optional",
       "author": "Julian Gruber",
       "description": "Brace expansion as known from sh/bash",
-      "purl": "pkg:npm/brace-expansion@1.1.21",
+      "purl": "pkg:npm/brace-expansion@1.1.22",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -13794,7 +13934,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.21.tgz"
+          "url": "https://registry.npmjs.org/brace-expansion/-/brace-expansion-1.1.22.tgz"
         },
         {
           "type": "vcs",
@@ -13812,7 +13952,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f73780f8a2d934dce0945d933ca450103cb1e986f2edd68092ecbc3223f3a573ec6035a2fc344cf239b0503c689108d8a81a6fe4380f8b00f88786594b2d548f"
+          "content": "08a2c34ee4ac374fabd5384cd16933cc123b7673c8eb11067dafc99d56082bd24d040d4dd4dc8fc17547a2bfff34a0ffcb7b03c69efae2c65d2e114aee91fc5d"
         }
       ],
       "licenses": [
@@ -13926,14 +14066,14 @@
       ]
     },
     {
-      "bom-ref": "semver@7.8.5",
+      "bom-ref": "semver@7.8.6",
       "type": "library",
       "name": "semver",
-      "version": "7.8.5",
+      "version": "7.8.6",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@7.8.5",
+      "purl": "pkg:npm/semver@7.8.6",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -13947,7 +14087,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz"
         },
         {
           "type": "vcs",
@@ -13965,7 +14105,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+          "content": "f65a52494e0c972de6aedaeec0bb3578b2bafa0cdbcea78117044d8c88c4fbd2ee0e959d61cb6b4254377a3d489608bb8249e9b134673e82cff03a421ea1c827"
         }
       ],
       "licenses": [
@@ -15689,13 +15829,13 @@
       ]
     },
     {
-      "bom-ref": "joi@18.3.0",
+      "bom-ref": "joi@18.3.2",
       "type": "library",
       "name": "joi",
-      "version": "18.3.0",
+      "version": "18.3.2",
       "scope": "optional",
       "description": "Object schema validation",
-      "purl": "pkg:npm/joi@18.3.0",
+      "purl": "pkg:npm/joi@18.3.2",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -15709,7 +15849,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/joi/-/joi-18.3.0.tgz"
+          "url": "https://registry.npmjs.org/joi/-/joi-18.3.2.tgz"
         },
         {
           "type": "vcs",
@@ -15727,7 +15867,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "fd1c002b80407f371d6dd160d3bdedceae3fc6163a43b94c7790268ea4cbea9bb440525d126b6cc209bc06f8305ef38ab8f35843c5eb750aeb5bf805eb92e237"
+          "content": "8948af029298c391a9666ab64b2e8497df63ee7a28f1049415997242daf71c2928b02fdbe70285ebf637b5e88722568cf16237f2c013dcffb9d6b07496102124"
         }
       ],
       "licenses": [
@@ -17402,14 +17542,14 @@
       ]
     },
     {
-      "bom-ref": "node-abi@4.39.0",
+      "bom-ref": "node-abi@4.40.0",
       "type": "library",
       "name": "node-abi",
-      "version": "4.39.0",
+      "version": "4.40.0",
       "scope": "optional",
       "author": "Lukas Geiger",
       "description": "Get the Node ABI for a given target and runtime, and vice versa.",
-      "purl": "pkg:npm/node-abi@4.39.0",
+      "purl": "pkg:npm/node-abi@4.40.0",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -17423,7 +17563,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/node-abi/-/node-abi-4.39.0.tgz"
+          "url": "https://registry.npmjs.org/node-abi/-/node-abi-4.40.0.tgz"
         },
         {
           "type": "vcs",
@@ -17441,7 +17581,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "a542e3237aac56b9fa2b90d9cf9b42a57d9d2fc20a33dff104c473dbd841928f1415767f0b743144c97f67bc0a690c1ac4f99853eed43ca6c37fb10ef804af7c"
+          "content": "1aebeabedace93e002dbb462741c41b0ccd5364c0d97b3e31e07383576e676f4952e02148e96aa706d458cd4589edd989fd62dabe2e7dfb5ec05a82551cb5eff"
         }
       ],
       "licenses": [
@@ -17453,14 +17593,14 @@
       ]
     },
     {
-      "bom-ref": "semver@7.8.5",
+      "bom-ref": "semver@7.8.6",
       "type": "library",
       "name": "semver",
-      "version": "7.8.5",
+      "version": "7.8.6",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@7.8.5",
+      "purl": "pkg:npm/semver@7.8.6",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -17474,7 +17614,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz"
         },
         {
           "type": "vcs",
@@ -17492,7 +17632,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+          "content": "f65a52494e0c972de6aedaeec0bb3578b2bafa0cdbcea78117044d8c88c4fbd2ee0e959d61cb6b4254377a3d489608bb8249e9b134673e82cff03a421ea1c827"
         }
       ],
       "licenses": [
@@ -17555,14 +17695,14 @@
       ]
     },
     {
-      "bom-ref": "semver@7.8.5",
+      "bom-ref": "semver@7.8.6",
       "type": "library",
       "name": "semver",
-      "version": "7.8.5",
+      "version": "7.8.6",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@7.8.5",
+      "purl": "pkg:npm/semver@7.8.6",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -17576,7 +17716,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz"
         },
         {
           "type": "vcs",
@@ -17594,7 +17734,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+          "content": "f65a52494e0c972de6aedaeec0bb3578b2bafa0cdbcea78117044d8c88c4fbd2ee0e959d61cb6b4254377a3d489608bb8249e9b134673e82cff03a421ea1c827"
         }
       ],
       "licenses": [
@@ -17708,14 +17848,14 @@
       ]
     },
     {
-      "bom-ref": "semver@7.8.5",
+      "bom-ref": "semver@7.8.6",
       "type": "library",
       "name": "semver",
-      "version": "7.8.5",
+      "version": "7.8.6",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@7.8.5",
+      "purl": "pkg:npm/semver@7.8.6",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -17729,7 +17869,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-7.8.5.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-7.8.6.tgz"
         },
         {
           "type": "vcs",
@@ -17747,7 +17887,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "63bfca0ec6fc2e3a28669c1aa86cae94ee8342592c8029dc7211c693eb19218e1206f52870c044147e54af57c8e1d57e26f974c3a723bee71a222e34a6e462a0"
+          "content": "f65a52494e0c972de6aedaeec0bb3578b2bafa0cdbcea78117044d8c88c4fbd2ee0e959d61cb6b4254377a3d489608bb8249e9b134673e82cff03a421ea1c827"
         }
       ],
       "licenses": [
@@ -20615,14 +20755,14 @@
       ]
     },
     {
-      "bom-ref": "sanitize-filename@1.6.4",
+      "bom-ref": "sanitize-filename@1.6.5",
       "type": "library",
       "name": "sanitize-filename",
-      "version": "1.6.4",
+      "version": "1.6.5",
       "scope": "optional",
       "author": "Parsha Pourkhomami",
       "description": "Sanitize a string for use as a filename",
-      "purl": "pkg:npm/sanitize-filename@1.6.4",
+      "purl": "pkg:npm/sanitize-filename@1.6.5",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -20636,7 +20776,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/sanitize-filename/-/sanitize-filename-1.6.4.tgz"
+          "url": "https://registry.npmjs.org/sanitize-filename/-/sanitize-filename-1.6.5.tgz"
         },
         {
           "type": "vcs",
@@ -20654,7 +20794,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "f59c88d3c3ecbdd425dabfdb0481ae6e955d477451f6c63a44389614fade036d42fc41654219a0a36d1466536364c31936e6eeb0b840428ce403439de49db512"
+          "content": "f9d540a6de3afe80055913f42814a760d2d1c35a5e63ba3f6f5dad9a99653cd1698dfc243ee66eb75f8388a683f73631e6bd921f073e5cc2d205a0e2c94270de"
         }
       ],
       "licenses": [
@@ -21865,14 +22005,14 @@
       ]
     },
     {
-      "bom-ref": "tar@7.5.22",
+      "bom-ref": "tar@7.5.23",
       "type": "library",
       "name": "tar",
-      "version": "7.5.22",
+      "version": "7.5.23",
       "scope": "optional",
       "author": "Isaac Z. Schlueter",
       "description": "tar for node",
-      "purl": "pkg:npm/tar@7.5.22",
+      "purl": "pkg:npm/tar@7.5.23",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -21886,7 +22026,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/tar/-/tar-7.5.22.tgz"
+          "url": "https://registry.npmjs.org/tar/-/tar-7.5.23.tgz"
         },
         {
           "type": "vcs",
@@ -21904,7 +22044,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "3053bf433bed00e9896e484e6824ef6c670537d2fd6fe26e9c8b03c1a2a58d239d70b31e6b7349d64f54b33feb8dd7d25d3ab875fcdf792ed6e29e1838000778"
+          "content": "964ba4cdda069e06472595f15b84bf138169f608530e5c995eb40644da09fcb5ef0ca717513ab6b20e7241eef8a68ed5a1e6ba9ff20dd3dfb013f42f24c8a27c"
         }
       ],
       "licenses": [
@@ -22119,14 +22259,14 @@
       ]
     },
     {
-      "bom-ref": "semver@5.7.2",
+      "bom-ref": "semver@5.7.3",
       "type": "library",
       "name": "semver",
-      "version": "5.7.2",
+      "version": "5.7.3",
       "scope": "optional",
       "author": "GitHub Inc.",
       "description": "The semantic version parser used by npm.",
-      "purl": "pkg:npm/semver@5.7.2",
+      "purl": "pkg:npm/semver@5.7.3",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -22140,7 +22280,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/semver/-/semver-5.7.2.tgz"
+          "url": "https://registry.npmjs.org/semver/-/semver-5.7.3.tgz"
         },
         {
           "type": "vcs",
@@ -22158,7 +22298,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "701ce79d0f4a8c9a94ebb079d91302eb908c6ab2b6eb4d161676e471a8b05aadf1cbfe61685265b21827a63a2f31527e1df7f8f5df06127d1bf3b0b9a43435d2"
+          "content": "90cd7c04f3aa4e2d3e4c1ebcef4dff18946900c2f931ef880d0b11d49dba601dc414a28d1321c8559b960d7efe58a401ded1f00f0824db805f85da5651bcadbd"
         }
       ],
       "licenses": [
@@ -22662,13 +22802,13 @@
       ]
     },
     {
-      "bom-ref": "undici@7.29.1",
+      "bom-ref": "undici@7.30.2",
       "type": "library",
       "name": "undici",
-      "version": "7.29.1",
+      "version": "7.30.2",
       "scope": "optional",
       "description": "An HTTP/1.1 client, written from scratch for Node.js",
-      "purl": "pkg:npm/undici@7.29.1",
+      "purl": "pkg:npm/undici@7.30.2",
       "properties": [
         {
           "name": "cdx:npm:package:path",
@@ -22682,7 +22822,7 @@
       "externalReferences": [
         {
           "type": "distribution",
-          "url": "https://registry.npmjs.org/undici/-/undici-7.29.1.tgz"
+          "url": "https://registry.npmjs.org/undici/-/undici-7.30.2.tgz"
         },
         {
           "type": "vcs",
@@ -22700,7 +22840,7 @@
       "hashes": [
         {
           "alg": "SHA-512",
-          "content": "45838d5b631e69f81896454e2982a403f020ec1997aa021609af2dd66d09731ad083da48f6512a46100eaee38109b02884e6bf824085fa23e2f61ae0bd3ceee9"
+          "content": "98bc8f4271f053168cfeb89d7a82bff8a2fc0da0092d197868109f997e38e1a0922e721aa26a8f2ed3517b68dd09872c939c19cd7ac32100bc65e60d44063220"
         }
       ],
       "licenses": [
@@ -23916,11 +24056,11 @@
     },
     {
       "type": "platform",
-      "bom-ref": "electron-bundled-nodejs@24.22.1",
+      "bom-ref": "electron-bundled-nodejs@24.22.2",
       "name": "node.js",
-      "version": "24.22.1",
-      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.1:*:*:*:*:*:*:*",
-      "description": "Bundled inside Electron 44.10.0 (desktop 1.12.0); not an npm package",
+      "version": "24.22.2",
+      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.2:*:*:*:*:*:*:*",
+      "description": "Bundled inside Electron 44.11.3 (desktop 1.12.0); not an npm package",
       "properties": [
         {
           "name": "picvision:runtime:addedManually",
@@ -23934,7 +24074,7 @@
       "name": "chromium",
       "version": "152.0.7977.169",
       "cpe": "cpe:2.3:a:google:chrome:152.0.7977.169:*:*:*:*:*:*:*",
-      "description": "Bundled inside Electron 44.10.0 (desktop 1.12.0); not an npm package",
+      "description": "Bundled inside Electron 44.11.3 (desktop 1.12.0); not an npm package",
       "properties": [
         {
           "name": "picvision:runtime:addedManually",
@@ -23958,9 +24098,9 @@
         "posthog-node@5.51.6",
         "@vitejs/plugin-react@4.7.0",
         "concurrently@9.2.5",
-        "electron@44.10.0",
-        "electron-builder@26.18.0",
-        "eslint@10.11.0",
+        "electron@44.11.3",
+        "electron-builder@26.18.1",
+        "eslint@10.15.0",
         "globals@17.12.0",
         "react@18.3.1",
         "react-dom@18.3.1",
@@ -24172,7 +24312,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@1.1.21",
+      "ref": "brace-expansion@1.1.22",
       "dependsOn": [
         "balanced-match@1.0.2",
         "concat-map@0.0.1"
@@ -24181,7 +24321,7 @@
     {
       "ref": "minimatch@3.1.5",
       "dependsOn": [
-        "brace-expansion@1.1.21"
+        "brace-expansion@1.1.22"
       ]
     },
     {
@@ -24210,7 +24350,7 @@
         "progress@2.0.3",
         "semver@7.8.5",
         "sumchecker@3.0.1",
-        "undici@7.29.1"
+        "undici@7.30.2"
       ]
     },
     {
@@ -24258,7 +24398,7 @@
       "dependsOn": [
         "@malept/cross-spawn-promise@2.0.0",
         "debug@4.4.3",
-        "node-abi@4.39.0",
+        "node-abi@4.40.0",
         "node-api-version@0.2.1",
         "node-gyp@12.4.0",
         "read-binary-file-arch@1.0.6"
@@ -24281,7 +24421,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@2.1.7",
+      "ref": "brace-expansion@2.1.8",
       "dependsOn": [
         "balanced-match@1.0.2"
       ]
@@ -24297,7 +24437,7 @@
     {
       "ref": "minimatch@9.0.9",
       "dependsOn": [
-        "brace-expansion@2.1.7"
+        "brace-expansion@2.1.8"
       ]
     },
     {
@@ -24325,7 +24465,7 @@
     {
       "ref": "@eslint-community/eslint-utils@4.10.1",
       "dependsOn": [
-        "eslint@10.11.0",
+        "eslint@10.15.0",
         "eslint-visitor-keys@3.4.3"
       ]
     },
@@ -24338,11 +24478,18 @@
       "dependsOn": []
     },
     {
-      "ref": "@eslint/config-array@0.23.5",
+      "ref": "@eslint/config-array@0.23.6",
       "dependsOn": [
         "@eslint/object-schema@3.0.5",
         "debug@4.4.3",
-        "minimatch@10.2.6"
+        "minimatch@11.0.8"
+      ]
+    },
+    {
+      "ref": "minimatch@11.0.8",
+      "dependsOn": [
+        "@isaacs/nonrecursive-glob-match@1.1.0",
+        "brace-expansion@5.0.13"
       ]
     },
     {
@@ -24433,6 +24580,10 @@
       ]
     },
     {
+      "ref": "@isaacs/nonrecursive-glob-match@1.1.0",
+      "dependsOn": []
+    },
+    {
       "ref": "@jridgewell/gen-mapping@0.3.13",
       "dependsOn": [
         "@jridgewell/sourcemap-codec@1.6.0",
@@ -24498,7 +24649,7 @@
       "dependsOn": []
     },
     {
-      "ref": "@peculiar/asn1-schema@2.11.0",
+      "ref": "@peculiar/asn1-schema@2.11.1",
       "dependsOn": [
         "@peculiar/utils@2.0.3",
         "asn1js@3.1.0",
@@ -24518,9 +24669,9 @@
       ]
     },
     {
-      "ref": "@peculiar/webcrypto@1.7.1",
+      "ref": "@peculiar/webcrypto@1.7.2",
       "dependsOn": [
-        "@peculiar/asn1-schema@2.11.0",
+        "@peculiar/asn1-schema@2.11.1",
         "@peculiar/json-schema@1.1.12",
         "@peculiar/utils@2.0.3",
         "tslib@2.8.1",
@@ -24761,10 +24912,10 @@
       ]
     },
     {
-      "ref": "app-builder-lib@26.18.0",
+      "ref": "app-builder-lib@26.18.1",
       "dependsOn": [
-        "dmg-builder@26.18.0",
-        "electron-builder-squirrel-windows@26.18.0",
+        "dmg-builder@26.18.1",
+        "electron-builder-squirrel-windows@26.18.1",
         "@electron/asar@3.4.1",
         "@electron/fuses@1.8.0",
         "@electron/get@3.1.0",
@@ -24774,7 +24925,7 @@
         "@electron/universal@2.0.3",
         "@malept/flatpak-bundler@0.4.0",
         "@noble/hashes@1.8.0",
-        "@peculiar/webcrypto@1.7.1",
+        "@peculiar/webcrypto@1.7.2",
         "@types/fs-extra@9.0.13",
         "ajv@8.20.0",
         "asn1js@3.1.0",
@@ -24798,14 +24949,14 @@
         "proper-lockfile@4.1.2",
         "resedit@1.7.2",
         "semver@7.7.4",
-        "tar@7.5.22",
+        "tar@7.5.23",
         "temp-file@3.4.0",
         "tiny-async-pool@1.3.0",
         "unzipper@0.12.5",
         "which@5.0.0",
-        "builder-util@26.16.0",
-        "builder-util-runtime@9.7.0",
-        "electron-publish@26.18.0"
+        "electron-publish@26.18.1",
+        "builder-util@26.18.1",
+        "builder-util-runtime@9.7.1"
       ]
     },
     {
@@ -24816,7 +24967,7 @@
         "fs-extra@8.1.0",
         "got@11.8.6",
         "progress@2.0.3",
-        "semver@6.3.1",
+        "semver@6.3.2",
         "sumchecker@3.0.1",
         "global-agent@3.0.0"
       ]
@@ -24830,7 +24981,7 @@
       ]
     },
     {
-      "ref": "semver@6.3.1",
+      "ref": "semver@6.3.2",
       "dependsOn": []
     },
     {
@@ -24893,7 +25044,7 @@
     {
       "ref": "axios@1.20.0",
       "dependsOn": [
-        "follow-redirects@1.16.1",
+        "follow-redirects@1.16.3",
         "form-data@4.0.6",
         "https-proxy-agent@5.0.1",
         "proxy-from-env@2.1.0"
@@ -24933,7 +25084,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@5.0.9",
+      "ref": "brace-expansion@5.0.13",
       "dependsOn": [
         "balanced-match@4.0.4"
       ]
@@ -24953,7 +25104,7 @@
       "dependsOn": []
     },
     {
-      "ref": "builder-util@26.16.0",
+      "ref": "builder-util@26.18.1",
       "dependsOn": [
         "@types/debug@4.1.13",
         "chalk@4.1.2",
@@ -24963,16 +25114,16 @@
         "http-proxy-agent@7.0.2",
         "https-proxy-agent@7.0.6",
         "js-yaml@4.3.2",
-        "sanitize-filename@1.6.4",
+        "sanitize-filename@1.6.5",
         "source-map-support@0.5.21",
         "stat-mode@1.0.0",
         "temp-file@3.4.0",
         "tiny-async-pool@1.3.0",
-        "builder-util-runtime@9.7.0"
+        "builder-util-runtime@9.7.1"
       ]
     },
     {
-      "ref": "builder-util-runtime@9.7.0",
+      "ref": "builder-util-runtime@9.7.1",
       "dependsOn": [
         "debug@4.4.3",
         "sax@1.6.1"
@@ -25234,7 +25385,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@1.1.21",
+      "ref": "brace-expansion@1.1.22",
       "dependsOn": [
         "balanced-match@1.0.2",
         "concat-map@0.0.1"
@@ -25243,16 +25394,16 @@
     {
       "ref": "minimatch@3.1.5",
       "dependsOn": [
-        "brace-expansion@1.1.21"
+        "brace-expansion@1.1.22"
       ]
     },
     {
-      "ref": "dmg-builder@26.18.0",
+      "ref": "dmg-builder@26.18.1",
       "dependsOn": [
         "fs-extra@10.1.0",
         "js-yaml@4.3.2",
-        "app-builder-lib@26.18.0",
-        "builder-util@26.16.0"
+        "app-builder-lib@26.18.1",
+        "builder-util@26.18.1"
       ]
     },
     {
@@ -25314,17 +25465,17 @@
       ]
     },
     {
-      "ref": "electron@44.10.0",
+      "ref": "electron@44.11.3",
       "dependsOn": [
         "@electron-internal/extract-zip@1.0.5",
         "@electron/get@5.1.0",
         "@types/node@24.13.3",
-        "electron-bundled-nodejs@24.22.1",
+        "electron-bundled-nodejs@24.22.2",
         "electron-bundled-chromium@152.0.7977.169"
       ]
     },
     {
-      "ref": "electron-builder@26.18.0",
+      "ref": "electron-builder@26.18.1",
       "dependsOn": [
         "chalk@4.1.2",
         "ci-info@4.4.0",
@@ -25332,22 +25483,22 @@
         "lazy-val@1.0.5",
         "simple-update-notifier@2.0.0",
         "yargs@17.7.2",
-        "builder-util@26.16.0",
-        "app-builder-lib@26.18.0",
-        "builder-util-runtime@9.7.0",
-        "dmg-builder@26.18.0"
+        "builder-util@26.18.1",
+        "builder-util-runtime@9.7.1",
+        "app-builder-lib@26.18.1",
+        "dmg-builder@26.18.1"
       ]
     },
     {
-      "ref": "electron-builder-squirrel-windows@26.18.0",
+      "ref": "electron-builder-squirrel-windows@26.18.1",
       "dependsOn": [
         "electron-winstaller@5.4.0",
-        "app-builder-lib@26.18.0",
-        "builder-util@26.16.0"
+        "app-builder-lib@26.18.1",
+        "builder-util@26.18.1"
       ]
     },
     {
-      "ref": "electron-publish@26.18.0",
+      "ref": "electron-publish@26.18.1",
       "dependsOn": [
         "@types/fs-extra@9.0.13",
         "aws4@1.13.2",
@@ -25356,8 +25507,8 @@
         "fs-extra@10.1.0",
         "lazy-val@1.0.5",
         "mime@2.6.0",
-        "builder-util@26.16.0",
-        "builder-util-runtime@9.7.0"
+        "builder-util@26.18.1",
+        "builder-util-runtime@9.7.1"
       ]
     },
     {
@@ -25460,12 +25611,12 @@
       "dependsOn": []
     },
     {
-      "ref": "eslint@10.11.0",
+      "ref": "eslint@10.15.0",
       "dependsOn": [
         "jiti@2.7.0",
         "@eslint-community/eslint-utils@4.10.1",
         "@eslint-community/regexpp@4.12.2",
-        "@eslint/config-array@0.23.5",
+        "@eslint/config-array@0.23.6",
         "@eslint/config-helpers@0.7.0",
         "@eslint/core@1.2.1",
         "@eslint/plugin-kit@0.7.3",
@@ -25490,7 +25641,7 @@
         "imurmurhash@0.1.4",
         "is-glob@4.0.3",
         "json-stable-stringify-without-jsonify@1.0.1",
-        "minimatch@10.2.6",
+        "minimatch@11.0.8",
         "natural-compare@1.4.0",
         "optionator@0.9.4"
       ]
@@ -25520,6 +25671,13 @@
     {
       "ref": "json-schema-traverse@0.4.1",
       "dependsOn": []
+    },
+    {
+      "ref": "minimatch@11.0.8",
+      "dependsOn": [
+        "@isaacs/nonrecursive-glob-match@1.1.0",
+        "brace-expansion@5.0.13"
+      ]
     },
     {
       "ref": "espree@11.2.0",
@@ -25618,7 +25776,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@2.1.7",
+      "ref": "brace-expansion@2.1.8",
       "dependsOn": [
         "balanced-match@1.0.2"
       ]
@@ -25626,7 +25784,7 @@
     {
       "ref": "minimatch@5.1.9",
       "dependsOn": [
-        "brace-expansion@2.1.7"
+        "brace-expansion@2.1.8"
       ]
     },
     {
@@ -25649,7 +25807,7 @@
       "dependsOn": []
     },
     {
-      "ref": "follow-redirects@1.16.1",
+      "ref": "follow-redirects@1.16.3",
       "dependsOn": []
     },
     {
@@ -25736,7 +25894,7 @@
       "dependsOn": []
     },
     {
-      "ref": "brace-expansion@1.1.21",
+      "ref": "brace-expansion@1.1.22",
       "dependsOn": [
         "balanced-match@1.0.2",
         "concat-map@0.0.1"
@@ -25745,7 +25903,7 @@
     {
       "ref": "minimatch@3.1.5",
       "dependsOn": [
-        "brace-expansion@1.1.21"
+        "brace-expansion@1.1.22"
       ]
     },
     {
@@ -25755,12 +25913,12 @@
         "es6-error@4.1.1",
         "matcher@3.0.0",
         "roarr@2.15.4",
-        "semver@7.8.5",
+        "semver@7.8.6",
         "serialize-error@7.0.1"
       ]
     },
     {
-      "ref": "semver@7.8.5",
+      "ref": "semver@7.8.6",
       "dependsOn": []
     },
     {
@@ -25947,7 +26105,7 @@
       "dependsOn": []
     },
     {
-      "ref": "joi@18.3.0",
+      "ref": "joi@18.3.2",
       "dependsOn": [
         "@hapi/address@5.1.1",
         "@hapi/formula@3.0.2",
@@ -26081,7 +26239,7 @@
     {
       "ref": "minimatch@10.2.6",
       "dependsOn": [
-        "brace-expansion@5.0.9"
+        "brace-expansion@5.0.13"
       ]
     },
     {
@@ -26117,23 +26275,23 @@
       "dependsOn": []
     },
     {
-      "ref": "node-abi@4.39.0",
+      "ref": "node-abi@4.40.0",
       "dependsOn": [
-        "semver@7.8.5"
+        "semver@7.8.6"
       ]
     },
     {
-      "ref": "semver@7.8.5",
+      "ref": "semver@7.8.6",
       "dependsOn": []
     },
     {
       "ref": "node-api-version@0.2.1",
       "dependsOn": [
-        "semver@7.8.5"
+        "semver@7.8.6"
       ]
     },
     {
-      "ref": "semver@7.8.5",
+      "ref": "semver@7.8.6",
       "dependsOn": []
     },
     {
@@ -26144,8 +26302,8 @@
         "graceful-fs@4.2.11",
         "nopt@9.0.0",
         "proc-log@6.1.0",
-        "semver@7.8.5",
-        "tar@7.5.22",
+        "semver@7.8.6",
+        "tar@7.5.23",
         "tinyglobby@0.2.17",
         "undici@6.29.1",
         "which@6.0.1"
@@ -26156,7 +26314,7 @@
       "dependsOn": []
     },
     {
-      "ref": "semver@7.8.5",
+      "ref": "semver@7.8.6",
       "dependsOn": []
     },
     {
@@ -26473,7 +26631,7 @@
       "dependsOn": []
     },
     {
-      "ref": "sanitize-filename@1.6.4",
+      "ref": "sanitize-filename@1.6.5",
       "dependsOn": [
         "truncate-utf8-bytes@1.0.2"
       ]
@@ -26600,7 +26758,7 @@
       ]
     },
     {
-      "ref": "tar@7.5.22",
+      "ref": "tar@7.5.23",
       "dependsOn": [
         "@isaacs/fs-minipass@4.0.1",
         "chownr@3.0.0",
@@ -26630,11 +26788,11 @@
     {
       "ref": "tiny-async-pool@1.3.0",
       "dependsOn": [
-        "semver@5.7.2"
+        "semver@5.7.3"
       ]
     },
     {
-      "ref": "semver@5.7.2",
+      "ref": "semver@5.7.3",
       "dependsOn": []
     },
     {
@@ -26687,7 +26845,7 @@
       "dependsOn": []
     },
     {
-      "ref": "undici@7.29.1",
+      "ref": "undici@7.30.2",
       "dependsOn": []
     },
     {
@@ -26755,7 +26913,7 @@
       "ref": "wait-on@8.0.5",
       "dependsOn": [
         "axios@1.20.0",
-        "joi@18.3.0",
+        "joi@18.3.2",
         "lodash@4.18.1",
         "minimist@1.2.8",
         "rxjs@7.8.2"
@@ -26764,7 +26922,7 @@
     {
       "ref": "webcrypto-core@1.9.2",
       "dependsOn": [
-        "@peculiar/asn1-schema@2.11.0",
+        "@peculiar/asn1-schema@2.11.1",
         "@peculiar/json-schema@1.1.12",
         "@peculiar/utils@2.0.3",
         "asn1js@3.1.0",

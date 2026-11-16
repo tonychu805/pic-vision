@@ -21,6 +21,20 @@ Not covered: the pod's container image (stock PyTorch image; OS packages), Supab
 
 ---
 
+## After the 2026-11-16 fixes (PRs open; SBOMs above describe this state)
+
+| Component | Before | After | Change |
+|---|---|---|---|
+| Desktop — ships | 0 | 0 | Electron 44.10.0 → **44.11.3** (Node 24.22.2) |
+| Desktop — build only | 4 high, 8 moderate | 6 moderate | non-breaking `npm audit fix`; electron-builder chain left (breaking, plan step 6) |
+| Console (production) | 5 critical, 37 high | **0** | Next.js 16.4.6, shadcn → devDependencies, posthog-js ^1.449.2, overrides for browserslist / baseline-browser-mapping |
+| Share app (production) | 4 critical, 36 high | **0** | same |
+| Website (production) | 5 critical, 37 high | **0** | same |
+| Orchestrator — build only | 4 high | **0** | non-breaking `npm audit fix` |
+| Python | 0 | 0 | — |
+
+The table below is the scan as found, before these fixes.
+
 ## Current status (2026-11-16)
 
 | Component | Critical | High | Moderate | Low | Read this as |

@@ -2,10 +2,10 @@
   "$schema": "http://cyclonedx.org/schema/bom-1.5.schema.json",
   "bomFormat": "CycloneDX",
   "specVersion": "1.5",
-  "serialNumber": "urn:uuid:9c8f11fa-142d-4f9c-8922-cbefa27dd965",
+  "serialNumber": "urn:uuid:ebc9dac8-5386-421a-8ca8-dd90250109c2",
   "version": 1,
   "metadata": {
-    "timestamp": "2026-11-16T09:16:22.335Z",
+    "timestamp": "2026-11-16T10:10:31.344Z",
     "lifecycles": [
       {
         "phase": "build"
@@ -2184,11 +2184,11 @@
     },
     {
       "type": "platform",
-      "bom-ref": "electron-bundled-nodejs@24.22.1",
+      "bom-ref": "electron-bundled-nodejs@24.22.2",
       "name": "node.js",
-      "version": "24.22.1",
-      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.1:*:*:*:*:*:*:*",
-      "description": "Bundled inside Electron 44.10.0 (desktop 1.12.0); not an npm package",
+      "version": "24.22.2",
+      "cpe": "cpe:2.3:a:nodejs:node.js:24.22.2:*:*:*:*:*:*:*",
+      "description": "Bundled inside Electron 44.11.3 (desktop 1.12.0); not an npm package",
       "properties": [
         {
           "name": "picvision:runtime:addedManually",
@@ -2202,7 +2202,7 @@
       "name": "chromium",
       "version": "152.0.7977.169",
       "cpe": "cpe:2.3:a:google:chrome:152.0.7977.169:*:*:*:*:*:*:*",
-      "description": "Bundled inside Electron 44.10.0 (desktop 1.12.0); not an npm package",
+      "description": "Bundled inside Electron 44.11.3 (desktop 1.12.0); not an npm package",
       "properties": [
         {
           "name": "picvision:runtime:addedManually",
@@ -2224,7 +2224,7 @@
         "onvif@0.8.2",
         "oui-data@2.1.12",
         "posthog-node@5.51.6",
-        "electron-bundled-nodejs@24.22.1",
+        "electron-bundled-nodejs@24.22.2",
         "electron-bundled-chromium@152.0.7977.169"
       ]
     },
