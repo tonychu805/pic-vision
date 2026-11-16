@@ -116,10 +116,13 @@ jobs:
             || { echo "ffmpeg not unpacked/executable"; exit 1; }
           echo "bundle checks passed"
 
-      # The DMG is a release artifact only. PR/main builds still run the full
-      # package and bundle checks above, but do not create disposable uploads.
+      # The DMG is kept for a release and for a manually started release-candidate
+      # build. PR/main builds still run the full package and bundle checks above,
+      # but do not create disposable uploads.
       - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        # Also on a manual run (workflow_dispatch): that is the release candidate the operator installs and
+        # checks on a Mac before the tag, so the public tag is never the first test of a commit (CLAUDE.md).
+        if: startsWith(github.ref, 'refs/tags/desktop-v') || github.event_name == 'workflow_dispatch'
         with:
           name: dmg-${{ matrix.arch }}
           path: desktop/release/*.dmg
@@ -180,7 +183,9 @@ jobs:
           echo "bundle checks passed"
 
       - uses: actions/upload-artifact@v4
-        if: startsWith(github.ref, 'refs/tags/desktop-v')
+        # Also on a manual run (workflow_dispatch): that is the release candidate the operator installs and
+        # checks on a Mac before the tag, so the public tag is never the first test of a commit (CLAUDE.md).
+        if: startsWith(github.ref, 'refs/tags/desktop-v') || github.event_name == 'workflow_dispatch'
         with:
           name: exe-x64
           path: desktop/release/*.exe
