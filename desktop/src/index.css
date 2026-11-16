@@ -2,58 +2,59 @@
    desktop-utility-by-claude-design.zip, 2026-09-01) -- tokens and component
    classes copied verbatim from styles.css so values stay traceable back to
    the source design rather than rederived by eye. */
-/* Inter is bundled, not fetched from Google Fonts at runtime: a venue's
-   machine may be on a network with no route to the internet (or a slow
-   one), and the app would silently fall back to a system font while
-   waiting -- plus it's a request to a third party on every launch. */
-@import "@fontsource/inter/400.css";
-@import "@fontsource/inter/500.css";
-@import "@fontsource/inter/600.css";
-@import "@fontsource/inter/700.css";
+/* Archivo (the share app's face, Clubhouse theme 2026-11-16) is bundled, not
+   fetched from Google Fonts at runtime: a venue's machine may be on a network
+   with no route to the internet (or a slow one), and the app would silently
+   fall back to a system font while waiting -- plus it's a request to a third
+   party on every launch. */
+@import "@fontsource/archivo/400.css";
+@import "@fontsource/archivo/500.css";
+@import "@fontsource/archivo/600.css";
+@import "@fontsource/archivo/700.css";
 @import "@phosphor-icons/web/regular";
 @import "@phosphor-icons/web/fill";
 
 :root {
-  --color-bg: #161826;
-  --color-surface: #232532;
-  --color-text: #e9e9ed;
-  --color-accent: #9184d9;
-  --color-accent-2: #a7a1db;
-  --color-divider: color-mix(in srgb, #e9e9ed 16%, transparent);
+  --color-bg: #0d1310;
+  --color-surface: #171f1a;
+  --color-text: #f3f1e9;
+  --color-accent: #86c29c;
+  --color-accent-2: #acd6b9;
+  --color-divider: color-mix(in srgb, #f3f1e9 14%, transparent);
 
-  --color-neutral-100: #f3f5fe;
-  --color-neutral-200: #e4e7f5;
-  --color-neutral-300: #cfd3e5;
-  --color-neutral-400: #b2b6ca;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #75798c;
-  --color-neutral-700: #595d6c;
-  --color-neutral-800: #3f424d;
-  --color-neutral-900: #292b31;
+  --color-neutral-100: #f3f1e9;
+  --color-neutral-200: #e2e3dc;
+  --color-neutral-300: #c8ccc4;
+  --color-neutral-400: #a7ada5;
+  --color-neutral-500: #868e86;
+  --color-neutral-600: #67706a;
+  --color-neutral-700: #4b544e;
+  --color-neutral-800: #343c37;
+  --color-neutral-900: #222924;
 
-  --color-accent-100: #f5f4ff;
-  --color-accent-200: #e7e5fe;
-  --color-accent-300: #d2cefd;
-  --color-accent-400: #b5abfc;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #796cbf;
-  --color-accent-700: #5d5294;
-  --color-accent-800: #423a6a;
-  --color-accent-900: #2b2741;
+  --color-accent-100: #eef6f0;
+  --color-accent-200: #d3ead9;
+  --color-accent-300: #acd6b9;
+  --color-accent-400: #86c29c;
+  --color-accent-500: #5fa87c;
+  --color-accent-600: #3f8a60;
+  --color-accent-700: #2b6c4a;
+  --color-accent-800: #1c4e35;
+  --color-accent-900: #123423;
 
-  --color-accent-2-100: #f5f4ff;
-  --color-accent-2-200: #e7e5fe;
-  --color-accent-2-300: #d2cefd;
-  --color-accent-2-400: #b5afe8;
-  --color-accent-2-500: #9690c9;
-  --color-accent-2-600: #7972a9;
-  --color-accent-2-700: #5c5783;
-  --color-accent-2-800: #423e5d;
-  --color-accent-2-900: #2b293a;
+  --color-accent-2-100: #f6f9e3;
+  --color-accent-2-200: #eaf3bf;
+  --color-accent-2-300: #dcec8f;
+  --color-accent-2-400: #d7ee3c;
+  --color-accent-2-500: #b8cf2a;
+  --color-accent-2-600: #94a822;
+  --color-accent-2-700: #6f7e1a;
+  --color-accent-2-800: #4c5713;
+  --color-accent-2-900: #2e340c;
 
-  --font-heading: "Inter", system-ui, sans-serif;
+  --font-heading: Archivo, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
   --font-heading-weight: 500;
-  --font-body: "Inter", system-ui, sans-serif;
+  --font-body: Archivo, "PingFang TC", "Noto Sans TC", "Microsoft JhengHei", system-ui, sans-serif;
 
   --space-1: 2.8px;
   --space-2: 5.6px;
@@ -66,9 +67,9 @@
   --radius-md: 8px;
   --radius-lg: 14px;
 
-  --shadow-sm: 0 0 0 1px #3f424d;
-  --shadow-md: 0 0 0 1px #595d6c, 0 6px 18px rgba(0,0,0,0.55);
-  --shadow-lg: 0 0 0 1px #9397ab, 0 16px 40px rgba(0,0,0,0.65);
+  --shadow-sm: 0 0 0 1px #343c37;
+  --shadow-md: 0 0 0 1px #4b544e, 0 6px 18px rgba(0, 0, 0, 0.55);
+  --shadow-lg: 0 0 0 1px #868e86, 0 16px 40px rgba(0, 0, 0, 0.65);
 }
 
 *, *::before, *::after { box-sizing: border-box; }
@@ -206,7 +207,7 @@ img { display: block; max-width: 100%; }
      job in the log looked like a finished one. These are tuned to sit on
      --color-surface (#232532) without leaving the palette's dusk range:
      desaturated, not signal-flare primaries. */
-  --color-success: #7fd1ae;
+  --color-success: #86c29c;
   --color-warning: #e2bb6c;
   --color-danger: #e79191;
   --color-success-bg: color-mix(in srgb, var(--color-success) 13%, transparent);
@@ -305,52 +306,52 @@ img { display: block; max-width: 100%; }
 :root[data-theme="light"] {
   color-scheme: light;
 
-  --color-bg: #faf9f5;
-  --color-surface: #ffffff;
-  --color-text: #1b1c26;
+  --color-bg: #f3f1e9;
+  --color-surface: #fffdf7;
+  --color-text: #13201a;
   /* #9184d9 is a mid-tone picked to sit on near-black; it reaches only
      ~2:1 on white, so light mode needs its own. */
-  --color-accent: #5d52a8;
-  --color-accent-2: #6b64ab;
-  --color-divider: color-mix(in srgb, #1b1c26 14%, transparent);
+  --color-accent: #1f5a3f;
+  --color-accent-2: #2b6c4a;
+  --color-divider: color-mix(in srgb, #13201a 14%, transparent);
 
-  --color-neutral-100: #292b31;
-  --color-neutral-200: #3f424d;
-  --color-neutral-300: #595d6c;
-  --color-neutral-400: #75798c;
-  --color-neutral-500: #9397ab;
-  --color-neutral-600: #b2b6ca;
-  --color-neutral-700: #cfd3e5;
-  --color-neutral-800: #e4e7f5;
-  --color-neutral-900: #f0f1f8;
+  --color-neutral-100: #222924;
+  --color-neutral-200: #343c37;
+  --color-neutral-300: #4b544e;
+  --color-neutral-400: #67706a;
+  --color-neutral-500: #868e86;
+  --color-neutral-600: #a7ada5;
+  --color-neutral-700: #c8ccc4;
+  --color-neutral-800: #e2e3dc;
+  --color-neutral-900: #f3f1e9;
 
-  --color-accent-100: #2b2741;
-  --color-accent-200: #423a6a;
-  --color-accent-300: #5d5294;
-  --color-accent-400: #796cbf;
-  --color-accent-500: #968ae0;
-  --color-accent-600: #b5abfc;
-  --color-accent-700: #d2cefd;
-  --color-accent-800: #e7e5fe;
-  --color-accent-900: #f5f4ff;
+  --color-accent-100: #123423;
+  --color-accent-200: #143d2c;
+  --color-accent-300: #1f5a3f;
+  --color-accent-400: #2b6c4a;
+  --color-accent-500: #3f8a60;
+  --color-accent-600: #5fa87c;
+  --color-accent-700: #acd6b9;
+  --color-accent-800: #d3ead9;
+  --color-accent-900: #eef6f0;
 
-  --color-accent-2-100: #2b293a;
-  --color-accent-2-200: #423e5d;
-  --color-accent-2-300: #5c5783;
-  --color-accent-2-400: #7972a9;
-  --color-accent-2-500: #9690c9;
-  --color-accent-2-600: #b5afe8;
-  --color-accent-2-700: #d2cefd;
-  --color-accent-2-800: #e7e5fe;
-  --color-accent-2-900: #f5f4ff;
+  --color-accent-2-100: #2e340c;
+  --color-accent-2-200: #4c5713;
+  --color-accent-2-300: #6f7e1a;
+  --color-accent-2-400: #94a822;
+  --color-accent-2-500: #b8cf2a;
+  --color-accent-2-600: #d7ee3c;
+  --color-accent-2-700: #dcec8f;
+  --color-accent-2-800: #eaf3bf;
+  --color-accent-2-900: #f6f9e3;
 
   /* The dark theme's semantic colours are lightened for a dark ground and
      wash out on white -- #7fd1ae mint reads as barely-there mint on
      #ffffff. These are the same hues taken down to ~4.5:1 on the light
      surface. */
-  --color-success: #1c8560;
-  --color-warning: #96690b;
-  --color-danger: #c0392c;
+  --color-success: #1f6b45;
+  --color-warning: #8a6514;
+  --color-danger: #b5392b;
 
 
   /* Re-tuned for light, not inherited: the dark theme's 70/55/42%
@@ -362,9 +363,9 @@ img { display: block; max-width: 100%; }
   --text-3: color-mix(in srgb, var(--color-text) 61%, transparent);
   --text-4: color-mix(in srgb, var(--color-text) 53%, transparent);
   --hairline: color-mix(in srgb, var(--color-text) 10%, transparent);
-  --shadow-sm: 0 0 0 1px #e2e2ea;
-  --shadow-md: 0 0 0 1px #d3d3de, 0 6px 18px rgba(27, 28, 38, 0.10);
-  --shadow-lg: 0 0 0 1px #c2c2d0, 0 16px 40px rgba(27, 28, 38, 0.18);
+  --shadow-sm: 0 0 0 1px #dcd7c8;
+  --shadow-md: 0 0 0 1px #cfc9b8, 0 6px 18px rgba(19, 32, 26, 0.10);
+  --shadow-lg: 0 0 0 1px #b9b3a0, 0 16px 40px rgba(19, 32, 26, 0.18);
 }
 
 :root[data-theme="dark"] { color-scheme: dark; }
@@ -380,46 +381,46 @@ img { display: block; max-width: 100%; }
   :root:not([data-theme="dark"]) {
     color-scheme: light;
 
-    --color-bg: #faf9f5;
-    --color-surface: #ffffff;
-    --color-text: #1b1c26;
-    --color-accent: #5d52a8;
-    --color-accent-2: #6b64ab;
-    --color-divider: color-mix(in srgb, #1b1c26 14%, transparent);
+    --color-bg: #f3f1e9;
+    --color-surface: #fffdf7;
+    --color-text: #13201a;
+    --color-accent: #1f5a3f;
+    --color-accent-2: #2b6c4a;
+    --color-divider: color-mix(in srgb, #13201a 14%, transparent);
 
-    --color-neutral-100: #292b31;
-    --color-neutral-200: #3f424d;
-    --color-neutral-300: #595d6c;
-    --color-neutral-400: #75798c;
-    --color-neutral-500: #9397ab;
-    --color-neutral-600: #b2b6ca;
-    --color-neutral-700: #cfd3e5;
-    --color-neutral-800: #e4e7f5;
-    --color-neutral-900: #f0f1f8;
+    --color-neutral-100: #222924;
+    --color-neutral-200: #343c37;
+    --color-neutral-300: #4b544e;
+    --color-neutral-400: #67706a;
+    --color-neutral-500: #868e86;
+    --color-neutral-600: #a7ada5;
+    --color-neutral-700: #c8ccc4;
+    --color-neutral-800: #e2e3dc;
+    --color-neutral-900: #f3f1e9;
 
-    --color-accent-100: #2b2741;
-    --color-accent-200: #423a6a;
-    --color-accent-300: #5d5294;
-    --color-accent-400: #796cbf;
-    --color-accent-500: #968ae0;
-    --color-accent-600: #b5abfc;
-    --color-accent-700: #d2cefd;
-    --color-accent-800: #e7e5fe;
-    --color-accent-900: #f5f4ff;
+    --color-accent-100: #123423;
+    --color-accent-200: #143d2c;
+    --color-accent-300: #1f5a3f;
+    --color-accent-400: #2b6c4a;
+    --color-accent-500: #3f8a60;
+    --color-accent-600: #5fa87c;
+    --color-accent-700: #acd6b9;
+    --color-accent-800: #d3ead9;
+    --color-accent-900: #eef6f0;
 
-    --color-accent-2-100: #2b293a;
-    --color-accent-2-200: #423e5d;
-    --color-accent-2-300: #5c5783;
-    --color-accent-2-400: #7972a9;
-    --color-accent-2-500: #9690c9;
-    --color-accent-2-600: #b5afe8;
-    --color-accent-2-700: #d2cefd;
-    --color-accent-2-800: #e7e5fe;
-    --color-accent-2-900: #f5f4ff;
+    --color-accent-2-100: #2e340c;
+    --color-accent-2-200: #4c5713;
+    --color-accent-2-300: #6f7e1a;
+    --color-accent-2-400: #94a822;
+    --color-accent-2-500: #b8cf2a;
+    --color-accent-2-600: #d7ee3c;
+    --color-accent-2-700: #dcec8f;
+    --color-accent-2-800: #eaf3bf;
+    --color-accent-2-900: #f6f9e3;
 
-    --color-success: #1c8560;
-    --color-warning: #96690b;
-    --color-danger: #c0392c;
+    --color-success: #1f6b45;
+    --color-warning: #8a6514;
+    --color-danger: #b5392b;
 
   
     /* Re-tuned for light, not inherited: the dark theme's 70/55/42%
@@ -431,9 +432,9 @@ img { display: block; max-width: 100%; }
     --text-3: color-mix(in srgb, var(--color-text) 61%, transparent);
     --text-4: color-mix(in srgb, var(--color-text) 53%, transparent);
     --hairline: color-mix(in srgb, var(--color-text) 10%, transparent);
-  --shadow-sm: 0 0 0 1px #e2e2ea;
-    --shadow-md: 0 0 0 1px #d3d3de, 0 6px 18px rgba(27, 28, 38, 0.10);
-    --shadow-lg: 0 0 0 1px #c2c2d0, 0 16px 40px rgba(27, 28, 38, 0.18);
+  --shadow-sm: 0 0 0 1px #dcd7c8;
+    --shadow-md: 0 0 0 1px #cfc9b8, 0 6px 18px rgba(19, 32, 26, 0.10);
+    --shadow-lg: 0 0 0 1px #b9b3a0, 0 16px 40px rgba(19, 32, 26, 0.18);
   }
 }
 
