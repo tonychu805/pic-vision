@@ -60,8 +60,7 @@ _RETIRED_CLOUD_STAGES = [
 # pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min".
 _PROGRESS_RE = re.compile(r"^\s*(\d+)/(\d+)\s+(\d+)\s*fps\s+ETA\s+([\d.]+)\s*min")
 
-# job_id -> {"proc": Popen|None, "pod_id": str|None} for whatever real
-# resource (local subprocess or RunPod pod) a running job currently holds --
+# job_id -> {"proc": Popen|None} for the local subprocess a running job holds --
 # lets cancel_job() actually stop billing/GPU usage from a separate request,
 # not just mark the job done and leave the resource running unattended.
 _handles_lock = threading.Lock()
@@ -88,11 +87,6 @@ class _Cancelled(Exception):
 def _register_proc(job_id, proc):
     with _handles_lock:
         _job_handles.setdefault(job_id, {})["proc"] = proc
-
-
-def _register_pod(job_id, pod_id):
-    with _handles_lock:
-        _job_handles.setdefault(job_id, {})["pod_id"] = pod_id
 
 
 def _clear_handle(job_id):
@@ -161,7 +155,6 @@ def cancel_job(job_dir):
         _cancel_requested.add(job_id)
         handle = _job_handles.pop(job_id, {})
     proc = handle.get("proc")
-    pod_id = handle.get("pod_id")
 
     # Write the terminal status BEFORE doing any potentially slow work below
     # (terminate_pod() is a real network call) -- otherwise a background
@@ -175,10 +168,6 @@ def cancel_job(job_dir):
     if proc is not None and proc.poll() is None:
         proc.terminate()
         stopped.append("local inference process")
-    if pod_id:
-        from cloud_pipeline import runpod_pod
-        runpod_pod.terminate_pod(pod_id)
-        stopped.append(f"RunPod pod {pod_id}")
 
     if stopped:
         msg = f"cancelled by operator ({', '.join(stopped)} stopped)"
