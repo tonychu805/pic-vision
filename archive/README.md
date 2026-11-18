@@ -1,9 +1,10 @@
 # Archive — retired code and process
 
 Retired code and process, not maintained — nothing here is tested, linted,
-or run. Six groups so far: the YOLO ball-detection pipeline, one superseded
+or run. Seven groups so far: the YOLO ball-detection pipeline, one superseded
 calibration tool, one abandoned workflow template, one rejected performance
-experiment, the LLM-judged rally verifier, and the SSH-driven cloud path.
+experiment, the LLM-judged rally verifier, the SSH-driven cloud path, and the
+Python RunPod client.
 
 **Two kinds of entry, and the difference matters.** Most sections below keep
 the code, because the code *is* the reference — a negative result you would
@@ -153,10 +154,32 @@ the *code itself* is the reference — a negative result like
 `/cloud/new-venue` calibration flow in `webapp/app.py` that writes them.
 Three venues' worth of hand-clicked calibration is data this project treats
 as expensive to lose (`CLAUDE.md`), and that flow touches neither R2 nor a
-pod. `cloud_pipeline/runpod_pod.py` also stays — `job_runner.py` uses it to
-create pods on the live path.
+pod. `cloud_pipeline/runpod_pod.py` also stayed then, because `job_runner.py`
+used it to create pods; it was retired on 2026-11-18 (next section).
 
 **What this does not affect.** The live pipeline ships source to the pod as a
 tarball, so a file need not be imported to be load-bearing — checked
 explicitly. `job_runner.py`'s `POD_DEPS_FILES` contains `pod_driver.py`,
 ten `src/` modules and five `scripts/` modules, and none of the files above.
+
+## Retired: the Python RunPod client
+
+Retired 2026-11-18. RunPod shut down REST v1 (`rest.runpod.io/v1`) on
+2026-11-15, and both files below still called it. Reel jobs have run on the
+Cloudflare orchestrator since ADR-125, which moved to RunPod's v2 API in the
+console repo (`fix/runpod-rest-v2`). Nothing active imported either file.
+
+**Kept for reference, not active** (`cloud_pipeline/`):
+- `runpod_pod.py`: pod create, SSH, and terminate, plus
+  `create_selfdriving_pod`, the stock image + start-command bootstrap that
+  the orchestrator's `BOOTSTRAP_CMD` copies. Kept because its comments
+  record why that design was chosen (ADR-093). Its API calls are dead.
+- `serverless_spike.py`: the 2026-09-10 Serverless test that never left
+  `initializing` (ADR-093 update). A negative result.
+
+**What changed alongside.** `cloud_pipeline/job_runner.py` now claims only
+`calibration` jobs, and refuses a reel job with the reason. Its reel path and
+those tests were removed, not archived. `webapp/pipeline.py` lost a RunPod
+cancel branch nothing had reached since ADR-110. `pod_driver.py` still names
+`runpod_pod` in comments; it ships to the pod, so it was left for a change
+that goes through staging.

@@ -730,7 +730,10 @@ pic-vision/
 │   │                                # tars pod_driver.py's dependency closure fresh (not
 │   │                                # cached -- it's source code), uploads it to R2, and
 │   │                                # creates a self-driving pod (runpod_pod.py's
-│   │                                # create_selfdriving_pod) that does everything else
+│   │                                # create_selfdriving_pod; that reel path was removed
+│   │                                # 2026-11-18 -- reel jobs run on the Cloudflare
+│   │                                # orchestrator, ADR-125; this now claims only
+│   │                                # calibration jobs) that does everything else
 │   │                                # itself and reports straight to the console over
 │   │                                # HTTPS. This process just waits for the pod to
 │   │                                # disappear (or hits a 3h deadline and terminates it
@@ -749,18 +752,6 @@ pic-vision/
 │   │                                    # generate_presigned_url, ADR-074) -- also
 │   │                                    # what upload_calibration_snapshot.py's
 │   │                                    # upload_file() call goes through
-│   ├── runpod_pod.py                  # RunPod pod lifecycle. create_pod()/ssh_run()/
-│   │                                    # scp_to() (create/SSH/exec/terminate) is the
-│   │                                    # original SSH-driven path, still what
-│   │                                    # run_cloud_job.py (retired) and webapp/pipeline.py's local
-│   │                                    # dashboard use unchanged. create_selfdriving_pod()
-│   │                                    # (ADR-093, 2026-09-10) is the new one job_runner.py
-│   │                                    # actually calls for real reel jobs: stock,
-│   │                                    # never-modified base image + a dockerStartCmd
-│   │                                    # bootstrap, no SSH key or port mapping at all --
-│   │                                    # built this way after a custom baked image
-│   │                                    # reliably failed to start on RunPod for a reason
-│   │                                    # never identified (see pod_driver.py, below)
 │   ├── pod_driver.py                  # ADR-093 (2026-09-10): the self-driving pod's own
 │   │                                    # entrypoint, run via create_selfdriving_pod's
 │   │                                    # dockerStartCmd bootstrap (curl a presigned R2
@@ -2118,7 +2109,9 @@ pic-vision/
 │                                  # a negative result, a fallback); the SSH-driven cloud path
 │                                  # (PIC-139/ADR-110, 2026-09-20) keeps only the note, its
 │                                  # code deleted, because a retired file that still runs is a
-│                                  # hazard not a record. Prefer that shape for new retirements
+│                                  # hazard not a record. Prefer that shape for new retirements.
+│                                  # archive/cloud_pipeline/: runpod_pod.py, serverless_spike.py
+│                                  # (2026-11-18, RunPod REST v1 retired)
 ├── docs/                        # misc planning docs
 ├── tests/                       # pytest suite
 ├── sbom/                        # CycloneDX SBOMs + vuln scan for the tracked deps
