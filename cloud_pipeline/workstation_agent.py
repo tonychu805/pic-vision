@@ -18,10 +18,16 @@ Config (environment, e.g. from ~/.config/pic-vision/workstation.env):
                      on the RTX 2000 Ada, EXPERIMENTS.md 2026-11-18)
   WORKSTATION_PYTHON interpreter with the pod's dependencies
   WORKSTATION_JOBS_DIR  per-job folders (default on /mnt/fast_scratch)
+  WORKSTATION_CACHE_DIR model files and ffmpeg kept between jobs
+
+Model files and ffmpeg are kept between jobs (setup took 60 s per job on
+staging, 2026-11-19): see pod_assets().
 """
 
 from __future__ import annotations
 
+import hashlib
+import io
 import json
 import os
 import re
@@ -29,14 +35,90 @@ import shutil
 import signal
 import subprocess
 import sys
+import tarfile
 import time
 import urllib.request
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Callable
 
 ID_RE = re.compile(r"^ws-[0-9a-f]{12}$")
 POLL_SEC = 10
 KILL_GRACE_SEC = 20
+
+USER_AGENT = "pic-vision-workstation-agent/1"
+
+# Files pod_driver.py downloads only when they are missing, by the names of
+# its own constants: <NAME>_R2_KEY is where it fetches from, <NAME>_LOCAL
+# where it puts it. Cached by the KEY, so a new version (a new key) is never
+# served from an older copy that lands under the same local name. Every one of
+# these downloads is atomic (boto3 writes a temp name then renames; the
+# weights use .part), so a file at its final path is complete however the job
+# ended.
+CACHED_ASSETS = ("WEIGHTS", "POSE", "FFMPEG", "FFPROBE")
+# Where each sandbox path lives in the job's folder (sandbox_command's binds).
+SANDBOX_DIRS = {"/workspace/": "workspace", "/usr/local/bin/": "bin"}
+
+
+@dataclass(frozen=True)
+class Asset:
+    key: str
+    path: Path
+
+
+def pod_assets(pod_driver_src: str, job_dir: Path) -> list[Asset]:
+    consts = dict(re.findall(r'^([A-Z0-9_]+) = "([^"]+)"', pod_driver_src, re.M))
+    out = []
+    for name in CACHED_ASSETS:
+        key, local = consts.get(f"{name}_R2_KEY"), consts.get(f"{name}_LOCAL")
+        if not key or not local:
+            continue
+        for prefix, sub in SANDBOX_DIRS.items():
+            if local.startswith(prefix) and "/" not in local[len(prefix):]:
+                out.append(Asset(key, Path(job_dir) / sub / local[len(prefix):]))
+    return out
+
+
+def _cached(cache: Path, key: str) -> Path:
+    return Path(cache) / hashlib.sha256(key.encode()).hexdigest()[:32] / os.path.basename(key)
+
+
+def seed(assets: list[Asset], cache: Path) -> int:
+    """Copy each cached file into the job (a copy: a job never changes the cache). Returns how many."""
+    n = 0
+    for a in assets:
+        src = _cached(cache, a.key)
+        if not src.is_file():
+            continue
+        a.path.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(src, a.path)
+        if a.path.parent.name == "bin":
+            os.chmod(a.path, 0o755)
+        n += 1
+    return n
+
+
+def harvest(assets: list[Asset], cache: Path) -> None:
+    """Keep each of the job's files the cache does not have yet."""
+    for a in assets:
+        dst = _cached(cache, a.key)
+        if dst.exists() or not a.path.is_file():
+            continue
+        dst.parent.mkdir(parents=True, exist_ok=True)
+        tmp = dst.with_name(dst.name + ".tmp")
+        shutil.copyfile(a.path, tmp)
+        os.replace(tmp, dst)
+
+
+def unpack_job_code(tar_bytes: bytes, ws: Path) -> str:
+    """The pod-code tarball into the workspace (nothing outside it), and pod_driver.py's text."""
+    with tarfile.open(fileobj=io.BytesIO(tar_bytes)) as t:
+        for m in t.getmembers():
+            if m.name.startswith("/") or ".." in Path(m.name).parts:
+                continue
+            t.extract(m, ws, filter="data")
+    return (ws / "pod_driver.py").read_text()
+
 
 # Read-only system folders the job needs (Python, CUDA libraries, certificates, DNS).
 RO_DIRS = ["/usr", "/etc", "/opt", "/home", "/var", "/run", "/snap", "/srv", "/mnt"]
@@ -73,12 +155,10 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
         "--bind", str(bin_dir), "/usr/local/bin",
         "--chdir", "/workspace",
         "--die-with-parent", "--unshare-pid", "--new-session",
-        "bash", "-c",
-        # BOOTSTRAP_CMD (orchestrator adapters.ts) minus its pip installs:
-        # WORKSTATION_PYTHON already has them.
-        'curl -sfL "$BOOTSTRAP_URL" -o /tmp/deps.tar && '
-        "tar -xf /tmp/deps.tar -C /workspace --no-same-owner && "
-        f"cd /workspace && exec {python} -u pod_driver.py",
+        # BOOTSTRAP_CMD (orchestrator adapters.ts) without its download and
+        # pip installs: spawn_job unpacked the job code (to seed the cache),
+        # and WORKSTATION_PYTHON already has the packages.
+        "bash", "-c", f"{python} -u pod_driver.py",
     ]
     # pod_driver.py starts the ball model as plain `python3`: WORKSTATION_PYTHON's
     # folder comes right after /usr/local/bin (pod_driver's own ffmpeg) so it is that one.
@@ -87,10 +167,27 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
     return argv, job_env
 
 
-def spawn_job(job_id: str, env: dict, job_dir: Path, python: str):
+def spawn_job(job_id: str, env: dict, job_dir: Path, python: str, cache: Path):
     argv, job_env = sandbox_command(env, job_dir, python)
     log = open(job_dir / "job.log", "ab")
+    req = urllib.request.Request(env["BOOTSTRAP_URL"], headers={"User-Agent": USER_AGENT})
+    with urllib.request.urlopen(req, timeout=60) as r:
+        src = unpack_job_code(r.read(), job_dir / "workspace")
+    log.write(f"[workstation] {seed(pod_assets(src, job_dir), cache)} model/tool files from the cache\n".encode())
+    log.flush()
     return subprocess.Popen(argv, env=job_env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)
+
+
+def finish_job(job_dir: Path, cache: Path) -> None:
+    """After a job is removed: keep its model files for the next job, then delete everything but its log."""
+    driver = job_dir / "workspace" / "pod_driver.py"
+    try:
+        if driver.is_file():
+            harvest(pod_assets(driver.read_text(), job_dir), cache)
+    except OSError as err:
+        print(f"[workstation] cache not updated from {job_dir.name}: {err}", flush=True)
+    for d in ("workspace", "bin"):
+        shutil.rmtree(job_dir / d, ignore_errors=True)
 
 
 def kill_job(proc) -> None:
@@ -106,8 +203,10 @@ def kill_job(proc) -> None:
 
 
 class Agent:
-    def __init__(self, post: Callable[[dict], dict], spawn, kill, jobs_dir: Path, slots: int, label: str):
+    def __init__(self, post: Callable[[dict], dict], spawn, kill, jobs_dir: Path, slots: int, label: str,
+                 finish: Callable[[Path], None] | None = None):
         self.post, self.spawn, self.kill = post, spawn, kill
+        self.finish = finish or (lambda job_dir: [shutil.rmtree(job_dir / d, ignore_errors=True) for d in ("workspace", "bin")])
         self.jobs_dir, self.slots, self.label = Path(jobs_dir), slots, label
         self.procs: dict = {}
 
@@ -125,9 +224,8 @@ class Agent:
             proc = self.procs.pop(job_id, None)
             if proc is not None:
                 self.kill(proc)
-                # The video, weights and outputs go; the job's log stays.
-                for d in ("workspace", "bin"):
-                    shutil.rmtree(self.jobs_dir / job_id / d, ignore_errors=True)
+                # The video and outputs go (model files to the cache first); the job's log stays.
+                self.finish(self.jobs_dir / job_id)
                 print(f"[workstation] {job_id} removed", flush=True)
         for job in reply.get("start", []):
             job_id = job.get("id", "")
@@ -135,7 +233,11 @@ class Agent:
                 continue
             if sum(p.poll() is None for p in self.procs.values()) >= self.slots:
                 break
-            self.procs[job_id] = self.spawn(job_id, job.get("env", {}), self.jobs_dir / job_id)
+            try:
+                self.procs[job_id] = self.spawn(job_id, job.get("env", {}), self.jobs_dir / job_id)
+            except Exception as err:  # noqa: BLE001 -- not started: the orchestrator retries it in the cloud
+                print(f"[workstation] {job_id} could not start: {err}", flush=True)
+                continue
             print(f"[workstation] {job_id} started", flush=True)
 
 
@@ -144,7 +246,7 @@ def http_post(url: str, token: str) -> Callable[[dict], dict]:
         req = urllib.request.Request(url, data=json.dumps(report).encode(), method="POST",
                                      # Cloudflare refuses Python's default User-Agent (HTTP 403, 2026-11-19).
                                      headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
-                                              "User-Agent": "pic-vision-workstation-agent/1"})
+                                              "User-Agent": USER_AGENT})
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)
     return post
@@ -155,13 +257,15 @@ def main() -> int:
     token = os.environ["WORKSTATION_TOKEN"]
     python = os.environ.get("WORKSTATION_PYTHON", sys.executable)
     jobs_dir = Path(os.environ.get("WORKSTATION_JOBS_DIR", "/mnt/fast_scratch/pic-vision-scratch/workstation-jobs"))
+    cache = Path(os.environ.get("WORKSTATION_CACHE_DIR", "/mnt/fast_scratch/pic-vision-scratch/workstation-cache"))
     slots = int(os.environ.get("WORKSTATION_SLOTS", "2"))
     label = os.environ.get("WORKSTATION_LABEL", "NVIDIA RTX 2000 Ada (workstation)")
     if not shutil.which("bwrap"):
         print("[workstation] bwrap is not installed", flush=True)
         return 1
     jobs_dir.mkdir(parents=True, exist_ok=True)
-    agent = Agent(http_post(url, token), lambda i, e, d: spawn_job(i, e, d, python), kill_job, jobs_dir, slots, label)
+    agent = Agent(http_post(url, token), lambda i, e, d: spawn_job(i, e, d, python, cache), kill_job, jobs_dir, slots, label,
+                  finish=lambda d: finish_job(d, cache))
     print(f"[workstation] checking in at {url} every {POLL_SEC} s, {slots} slots", flush=True)
     while True:
         agent.tick()
