@@ -95,10 +95,85 @@ def test_the_sandbox_isolates_writes_but_keeps_gpu_network_and_the_job_env(tmp_p
     assert "--ro-bind /home /home" in joined, "the operator's home (and its keys) is read-only"
     assert "--dev-bind /dev /dev" in joined, "the GPU device files"
     assert "--die-with-parent" in argv
-    assert "/opt/venv/bin/python -u pod_driver.py" in argv[-1]
-    assert '"$BOOTSTRAP_URL"' in argv[-1]
+    assert argv[-1] == "/opt/venv/bin/python -u pod_driver.py", "the agent fetched and unpacked the job code already"
     assert env["RUNPOD_POD_ID"] == "ws-0123456789ab" and env["R2_READ_SESSION_TOKEN"] == "s"
     assert env["PATH"].split(":")[:2] == ["/usr/local/bin", "/opt/venv/bin"], "pod_driver's bare `python3` is the configured one"
     assert f"--ro-bind {job_dir / 'gai.conf'} /etc/gai.conf" in joined
     assert "::ffff:0:0/96" in (job_dir / "gai.conf").read_text(), "IPv4 first: this host's IPv6 route hangs"
     assert "RUNNER_TOKEN" not in env and "WORKSTATION_TOKEN" not in env, "the agent's own secrets never reach a job"
+
+
+# --- Model and binary cache across jobs (2026-11-19: setup took 60 s per job) ---
+
+POD_DRIVER_SRC = '''
+WEIGHTS_R2_KEY = "weights/tracknet_k14_epoch19.pt"
+WEIGHTS_LOCAL = "/workspace/tracknet_k14_epoch19.pt"
+POSE_R2_KEY = "weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript"
+POSE_LOCAL = "/workspace/yolov8n-pose-736x1280.torchscript"
+FFMPEG_R2_KEY = "pipeline/ffmpeg-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
+FFMPEG_LOCAL = "/usr/local/bin/ffmpeg"
+FFPROBE_R2_KEY = "pipeline/ffprobe-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
+FFPROBE_LOCAL = "/usr/local/bin/ffprobe"
+'''
+
+
+def test_the_job_code_names_each_cached_file_by_its_storage_key(tmp_path):
+    assets = wa.pod_assets(POD_DRIVER_SRC, tmp_path / "job")
+    assert [(a.key, a.path.relative_to(tmp_path / "job").as_posix()) for a in assets] == [
+        ("weights/tracknet_k14_epoch19.pt", "workspace/tracknet_k14_epoch19.pt"),
+        ("weights/staging-yolov8n-pose-736x1280-torch21-20261030.torchscript", "workspace/yolov8n-pose-736x1280.torchscript"),
+        ("pipeline/ffmpeg-btbn-nvenc-linux-x64-n8.1.2-gc573a95381", "bin/ffmpeg"),
+        ("pipeline/ffprobe-btbn-nvenc-linux-x64-n8.1.2-gc573a95381", "bin/ffprobe"),
+    ]
+
+
+def test_a_cleanly_finished_job_fills_the_cache_and_the_next_job_starts_with_its_files(tmp_path):
+    cache = tmp_path / "cache"
+    first = tmp_path / "job1"
+    assets = wa.pod_assets(POD_DRIVER_SRC, first)
+    for a in assets:
+        a.path.parent.mkdir(parents=True, exist_ok=True)
+        a.path.write_bytes(b"model-bytes-" + a.key.encode())
+    wa.harvest(assets, cache, exit_code=0)
+
+    second = tmp_path / "job2"
+    seeded = wa.seed(wa.pod_assets(POD_DRIVER_SRC, second), cache)
+    assert seeded == 4
+    assert (second / "workspace" / "tracknet_k14_epoch19.pt").read_bytes() == b"model-bytes-weights/tracknet_k14_epoch19.pt"
+    (second / "bin" / "ffmpeg").write_bytes(b"changed by the job")
+    assert wa.seed(wa.pod_assets(POD_DRIVER_SRC, tmp_path / "job3"), cache) == 4
+    assert (tmp_path / "job3" / "bin" / "ffmpeg").read_bytes().startswith(b"model-bytes-"), "a job's own copy never changes the cache"
+
+
+# Paired with the test above: the cache never hands out a file it cannot vouch for.
+def test_a_new_model_version_or_a_failed_job_never_reaches_the_cache(tmp_path):
+    cache = tmp_path / "cache"
+    job = tmp_path / "job1"
+    assets = wa.pod_assets(POD_DRIVER_SRC, job)
+    for a in assets:
+        a.path.parent.mkdir(parents=True, exist_ok=True)
+        a.path.write_bytes(b"x")
+    wa.harvest(assets, cache, exit_code=1)
+    assert wa.seed(wa.pod_assets(POD_DRIVER_SRC, tmp_path / "job2"), cache) == 0, "a failed job may hold a half-written file"
+
+    wa.harvest(assets, cache, exit_code=0)
+    newer = POD_DRIVER_SRC.replace("tracknet_k14_epoch19.pt\"\nWEIGHTS_LOCAL", "tracknet_k14_epoch20.pt\"\nWEIGHTS_LOCAL")
+    job3 = tmp_path / "job3"
+    assert wa.seed(wa.pod_assets(newer, job3), cache) == 3, "the renamed weights key is not served from the old copy"
+    assert not (job3 / "workspace" / "tracknet_k14_epoch19.pt").exists()
+
+
+def test_job_code_is_unpacked_safely_into_the_workspace(tmp_path):
+    import io, tarfile
+    buf = io.BytesIO()
+    with tarfile.open(fileobj=buf, mode="w") as t:
+        for name, data in (("pod_driver.py", POD_DRIVER_SRC.encode()), ("../escape.txt", b"no")):
+            info = tarfile.TarInfo(name)
+            info.size = len(data)
+            t.addfile(info, io.BytesIO(data))
+    ws = tmp_path / "job" / "workspace"
+    ws.mkdir(parents=True)
+    src = wa.unpack_job_code(buf.getvalue(), ws)
+    assert "WEIGHTS_R2_KEY" in src
+    assert (ws / "pod_driver.py").exists()
+    assert not (tmp_path / "job" / "escape.txt").exists(), "a path outside the workspace is refused"
