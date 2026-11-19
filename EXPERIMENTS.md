@@ -6200,3 +6200,42 @@ Three single jobs before the production push (release plan: root `progress/11.15
 - Rallies differ by GPU type on the same part: 12 on the T4, 13 on the RTX 4000 Ada (the open GPU-dependence item).
 - Jev's score for the same clip moved between runs (0.25, 0.35, 0.33): every time under 0.4 here, but a clip near the cut can land on either side.
 - **Badge fix not exercised:** one part clears no badge bar under the old or new rule (replayed locally). It rests on its unit tests and the replay of Run A's five parts (Killer Shot no longer awarded to the vetoed clip).
+
+## 2026-11-19 — The workstation as a GPU supplier: staging timings, and why the cloud wasn't enough
+
+**Why.** Rented GPU supply failed this week (measured):
+- RunPod had no card under the $0.50 cap: every one read availability `NONE` for over 2 hours (polled every 2 min).
+- Google allows 1 GPU in all regions. Requests for 2 were denied on 11-17 (Cloud Quotas API `quotaPreferences`).
+- The two staging T4 jobs that "stopped without reporting" (11-17, 11-19) were both a second concurrent job. In Google's audit log, zone a refused it with `QUOTA_EXCEEDED` at once; zone c accepted it, then failed it 2–3 min later. `gce.ts` took the accepted insert as created. No T4 has been preempted.
+
+The operator's RTX 2000 Ada became a third supplier for the pilot phase: console `orchestrator-worker/src/workstation.ts` and `cloud_pipeline/workstation_agent.py`. The switch is per venue device, on `/ops`.
+
+**Runs** (staging, pod code from `staging.json`; footage uploaded to the staging ingest bucket, so the workstation downloads it from R2 as in a pilot):
+
+| Run | Footage | Claim → start | Setup | Claim → reel | Note |
+|---|---|---|---|---|---|
+| Google T4 (fallback, workstation offline) | 1-min clip | 67 s | 4 s | 154 s | the fallback works |
+| Workstation #2 | 1-min clip | — | — | failed | `python3` was the system Python (no cv2); console reports took ~60 s each (IPv6, below) |
+| Workstation #3 | 1-min clip | 29 s | 32 s | 125 s | after both fixes |
+| **2 cameras at once** | PGC eda301d9 25 Sep 19:01, parts 2 and 3 (10 min each) | 34–36 s | 60 s | **12.3 min each** | both done; 3 s apart |
+| Cache run 1 / 2 | 1-min clip | 156 s | 33 s / **1 s** | 257 / 215 s | the cache works; start slowed by the agent's own Python download (IPv6) |
+| Cache run 3 (curl) | 1-min clip | 26 s | **1 s** | **85 s** | final agent |
+
+**Two cameras, by stage** (part 3; part 2 within seconds):
+- start 34 s, setup 60 s, download 26 s, convert 70 s
+- ball model 3.6 min (18,000 frames at 93 fps)
+- hit finder 3.1 min
+- badges and cut 1.4 min
+- upload and finish 62 s
+
+GPU use averaged 50%, peaking at 100% (54 samples, 15 s apart); memory peaked at 3.6 GB.
+
+**Host findings:**
+- This workstation's IPv6 route hangs. Python waited about 90 s per IPv6 address before IPv4: 181 s for one console request. Fixed by giving each job a `gai.conf` that puts IPv4 first (1.0 s), and by fetching job code with curl.
+- Cloudflare returns 403 to Python's default User-Agent, so the agent sends its own.
+
+**Reading:**
+- Processing alone took about 9.2 min per pair, matching the 11-18 local benchmark (9.5 min). The rest of the 12.3 min was overhead the benchmark left out.
+- In a recording session a camera's job stays on the workstation, so start and setup are paid once. **Estimate, not measured:** later parts about 10.7 min each, about 40 s behind per part, so the last reel of a 2-hour session lands about 8 min late. Two cameras is the limit; a third goes to the cloud.
+- The cache took setup from 33 s to 1 s. It helps each session's first part.
+- **Not tested:** a live recording session (warm-up job, several parts on the workstation, the venue's own upload). A venue at about 3.5 Mbps needs about 5.5 min to upload a 145 MB part before its job can start.
