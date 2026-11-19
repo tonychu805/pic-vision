@@ -167,12 +167,21 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
     return argv, job_env
 
 
+def fetch_command(url: str) -> list[str]:
+    """curl, not urllib: this host's IPv6 route hangs, and Python waited ~2.5 min
+    for IPv6 before IPv4 on every job's code download (staging, 2026-11-19).
+    curl races the two (Happy Eyeballs)."""
+    return ["curl", "-sfL", "--max-time", "120", "-A", USER_AGENT, url]
+
+
+def fetch_job_code(url: str) -> bytes:
+    return subprocess.run(fetch_command(url), capture_output=True, check=True, timeout=150).stdout
+
+
 def spawn_job(job_id: str, env: dict, job_dir: Path, python: str, cache: Path):
     argv, job_env = sandbox_command(env, job_dir, python)
     log = open(job_dir / "job.log", "ab")
-    req = urllib.request.Request(env["BOOTSTRAP_URL"], headers={"User-Agent": USER_AGENT})
-    with urllib.request.urlopen(req, timeout=60) as r:
-        src = unpack_job_code(r.read(), job_dir / "workspace")
+    src = unpack_job_code(fetch_job_code(env["BOOTSTRAP_URL"]), job_dir / "workspace")
     log.write(f"[workstation] {seed(pod_assets(src, job_dir), cache)} model/tool files from the cache\n".encode())
     log.flush()
     return subprocess.Popen(argv, env=job_env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

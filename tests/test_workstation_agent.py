@@ -182,3 +182,9 @@ def test_job_code_is_unpacked_safely_into_the_workspace(tmp_path):
     assert "WEIGHTS_R2_KEY" in src
     assert (ws / "pod_driver.py").exists()
     assert not (tmp_path / "job" / "escape.txt").exists(), "a path outside the workspace is refused"
+
+
+def test_job_code_is_fetched_with_curl_not_python(tmp_path):
+    cmd = wa.fetch_command("https://r2.example/deps.tar?sig")
+    assert cmd[0] == "curl", "Python waited ~2.5 min for this host's hanging IPv6 route; curl races IPv4"
+    assert "--max-time" in cmd and cmd[-1] == "https://r2.example/deps.tar?sig"
