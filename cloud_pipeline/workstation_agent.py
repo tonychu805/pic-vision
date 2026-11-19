@@ -49,6 +49,13 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
     this agent's own (which holds WORKSTATION_TOKEN).
     """
     ws, bin_dir = job_dir / "workspace", job_dir / "bin"
+    ws.mkdir(parents=True, exist_ok=True)
+    bin_dir.mkdir(parents=True, exist_ok=True)
+    # This workstation's IPv6 route hangs: Python tried the console's two
+    # IPv6 addresses for ~90 s each before IPv4 (181 s per request, measured
+    # 2026-11-19). Each job gets a resolver setting that puts IPv4 first.
+    gai = job_dir / "gai.conf"
+    gai.write_text("precedence ::ffff:0:0/96  100\n")
     argv = ["bwrap", "--tmpfs", "/"]
     for d in RO_DIRS:
         if os.path.exists(d):
@@ -61,6 +68,7 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
     argv += [
         "--dev-bind", "/dev", "/dev", "--proc", "/proc", "--ro-bind", "/sys", "/sys",
         "--tmpfs", "/tmp",
+        "--ro-bind", str(gai), "/etc/gai.conf",
         "--bind", str(ws), "/workspace",
         "--bind", str(bin_dir), "/usr/local/bin",
         "--chdir", "/workspace",
@@ -72,13 +80,14 @@ def sandbox_command(env: dict, job_dir: Path, python: str) -> tuple[list[str], d
         "tar -xf /tmp/deps.tar -C /workspace --no-same-owner && "
         f"cd /workspace && exec {python} -u pod_driver.py",
     ]
-    job_env = {**env, "PATH": "/usr/local/bin:/usr/bin:/bin", "HOME": "/workspace", "PYTHONUNBUFFERED": "1"}
+    # pod_driver.py starts the ball model as plain `python3`: WORKSTATION_PYTHON's
+    # folder comes right after /usr/local/bin (pod_driver's own ffmpeg) so it is that one.
+    venv_bin = os.path.dirname(python)
+    job_env = {**env, "PATH": f"/usr/local/bin:{venv_bin}:/usr/bin:/bin", "HOME": "/workspace", "PYTHONUNBUFFERED": "1"}
     return argv, job_env
 
 
 def spawn_job(job_id: str, env: dict, job_dir: Path, python: str):
-    (job_dir / "workspace").mkdir(parents=True, exist_ok=True)
-    (job_dir / "bin").mkdir(parents=True, exist_ok=True)
     argv, job_env = sandbox_command(env, job_dir, python)
     log = open(job_dir / "job.log", "ab")
     return subprocess.Popen(argv, env=job_env, stdout=log, stderr=subprocess.STDOUT, start_new_session=True)

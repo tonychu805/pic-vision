@@ -92,4 +92,7 @@ def test_the_sandbox_isolates_writes_but_keeps_gpu_network_and_the_job_env(tmp_p
     assert "/opt/venv/bin/python -u pod_driver.py" in argv[-1]
     assert '"$BOOTSTRAP_URL"' in argv[-1]
     assert env["RUNPOD_POD_ID"] == "ws-0123456789ab" and env["R2_READ_SESSION_TOKEN"] == "s"
+    assert env["PATH"].split(":")[:2] == ["/usr/local/bin", "/opt/venv/bin"], "pod_driver's bare `python3` is the configured one"
+    assert f"--ro-bind {job_dir / 'gai.conf'} /etc/gai.conf" in joined
+    assert "::ffff:0:0/96" in (job_dir / "gai.conf").read_text(), "IPv4 first: this host's IPv6 route hangs"
     assert "RUNNER_TOKEN" not in env and "WORKSTATION_TOKEN" not in env, "the agent's own secrets never reach a job"
