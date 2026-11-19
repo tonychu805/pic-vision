@@ -125,6 +125,9 @@ class Agent:
             proc = self.procs.pop(job_id, None)
             if proc is not None:
                 self.kill(proc)
+                # The video, weights and outputs go; the job's log stays.
+                for d in ("workspace", "bin"):
+                    shutil.rmtree(self.jobs_dir / job_id / d, ignore_errors=True)
                 print(f"[workstation] {job_id} removed", flush=True)
         for job in reply.get("start", []):
             job_id = job.get("id", "")

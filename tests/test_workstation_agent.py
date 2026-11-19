@@ -47,8 +47,14 @@ def test_a_finished_job_reads_as_not_running_until_the_orchestrator_removes_it(t
     a.procs["ws-0123456789ab"].code = 0
     a.tick()
     assert sent[1]["procs"] == [{"id": "ws-0123456789ab", "running": False}]
+    job_dir = tmp_path / "ws-0123456789ab"
+    (job_dir / "workspace").mkdir(parents=True)
+    (job_dir / "workspace" / "video.mp4").write_text("x")
+    (job_dir / "job.log").write_text("log")
     a.post = lambda r: (sent.append(r), {"start": [], "kill": ["ws-0123456789ab"]})[1]
     a.tick()
+    assert not (job_dir / "workspace").exists(), "a removed job's files are deleted"
+    assert (job_dir / "job.log").exists(), "its log is kept"
     assert "ws-0123456789ab" not in a.procs
     assert len(killed) == 1
     a.tick()
