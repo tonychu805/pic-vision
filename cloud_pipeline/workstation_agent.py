@@ -130,7 +130,9 @@ class Agent:
 def http_post(url: str, token: str) -> Callable[[dict], dict]:
     def post(report: dict) -> dict:
         req = urllib.request.Request(url, data=json.dumps(report).encode(), method="POST",
-                                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json"})
+                                     # Cloudflare refuses Python's default User-Agent (HTTP 403, 2026-11-19).
+                                     headers={"Authorization": f"Bearer {token}", "Content-Type": "application/json",
+                                              "User-Agent": "pic-vision-workstation-agent/1"})
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.load(r)
     return post
