@@ -745,6 +745,14 @@ pic-vision/
 │   │                                    # `git pull`; closes that gap instead of relying on
 │   │                                    # remembering to restart by hand
 │   ├── pic-vision-runner-restart.service  # oneshot unit the .path file above triggers
+│   ├── workstation_agent.py          # Pilot phase (2026-11-19): runs reel jobs on this
+│   │                                    # workstation's GPU for the orchestrator (console repo,
+│   │                                    # orchestrator-worker/src/workstation.ts), asked before
+│   │                                    # RunPod and Google while WORKSTATION_FIRST is on. Checks
+│   │                                    # in outbound every 10 s; each job is the pod-code tarball +
+│   │                                    # pod_driver.py in a bubblewrap sandbox (own /workspace and
+│   │                                    # /usr/local/bin, GPU, rest read-only)
+│   ├── pic-vision-workstation.service  # systemd user unit for the above (Restart=always)
 │   ├── r2_storage.py                 # thin boto3 wrapper for Cloudflare R2 (incl.
 │   │                                    # generate_presigned_url, ADR-074) -- also
 │   │                                    # what upload_calibration_snapshot.py's

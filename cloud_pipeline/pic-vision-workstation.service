@@ -1,0 +1,25 @@
+# Pilot phase (2026-11-19): runs reel jobs on this workstation's GPU for the
+# orchestrator named in the env file. A user unit:
+#   mkdir -p ~/.config/pic-vision ~/.config/systemd/user
+#   cp cloud_pipeline/pic-vision-workstation.service ~/.config/systemd/user/
+#   ~/.config/pic-vision/workstation.env (chmod 600):
+#     ORCHESTRATOR_URL=https://pic-vision-orchestrator-staging.tony-chu805.workers.dev
+#     WORKSTATION_TOKEN=<that orchestrator's WORKSTATION_TOKEN secret>
+#     WORKSTATION_PYTHON=/home/tonychu/repository/pic-vision/.venv/bin/python
+#   systemctl --user daemon-reload && systemctl --user enable --now pic-vision-workstation
+#   loginctl enable-linger tonychu   (keep running when logged out)
+# Logs: journalctl --user -u pic-vision-workstation; each job's own log is
+# WORKSTATION_JOBS_DIR/<id>/job.log.
+[Unit]
+Description=PicVision workstation GPU agent (pilot phase)
+After=network-online.target
+
+[Service]
+EnvironmentFile=%h/.config/pic-vision/workstation.env
+WorkingDirectory=%h/repository/pic-vision
+ExecStart=%h/repository/pic-vision/.venv/bin/python -m cloud_pipeline.workstation_agent
+Restart=always
+RestartSec=10
+
+[Install]
+WantedBy=default.target
