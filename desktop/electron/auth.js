@@ -15,6 +15,7 @@ import Store from "electron-store";
 import { registerAgent, getCloudConnection, adoptConnection, wasDisconnectedByUser } from "./cloud.js";
 import { logEvent, msg } from "./activityLog.js";
 import { encryptField, decryptField } from "./secureField.js";
+import { currentDatabase } from "./database.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -59,13 +60,6 @@ function loadSession() {
   return { ...session, accessToken, refreshToken };
 }
 
-// Same project/public anon key already committed in
-// pic-vision-cloud-console/.env.local.example (NEXT_PUBLIC_-prefixed
-// values are baked into that app's client bundle, so they're public by
-// design, not a secret this file is newly exposing). Overridable for
-// local dev against a different Supabase project.
-export const SUPABASE_URL = process.env.PIC_VISION_SUPABASE_URL || "https://evceszapbiuwdmqfisqx.supabase.co";
-export const SUPABASE_ANON_KEY = process.env.PIC_VISION_SUPABASE_ANON_KEY || "sb_publishable_vx_czTeMEFsky1w0qf2xVQ_IH-Ekstq";
 
 // Strips the tokens before anything crosses back to the renderer -- unlike
 // cloud.js's `connection` (whose apiToken is a long-lived agent credential
@@ -78,9 +72,10 @@ function publicSession(session) {
 }
 
 async function requestToken(body) {
-  const res = await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=${body.grant_type}`, {
+  const db = currentDatabase();
+  const res = await fetch(`${db.url}/auth/v1/token?grant_type=${body.grant_type}`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", apikey: SUPABASE_ANON_KEY },
+    headers: { "Content-Type": "application/json", apikey: db.key },
     body: JSON.stringify(body),
   });
   const data = await res.json().catch(() => ({}));
@@ -250,9 +245,10 @@ export async function signOut() {
   if (session?.accessToken) {
     // Best-effort -- an already-expired or already-revoked token 400s here,
     // which shouldn't block clearing the local session either way.
-    await fetch(`${SUPABASE_URL}/auth/v1/logout`, {
+    const db = currentDatabase();
+    await fetch(`${db.url}/auth/v1/logout`, {
       method: "POST",
-      headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${session.accessToken}` },
+      headers: { apikey: db.key, Authorization: `Bearer ${session.accessToken}` },
     }).catch(() => {});
   }
   // Logged before clearing -- session.user.email won't exist to read afterward.
@@ -280,6 +276,17 @@ export function getSession() {
  * token to authenticate its subscription and a fresh one periodically.
  * Still the same single place that decides when a session is over.
  */
+/**
+ * The database moved (heartbeat reply, database.js): the stored access token
+ * was signed by the old project, so renew now against the new one. If the new
+ * project knows this session the venue stays signed in; if it refuses it, the
+ * session is over as for any refused renewal and the venue signs in again.
+ */
+export function expireAccessToken() {
+  const session = loadSession();
+  if (session) saveSession({ ...session, expiresAt: 0 });
+}
+
 export async function currentAccessToken() {
   return getValidAccessToken();
 }
@@ -319,8 +326,9 @@ async function getValidAccessToken() {
 export async function getBrand() {
   const token = await getValidAccessToken();
   if (!token) return null;
-  const res = await fetch(`${SUPABASE_URL}/rest/v1/brands?select=id,name,timezone`, {
-    headers: { apikey: SUPABASE_ANON_KEY, Authorization: `Bearer ${token}` },
+  const db = currentDatabase();
+  const res = await fetch(`${db.url}/rest/v1/brands?select=id,name,timezone`, {
+    headers: { apikey: db.key, Authorization: `Bearer ${token}` },
   });
   if (!res.ok) return null;
   const rows = await res.json().catch(() => []);
