@@ -1,6 +1,8 @@
 """The workstation agent (pilot phase, 2026-11-19): checks in with the
 orchestrator, runs each handed-out job in its own sandbox, reports and kills."""
 
+import os
+
 from cloud_pipeline import workstation_agent as wa
 
 ENV = {"BOOTSTRAP_URL": "https://r2.example/deps.tar?sig", "RUNPOD_POD_ID": "ws-0123456789ab", "R2_READ_SESSION_TOKEN": "s"}
@@ -134,7 +136,7 @@ def test_a_cleanly_finished_job_fills_the_cache_and_the_next_job_starts_with_its
     for a in assets:
         a.path.parent.mkdir(parents=True, exist_ok=True)
         a.path.write_bytes(b"model-bytes-" + a.key.encode())
-    wa.harvest(assets, cache, exit_code=0)
+    wa.harvest(assets, cache)
 
     second = tmp_path / "job2"
     seeded = wa.seed(wa.pod_assets(POD_DRIVER_SRC, second), cache)
@@ -146,21 +148,24 @@ def test_a_cleanly_finished_job_fills_the_cache_and_the_next_job_starts_with_its
 
 
 # Paired with the test above: the cache never hands out a file it cannot vouch for.
-def test_a_new_model_version_or_a_failed_job_never_reaches_the_cache(tmp_path):
+# Every download pod_driver.py makes is atomic (boto3 writes a temp name then
+# renames; the weights use .part), so a file at its final path is complete
+# however the job ended -- a job the cleanup stopped still fills the cache.
+def test_a_new_model_version_is_never_served_from_an_older_copy(tmp_path):
     cache = tmp_path / "cache"
-    job = tmp_path / "job1"
-    assets = wa.pod_assets(POD_DRIVER_SRC, job)
+    assets = wa.pod_assets(POD_DRIVER_SRC, tmp_path / "job1")
     for a in assets:
         a.path.parent.mkdir(parents=True, exist_ok=True)
         a.path.write_bytes(b"x")
-    wa.harvest(assets, cache, exit_code=1)
-    assert wa.seed(wa.pod_assets(POD_DRIVER_SRC, tmp_path / "job2"), cache) == 0, "a failed job may hold a half-written file"
+    (assets[0].path.parent / (assets[0].path.name + ".part")).write_bytes(b"half")
+    wa.harvest(assets, cache)
+    assert not any(p.name.endswith(".part") for p in cache.rglob("*")), "only files at their final path"
 
-    wa.harvest(assets, cache, exit_code=0)
     newer = POD_DRIVER_SRC.replace("tracknet_k14_epoch19.pt\"\nWEIGHTS_LOCAL", "tracknet_k14_epoch20.pt\"\nWEIGHTS_LOCAL")
-    job3 = tmp_path / "job3"
-    assert wa.seed(wa.pod_assets(newer, job3), cache) == 3, "the renamed weights key is not served from the old copy"
-    assert not (job3 / "workspace" / "tracknet_k14_epoch19.pt").exists()
+    job2 = tmp_path / "job2"
+    assert wa.seed(wa.pod_assets(newer, job2), cache) == 3, "the renamed weights key is not served from the old copy"
+    assert not (job2 / "workspace" / "tracknet_k14_epoch19.pt").exists()
+    assert os.access(job2 / "bin" / "ffmpeg", os.X_OK), "cached binaries stay executable"
 
 
 def test_job_code_is_unpacked_safely_into_the_workspace(tmp_path):
