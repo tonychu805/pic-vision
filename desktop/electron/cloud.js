@@ -31,6 +31,7 @@ import { rememberedResult, rememberResult } from "./commandMemory.js";
 import { retentionSummary } from "./recordingRetention.js";
 import { adoptDatabase } from "./database.js";
 import { needsMeasuring, needsCheckBeforeStart, PROBE_SECONDS } from "./cameras/measureSchedule.js";
+import { redactCredentials } from "./redactText.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
 // afterwards -- see activityLog.js for why that distinction matters.
@@ -818,7 +819,7 @@ async function completeCommand(connection, commandId, status, result) {
       signal: AbortSignal.timeout(CONSOLE_REQUEST_TIMEOUT_MS),
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${connection.apiToken}` },
-      body: JSON.stringify({ status, result: result ?? null }),
+      body: JSON.stringify({ status, result: redactCredentials(result ?? null) }),
     });
   } catch (err) {
     console.error(`[cloud] reporting command result failed: ${err.message}`);

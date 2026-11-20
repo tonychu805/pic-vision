@@ -17,6 +17,7 @@ import { spawn } from "node:child_process";
 import http from "node:http";
 import { authenticatedStreamUri } from "./capture.js";
 import { FFMPEG } from "./binaries.js";
+import { lastStderrLine } from "./redactText.js";
 
 const BOUNDARY = "picvisionlive";
 const SOI = Buffer.from([0xff, 0xd8]);
@@ -85,7 +86,7 @@ export async function startLiveView(camera) {
   return new Promise((resolve, reject) => {
     const onExit = (code) => {
       if (current?.proc === proc) current = null;
-      reject(new Error(stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`));
+      reject(new Error(lastStderrLine(stderrTail, `ffmpeg exited (code ${code})`)));
     };
     proc.once("exit", onExit);
     server.listen(0, "127.0.0.1", () => {

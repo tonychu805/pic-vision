@@ -19,6 +19,7 @@ import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
 import { consoleFetch, uploadFile } from "./consoleApi.js";
 import { listCameras } from "./cameras/store.js";
 import { cropVertical } from "./verticalCrop.js";
+import { lastStderrLine } from "./redactText.js";
 
 // Guards against the SAME reel being started twice -- the console keeps
 // offering a fetch on every heartbeat until this machine's own PATCH
@@ -143,7 +144,7 @@ function run(args) {
     proc.on("error", reject);
     proc.on("exit", (code) => {
       if (code === 0) resolve();
-      else reject(new Error(stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`));
+      else reject(new Error(lastStderrLine(stderrTail, `ffmpeg exited (code ${code})`)));
     });
   });
 }
