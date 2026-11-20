@@ -155,10 +155,20 @@ export function writeSessionMeta(recordingDir, params) {
   writeFileSync(path.join(recordingDir, SESSION_FILE), JSON.stringify({ recordingSessionId, bookingId }, null, 2));
 }
 
-/** The session saved for a recording, or null (none saved, or unreadable). */
+/**
+ * The session saved for a recording, or null (none saved, or unreadable).
+ * A dual-stream camera uploads from its `<recording>-sub` folder, but the
+ * start command's session is saved on the main `<recording>` folder.
+ */
 export function readSessionMeta(recordingDir) {
+  const own = readSessionFile(recordingDir);
+  if (own || !recordingDir.endsWith("-sub")) return own;
+  return readSessionFile(recordingDir.slice(0, -"-sub".length));
+}
+
+function readSessionFile(dir) {
   try {
-    return JSON.parse(readFileSync(path.join(recordingDir, SESSION_FILE), "utf8"));
+    return JSON.parse(readFileSync(path.join(dir, SESSION_FILE), "utf8"));
   } catch {
     return null;
   }

@@ -166,3 +166,37 @@ test("a recording outside a session sends no end report", () => {
   makeDueParts(dir, { stillRecording: false, partMinutes: 5, flush: true });
   assert.equal(sessionEndReport(dir), null);
 });
+
+// A dual-stream camera records main into <dir> and the 720p sub-stream into
+// <dir>-sub, and uploads from <dir>-sub. The start command's session is saved
+// in <dir> only. On 2026-11-20 every upload of such a camera went out with no
+// session: the booking's share page got no reel and its warm GPU waited.
+function dualStream(segments) {
+  const main = recording(segments);
+  const subDir = `${main}-sub`;
+  mkdirSync(subDir);
+  const t = (Date.now() - 60_000) / 1000;
+  for (let i = 0; i < segments; i++) {
+    writeFileSync(path.join(subDir, seg(i)), `sub segment ${i}`);
+    utimesSync(path.join(subDir, seg(i)), t, t);
+  }
+  return { main, subDir };
+}
+
+test("a dual-stream camera's sub-stream uploads carry the session saved on its main recording", () => {
+  const { main, subDir } = dualStream(4);
+  writeSessionMeta(main, { recording_session_id: "44444444-4444-4444-8444-444444444444", schedule_booking_id: "b-4" });
+  const [p1, p2] = makeDueParts(subDir, { stillRecording: false, partMinutes: 5 });
+  assert.deepEqual(sessionFieldsFor(p1.dir, p1.segments), { recordingSessionId: "44444444-4444-4444-8444-444444444444", partIndex: 1, partOffsetSec: 0 });
+  assert.equal(sessionFieldsFor(p2.dir, p2.segments).partIndex, 2);
+  assert.deepEqual(sessionFieldsFor(subDir, [seg(0)]), { recordingSessionId: "44444444-4444-4444-8444-444444444444" });
+  assert.deepEqual(sessionEndReport(subDir), { recordingSessionId: "44444444-4444-4444-8444-444444444444", partCount: listParts(subDir).length });
+});
+
+// Paired: a hand recording on a dual-stream camera (no session on main) stays unlinked.
+test("a dual-stream hand recording still sends no session", () => {
+  const { subDir } = dualStream(2);
+  const [p] = makeDueParts(subDir, { stillRecording: false, partMinutes: 10, flush: true });
+  assert.deepEqual(sessionFieldsFor(p.dir, p.segments), {});
+  assert.equal(sessionEndReport(subDir), null);
+});
