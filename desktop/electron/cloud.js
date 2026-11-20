@@ -29,6 +29,7 @@ import { withDeadline } from "./deadline.js";
 import { agentBuildInfo } from "./version.js";
 import { rememberedResult, rememberResult } from "./commandMemory.js";
 import { retentionSummary } from "./recordingRetention.js";
+import { adoptDatabase } from "./database.js";
 import { needsMeasuring, needsCheckBeforeStart, PROBE_SECONDS } from "./cameras/measureSchedule.js";
 
 // configFileMode 0600: owner-only, and set here rather than chmod-ed
@@ -36,7 +37,7 @@ import { needsMeasuring, needsCheckBeforeStart, PROBE_SECONDS } from "./cameras/
 const store = new Store({ name: "cloud", configFileMode: 0o600 });
 
 // Defaults to the real production console -- same pattern as auth.js's
-// SUPABASE_URL/SUPABASE_ANON_KEY, overridable via env var for local dev
+// database.js's built-in project, overridable via env var for local dev
 // against `pnpm dev`'s localhost:3000, never the other way around.
 //
 // Found 2026-09-05 while QCing the Disconnect feature: this used to
@@ -51,7 +52,7 @@ const store = new Store({ name: "cloud", configFileMode: 0o600 });
 // as a generic "TypeError: fetch failed" (a real connection refusal to
 // a port nothing was listening on), not an HTTP error, so it looked
 // environmental at first rather than a wrong URL.
-const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "https://console.picvisionai.com";
+export const DEFAULT_CONSOLE_URL = process.env.PIC_VISION_CLOUD_URL || "https://console.picvisionai.com";
 
 // 30s until 2026-09-20. Each tick costs TWO cloud-function calls (the
 // command sweep below and the heartbeat itself), so one always-on agent
@@ -164,6 +165,10 @@ let lastHeartbeatAt = null;
 // can't start new check-ins on this machine's courts, and the app shows a must-update banner.
 let updateRequired = false;
 let minimumVersion = null;
+
+// Called when a heartbeat reply moves the app to another database (database.js); main.js reconnects.
+let onDatabaseMoved = null;
+export function whenDatabaseMoves(fn) { onDatabaseMoved = fn; }
 
 // Removed from the venue in the console (2026-09-29). A removed machine's
 // token is refused (401) on every heartbeat, forever; before this it kept
@@ -665,6 +670,7 @@ export async function sendHeartbeat(timeoutMs = CONSOLE_REQUEST_TIMEOUT_MS) {
     followVenueLanguage(body.brandLanguage);
     if (typeof body.updateRequired === "boolean") updateRequired = body.updateRequired;
     minimumVersion = typeof body.minimumVersion === "string" ? body.minimumVersion : null;
+    if (adoptDatabase(body.database)) onDatabaseMoved?.();
     if ((typeof body.brandName === "string" && body.brandName !== connection.brandName)
       || (typeof body.brandTimezone === "string" && body.brandTimezone !== connection.brandTimezone)) {
       saveConnection({

@@ -30,15 +30,16 @@ import { explainEmptyScan } from "./cameras/networkPresence.js";
 import { secureStoreFiles } from "./storeFiles.js";
 import { stopAllRecordings, recordingStatus, listRecordings, discardAllSnapshots, isRecording, uploadDirFor } from "./capture.js";
 import { runCloudJob, pipelineStatus, pipelineStatusForRecording, cancelCloudJob } from "./pipeline.js";
-import { disconnectCloud, getCloudConnection, startHeartbeatLoop, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, calibrationKnown, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
+import { DEFAULT_CONSOLE_URL, disconnectCloud, getCloudConnection, startHeartbeatLoop, whenDatabaseMoves, getAgentName, setAgentName, getOtherAgentNames, getOrCreateDeviceId, getCalibrationState, calibrationKnown, processCommandsNow, getHeartbeatState, autoSplitTick, autoSplitSendNow, bookingEndTick, recoverRecordingsAfterRestart } from "./cloud.js";
 import { getAutoSplitMinutes, setAutoSplitMinutes, partSessionId } from "./autoSplit.js";
 import { applyPowerSettings, getPowerSettings, setKeepAwake, setOpenAtLogin } from "./power.js";
-import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, SUPABASE_URL, SUPABASE_ANON_KEY } from "./auth.js";
+import { signIn, signOut, getSession, getBrand, registerDevice, registrationStatus, resolveRegistrationForSession, currentAccessToken, expireAccessToken } from "./auth.js";
+import { askConsoleForDatabase, currentDatabase } from "./database.js";
 import { startCommandChannel, stopCommandChannel } from "./commandChannel.js";
 import { retentionSweep, retentionSummary } from "./recordingRetention.js";
 import { capture, shutdownAnalytics, isFeatureEnabled } from "./analytics.js";
 import { startLiveView, stopLiveView } from "./liveview.js";
-import { getEvents, clearEvents, logEvent } from "./activityLog.js";
+import { getEvents, clearEvents, logEvent, msg } from "./activityLog.js";
 import { runChecks } from "./diagnostics.js";
 import { runBandwidthTest, bandwidthStatus } from "./bandwidth.js";
 import { createTray, destroyTray } from "./tray.js";
@@ -77,8 +78,8 @@ async function syncCommandChannel() {
   if (!connection?.agentId) return stopCommandChannel();
   try {
     await startCommandChannel({
-      url: SUPABASE_URL,
-      anonKey: SUPABASE_ANON_KEY,
+      url: currentDatabase().url,
+      anonKey: currentDatabase().key,
       agentId: connection.agentId,
       getAccessToken: currentAccessToken,
       onCommand: () => { processCommandsNow().catch(() => {}); },
@@ -745,6 +746,14 @@ app.whenReady().then(() => {
   recoverRecordingsAfterRestart()
     .catch((err) => console.error(`[recordings] recovery after restart failed: ${err.message}`))
     .finally(() => {
+      // The console moved the venue to another database: renew the session there and reconnect the command channel.
+      const databaseMoved = () => {
+        logEvent("database_moved", msg("log.databaseMoved"));
+        expireAccessToken();
+        syncCommandChannel().catch(() => {});
+      };
+      whenDatabaseMoves(databaseMoved);
+      askConsoleForDatabase(DEFAULT_CONSOLE_URL).then((moved) => { if (moved) databaseMoved(); });
       startHeartbeatLoop(); // no-op if never registered; resumes automatically if it was
       syncCommandChannel().catch(() => {}); // instant commands where possible; the poll is the floor
       // A booking's recording stops on this machine's clock, internet or not.
