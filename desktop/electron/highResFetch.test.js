@@ -15,6 +15,7 @@ const home = mkdtempSync(path.join(tmpdir(), "high-res-fetch-"));
 process.env.HOME = home;
 process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
 const { RECORDINGS_ROOT } = await import("./capture.js");
+const { partSessionId } = await import("./autoSplit.js");
 const { findRecordingForPart, partWindow, mainWindowsOverlapping, leadSecFor, trimHighRes } = await import("./highResFetch.js");
 
 // startRecording's own folder-naming convention -- recordingStartedAt
@@ -72,10 +73,10 @@ test("two recordings with the same part number: the session id picks the right o
     mkdirSync(path.join(`${dir}-sub`, "parts", "part-03"), { recursive: true });
     writeFileSync(path.join(`${dir}-sub`, "parts", "part-03", "session-010.mkv"), "");
   }
-  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-29T10-35-39-462Z-part-03").mainDir, newer);
-  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-28T10-00-27-432Z-part-03").mainDir, older);
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-29T10-35-39-462Z-sub-part-03").mainDir, newer);
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-28T10-00-27-432Z-sub-part-03").mainDir, older);
   // A session whose recording is gone from this machine: nothing, never the other one.
-  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-27T09-00-00-000Z-part-03"), null);
+  assert.equal(findRecordingForPart({ id: camId }, 3, "Camera-2026-10-27T09-00-00-000Z-sub-part-03"), null);
   // No session id (an older console) and two candidates: skipped, not guessed.
   assert.equal(findRecordingForPart({ id: camId }, 3), null);
 });
@@ -86,8 +87,34 @@ test("a camera label containing the folder-like text cannot match the wrong fold
   mkdirSync(dir, { recursive: true });
   mkdirSync(path.join(`${dir}-sub`, "parts", "part-01"), { recursive: true });
   writeFileSync(path.join(`${dir}-sub`, "parts", "part-01", "session-000.mkv"), "");
-  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-part-01").mainDir, dir);
-  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-part-011"), null);
+  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-sub-part-01").mainDir, dir);
+  assert.equal(findRecordingForPart({ id: camId }, 1, "Court_2-2026-10-29T05-21-05-452Z-sub-part-011"), null);
+});
+
+test("a dual-stream part is found by the session id its sub-stream upload was given", () => {
+  // 2026-11-20: session ids name the folder the parts were uploaded from,
+  // "<recording>-sub", and none of them matched, so no sharp or 9:16 clip was cut.
+  const camId = "find-part-dual-stream";
+  const dir = path.join(RECORDINGS_ROOT, camId, "2026-11-20T08-33-30-916Z");
+  const subPart = path.join(`${dir}-sub`, "parts", "part-04");
+  mkdirSync(dir, { recursive: true });
+  mkdirSync(subPart, { recursive: true });
+  writeFileSync(path.join(subPart, "session-003.mkv"), "");
+  const sessionId = partSessionId("Camera", `${dir}-sub`, "part-04");
+  assert.equal(sessionId, "Camera-2026-11-20T08-33-30-916Z-sub-part-04");
+  const found = findRecordingForPart({ id: camId }, 4, sessionId);
+  assert.equal(found.mainDir, dir);
+  assert.deepEqual(found.part.segments, ["session-003.mkv"]);
+});
+
+test("a single-stream part is still found by its session id", () => {
+  const camId = "find-part-single-stream";
+  const dir = path.join(RECORDINGS_ROOT, camId, "2026-11-20T09-00-00-000Z");
+  const part = path.join(dir, "parts", "part-02");
+  mkdirSync(part, { recursive: true });
+  writeFileSync(path.join(part, "session-001.mkv"), "");
+  const sessionId = partSessionId("Camera", dir, "part-02");
+  assert.equal(findRecordingForPart({ id: camId }, 2, sessionId).mainDir, dir);
 });
 
 // ---------- partWindow / mainWindowsOverlapping: real mtimes, no drift ----------

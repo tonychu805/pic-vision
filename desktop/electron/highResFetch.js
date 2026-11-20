@@ -40,7 +40,10 @@ const inFlight = new Set();
 // folder with a part-03" cut a later session's sharp and 9:16 clips out of
 // an EARLIER session's recording -- other players, another time, on this
 // session's share page. A part's session id ends in "-<folder>-part-NN"
-// (autoSplit.js partSessionId), which names exactly one folder. Without a
+// (autoSplit.js partSessionId), where <folder> is the folder the parts were
+// uploaded from: "<recording>-sub" on a dual-stream camera, which is why
+// the match is on the upload folder and not the main one (2026-11-20: every
+// dual-stream clip went unmatched). Without a
 // session id (a console from before this change) a part number is used
 // only when one recording has it; anything ambiguous is skipped -- a clip
 // left at proxy resolution is better than someone else's footage.
@@ -51,10 +54,11 @@ export function findRecordingForPart(camera, partIndex, sessionId = null) {
   const matches = [];
   for (const name of readdirSync(cameraDir)) {
     if (name.endsWith("-sub")) continue;
-    if (sessionId && !sessionId.endsWith(`-${name}-${partName}`)) continue;
     const mainDir = path.join(cameraDir, name);
     if (!statSync(mainDir).isDirectory()) continue;
-    const part = listParts(uploadDirFor(mainDir)).find((p) => p.name === partName);
+    const uploadDir = uploadDirFor(mainDir);
+    if (sessionId && !sessionId.endsWith(`-${path.basename(uploadDir)}-${partName}`)) continue;
+    const part = listParts(uploadDir).find((p) => p.name === partName);
     if (part) matches.push({ mainDir, part });
   }
   return matches.length === 1 ? matches[0] : null;
