@@ -24,6 +24,7 @@ import { tm } from "./language.js";
 import { FFMPEG, FFPROBE } from "./binaries.js";
 import { assertUsableFrameRate } from "./cameras/frameRate.js";
 import Store from "electron-store";
+import { lastStderrLine } from "./redactText.js";
 
 const IS_WINDOWS = process.platform === "win32";
 
@@ -155,7 +156,7 @@ export function grabSnapshot(camera) {
     proc.on("exit", (code) => {
       clearTimeout(timer);
       if (code !== 0 || !existsSync(outPath)) {
-        reject(new Error(stderrTail.trim().split("\n").pop() || "Could not get a snapshot from the camera (timed out or offline)"));
+        reject(new Error(lastStderrLine(stderrTail, "Could not get a snapshot from the camera (timed out or offline)")));
         return;
       }
       outstandingSnapshots.add(outPath);
@@ -358,8 +359,7 @@ export function grabFrameFromFile(filePath, atSec) {
   const args = ["-y", "-ss", String(atSec), "-i", filePath, "-frames:v", "1", "-f", "image2", outPath];
   const result = spawnSync(FFMPEG, args, { encoding: "utf8" });
   if (result.status !== 0 || !existsSync(outPath)) {
-    const stderrTail = (result.stderr || "").trim().split("\n").pop();
-    throw new Error(stderrTail || `Could not read a frame at ${atSec}s from ${path.basename(filePath)}`);
+    throw new Error(lastStderrLine(result.stderr, `Could not read a frame at ${atSec}s from ${path.basename(filePath)}`));
   }
   outstandingSnapshots.add(outPath);
   return { path: outPath, base64: readFileSync(outPath).toString("base64"), atSec };
@@ -460,7 +460,7 @@ function spawnSegmenter(cameraId, slotName, url, slot) {
 }
 
 function lastError(slot, code) {
-  return slot.stderrTail.trim().split("\n").pop() || `ffmpeg exited (code ${code})`;
+  return lastStderrLine(slot.stderrTail, `ffmpeg exited (code ${code})`);
 }
 
 // The stream dropped after the recording had started: log it once, then

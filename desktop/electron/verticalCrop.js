@@ -14,6 +14,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
 import { FFMPEG, FFPROBE } from "./binaries.js";
+import { lastStderrLine } from "./redactText.js";
 
 // Never upscale past this: the share page's player fills the phone anyway,
 // and a taller file only costs upload time.
@@ -65,7 +66,7 @@ function run(bin, args) {
     proc.on("error", reject);
     proc.on("exit", (code) => {
       if (code === 0) resolve(out);
-      else reject(new Error(stderrTail.trim().split("\n").pop() || `${path.basename(bin)} exited (code ${code})`));
+      else reject(new Error(lastStderrLine(stderrTail, `${path.basename(bin)} exited (code ${code})`)));
     });
   });
 }

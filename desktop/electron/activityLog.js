@@ -13,6 +13,7 @@
 import { randomUUID } from "node:crypto";
 import Store from "electron-store";
 import { t } from "./i18n/index.js";
+import { redactCredentials } from "./redactText.js";
 
 // configFileMode 0600: owner-only. electron-store passes its options
 // straight to conf, which otherwise writes every file 0666 (0664 after
@@ -39,9 +40,9 @@ const english = (x) => (isMsg(x) ? t("en", x.key, x.vars) : x);
 
 export function logEvent(type, title, detail = null) {
   const events = store.get("events", []);
-  const event = { id: randomUUID(), type, title: english(title), detail: english(detail), at: new Date().toISOString() };
-  if (isMsg(title)) Object.assign(event, { titleKey: title.key, titleVars: title.vars });
-  if (isMsg(detail)) Object.assign(event, { detailKey: detail.key, detailVars: detail.vars });
+  const event = { id: randomUUID(), type, title: redactCredentials(english(title)), detail: redactCredentials(english(detail)), at: new Date().toISOString() };
+  if (isMsg(title)) Object.assign(event, { titleKey: title.key, titleVars: redactCredentials(title.vars) });
+  if (isMsg(detail)) Object.assign(event, { detailKey: detail.key, detailVars: redactCredentials(detail.vars) });
   events.unshift(event);
   store.set("events", events.slice(0, MAX_EVENTS));
 }
