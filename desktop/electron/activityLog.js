@@ -47,6 +47,15 @@ export function logEvent(type, title, detail = null) {
   store.set("events", events.slice(0, MAX_EVENTS));
 }
 
+// Entries written before 1.13.3 may hold a camera password (redactText.js).
+// Rewritten once at startup, so the file on disk is clean, not just the screen.
+export function scrubStoredEvents(target = store) {
+  const events = target.get("events", []);
+  const clean = redactCredentials(events);
+  if (JSON.stringify(clean) !== JSON.stringify(events)) target.set("events", clean);
+}
+scrubStoredEvents();
+
 export function getEvents() {
   return store.get("events", []);
 }

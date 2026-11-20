@@ -43,3 +43,14 @@ test("the Log tab never stores a password, and still shows the message", () => {
   assert.doesNotMatch(JSON.stringify(event), /s3cr3t/);
   assert.equal(event.detail, "rtsp://***:***@192.168.2.3:554/1: Connection refused");
 });
+
+test("a password saved in the Log tab by an older version is cleaned at startup", async () => {
+  const { default: Store } = await import("electron-store");
+  const saved = new Store({ name: "activityLog" });
+  saved.set("events", [{ id: "old", type: "recording_failed", title: "Recording failed", detail: REFUSED, at: "2026-09-29T16:37:08Z" }]);
+  const { scrubStoredEvents } = await import("./activityLog.js");
+  scrubStoredEvents(saved);
+  assert.doesNotMatch(JSON.stringify(saved.get("events")), /s3cr3t/);
+  assert.equal(saved.get("events")[0].detail, "rtsp://***:***@192.168.2.3:554/1: Connection refused");
+  assert.equal(saved.get("events")[0].id, "old");
+});
