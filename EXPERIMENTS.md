@@ -6242,6 +6242,8 @@ GPU use averaged 50%, peaking at 100% (54 samples, 15 s apart); memory peaked at
 
 ## 2026-11-21 — Does a view box hurt the ball model? (operator's gate before any venue gets one)
 
+**Correction (operator, same day): Result 1 is not admissible.** PDSC Court 3 is excluded from all experiments (memory `project_court3_excluded_for_now`: the far ball is not visible against the pale wall), and was used here by mistake because its 11-01 marks were the only hand-marked balls in the repo. Read Result 1 as a record of what was run, not as evidence. The conclusion below rests on Result 2 (brickwall) only, and the detection gate needs a re-run on admissible footage. A staging run on the same Court 3 part (jobs e7b569ad whole frame, fd5c0e24 1.3x box) is likewise not evidence of reel quality; it only shows the crop path runs end to end on a real pod (RunPod RTX 2000 Ada, no errors).
+
 **Question.** A view box (docs/product/2026-11-21-view-box-design.md) crops each job's video at the convert step, so the ball model sees the box instead of the whole frame. The operator asked (2026-11-21) for the ball model on a boxed session to be compared on labels before any venue gets a box.
 
 **Setup.** Production conditions throughout: `tracknet_k14_epoch19.pt` (torch), cut 0.5, the real `scripts/pod_infer.py`, a 30 fps CFR NVENC encode as the pod does, and for the boxed runs the crop and calibration from `src/view_box.py` (`video_crop`, `calib_for_box`), i.e. the step-2 code path. Boxes are `court_crop_box` with a wider margin and airspace, 16:9. Scripts: `scripts/view_box_marks_eval.py`, `scripts/view_box_brickwall_eval.py`.
@@ -6266,6 +6268,6 @@ Coordinates were checked: where a run found the ball, it is 1-5 px from the mark
 
 Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than about 1.18x keeps both sidelines; 1.14x was the realistic one. One rally fewer matched (25 vs 26) is within run-to-run noise on 38 labels.
 
-**Conclusion.** A view box does not hurt the ball model, and on a far camera it helps: on Court 3 the court-side ball goes from 0 to 3 (1.3x) and 6 of 22 (1.59x), and on brickwall rally precision and recall are unchanged within one rally. It does not help the far ball against the pale wall at all (0 of 12 in every condition), which remains the fine-tuning problem from 2026-11-01. This clears the operator's gate (decision 5) for the detection side; reel quality on a boxed camera (720p proxy softness, section 5.1 of the design) still needs the staging run.
+**Conclusion (after the correction above).** On the one admissible venue, brickwall at 1.14x, a view box leaves rally precision and recall unchanged within one rally. That is a small zoom on a court that already fills the frame, so the operator's gate (decision 5) is **not yet cleared**: it needs a re-run on admissible footage from a camera that sits far enough back for a real box.
 
 **Limits.** One rally window at one venue for the marks (34 balls); one held-out venue for rallies, at a small zoom; crossing-based candidates only, not the hit finder production uses first; the k14 production weights, not the fine-tuned e2 weights.
