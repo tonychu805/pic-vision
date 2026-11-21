@@ -703,7 +703,7 @@ export function CameraAddress({ camera, onUpdated }) {
   );
 }
 
-function InfoPanel({ title, rows }) {
+function InfoPanel({ title, rows, action }) {
   return (
     <div className="card">
       <div className="section-label">{title}</div>
@@ -713,6 +713,7 @@ function InfoPanel({ title, rows }) {
           <span style={{ minWidth: 0, fontFamily: "var(--font-mono)", fontSize: "var(--fs-body)" }}>{row.v}</span>
         </div>
       ))}
+      {action}
     </div>
   );
 }
@@ -887,7 +888,20 @@ export default function CameraDetailPage({ card, onBack, onCameraRemoved, onCame
         <>
           <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 14, marginTop: 10 }}>
             <InfoPanel title={t("detail.identity")} rows={panels.identity} />
-            <InfoPanel title={t("detail.network")} rows={panels.network} />
+            <InfoPanel
+              title={t("detail.network")}
+              rows={panels.network}
+              action={card.camera?.hostname ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost"
+                  style={{ fontSize: "var(--fs-body)", padding: 0, marginTop: 8 }}
+                  onClick={() => window.cameraAPI.openWebPage(card.camera.id).catch(() => {})}
+                >
+                  {t("detail.openWebPage")} ↗
+                </button>
+              ) : null}
+            />
           </div>
 
           <div className="card" style={{ marginTop: 14 }}>

@@ -1,4 +1,5 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { cameraWebPageUrl } from "./cameraWebPage.js";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { discoverCameras } from "./cameras/discovery.js";
@@ -142,6 +143,19 @@ function registerCameraHandlers() {
   // not something every render does.
   ipcMain.handle("cameras:revealStreamUri", async (_event, id) => {
     return revealStreamUri(id);
+  });
+  // The camera's own web page in the browser (cameraWebPage.js): an address
+  // from the add form, or a stored camera by id, read here as live view does.
+  ipcMain.handle("cameras:openDeviceWebPage", async (_event, host) => {
+    const url = cameraWebPageUrl(host);
+    if (!url) throw new Error(tm("main.webPage.badAddress"));
+    await shell.openExternal(url);
+  });
+  ipcMain.handle("cameras:openWebPage", async (_event, id) => {
+    const camera = listCameras().find((c) => c.id === id);
+    const url = cameraWebPageUrl(camera?.hostname);
+    if (!url) throw new Error(tm("main.webPage.badAddress"));
+    await shell.openExternal(url);
   });
   ipcMain.handle("cameras:add", async (_event, config) => {
     try {

@@ -42,6 +42,10 @@ const RESTORES_SECRETS = new Set([
 // yet stored. Nothing to restore: the credentials in hand are the only
 // ones that exist, and are exactly what needs verifying.
 const FRESH_INPUT_ONLY = new Set([
+  // An address string from the add form or a scan, for the camera's own web
+  // page. No stored entity and no credentials; cameraWebPage.js only lets a
+  // local-network address through.
+  "cameras:openDeviceWebPage",
   "cameras:add", // the ONVIF add form
   "cameras:addRtsp", // the RTSP fallback form
   "cameras:addSampleClip", // a local file, no credentials at all

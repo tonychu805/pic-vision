@@ -338,6 +338,16 @@ function ManualAddDialog({ initialHostname = "", initialVendor = null, initialPo
         <div className="field">
           <label>{t("add.form.ip")}</label>
           <input className="input" value={form.hostname} onChange={update("hostname")} required autoFocus={!foundIt} />
+          <button
+            type="button"
+            className="btn btn-ghost"
+            style={{ alignSelf: "flex-start", fontSize: "var(--fs-body)", padding: 0, marginTop: 4 }}
+            disabled={!form.hostname.trim()}
+            title={t("add.form.openWebPageHint")}
+            onClick={() => window.cameraAPI.openDeviceWebPage(form.hostname).catch((e) => setError(e.message))}
+          >
+            {t("add.form.openWebPage")} ↗
+          </button>
         </div>
         <div className="field"><label>{t("add.form.username")}</label><input className="input" value={form.username} onChange={update("username")} autoFocus={foundIt} /></div>
         <div className="field"><label>{t("add.form.password")}</label><input className="input" type="password" value={form.password} onChange={update("password")} /></div>

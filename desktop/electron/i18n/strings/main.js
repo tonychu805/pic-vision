@@ -20,6 +20,7 @@ export const en = {
 
   "main.noIpv4": "No active IPv4 network found to scan",
   "main.scan.badRange": "Enter an address like 192.168.1.50 or a range like 192.168.1.0/24",
+  "main.webPage.badAddress": "This camera's web page can only be opened for an address on your local network, like 192.168.1.50.",
   "main.scan.tooMany": "{range} covers {count} addresses (cap is {cap}) -- narrow it to the block your cameras actually sit on",
   "main.scan.badTimeout": "Timeout must be between {min} and {max} ms",
   "main.parts.badLength": "Part length must be 0 (off) to 120 minutes",
@@ -54,6 +55,7 @@ export const zhTW = {
 
   "main.noIpv4": "找不到可以掃描的有效 IPv4 網路",
   "main.scan.badRange": "請輸入像 192.168.1.50 的位址，或像 192.168.1.0/24 的範圍",
+  "main.webPage.badAddress": "只能開啟本地網路上的攝影機網頁，例如 192.168.1.50。",
   "main.scan.tooMany": "{range} 涵蓋 {count} 個位址（上限 {cap}），請縮小到攝影機實際所在的網段",
   "main.scan.badTimeout": "等待時間必須介於 {min} 到 {max} 毫秒",
   "main.parts.badLength": "分段長度必須是 0（關閉）到 120 分鐘",

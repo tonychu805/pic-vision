@@ -27,6 +27,8 @@ contextBridge.exposeInMainWorld("cameraAPI", {
   updateAddress: (id, hostname, port) => ipcRenderer.invoke("cameras:updateAddress", id, hostname, port),
   testConnection: (config) => ipcRenderer.invoke("cameras:testConnection", config),
   revealStreamUri: (id) => ipcRenderer.invoke("cameras:revealStreamUri", id),
+  openDeviceWebPage: (host) => ipcRenderer.invoke("cameras:openDeviceWebPage", host),
+  openWebPage: (id) => ipcRenderer.invoke("cameras:openWebPage", id),
   // No options anymore -- scanSettings.js (extra ranges + timeout) is the
   // single source of truth main.js's own handler reads internally now,
   // same pattern as getNetworkInfo() already being computed server-side.
