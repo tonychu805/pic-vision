@@ -90,3 +90,23 @@ def test_an_empty_or_outside_box_is_refused():
                 {"x0": 400, "y0": 300, "x1": 2000, "y1": 1000}):
         with pytest.raises(ValueError):
             calib_for_box(boxed(bad))
+
+
+def test_ffmpeg_crops_a_720p_upload_to_the_box(tmp_path):
+    # The dual-stream case: calibrated at 1080p, the pod gets the 720p sub-stream.
+    import shutil
+    import subprocess
+    if not shutil.which("ffmpeg"):
+        pytest.skip("ffmpeg not installed")
+    src, out = tmp_path / "in.mp4", tmp_path / "out.mp4"
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-f", "lavfi", "-i", "testsrc=size=1280x720:rate=30:duration=1",
+                    "-pix_fmt", "yuv420p", str(src)], check=True)
+    w, h, x, y = video_crop(boxed(), (1280, 720))
+    subprocess.run(["ffmpeg", "-y", "-v", "error", "-i", str(src), "-vf", f"crop={w}:{h}:{x}:{y}",
+                    "-c:v", "libx264", "-pix_fmt", "yuv420p", str(out)], check=True)
+    probe = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height",
+                            "-of", "csv=p=0", str(out)], capture_output=True, text=True, check=True).stdout.strip()
+    assert probe == "1066,600"
+    # The cropped video and the boxed calibration agree on proportions (court_crop and the hit finder scale by them).
+    cw, ch = calib_for_box(boxed())["calibration_resolution"]
+    assert abs(1066 / cw - 600 / ch) < 0.002
