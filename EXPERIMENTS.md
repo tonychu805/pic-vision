@@ -6239,3 +6239,33 @@ GPU use averaged 50%, peaking at 100% (54 samples, 15 s apart); memory peaked at
 - In a recording session a camera's job stays on the workstation, so start and setup are paid once. **Estimate, not measured:** later parts about 10.7 min each, about 40 s behind per part, so the last reel of a 2-hour session lands about 8 min late. Two cameras is the limit; a third goes to the cloud.
 - The cache took setup from 33 s to 1 s. It helps each session's first part.
 - **Not tested:** a live recording session (warm-up job, several parts on the workstation, the venue's own upload). A venue at about 3.5 Mbps needs about 5.5 min to upload a 145 MB part before its job can start.
+
+## 2026-11-21 — Does a view box hurt the ball model? (operator's gate before any venue gets one)
+
+**Question.** A view box (docs/product/2026-11-21-view-box-design.md) crops each job's video at the convert step, so the ball model sees the box instead of the whole frame. The operator asked (2026-11-21) for the ball model on a boxed session to be compared on labels before any venue gets a box.
+
+**Setup.** Production conditions throughout: `tracknet_k14_epoch19.pt` (torch), cut 0.5, the real `scripts/pod_infer.py`, a 30 fps CFR NVENC encode as the pod does, and for the boxed runs the crop and calibration from `src/view_box.py` (`video_crop`, `calib_for_box`), i.e. the step-2 code path. Boxes are `court_crop_box` with a wider margin and airspace, 16:9. Scripts: `scripts/view_box_marks_eval.py`, `scripts/view_box_brickwall_eval.py`.
+
+**Result 1: PDSC Court 3, part 9 of the 03:12 session, the operator's 60 marked steps** (`pdsc_court3_20261101_ball_marks.jsonl`, set seq9: 34 visible balls, 12 against the wall and 22 against the court, 26 "can't see"). Found = a detection in the marked frame within 11 px (20 px gives the same counts).
+
+| Condition | Zoom | Ball in % of frames | Wall-side | Court-side | Ghost steps (of 26) |
+|---|---|---|---|---|---|
+| Whole frame (production today) | 1.00x | 9.6% | 0 / 12 | 0 / 22 | 1 |
+| View box, court + room behind the baselines + lob airspace | 1.30x | 10.2% | 0 / 12 | 3 / 22 | 1 |
+| View box, the 11-01 court-crop rectangle | 1.59x | 10.3% | 0 / 12 | 6 / 22 | 0 |
+| `--crop-to-court` (inference-only crop, off in production since 11-12), reference | 1.00x | 10.1% | 0 / 12 | 7 / 22 | 0 |
+
+Coordinates were checked: where a run found the ball, it is 1-5 px from the mark. The whole-frame run had no detection at all in any of the 34 marked frames, so its 0 is a real miss, not a mapping error.
+
+**Result 2: held-out brickwall-SEMI, 15 min, 38 hand-labelled rallies, IoU >= 0.5**, crossing-based candidates (`detect_candidates`, shipped gap 3 s, 6 crossings, occlusion bridge on; the hit finder needs the pose model and was not run).
+
+| Condition | Zoom | Ball in % of frames | Crossings | Rallies found | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| Whole frame | 1.00x | 31.2% | 553 | 31 | 26 | 0.84 | 0.68 |
+| View box | 1.14x | 33.2% | 589 | 29 | 25 | 0.86 | 0.66 |
+
+Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than about 1.18x keeps both sidelines; 1.14x was the realistic one. One rally fewer matched (25 vs 26) is within run-to-run noise on 38 labels.
+
+**Conclusion.** A view box does not hurt the ball model, and on a far camera it helps: on Court 3 the court-side ball goes from 0 to 3 (1.3x) and 6 of 22 (1.59x), and on brickwall rally precision and recall are unchanged within one rally. It does not help the far ball against the pale wall at all (0 of 12 in every condition), which remains the fine-tuning problem from 2026-11-01. This clears the operator's gate (decision 5) for the detection side; reel quality on a boxed camera (720p proxy softness, section 5.1 of the design) still needs the staging run.
+
+**Limits.** One rally window at one venue for the marks (34 balls); one held-out venue for rallies, at a small zoom; crossing-based candidates only, not the hit finder production uses first; the k14 production weights, not the fine-tuned e2 weights.
