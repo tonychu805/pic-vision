@@ -110,6 +110,7 @@ from src.drift import drift_span, find_bumps  # noqa: E402
 from src.ball_threshold import apply_adaptive_threshold  # noqa: E402
 from src.rallies import detect_candidates  # noqa: E402
 from src.video_quality import BLOCK_BELOW_FPS, check_video  # noqa: E402
+from src.view_box import calib_for_box, video_crop  # noqa: E402
 
 WORKDIR = "/workspace/job"
 # Occlusion bridge (ADR-160): hold rallies together across near-kitchen ball
@@ -430,6 +431,15 @@ class FfmpegError(RuntimeError):
     def __init__(self, message, stderr):
         super().__init__(message)
         self.stderr = stderr
+
+
+def _video_size(path):
+    """(width, height) of a video's first stream."""
+    out = subprocess.run(["ffprobe", "-v", "error", "-select_streams", "v:0",
+                          "-show_entries", "stream=width,height", "-of", "csv=p=0", path],
+                         capture_output=True, text=True, check=True).stdout.strip()
+    w, h = out.split(",")[:2]
+    return int(w), int(h)
 
 
 def _encode_h264(head, tail):
@@ -843,7 +853,12 @@ def run():
         os.chmod(local_path, 0o755)
 
     segment_keys = json.loads(os.environ["SEGMENT_KEYS_JSON"])
-    calib = json.loads(os.environ["CALIB_JSON"])
+    # The view box (src/view_box.py): when the camera has one, the video is
+    # cropped to it in the convert step below and everything after that works
+    # on the box, with the calibration shifted to match. full_calib keeps the
+    # stored, full-frame one for working out the crop.
+    full_calib = json.loads(os.environ["CALIB_JSON"])
+    calib = calib_for_box(full_calib)
     target_sec = float(os.environ.get("TARGET_SEC", "180"))
     session_id = os.environ.get("SESSION_ID", JOB_ID)
 
@@ -906,7 +921,12 @@ def run():
     # Off unless CONVERT_SKIP=1: skipping changes which frames TrackNet sees
     # (the encode is lossy), which moved ~40% of ball detections on a real
     # recording (2026-09-24) -- to be scored against hand labels first.
-    if os.environ.get("CONVERT_SKIP") == "1":
+    crop = video_crop(full_calib, _video_size(raw_video))
+    if crop:
+        # Repackaging cannot crop: a boxed camera always takes the encode.
+        skip, why = False, "the camera has a view box"
+        _log(f"view box: cropping to {crop[0]}x{crop[1]} at ({crop[2]}, {crop[3]})")
+    elif os.environ.get("CONVERT_SKIP") == "1":
         skip, why = convert_skippable(raw_video)
     else:
         skip, why = False, "convert skip is off"
@@ -921,6 +941,7 @@ def run():
     else:
         _log(f"converting to 30fps CFR: {why}")
         _encode_h264(["-err_detect", "ignore_err", "-i", raw_video],
+                     (["-vf", "crop={}:{}:{}:{}".format(*crop)] if crop else []) +
                      ["-map", "0:v:0", "-map", "0:a:0?",
                       "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
                       "-vsync", "cfr", "-r", "30", cfr_video])
