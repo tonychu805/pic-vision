@@ -12,7 +12,7 @@ import { existsSync, mkdtempSync, readdirSync, rmSync, statSync, writeFileSync }
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { spawn } from "node:child_process";
-import { FFMPEG } from "./binaries.js";
+import { FFMPEG, FFPROBE } from "./binaries.js";
 import { logEvent, msg } from "./activityLog.js";
 import { listParts, SEGMENT_RE } from "./autoSplit.js";
 import { cameraRecordingsDir, uploadDirFor } from "./capture.js";
@@ -155,15 +155,21 @@ function run(args) {
 // accurate boundary -- same reasoning and the same flags render.py's
 // clip_command uses on the cloud side: input-seeking (`-ss` before `-i`)
 // is frame-accurate once paired with a re-encode, not with `-c copy`.
-export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
+//
+// viewBox (view-box design, step 4): the camera's view box as fractions of
+// the frame, sent with the console's offer. The sharp copy is cropped to it,
+// so it shows what the pod's boxed reel shows, from the main stream's pixels.
+export async function trimHighRes(segmentPaths, startSec, endSec, outPath, viewBox = null) {
   const workDir = mkdtempSync(path.join(tmpdir(), "pic-vision-highres-"));
   const listFile = path.join(workDir, "concat.txt");
   const concatOut = path.join(workDir, "concat.mkv");
   try {
     writeFileSync(listFile, segmentPaths.map((p) => `file '${p}'\n`).join(""));
     await run(["-y", "-v", "error", "-f", "concat", "-safe", "0", "-i", listFile, "-c", "copy", concatOut]);
+    const crop = viewBox ? viewBoxCrop(viewBox, await videoSize(concatOut)) : null;
     await run([
       "-y", "-v", "error", "-ss", String(startSec), "-i", concatOut, "-t", String(endSec - startSec),
+      ...(crop ? ["-vf", `crop=${crop.w}:${crop.h}:${crop.x}:${crop.y}`] : []),
       "-map", "0:v:0", "-map", "0:a:0?",
       "-c:v", "libx264", "-preset", "veryfast", "-pix_fmt", "yuv420p",
       "-c:a", "aac", "-b:a", "128k", "-ar", "48000",
@@ -172,6 +178,32 @@ export async function trimHighRes(segmentPaths, startSec, endSec, outPath) {
   } finally {
     rmSync(workDir, { recursive: true, force: true });
   }
+}
+
+/** ffmpeg's crop for a view box given as fractions of a w x h frame: even pixels, inside the frame. */
+export function viewBoxCrop(box, { w, h }) {
+  const even = (v) => Math.floor(v / 2) * 2;
+  const x = even(Math.max(0, box.left) * w);
+  const y = even(Math.max(0, box.top) * h);
+  const cw = Math.min(even(Math.min(1, box.right) * w - x), even(w - x));
+  const ch = Math.min(even(Math.min(1, box.bottom) * h - y), even(h - y));
+  if (cw <= 0 || ch <= 0) throw new Error(`view box ${JSON.stringify(box)} is empty on a ${w}x${h} frame`);
+  return { w: cw, h: ch, x, y };
+}
+
+function videoSize(file) {
+  return new Promise((resolve, reject) => {
+    const proc = spawn(FFPROBE, ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file],
+      { stdio: ["ignore", "pipe", "pipe"] });
+    let out = "";
+    proc.stdout.on("data", (c) => { out += c.toString(); });
+    proc.on("error", reject);
+    proc.on("exit", (code) => {
+      const [w, h] = out.trim().split(",").map(Number);
+      if (code === 0 && w > 0 && h > 0) resolve({ w, h });
+      else reject(new Error(`could not read the video size of ${path.basename(file)}`));
+    });
+  });
 }
 
 // verticalPath (2026-10-27): the 9:16 crop of the same clip, when there is
@@ -245,7 +277,9 @@ async function processOne(camera, fetchReq) {
   const outPath = path.join(mkdtempSync(path.join(tmpdir(), "pic-vision-highres-out-")), "clip.mp4");
   try {
     const segmentPaths = mainWindows.map((w) => path.join(mainDir, w.name));
-    await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath);
+    // The pod's framing path for the 9:16 copy is already in fractions of the
+    // boxed picture, so the vertical crop of the boxed clip needs no change.
+    await trimHighRes(segmentPaths, partStartSec + leadSec, partEndSec + leadSec, outPath, fetchReq.viewBox ?? null);
     await deliverHighRes(fetchReq, outPath, { label: camera.label });
     logEvent("high_res_reel_synced", msg("log.highResSynced", { label: camera.label }), reelId);
   } finally {
