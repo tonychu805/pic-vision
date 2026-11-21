@@ -16,7 +16,7 @@ process.env.HOME = home;
 process.env.USERPROFILE = process.env.HOME; // os.homedir() on Windows
 const { RECORDINGS_ROOT } = await import("./capture.js");
 const { partSessionId } = await import("./autoSplit.js");
-const { findRecordingForPart, partWindow, mainWindowsOverlapping, leadSecFor, trimHighRes } = await import("./highResFetch.js");
+const { findRecordingForPart, partWindow, mainWindowsOverlapping, leadSecFor, trimHighRes, viewBoxCrop } = await import("./highResFetch.js");
 
 // startRecording's own folder-naming convention -- recordingStartedAt
 // parses exactly this shape back into the instant it names.
@@ -267,4 +267,33 @@ test("trimHighRes converts camera PCM audio to browser-compatible AAC", { timeou
   const streams = JSON.parse(probed.stdout).streams;
   assert.ok(streams.some((s) => s.codec_type === "video" && s.codec_name === "h264"));
   assert.ok(streams.some((s) => s.codec_type === "audio" && s.codec_name === "aac" && s.sample_rate === "48000"));
+});
+
+// ---------- view box (step 4): the sharp copy shows what the boxed reel shows ----------
+
+// PGC Court A's box (2026-11-21): x 200-2704, y 159-1568 of a 2880x1620 calibration, as the console sends it.
+const COURT_A_BOX = { left: 200 / 2880, top: 159 / 1620, right: 2704 / 2880, bottom: 1568 / 1620 }
+
+test("a view box becomes an even, in-frame crop at the main stream's own size", () => {
+  assert.deepEqual(viewBoxCrop(COURT_A_BOX, { w: 2880, h: 1620 }), { w: 2504, h: 1410, x: 200, y: 158 });
+  assert.deepEqual(viewBoxCrop(COURT_A_BOX, { w: 1920, h: 1080 }), { w: 1670, h: 938, x: 132, y: 106 });
+  const edge = viewBoxCrop({ left: 0.5, top: 0.5, right: 1, bottom: 1 }, { w: 1281, h: 721 });
+  assert.ok(edge.x + edge.w <= 1281 && edge.y + edge.h <= 721);
+  assert.ok([edge.w, edge.h, edge.x, edge.y].every((v) => v % 2 === 0));
+  assert.throws(() => viewBoxCrop({ left: 0.6, top: 0, right: 0.6, bottom: 1 }, { w: 1920, h: 1080 }));
+});
+
+test("a boxed sharp copy is cut to the box from the main stream; without a box it stays whole-frame", { timeout: 60_000 }, async () => {
+  const main = path.join(outDir, "main-1080.mkv");
+  const made = spawnSync(FFMPEG, ["-y", "-f", "lavfi", "-i", "testsrc=size=1920x1080:rate=30:duration=4", "-c:v", "libx264", "-pix_fmt", "yuv420p", main],
+    { encoding: "utf8" });
+  assert.equal(made.status, 0, made.stderr?.slice(-300));
+  const size = (file) => spawnSync(FFPROBE, ["-v", "error", "-select_streams", "v:0", "-show_entries", "stream=width,height", "-of", "csv=p=0", file],
+    { encoding: "utf8" }).stdout.trim();
+  const boxed = path.join(outDir, "boxed.mp4");
+  await trimHighRes([main], 1, 3, boxed, COURT_A_BOX);
+  assert.equal(size(boxed), "1670,938");
+  const whole = path.join(outDir, "whole.mp4");
+  await trimHighRes([main], 1, 3, whole);
+  assert.equal(size(whole), "1920,1080");
 });

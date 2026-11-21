@@ -83,6 +83,7 @@ export const en = {
   "detail.hideDetails": "Hide camera details",
   "detail.identity": "Identity",
   "detail.network": "Network",
+  "detail.openWebPage": "Open the camera's web page",
   "detail.streams": "Streams",
   "detail.noStream": "No stream URI on record for this camera.",
 
@@ -179,6 +180,7 @@ export const zhTW = {
   "detail.hideDetails": "隱藏攝影機詳細資料",
   "detail.identity": "識別資訊",
   "detail.network": "網路",
+  "detail.openWebPage": "開啟攝影機設定網頁",
   "detail.streams": "串流",
   "detail.noStream": "這台攝影機沒有串流位址的紀錄。",
 
