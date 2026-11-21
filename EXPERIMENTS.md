@@ -6239,3 +6239,37 @@ GPU use averaged 50%, peaking at 100% (54 samples, 15 s apart); memory peaked at
 - In a recording session a camera's job stays on the workstation, so start and setup are paid once. **Estimate, not measured:** later parts about 10.7 min each, about 40 s behind per part, so the last reel of a 2-hour session lands about 8 min late. Two cameras is the limit; a third goes to the cloud.
 - The cache took setup from 33 s to 1 s. It helps each session's first part.
 - **Not tested:** a live recording session (warm-up job, several parts on the workstation, the venue's own upload). A venue at about 3.5 Mbps needs about 5.5 min to upload a 145 MB part before its job can start.
+
+## 2026-11-21 — Does a view box hurt the ball model? (operator's gate before any venue gets one)
+
+**Correction (operator, same day): Result 1 is not admissible.** PDSC Court 3 is excluded from all experiments (memory `project_court3_excluded_for_now`: the far ball is not visible against the pale wall), and was used here by mistake because its 11-01 marks were the only hand-marked balls in the repo. Read Result 1 as a record of what was run, not as evidence. The conclusion below rests on Result 2 (brickwall) only, and the detection gate needs a re-run on admissible footage. A staging run on the same Court 3 part (jobs e7b569ad whole frame, fd5c0e24 1.3x box) is likewise not evidence of reel quality; it only shows the crop path runs end to end on a real pod (RunPod RTX 2000 Ada, no errors).
+
+**Question.** A view box (docs/product/2026-11-21-view-box-design.md) crops each job's video at the convert step, so the ball model sees the box instead of the whole frame. The operator asked (2026-11-21) for the ball model on a boxed session to be compared on labels before any venue gets a box.
+
+**Setup.** Production conditions throughout: `tracknet_k14_epoch19.pt` (torch), cut 0.5, the real `scripts/pod_infer.py`, a 30 fps CFR NVENC encode as the pod does, and for the boxed runs the crop and calibration from `src/view_box.py` (`video_crop`, `calib_for_box`), i.e. the step-2 code path. Boxes are `court_crop_box` with a wider margin and airspace, 16:9. Scripts: `scripts/view_box_marks_eval.py`, `scripts/view_box_brickwall_eval.py`.
+
+**Result 1: PDSC Court 3, part 9 of the 03:12 session, the operator's 60 marked steps** (`pdsc_court3_20261101_ball_marks.jsonl`, set seq9: 34 visible balls, 12 against the wall and 22 against the court, 26 "can't see"). Found = a detection in the marked frame within 11 px (20 px gives the same counts).
+
+| Condition | Zoom | Ball in % of frames | Wall-side | Court-side | Ghost steps (of 26) |
+|---|---|---|---|---|---|
+| Whole frame (production today) | 1.00x | 9.6% | 0 / 12 | 0 / 22 | 1 |
+| View box, court + room behind the baselines + lob airspace | 1.30x | 10.2% | 0 / 12 | 3 / 22 | 1 |
+| View box, the 11-01 court-crop rectangle | 1.59x | 10.3% | 0 / 12 | 6 / 22 | 0 |
+| `--crop-to-court` (inference-only crop, off in production since 11-12), reference | 1.00x | 10.1% | 0 / 12 | 7 / 22 | 0 |
+
+Coordinates were checked: where a run found the ball, it is 1-5 px from the mark. The whole-frame run had no detection at all in any of the 34 marked frames, so its 0 is a real miss, not a mapping error.
+
+**Result 2: held-out brickwall-SEMI, 15 min, 38 hand-labelled rallies, IoU >= 0.5**, crossing-based candidates (`detect_candidates`, shipped gap 3 s, 6 crossings, occlusion bridge on; the hit finder needs the pose model and was not run).
+
+| Condition | Zoom | Ball in % of frames | Crossings | Rallies found | Matched | Precision | Recall |
+|---|---|---|---|---|---|---|---|
+| Whole frame | 1.00x | 31.2% | 553 | 31 | 26 | 0.84 | 0.68 |
+| View box | 1.14x | 33.2% | 589 | 29 | 25 | 0.86 | 0.66 |
+
+Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than about 1.18x keeps both sidelines; 1.14x was the realistic one. One rally fewer matched (25 vs 26) is within run-to-run noise on 38 labels.
+
+**Conclusion (after the correction above).** On the one admissible venue, brickwall at 1.14x, a view box leaves rally precision and recall unchanged within one rally. That is a small zoom on a court that already fills the frame, so the operator's gate (decision 5) is **not yet cleared**: it needs a re-run on admissible footage from a camera that sits far enough back for a real box.
+
+**Limits.** One rally window at one venue for the marks (34 balls); one held-out venue for rallies, at a small zoom; crossing-based candidates only, not the hit finder production uses first; the k14 production weights, not the fine-tuned e2 weights.
+
+**Addendum (same day): no admissible labelled footage has room for a box.** Measured with each video's real resolution (a calibration without `calibration_resolution` is at the video's own size, as the pod treats it), the suggested box (`court_crop_box`, margin 0.08, airspace 0.9) is 1.00x on brickwall-SEMI, brickwall_30fps (1280x720), brickwall_mid_atlantic (1280x640), austin_rally2, pb_draft_cup and lifetime_fall_classic, and 1.04x on PGC Court B 09-26 (court 35-85% wide, but the lob airspace needs nearly the full height). A first brickwall_30fps run assumed a 1080p calibration for a 720p video and was discarded; re-run correctly, whole frame gives 43 rallies, 36 of 49 matched, precision 0.84, recall 0.73 (the documented 44-of-49 run, within one), and the box equals the frame. So the only real box test remains brickwall-SEMI at 1.14x, no change within one rally. The detection gate needs a labelled session from a camera that is actually too far back. Script: `scripts/view_box_brickwall30_eval.py`.
