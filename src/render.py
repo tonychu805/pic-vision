@@ -213,9 +213,10 @@ def concat_clips(manifest, out_dir):
 
 
 def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
-              pad_sec=3.0, logo_path=None):
+              pad_sec=3.0, logo_path=None, pad_after=None):
     """Cut each segment into an H.264 clip in out_dir and write manifest.json.
-    pad_sec adds context before/after each crossing burst so clips are watchable.
+    pad_sec adds context before/after each crossing burst so clips are watchable;
+    pad_after, if given, replaces it after the segment's end.
     logo_path, if given, is burnt into every clip's lower-right corner -- and
     so into every reel concatenated from them, since those are `-c copy`.
     Returns the manifest (list of manifest_entry dicts, sorted by start)."""
@@ -227,7 +228,7 @@ def cut_clips(video, segments, out_dir, court_id=None, session_id=None,
     for i, seg in enumerate(sorted_segs, 1):
         fname = f"rally_{i:03d}.mp4"
         start = max(0.0, seg["start"] - pad_sec)
-        end = seg["end"] + pad_sec
+        end = seg["end"] + (pad_sec if pad_after is None else pad_after)
         log.info("[%d/%d] %.1f–%.1fs  (%.1fs, %d crossings)",
                  i, n, start, end, end - start, seg.get("crossings", 0))
         jobs.append((i, seg, fname, start, end, os.path.join(out_dir, fname)))
