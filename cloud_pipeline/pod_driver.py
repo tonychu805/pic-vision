@@ -1100,7 +1100,7 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
-    archive_part(s3_out, proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
+    archive_part(proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
 def next_part_waiting(url, headers):
@@ -1112,9 +1112,10 @@ def next_part_waiting(url, headers):
         return False
 
 
-def archive_part(s3_out, video, calib, poses):
+def archive_part(video, calib, poses):
     """Upload this part's redacted copy when the console wants one (src/session_archive.py), after the part is
-    reported done so players never wait on it. Never raises: a missing copy must not fail a finished part, and
+    reported done so players never wait on it. It goes to the archive bucket through the one-file upload link
+    the console hands out: this machine holds no key to that bucket. Never raises: a missing copy must not fail a finished part, and
     nothing unblurred is ever kept in its place."""
     out = os.path.join(WORKDIR, "archive.mp4")
     headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
@@ -1125,14 +1126,15 @@ def archive_part(s3_out, video, calib, poses):
         if r.status_code == 503:
             return
         r.raise_for_status()
-        key = r.json()["key"]
+        key, put_url = r.json()["key"], r.json()["url"]
         asked = True   # the console now keeps this machine until we report or give up
         from src.cpus import usable_cpus
         from src.session_archive import redact_video
         started = time.time()
         res = redact_video(video, out, calib, poses, workers=usable_cpus(), should_stop=lambda: next_part_waiting(url, headers))
         redacted_sec = time.time() - started
-        s3_out.upload_file(out, OUTPUT_BUCKET, key, ExtraArgs={"ContentType": "video/mp4"})
+        with open(out, "rb") as f:
+            requests.put(put_url, data=f, headers={"Content-Type": "video/mp4"}, timeout=600).raise_for_status()
         r = requests.post(url, headers=headers, timeout=30, json={
             "key": key, "bytes": res["bytes"], "frames": res["frames"], "seconds": res["seconds"], "version": res["version"]})
         r.raise_for_status()

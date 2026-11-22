@@ -10,7 +10,8 @@ os.environ.setdefault("BRAND_ID", "test-brand-id")
 from cloud_pipeline import pod_driver  # noqa: E402
 from src import session_archive  # noqa: E402
 
-KEY = "archive/b/j/part.mp4"
+KEY = "b/part.mp4"
+PUT_URL = "https://archive.example/b/part.mp4?X-Amz-Signature=s"
 
 
 class Reply:
@@ -25,22 +26,16 @@ class Reply:
             raise RuntimeError(f"HTTP {self.status_code}")
 
 
-class S3:
-    def __init__(self):
-        self.uploads = []
-
-    def upload_file(self, path, bucket, key, ExtraArgs=None):
-        self.uploads.append((os.path.getsize(path), bucket, key))
-
-
 def setup(monkeypatch, tmp_path, get_status, redact):
-    posts = []
+    posts, uploads = [], []
     monkeypatch.setattr(pod_driver, "WORKDIR", str(tmp_path))
-    monkeypatch.setattr(pod_driver.requests, "get", lambda *a, **k: Reply(get_status, {"key": KEY}))
+    monkeypatch.setattr(pod_driver.requests, "get", lambda *a, **k: Reply(get_status, {"key": KEY, "url": PUT_URL}))
+    monkeypatch.setattr(pod_driver.requests, "put",
+                        lambda url, data=None, headers=None, **k: uploads.append((url, len(data.read()), headers)) or Reply(200))
     monkeypatch.setattr(pod_driver.requests, "post", lambda url, **k: posts.append((url, k["json"])) or Reply(200, {}))
     monkeypatch.setattr(pod_driver.requests, "delete", lambda url, **k: posts.append((url, "DELETE")) or Reply(200, {}))
     monkeypatch.setattr(session_archive, "redact_video", redact)
-    return posts
+    return posts, uploads
 
 
 def written(src, dst, calib, poses, workers, **kwargs):
@@ -50,29 +45,26 @@ def written(src, dst, calib, poses, workers, **kwargs):
 
 def test_archive_off_here_does_nothing(monkeypatch, tmp_path):
     calls = []
-    posts = setup(monkeypatch, tmp_path, 503, lambda *a, **k: calls.append(a))
-    s3 = S3()
-    pod_driver.archive_part(s3, "video.mp4", {}, {})
-    assert calls == [] and s3.uploads == [] and posts == []
+    posts, uploads = setup(monkeypatch, tmp_path, 503, lambda *a, **k: calls.append(a))
+    pod_driver.archive_part("video.mp4", {}, {})
+    assert calls == [] and uploads == [] and posts == []
 
 
 def test_a_refused_part_uploads_nothing_releases_its_machine_and_does_not_raise(monkeypatch, tmp_path):
     def refuse(src, dst, calib, poses, workers, **kwargs):
         open(dst, "wb").write(b"partial")
         raise session_archive.ArchiveRefused("no poses")
-    posts = setup(monkeypatch, tmp_path, 200, refuse)
-    s3 = S3()
-    pod_driver.archive_part(s3, "video.mp4", {}, {})
-    assert s3.uploads == []
+    posts, uploads = setup(monkeypatch, tmp_path, 200, refuse)
+    pod_driver.archive_part("video.mp4", {}, {})
+    assert uploads == []
     assert [p[1] for p in posts] == ["DELETE"], "the console is told to stop holding the machine"
     assert not os.path.exists(tmp_path / "archive.mp4")
 
 
-def test_a_redacted_copy_goes_to_its_key_and_is_reported(monkeypatch, tmp_path):
-    posts = setup(monkeypatch, tmp_path, 200, written)
-    s3 = S3()
-    pod_driver.archive_part(s3, "video.mp4", {}, {"0": []})
-    assert s3.uploads == [(10, pod_driver.OUTPUT_BUCKET, KEY)]
+def test_a_redacted_copy_goes_through_its_upload_link_and_is_reported(monkeypatch, tmp_path):
+    posts, uploads = setup(monkeypatch, tmp_path, 200, written)
+    pod_driver.archive_part("video.mp4", {}, {"0": []})
+    assert uploads == [(PUT_URL, 10, {"Content-Type": "video/mp4"})], "the link, never the reels bucket"
     (url, body), = posts
     assert url.endswith("/archive") and body == {"key": KEY, "bytes": 10, "frames": 300, "seconds": 10.0, "version": "v"}
     assert not os.path.exists(tmp_path / "archive.mp4")
@@ -97,7 +89,14 @@ def test_a_copy_stopped_for_the_next_part_uploads_nothing_and_releases_the_machi
     def stopped(src, dst, calib, poses, workers, should_stop=None, **k):
         assert should_stop is not None
         raise session_archive.ArchiveRefused("stopped: the session's next part is waiting")
-    posts = setup(monkeypatch, tmp_path, 200, stopped)
-    s3 = S3()
-    pod_driver.archive_part(s3, "video.mp4", {}, {})
-    assert s3.uploads == [] and [p[1] for p in posts] == ["DELETE"]
+    posts, uploads = setup(monkeypatch, tmp_path, 200, stopped)
+    pod_driver.archive_part("video.mp4", {}, {})
+    assert uploads == [] and [p[1] for p in posts] == ["DELETE"]
+
+
+def test_a_failed_upload_records_nothing_and_releases_the_machine(monkeypatch, tmp_path):
+    posts, _ = setup(monkeypatch, tmp_path, 200, written)
+    monkeypatch.setattr(pod_driver.requests, "put", lambda *a, **k: Reply(403))
+    pod_driver.archive_part("video.mp4", {}, {"0": []})
+    assert [p[1] for p in posts] == ["DELETE"], "no record of a file that isn't there"
+    assert not os.path.exists(tmp_path / "archive.mp4")
