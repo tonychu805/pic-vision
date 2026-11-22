@@ -6274,7 +6274,7 @@ Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than
 
 **Addendum (same day): no admissible labelled footage has room for a box.** Measured with each video's real resolution (a calibration without `calibration_resolution` is at the video's own size, as the pod treats it), the suggested box (`court_crop_box`, margin 0.08, airspace 0.9) is 1.00x on brickwall-SEMI, brickwall_30fps (1280x720), brickwall_mid_atlantic (1280x640), austin_rally2, pb_draft_cup and lifetime_fall_classic, and 1.04x on PGC Court B 09-26 (court 35-85% wide, but the lob airspace needs nearly the full height). A first brickwall_30fps run assumed a 1080p calibration for a 720p video and was discarded; re-run correctly, whole frame gives 43 rallies, 36 of 49 matched, precision 0.84, recall 0.73 (the documented 44-of-49 run, within one), and the box equals the frame. So the only real box test remains brickwall-SEMI at 1.14x, no change within one rally. The detection gate needs a labelled session from a camera that is actually too far back. Script: `scripts/view_box_brickwall30_eval.py`.
 
-## 2026-11-23 — Clip ending length: the +3 s end padding is too long (PGC owner's report, blind test)
+## 2026-11-23 — Clip ending length: the +3 s end padding is too long (PGC owner's report, blind test, two sessions)
 
 **Why.** The PGC owner said clips run on too long after the point. A clip ends at the hit finder's rally end (last accepted hit + 1.5 s, `src/hit_finder.py`, fixed in the 11-09 pre-registration, never varied) plus `PAD_SEC = 3.0` (`src/render.py`, 2026-08-12 `1b5859e`, picked for watchability, never tested). Neither number was tuned for viewing.
 
@@ -6292,6 +6292,16 @@ Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than
 
 No version was marked cut off. Clips 07 and 10 (both part 7) each joined two points into one clip (the open glued-rallies issue); the ending pick there is still C.
 
-**Conclusion.** Today's ending was never preferred; 1.5 s after the last hit won most clips and nothing felt cut off. Recommend: end padding 0 (start padding unchanged), and cut the 9:16 copy to the exact clip end instead of rounding up to the next second.
+**Repeat, same day: 23:00 session** (share `ef3e8b26`, its 10 top clips, new shuffle seed 20261124, the page also asked "two points glued"). Delivered endings 4.5-5.4 s after the last hit. Picks: A 0/10, B 1/10, **C 9/10**; nothing marked cut off; clip 05 glued two points.
 
-**Limits.** One session, 10 clips, one viewer (the operator, relaying the owner's view). The 2026-10 review found a 1 s tail "cut off" on 7 of 70 tournament clips; 1.5 s was not flagged here. The ending relies on the hit finder's last accepted hit; a missed final hit would end C early.
+| Ending after last hit | 22:00 | 23:00 | Both |
+|---|---|---|---|
+| A, as delivered | 0/10 | 0/10 | **0/20** |
+| B, 3 s | 3/10 | 1/10 | 4/20 |
+| C, 1.5 s | 7/10 | 9/10 | **16/20** (13/17 without the 3 glued clips) |
+
+**Glued rallies, measured on the way:** 3 of the 20 delivered top clips (15%) joined two points.
+
+**Conclusion.** Today's ending was never preferred in 20 clips over two sessions; 1.5 s after the last hit won 16/20 and nothing felt cut off. Recommend: end padding 0 (start padding unchanged), and cut the 9:16 copy to the exact clip end instead of rounding up to the next second.
+
+**Limits.** Two sessions on one court, 20 clips, one viewer (the operator, relaying the owner's view). The 2026-10 review found a 1 s tail "cut off" on 7 of 70 tournament clips; 1.5 s was not flagged here. The ending relies on the hit finder's last accepted hit; a missed final hit would end C early.
