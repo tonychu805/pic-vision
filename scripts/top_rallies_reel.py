@@ -23,12 +23,18 @@ from src.rallies import detect_candidates
 from src.select import net_width_px, score_segments
 from src.render import cut_clips
 
-PAD_SEC = 3.0  # same as rank_and_reel.py's build_reel -- full rally context
+PAD_SEC = 3.0  # before the rally, same as rank_and_reel.py's build_reel
+# After the rally: none. A rally already ends 1.5 s after its last hit
+# (src/hit_finder.py); the 3 s on top ran clips on past the point. Blind test
+# on two PGC sessions (EXPERIMENTS 2026-11-23): 1.5 s after the last hit was
+# picked for 16 of 20 clips, the old 4.5-5.4 s for none, and nothing felt cut off.
+END_PAD_SEC = 0.0
 DEFAULT_N = 10
 
 
 def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
-                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False, segments=None):
+                       pad_sec=PAD_SEC, logo_path=None, occlusion_bridge=False, segments=None,
+                       pad_after=END_PAD_SEC):
     """Detect rally candidates, rank them, and cut the top `n` into their
     own clips -- each its own file, never concatenated.
 
@@ -66,7 +72,7 @@ def build_top_rallies(video, csv, calib_path, out_dir, session_id, n=DEFAULT_N,
     print(f"chose {len(chosen)}/{len(ranked)} rallies (n={n})", file=sys.stderr)
 
     manifest = cut_clips(video, chosen, out_dir, court_id=session_id,
-                          session_id=session_id, pad_sec=pad_sec, logo_path=logo_path)
+                          session_id=session_id, pad_sec=pad_sec, logo_path=logo_path, pad_after=pad_after)
     by_rank = sorted(manifest, key=lambda c: -(c["score"] or 0.0))
     for rank, clip in enumerate(by_rank, 1):
         clip["rank"] = rank

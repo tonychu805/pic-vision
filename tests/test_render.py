@@ -280,3 +280,25 @@ def test_a_stretch_already_cut_is_reused_not_re_encoded(tmp_path, monkeypatch):
     render.cut_clips("other.mp4", a[:1], str(tmp_path / "o"), pad_sec=0.5)
     render.cut_clips("v.mp4", a[:1], str(tmp_path / "l"), pad_sec=0.5, logo_path="logo.png")
     assert encoded[3:] == [(9.5, 12.5), (9.5, 12.5)]
+
+
+def test_cut_clips_end_padding_can_differ_from_the_lead_in(monkeypatch, tmp_path):
+    calls = []
+
+    class FakeResult:
+        stdout = "8.0"  # the real file's length: the 8 s that was cut
+
+    def fake_run(cmd, **kwargs):
+        if cmd[0] == "ffprobe":
+            return FakeResult()
+        calls.append(cmd)
+        return subprocess.CompletedProcess(cmd, 0, "", "")
+
+    monkeypatch.setattr(render.subprocess, "run", fake_run)
+    render._cut_cache.clear()
+    manifest = cut_clips("game.mp4", [{"start": 60.0, "end": 65.0, "crossings": 5, "score": 5}],
+                         str(tmp_path), pad_sec=3.0, pad_after=0.0)
+    cmd = calls[0]
+    assert float(cmd[cmd.index("-ss") + 1]) == 57.0, "3 s lead-in kept"
+    assert float(cmd[cmd.index("-t") + 1]) == 8.0, "ends at the segment's end, no tail"
+    assert (manifest[0]["start"], manifest[0]["end"]) == (57.0, 65.0)

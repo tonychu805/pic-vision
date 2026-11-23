@@ -160,3 +160,20 @@ def test_without_given_rallies_the_detected_ones_are_cut(monkeypatch, tmp_path):
                                                 session_id="test", n=10)
     assert result["stats"]["n_candidates"] == 3
     assert (1.0, 4.0) not in [(c["start"], c["end"]) for c in result["manifest"]]
+
+
+def test_top_rally_clips_get_a_lead_in_but_no_tail(monkeypatch, tmp_path):
+    seen = {}
+
+    def fake_cut_clips(video, scored, out_dir, **kwargs):
+        seen.update(kwargs)
+        return []
+
+    monkeypatch.setattr(top_rallies_reel, "cut_clips", fake_cut_clips)
+    monkeypatch.setattr(top_rallies_reel, "detect_candidates",
+                        lambda *a, **k: {"times_crossed": [], "speeds": [], "segments": []})
+    monkeypatch.setattr(top_rallies_reel, "score_segments", lambda segs, *a: segs)
+    calib_path = tmp_path / "calib.json"
+    calib_path.write_text(json.dumps({}))
+    top_rallies_reel.build_top_rallies("v.mp4", "p.csv", str(calib_path), str(tmp_path / "top"), "s")
+    assert seen["pad_sec"] == 3.0 and seen["pad_after"] == 0.0
