@@ -18,6 +18,7 @@ import json
 import os
 import shutil
 import sys
+import threading
 import time
 
 import requests
@@ -26,6 +27,9 @@ from src.session_archive import ArchiveRefused, redact_video
 
 DOWNLOAD_TIMEOUT_SEC = 600
 FINAL_REPORT_ATTEMPTS = 5
+# The orchestrator counts the machine as started when the job's stage moves off
+# 'queued', and the console treats a running job silent for 30 minutes as stale.
+HEARTBEAT_SEC = 60
 
 
 def _log(msg):
@@ -106,17 +110,33 @@ def _final_report(console_url, job_id, token, **fields):
             time.sleep(5 * 2 ** attempt)
 
 
+def _heartbeat(console_url, job_id, token, stop):
+    """Tell the console this job is alive: at once, then every HEARTBEAT_SEC until stopped."""
+    while True:
+        try:
+            requests.patch(f"{console_url}/api/runner/jobs/{job_id}", json={"stage": "archiving", "message": "making tonight's blurred copies"},
+                           headers={"Authorization": f"Bearer {token}"}, timeout=30)
+        except requests.RequestException as e:
+            _log(f"heartbeat failed ({e})")
+        if stop.wait(HEARTBEAT_SEC):
+            return
+
+
 def main():
     from src.cpus import usable_cpus
     console_url = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
     job_id, token = os.environ["JOB_ID"], os.environ["JOB_TOKEN"]
     deadline = float(os.environ["ARCHIVE_DEADLINE"])
+    stop = threading.Event()
+    threading.Thread(target=_heartbeat, args=(console_url, job_id, token, stop), daemon=True).start()
     try:
         kept, failed = run(console_url, job_id, token, deadline, "/workspace/job", workers=usable_cpus())
     except Exception as e:  # noqa: BLE001 -- report it; the 06:00 sweep deletes every stash left
         _log(f"FAILED: {e}")
         _final_report(console_url, job_id, token, error=str(e)[:2000])
         return 1
+    finally:
+        stop.set()
     _log(f"night done: {kept} copies kept, {failed} parts without one")
     _final_report(console_url, job_id, token, done=True, stage="done", message="done",
                   progress=None, result={"archive_kept": kept, "archive_failed": failed})

@@ -107,3 +107,21 @@ def test_nothing_is_asked_for_once_the_deadline_has_passed(tmp_path):
     assert archive_job.run("https://console", "j1", "t", deadline=0.0, workdir=str(tmp_path),
                            now=lambda: 1.0, http=console, redact=redact_ok) == (0, 0)
     assert len(console.items) == 1
+
+
+def test_the_job_reports_in_at_once_and_reports_done_at_the_end(monkeypatch):
+    patches = []
+
+    class Ok:
+        status_code, ok = 200, True
+
+        def raise_for_status(self):
+            pass
+    monkeypatch.setattr(archive_job.requests, "patch", lambda url, json=None, **k: patches.append(json) or Ok())
+    monkeypatch.setattr(archive_job, "run", lambda *a, **k: (3, 1))
+    monkeypatch.setenv("JOB_ID", "j1")
+    monkeypatch.setenv("JOB_TOKEN", "t")
+    monkeypatch.setenv("ARCHIVE_DEADLINE", "1e12")
+    assert archive_job.main() == 0
+    assert patches[0]["stage"] == "archiving", "the orchestrator sees the machine started"
+    assert patches[-1]["done"] is True and patches[-1]["result"] == {"archive_kept": 3, "archive_failed": 1}
