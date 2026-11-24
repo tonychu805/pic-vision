@@ -110,16 +110,18 @@ def _final_report(console_url, job_id, token, **fields):
             time.sleep(5 * 2 ** attempt)
 
 
+def _report_alive(console_url, job_id, token):
+    try:
+        requests.patch(f"{console_url}/api/runner/jobs/{job_id}", json={"stage": "archiving", "message": "making tonight's blurred copies"},
+                       headers={"Authorization": f"Bearer {token}"}, timeout=30)
+    except requests.RequestException as e:
+        _log(f"heartbeat failed ({e})")
+
+
 def _heartbeat(console_url, job_id, token, stop):
-    """Tell the console this job is alive: at once, then every HEARTBEAT_SEC until stopped."""
-    while True:
-        try:
-            requests.patch(f"{console_url}/api/runner/jobs/{job_id}", json={"stage": "archiving", "message": "making tonight's blurred copies"},
-                           headers={"Authorization": f"Bearer {token}"}, timeout=30)
-        except requests.RequestException as e:
-            _log(f"heartbeat failed ({e})")
-        if stop.wait(HEARTBEAT_SEC):
-            return
+    """Tell the console this job is alive every HEARTBEAT_SEC until stopped."""
+    while not stop.wait(HEARTBEAT_SEC):
+        _report_alive(console_url, job_id, token)
 
 
 def main():
@@ -127,6 +129,7 @@ def main():
     console_url = os.environ.get("CONSOLE_URL", "https://console.picvisionai.com").rstrip("/")
     job_id, token = os.environ["JOB_ID"], os.environ["JOB_TOKEN"]
     deadline = float(os.environ["ARCHIVE_DEADLINE"])
+    _report_alive(console_url, job_id, token)
     stop = threading.Event()
     threading.Thread(target=_heartbeat, args=(console_url, job_id, token, stop), daemon=True).start()
     try:
