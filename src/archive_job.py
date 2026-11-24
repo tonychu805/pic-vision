@@ -16,7 +16,6 @@ that stash: an unblurred part is never kept for a retry.
 import gzip
 import json
 import os
-import shutil
 import sys
 import threading
 import time
@@ -37,10 +36,13 @@ def _log(msg):
 
 
 def _download(url, path, http):
+    # iter_content, not r.raw: R2 gzips small JSON on the way out (Content-Encoding: gzip) and r.raw keeps it
+    # compressed, so calib.json arrived unreadable on the first staging night.
     with http.get(url, stream=True, timeout=DOWNLOAD_TIMEOUT_SEC) as r:
         r.raise_for_status()
         with open(path, "wb") as f:
-            shutil.copyfileobj(r.raw, f)
+            for chunk in r.iter_content(1 << 20):
+                f.write(chunk)
 
 
 def copy_one(item, base, headers, deadline, workdir, now=time.time, http=requests, redact=redact_video, workers=None):

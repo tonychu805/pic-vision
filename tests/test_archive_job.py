@@ -4,6 +4,8 @@ import io
 import json
 import os
 
+import requests
+
 from src import archive_job
 from src.session_archive import ArchiveRefused
 
@@ -18,6 +20,9 @@ def item(n):
 class Reply:
     def __init__(self, status=200, body=None, raw=b""):
         self.status_code, self._body, self.raw = status, body, io.BytesIO(raw)
+
+    def iter_content(self, size):
+        return iter(lambda: self.raw.read(size), b"")
         self.ok = status < 400
 
     def json(self):
@@ -127,3 +132,28 @@ def test_the_job_reports_in_at_once_and_reports_done_at_the_end(monkeypatch):
     assert patches[0]["stage"] == "archiving", "the orchestrator sees the machine started"
     assert patches[-1]["done"] is True and patches[-1]["result"] == {"archive_kept": 3, "archive_failed": 1,
                                                                "archive_failures": ["ArchiveRefused: no poses"]}
+
+
+def test_a_download_r2_sends_gzipped_on_the_fly_is_saved_decoded(tmp_path):
+    import threading
+    from http.server import BaseHTTPRequestHandler, HTTPServer
+    calib = json.dumps({"homography": [[1, 0, 0], [0, 1, 0], [0, 0, 1]]}).encode()
+
+    class R2Like(BaseHTTPRequestHandler):
+        def do_GET(self):
+            body = gzip.compress(calib)
+            self.send_response(200)
+            self.send_header("Content-Encoding", "gzip")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+
+        def log_message(self, *a):
+            pass
+    server = HTTPServer(("127.0.0.1", 0), R2Like)
+    threading.Thread(target=server.serve_forever, daemon=True).start()
+    try:
+        archive_job._download(f"http://127.0.0.1:{server.server_port}/calib.json", tmp_path / "calib.json", requests)
+    finally:
+        server.shutdown()
+    assert json.loads((tmp_path / "calib.json").read_text()) == json.loads(calib)
