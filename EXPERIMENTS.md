@@ -6321,3 +6321,12 @@ No version was marked cut off. Clips 07 and 10 (both part 7) each joined two poi
 **Conclusion.** Today's ending was never preferred in 20 clips over two sessions; 1.5 s after the last hit won 16/20 and nothing felt cut off. Recommend: end padding 0 (start padding unchanged), and cut the 9:16 copy to the exact clip end instead of rounding up to the next second.
 
 **Limits.** Two sessions on one court, 20 clips, one viewer (the operator, relaying the owner's view). The 2026-10 review found a 1 s tail "cut off" on 7 of 70 tournament clips; 1.5 s was not flagged here. The ending relies on the hit finder's last accepted hit; a missed final hit would end C early.
+
+## 2026-11-25 — Nightly archive on staging: first end-to-end run (CPU machine)
+
+Two PGC parts (2026-09-25T08-40 session-002/003, 10 min each, 1080p proxy) replayed on staging, stashed by the reel pods, then copied by one `archive` job on a Google e2-highcpu-8 spot machine (no GPU), dispatch called by hand (staging has no dispatcher).
+
+- Runs 1 and 2 (02:39, 03:22 Taipei): 0 of 2 copies. Cause, from the job result added in 730909e: `UnicodeDecodeError` on calib.json. R2 sends small JSON with `Content-Encoding: gzip`, and the download copied `r.raw` (still compressed). Reproduced against the staging bucket; fixed in 0a483ba (`iter_content`).
+- Run 3 (03:40): **2 of 2 kept**, 29.8 MB and 28.3 MB, 1280x720, 18,000 frames each. Job claimed 19:40:28 UTC, done 19:51:01: about 2 min boot, then about 4 min per part. Same part on the workstation (i7-7820X, 8 workers, libx264): 117 s, 28.2 MB.
+- After the run: 0 stash files and 0 `archive_inputs` rows left; `session_archives` rows hold venue, month (2026-11-01) and the random key only.
+- Visual check, 4 frames + 2 crops: everything off the main court blurred; every head blurred, including a person crouched at the baseline. Not a full blur audit (todo B13).
