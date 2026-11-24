@@ -3,7 +3,7 @@ import { test } from "node:test";
 import { mkdtempSync, writeFileSync, utimesSync, mkdirSync, statSync, readdirSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
-import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta, startMatchesCurrent, sessionEndReport } from "./autoSplit.js";
+import { planParts, finishedSegments, makeDueParts, listParts, unsentParts, partSessionId, SETTLE_MS, writeSessionMeta, sessionFieldsFor, stopTargets, readSessionMeta, startMatchesCurrent, sessionEndReport, recentFinishedRecordings, recordingStartMs, RESEND_WINDOW_MS } from "./autoSplit.js";
 
 const seg = (i) => `session-${String(i).padStart(3, "0")}.mkv`;
 
@@ -199,4 +199,46 @@ test("a dual-stream hand recording still sends no session", () => {
   const [p] = makeDueParts(subDir, { stillRecording: false, partMinutes: 10, flush: true });
   assert.deepEqual(sessionFieldsFor(p.dir, p.segments), {});
   assert.equal(sessionEndReport(subDir), null);
+});
+
+// PGC 2026-11-24: parts whose send failed sat on the venue PC for good. A part
+// marked "retry" goes again even though it has a job.json; one cancelled by
+// hand never does; one that reached the console is left alone.
+test("a part marked retry is resent; a cancelled one and one the console has are not", () => {
+  const dir = recording(4);
+  const [p1, p2] = makeDueParts(dir, { stillRecording: false, partMinutes: 10 });
+  const mark = (part, stage) => {
+    mkdirSync(path.join(part.dir, "cloud_job"), { recursive: true });
+    writeFileSync(path.join(part.dir, "cloud_job", "job.json"), JSON.stringify({ jobId: part.name }));
+    writeFileSync(path.join(part.dir, "cloud_job", "status.json"), JSON.stringify({ stage }));
+  };
+  mark(p1, "retry");
+  mark(p2, "queued");
+  assert.deepEqual(unsentParts(dir, () => false).map((p) => p.name), [p1.name]);
+  mark(p1, "cancelled");
+  assert.deepEqual(unsentParts(dir, () => false), [], "cancelled by hand: never resent");
+});
+
+test("a part never sent but cancelled by hand is not resent", () => {
+  const dir = recording(2);
+  const [p1] = makeDueParts(dir, { stillRecording: false, partMinutes: 10 });
+  assert.deepEqual(unsentParts(dir, () => false).map((p) => p.name), [p1.name]);
+  mkdirSync(path.join(p1.dir, "cloud_job"), { recursive: true });
+  writeFileSync(path.join(p1.dir, "cloud_job", "status.json"), JSON.stringify({ stage: "cancelled" }));
+  assert.deepEqual(unsentParts(dir, () => false), []);
+});
+
+test("the resend sweep looks only at finished recordings from the last 24 hours", () => {
+  const now = Date.parse("2026-11-25T02:00:00.000Z");
+  assert.equal(recordingStartMs("2026-11-24T02-00-35-030Z"), Date.parse("2026-11-24T02:00:35.030Z"));
+  assert.equal(recordingStartMs("not-a-recording"), null);
+  const rows = [
+    { name: "2026-11-24T02-00-00-000Z", recording: false },
+    { name: "2026-11-24T03-00-00-000Z", recording: false },
+    { name: "2026-11-25T01-00-00-000Z", recording: true },
+    { name: "notes", recording: false },
+  ];
+  assert.deepEqual(recentFinishedRecordings(rows, now).map((r) => r.name), ["2026-11-24T02-00-00-000Z", "2026-11-24T03-00-00-000Z"]);
+  assert.deepEqual(recentFinishedRecordings(rows, now + 60 * 60 * 1000).map((r) => r.name), ["2026-11-24T03-00-00-000Z"], "older than 24 hours: left alone");
+  assert.equal(RESEND_WINDOW_MS, 24 * 60 * 60 * 1000);
 });

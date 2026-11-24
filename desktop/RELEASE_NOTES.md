@@ -1,5 +1,29 @@
 # Release notes
 
+## 1.14.1 — 2026-11-24
+
+**A fix release: parts that fail to send are sent again, and no longer sit
+at "Uploading…" forever.**
+
+- **Fixed: parts stuck at "Uploading…".** When the internet dropped while a
+  part was being sent, the row kept saying "Uploading…" although nothing was
+  uploading, and nothing ever tried again once the recording had ended. Such
+  a part now reads "Waiting to retry…" and is sent again every 5 minutes for
+  up to 24 hours after its recording started.
+- **Fixed: Cancel did nothing on those rows.** Cancel now marks a part that
+  never reached the cloud as cancelled, and it is not sent again.
+- **Fixed: "operation not permitted" errors during uploads on Windows.**
+  Windows Defender briefly holds the upload's status file while it scans it,
+  and the app reported that as a crash and could stall the upload until its
+  retry. The app now writes that file at most once a second, waits a moment
+  and tries again when Windows refuses, and never lets a status-file problem
+  touch the upload itself.
+
+### Worth knowing
+
+- Parts already stuck before updating are only re-sent if their recording
+  started in the last 24 hours. Older ones can be cleared with Cancel.
+
 ## 1.9.0 — 2026-10-12
 
 **A small release: the console can now see which version of the app each
