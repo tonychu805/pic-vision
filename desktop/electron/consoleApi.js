@@ -134,7 +134,14 @@ export function putStream(url, body, total, onProgress, signal, idleTimeoutMs = 
     let sent = 0;
     body.on("data", (chunk) => {
       sent += chunk.length;
-      onProgress?.(sent, total);
+      // A throw here would escape the stream and skip piping this chunk,
+      // stalling the request short of its Content-Length until the idle
+      // timeout (PGC, 2026-11-24: a status-file write failing on Windows).
+      try {
+        onProgress?.(sent, total);
+      } catch (err) {
+        console.error(`[upload] progress report failed: ${err.message}`);
+      }
     });
     body.on("error", (err) => {
       req.destroy();
