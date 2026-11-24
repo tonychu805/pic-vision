@@ -102,6 +102,12 @@ import requests
 REPO_ROOT = "/workspace"
 sys.path.insert(0, REPO_ROOT)
 
+if __name__ == "__main__" and os.environ.get("JOB_KIND") == "archive":
+    # A venue's nightly blurred copies on a CPU-only machine: none of the reel
+    # job's environment, models or imports below apply.
+    from src.archive_job import main as archive_main  # noqa: E402
+    sys.exit(archive_main())
+
 from scripts.check_drift import measure as drift_measure  # noqa: E402
 from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
@@ -1100,56 +1106,49 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
-    archive_part(proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
+    stash_for_archive(proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
-def next_part_waiting(url, headers):
-    """Is this session's next part waiting? The archive gives way to it (delivery first). False when unsure."""
-    try:
-        r = requests.get(url, params={"probe": "next-part"}, headers=headers, timeout=10)
-        return r.status_code == 200 and r.json().get("waiting") is True
-    except Exception:  # noqa: BLE001 -- a failed probe must not stop a copy, nor fail the part
-        return False
-
-
-def archive_part(video, calib, poses):
-    """Upload this part's redacted copy when the console wants one (src/session_archive.py), after the part is
-    reported done so players never wait on it. It goes to the archive bucket through the one-file upload link
-    the console hands out: this machine holds no key to that bucket. Never raises: a missing copy must not fail a finished part, and
-    nothing unblurred is ever kept in its place."""
-    out = os.path.join(WORKDIR, "archive.mp4")
+def stash_for_archive(video, calib, poses):
+    """Leave this part's proxy video (no sound), poses and calibration in the ingest bucket for tonight's
+    blurred copy (src/archive_job.py), when the console wants one. Runs after the part is reported done, so
+    players never wait on it, and uploads through one-file links: this machine holds no key. Never raises: a
+    missing stash only means no copy for this part. The console deletes every stash by 06:00 venue time."""
+    import gzip
+    import cv2
     headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
-    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive"
-    asked = False
+    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive/stash"
+    silent = os.path.join(WORKDIR, "stash_proxy.mp4")
+    poses_gz = os.path.join(WORKDIR, "stash_poses.json.gz")
+    if not poses:
+        _log("archive: nothing stashed: this part has no poses (the copy needs every 2nd frame posed)")
+        return
     try:
         r = requests.get(url, headers=headers, timeout=30)
-        if r.status_code == 503:
+        if r.status_code in (409, 503):
             return
         r.raise_for_status()
-        key, put_url = r.json()["key"], r.json()["url"]
-        asked = True   # the console now keeps this machine until we report or give up
-        from src.cpus import usable_cpus
-        from src.session_archive import redact_video
-        started = time.time()
-        res = redact_video(video, out, calib, poses, workers=usable_cpus(), should_stop=lambda: next_part_waiting(url, headers))
-        redacted_sec = time.time() - started
-        with open(out, "rb") as f:
-            requests.put(put_url, data=f, headers={"Content-Type": "video/mp4"}, timeout=600).raise_for_status()
-        r = requests.post(url, headers=headers, timeout=30, json={
-            "key": key, "bytes": res["bytes"], "frames": res["frames"], "seconds": res["seconds"], "version": res["version"]})
-        r.raise_for_status()
-        _log(f"archive: {res['frames']} frames redacted in {redacted_sec:.0f}s, {res['bytes'] / 1e6:.1f} MB, "
-             f"stored in {time.time() - started:.0f}s")   # no key: nothing may pair this part with its copy
+        links = r.json()["urls"]
+        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", video, "-map", "0:v:0", "-c:v", "copy", "-an",
+                     "-movflags", "+faststart", silent])
+        with gzip.open(poses_gz, "wt") as f:
+            json.dump(poses, f, separators=(",", ":"))
+        cap = cv2.VideoCapture(silent)
+        frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), cap.get(cv2.CAP_PROP_FPS) or 30.0
+        cap.release()
+        for name, path, ctype in (("proxy", silent, "video/mp4"), ("poses", poses_gz, "application/gzip")):
+            with open(path, "rb") as f:
+                requests.put(links[name], data=f, headers={"Content-Type": ctype}, timeout=600).raise_for_status()
+        requests.put(links["calib"], data=json.dumps(calib).encode(), headers={"Content-Type": "application/json"},
+                     timeout=60).raise_for_status()
+        requests.post(url, headers=headers, timeout=30, json={"frames": frames, "seconds": frames / fps}).raise_for_status()
+        _log(f"archive: part stashed for tonight's copy ({os.path.getsize(silent) / 1e6:.0f} MB video)")
     except Exception as e:  # noqa: BLE001 -- see docstring
-        _log(f"archive: no redacted copy kept for this part: {type(e).__name__}: {e}")
-        if asked:
-            try:
-                requests.delete(url, headers=headers, timeout=30)
-            except Exception:  # noqa: BLE001 -- the console's own time limit frees the machine anyway
-                pass
+        _log(f"archive: nothing stashed for this part: {type(e).__name__}: {e}")
     finally:
-        if os.path.exists(out):
-            os.remove(out)
+        for p in (silent, poses_gz):
+            if os.path.exists(p):
+                os.remove(p)
 
 
 def finish_with_no_rallies():
