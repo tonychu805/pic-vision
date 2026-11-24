@@ -6289,3 +6289,35 @@ Brickwall's court spans 143-1767 px of the 1920 px width, so no box tighter than
 Locally (i7-7820X, 6 workers, libx264): 147 s per part with faces every 3rd frame, 98 s every 6th.
 
 **Gaps (checked by eye on 4 frames per run, not audited).** People on the neighbouring court and seated spectators are mostly not blurred: too small for YuNet and not posed. That is the faces-only choice; zones would cover them. A large over-blur box sometimes covers part of the net. A part whose session's next part is already waiting keeps no copy (console answers 409), so delivery never waits.
+
+## 2026-11-23 — Clip ending length: the +3 s end padding is too long (PGC owner's report, blind test, two sessions)
+
+**Why.** The PGC owner said clips run on too long after the point. A clip ends at the hit finder's rally end (last accepted hit + 1.5 s, `src/hit_finder.py`, fixed in the 11-09 pre-registration, never varied) plus `PAD_SEC = 3.0` (`src/render.py`, 2026-08-12 `1b5859e`, picked for watchability, never tested). Neither number was tuned for viewing.
+
+**Setup.** PGC Court A, 2026-11-22 22:00 session (share `cfcc8c50`), its 10 delivered top clips, the 9:16 copies players watch. Each was trimmed at the end only (no re-detection; every clip already ends rally end + 3 s): A = as delivered, B = last hit + 3 s, C = last hit + 1.5 s (end padding off). The start was untouched. Labels 1-3 were shuffled per clip (seed 20261123, key kept off the page). The operator watched the three side by side on a phone page and picked the ending that felt right, and could mark any version as cut off.
+
+**Measured on the way.** The delivered 9:16 copies end **4.8-5.4 s** after the last hit, not 4.5: the venue PC cuts them to whole seconds (`part_start_sec`/`part_end_sec`), adding up to 1 s.
+
+**Result.**
+
+| Ending after last hit | Picked |
+|---|---|
+| A, as delivered (4.8-5.4 s) | 0 / 10 |
+| B, 3 s | 3 / 10 |
+| C, 1.5 s (end padding off) | 7 / 10 (5 / 8 without the two glued clips) |
+
+No version was marked cut off. Clips 07 and 10 (both part 7) each joined two points into one clip (the open glued-rallies issue); the ending pick there is still C.
+
+**Repeat, same day: 23:00 session** (share `ef3e8b26`, its 10 top clips, new shuffle seed 20261124, the page also asked "two points glued"). Delivered endings 4.5-5.4 s after the last hit. Picks: A 0/10, B 1/10, **C 9/10**; nothing marked cut off; clip 05 glued two points.
+
+| Ending after last hit | 22:00 | 23:00 | Both |
+|---|---|---|---|
+| A, as delivered | 0/10 | 0/10 | **0/20** |
+| B, 3 s | 3/10 | 1/10 | 4/20 |
+| C, 1.5 s | 7/10 | 9/10 | **16/20** (13/17 without the 3 glued clips) |
+
+**Glued rallies, measured on the way:** 3 of the 20 delivered top clips (15%) joined two points.
+
+**Conclusion.** Today's ending was never preferred in 20 clips over two sessions; 1.5 s after the last hit won 16/20 and nothing felt cut off. Recommend: end padding 0 (start padding unchanged), and cut the 9:16 copy to the exact clip end instead of rounding up to the next second.
+
+**Limits.** Two sessions on one court, 20 clips, one viewer (the operator, relaying the owner's view). The 2026-10 review found a 1 s tail "cut off" on 7 of 70 tournament clips; 1.5 s was not flagged here. The ending relies on the hit finder's last accepted hit; a missed final hit would end C early.
