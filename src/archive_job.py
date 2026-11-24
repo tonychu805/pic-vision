@@ -44,7 +44,7 @@ def _download(url, path, http):
 
 
 def copy_one(item, base, headers, deadline, workdir, now=time.time, http=requests, redact=redact_video, workers=None):
-    """Make, upload and report one part's copy. True when a copy was kept. Never raises."""
+    """Make, upload and report one part's copy. None when a copy was kept, else why not. Never raises."""
     paths = {name: os.path.join(workdir, name) for name in ("proxy.mp4", "poses.json.gz", "calib.json", "copy.mp4")}
     report = {"input_id": item["input_id"]}
     try:
@@ -63,7 +63,7 @@ def copy_one(item, base, headers, deadline, workdir, now=time.time, http=request
         report.update(key=item["key"], bytes=res["bytes"], frames=res["frames"], seconds=res["seconds"], version=res["version"])
         http.post(f"{base}/report", json=report, headers=headers, timeout=30).raise_for_status()
         _log(f"copy kept: {res['frames']} frames in {now() - started:.0f}s, {res['bytes'] / 1e6:.1f} MB")
-        return True
+        return None
     except Exception as e:  # noqa: BLE001 -- one part's failure must not stop the night's other parts
         why = str(e) if isinstance(e, ArchiveRefused) else f"{type(e).__name__}: {e}"
         _log(f"no copy for this part: {why}")
@@ -71,7 +71,7 @@ def copy_one(item, base, headers, deadline, workdir, now=time.time, http=request
             http.post(f"{base}/report", json={**report, "failed": why[:500]}, headers=headers, timeout=30)
         except Exception:  # noqa: BLE001 -- the 06:00 sweep deletes the stash anyway
             pass
-        return False
+        return why
     finally:
         for p in paths.values():
             if os.path.exists(p):
@@ -79,22 +79,23 @@ def copy_one(item, base, headers, deadline, workdir, now=time.time, http=request
 
 
 def run(console_url, job_id, token, deadline, workdir, now=time.time, http=requests, redact=redact_video, workers=None):
-    """Copy stashed parts until the console has none left or the deadline passes. Returns (kept, failed)."""
+    """Copy stashed parts until the console has none left or the deadline passes. Returns (kept, why each other part failed)."""
     base = f"{console_url}/api/runner/jobs/{job_id}/archive"
     headers = {"Authorization": f"Bearer {token}"}
     os.makedirs(workdir, exist_ok=True)
-    kept = failed = 0
+    kept, failures = 0, []
     while now() < deadline:
         r = http.get(f"{base}/next", headers=headers, timeout=30)
         r.raise_for_status()
         item = r.json()
         if item.get("done"):
             break
-        if copy_one(item, base, headers, deadline, workdir, now, http, redact, workers):
+        why = copy_one(item, base, headers, deadline, workdir, now, http, redact, workers)
+        if why is None:
             kept += 1
         else:
-            failed += 1
-    return kept, failed
+            failures.append(why[:300])
+    return kept, failures
 
 
 def _final_report(console_url, job_id, token, **fields):
@@ -133,16 +134,16 @@ def main():
     stop = threading.Event()
     threading.Thread(target=_heartbeat, args=(console_url, job_id, token, stop), daemon=True).start()
     try:
-        kept, failed = run(console_url, job_id, token, deadline, "/workspace/job", workers=usable_cpus())
+        kept, failures = run(console_url, job_id, token, deadline, "/workspace/job", workers=usable_cpus())
     except Exception as e:  # noqa: BLE001 -- report it; the 06:00 sweep deletes every stash left
         _log(f"FAILED: {e}")
         _final_report(console_url, job_id, token, error=str(e)[:2000])
         return 1
     finally:
         stop.set()
-    _log(f"night done: {kept} copies kept, {failed} parts without one")
+    _log(f"night done: {kept} copies kept, {len(failures)} parts without one")
     _final_report(console_url, job_id, token, done=True, stage="done", message="done",
-                  progress=None, result={"archive_kept": kept, "archive_failed": failed})
+                  progress=None, result={"archive_kept": kept, "archive_failed": len(failures), "archive_failures": failures})
     return 0
 
 
