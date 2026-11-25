@@ -835,6 +835,31 @@ def clip_framings(video, csv_path, calib, clips, poses):
         return {}
 
 
+def clip_two_ball_rates(video, csv_path, calib, clips):
+    """{clip file: two-ball rate} for every rally clip (src/two_ball.py); {} on any failure.
+
+    Measured over the padded clip, as the 2026-11-24 test measured it. The
+    console keeps a long clip with a high rate out of the top 10. Best effort
+    like framing: a missing rate never costs the reel.
+    """
+    try:
+        from src.tracknet import load_predictions
+        from src.two_ball import two_ball_rate
+        # pod_infer writes predictions in calibration-resolution pixels when
+        # it has a calibration, as it always does here.
+        size = calib.get("calibration_resolution") or _video_size(video)
+        track = load_predictions(csv_path, CFR_FPS)
+        out = {}
+        for c in clips:
+            rate = two_ball_rate(track, c["start"], c["end"], calib, size, CFR_FPS)
+            if rate is not None:
+                out[c["file"]] = round(rate, 3)
+        return out
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"two-ball rate skipped: {type(e).__name__}: {e}")
+        return {}
+
+
 def run():
     s3_in, s3_out = _r2_clients()
     # Fresh per job: a pod kept for a session's next part (ADR-130) must
@@ -1046,6 +1071,7 @@ def run():
     upload_pool = ThreadPoolExecutor(max_workers=4)
     uploads = [upload_pool.submit(s3_out.upload_file, path, OUTPUT_BUCKET, key) for path, key in files]
     framings = clip_framings(proxy_video, csv_path, calib, top_result["manifest"], poses)
+    two_ball = clip_two_ball_rates(proxy_video, csv_path, calib, top_result["manifest"])
     jev, stats["jev"] = jev_wait() if jev_wait else ({}, None)
     for u in uploads:
         u.result()
@@ -1080,6 +1106,9 @@ def run():
             # clips from its sharper-cut score floor (reels.finder).
             "finder": rally_finder(hit_finder_info),
             **({"jev": verdict} if verdict else {}),
+            # Sideways ball jumps per second: two balls in the air, i.e.
+            # warm-up dinking (src/two_ball.py); absent if not measured.
+            **({"two_ball_rate": two_ball[clip["file"]]} if clip["file"] in two_ball else {}),
         })
     reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
     if has_burst:
