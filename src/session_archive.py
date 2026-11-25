@@ -128,7 +128,7 @@ def _run_worker(job, stop):
             if stop.wait(0.2):
                 proc.kill()
                 proc.wait()
-                raise ArchiveRefused("stopped: the session's next part is waiting")
+                raise ArchiveRefused("stopped: the night's deadline passed")
         out.seek(0)
         err.seek(0)
         stdout, stderr = out.read(), err.read()
@@ -156,8 +156,8 @@ def redact_video(src, dst, calib, poses, out_height=720, workers=None, encoders=
                   for i, (a, b) in enumerate(zip(bounds, bounds[1:]))]
         # Each range runs as its own program, not a forked or spawned child: the pod's process already runs threads
         # (torch, Jev, uploads) a fork can deadlock on, and spawn re-imports pod_driver.py, which needs a job.
-        # Delivery first: should_stop() (is the session's next part waiting?) is asked every stop_check_sec, and
-        # a yes ends every worker at once and keeps nothing.
+        # should_stop() (has the night's deadline passed?) is asked every stop_check_sec, and a yes ends every
+        # worker at once and keeps nothing.
         stop, finished = threading.Event(), threading.Event()
 
         def watch():

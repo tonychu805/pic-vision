@@ -4,6 +4,7 @@ import io
 import json
 import os
 import subprocess
+import threading
 
 import pytest
 
@@ -44,7 +45,8 @@ def setup(monkeypatch, tmp_path, get_status, put_status=200):
     calls = {"get": 0, "put": {}, "post": []}
     work = tmp_path / "work"
     work.mkdir()
-    monkeypatch.setattr(pod_driver, "WORKDIR", str(work))
+    monkeypatch.setattr(pod_driver, "STASH_DIR", str(work))
+    monkeypatch.setattr(pod_driver, "_stash_upload", None)
 
     def get(*a, **k):
         calls["get"] += 1
@@ -75,6 +77,7 @@ def test_a_part_without_poses_never_asks(monkeypatch, tmp_path, video):
 def test_a_wanted_part_leaves_a_silent_proxy_its_poses_and_calibration(monkeypatch, tmp_path, video):
     calls, work = setup(monkeypatch, tmp_path, 200)
     pod_driver.stash_for_archive(video, CALIB, POSES)
+    pod_driver.finish_stash()
     assert set(calls["put"]) == set(LINKS.values())
     stashed = tmp_path / "stashed.mp4"
     stashed.write_bytes(calls["put"][LINKS["proxy"]])
@@ -90,5 +93,34 @@ def test_a_wanted_part_leaves_a_silent_proxy_its_poses_and_calibration(monkeypat
 def test_a_failed_upload_reports_nothing_and_does_not_raise(monkeypatch, tmp_path, video):
     calls, work = setup(monkeypatch, tmp_path, 200, put_status=500)
     pod_driver.stash_for_archive(video, CALIB, POSES)
+    pod_driver.finish_stash()
     assert calls["post"] == []
     assert os.listdir(work) == []
+
+
+def test_the_upload_runs_while_the_pod_moves_on_and_finishes_before_it_exits(monkeypatch, tmp_path, video):
+    calls, work = setup(monkeypatch, tmp_path, 200)
+    release, put = threading.Event(), pod_driver.requests.put
+
+    def slow_put(url, **k):
+        release.wait(10)
+        return put(url, **k)
+    monkeypatch.setattr(pod_driver.requests, "put", slow_put)
+    pod_driver.stash_for_archive(video, CALIB, POSES)
+    assert calls["post"] == [] and pod_driver._stash_upload.is_alive(), "returned before the upload finished"
+    release.set()
+    pod_driver.finish_stash()
+    assert calls["post"] == [{"frames": 30, "seconds": 1.0}]
+    assert os.listdir(work) == []
+
+
+def test_a_part_finding_the_last_upload_still_running_keeps_no_copy(monkeypatch, tmp_path, video):
+    calls, _ = setup(monkeypatch, tmp_path, 200)
+    release, put = threading.Event(), pod_driver.requests.put
+    monkeypatch.setattr(pod_driver.requests, "put", lambda url, **k: release.wait(10) and put(url, **k))
+    pod_driver.stash_for_archive(video, CALIB, POSES)
+    pod_driver.stash_for_archive(video, CALIB, POSES)
+    assert calls["get"] == 1, "the second part never asked: delivery does not wait on the first upload"
+    release.set()
+    pod_driver.finish_stash()
+    assert len(calls["post"]) == 1

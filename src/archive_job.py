@@ -29,6 +29,9 @@ FINAL_REPORT_ATTEMPTS = 5
 # The orchestrator counts the machine as started when the job's stage moves off
 # 'queued', and the console treats a running job silent for 30 minutes as stale.
 HEARTBEAT_SEC = 60
+# Asking the console for the next part: a brief failure must not end the night's job.
+NEXT_ATTEMPTS = 4
+NEXT_BACKOFF_SEC = 15
 
 
 def _log(msg):
@@ -80,16 +83,15 @@ def copy_one(item, base, headers, deadline, workdir, now=time.time, http=request
                 os.remove(p)
 
 
-def run(console_url, job_id, token, deadline, workdir, now=time.time, http=requests, redact=redact_video, workers=None):
+def run(console_url, job_id, token, deadline, workdir, now=time.time, http=requests, redact=redact_video, workers=None,
+        sleep=time.sleep):
     """Copy stashed parts until the console has none left or the deadline passes. Returns (kept, why each other part failed)."""
     base = f"{console_url}/api/runner/jobs/{job_id}/archive"
     headers = {"Authorization": f"Bearer {token}"}
     os.makedirs(workdir, exist_ok=True)
     kept, failures = 0, []
     while now() < deadline:
-        r = http.get(f"{base}/next", headers=headers, timeout=30)
-        r.raise_for_status()
-        item = r.json()
+        item = _next_part(base, headers, http, sleep)
         if item.get("done"):
             break
         why = copy_one(item, base, headers, deadline, workdir, now, http, redact, workers)
@@ -98,6 +100,20 @@ def run(console_url, job_id, token, deadline, workdir, now=time.time, http=reque
         else:
             failures.append(why[:300])
     return kept, failures
+
+
+def _next_part(base, headers, http, sleep):
+    """The console's next stashed part, or {"done": true}. Retried; raises only when every attempt failed."""
+    for attempt in range(NEXT_ATTEMPTS):
+        try:
+            r = http.get(f"{base}/next", headers=headers, timeout=30)
+            r.raise_for_status()
+            return r.json()
+        except Exception as e:  # noqa: BLE001 -- retried, then raised to main()
+            if attempt == NEXT_ATTEMPTS - 1:
+                raise
+            _log(f"asking for the next part failed ({type(e).__name__}: {e}); trying again")
+            sleep(NEXT_BACKOFF_SEC * (attempt + 1))
 
 
 def _final_report(console_url, job_id, token, **fields):

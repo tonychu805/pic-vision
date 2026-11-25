@@ -1138,20 +1138,35 @@ def run():
     stash_for_archive(proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
 
 
+# Stashes upload here, not in WORKDIR: the next part empties WORKDIR while the last one may still be uploading.
+STASH_DIR = "/workspace/stash"
+# The upload in progress, if any. One at a time: a part that finds the last one still uploading keeps no copy.
+_stash_upload = None
+# How long the pod waits for an upload before it exits (finish_stash).
+STASH_FINISH_SEC = 15 * 60
+
+
 def stash_for_archive(video, calib, poses):
     """Leave this part's proxy video (no sound), poses and calibration in the ingest bucket for tonight's
-    blurred copy (src/archive_job.py), when the console wants one. Runs after the part is reported done, so
-    players never wait on it, and uploads through one-file links: this machine holds no key. Never raises: a
-    missing stash only means no copy for this part. The console deletes every stash by 06:00 venue time."""
+    blurred copy (src/archive_job.py), when the console wants one. Prepares the files and returns; the upload runs
+    in the background so the pod asks for its next part at once (a slow upload once held the next part up, and a
+    pod neither working nor waiting is removed after 90 s). Uploads through one-file links: this machine holds no
+    key. Never raises: a missing stash only means no copy for this part. The console deletes every stash by 06:00
+    venue time."""
+    global _stash_upload
     import gzip
     import cv2
-    headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
-    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive/stash"
-    silent = os.path.join(WORKDIR, "stash_proxy.mp4")
-    poses_gz = os.path.join(WORKDIR, "stash_poses.json.gz")
     if not poses:
         _log("archive: nothing stashed: this part has no poses (the copy needs every 2nd frame posed)")
         return
+    if _stash_upload is not None and _stash_upload.is_alive():
+        _log("archive: nothing stashed for this part: the last part's stash is still uploading")
+        return
+    headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
+    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive/stash"
+    os.makedirs(STASH_DIR, exist_ok=True)
+    silent = os.path.join(STASH_DIR, f"{JOB_ID}_proxy.mp4")
+    poses_gz = os.path.join(STASH_DIR, f"{JOB_ID}_poses.json.gz")
     try:
         r = requests.get(url, headers=headers, timeout=30)
         if r.status_code in (409, 503):
@@ -1165,6 +1180,17 @@ def stash_for_archive(video, calib, poses):
         cap = cv2.VideoCapture(silent)
         frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), cap.get(cv2.CAP_PROP_FPS) or 30.0
         cap.release()
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"archive: nothing stashed for this part: {type(e).__name__}: {e}")
+        _remove(silent, poses_gz)
+        return
+    _stash_upload = threading.Thread(target=_upload_stash, name="archive-stash",
+                                     args=(url, headers, links, silent, poses_gz, calib, frames, fps))
+    _stash_upload.start()
+
+
+def _upload_stash(url, headers, links, silent, poses_gz, calib, frames, fps):
+    try:
         for name, path, ctype in (("proxy", silent, "video/mp4"), ("poses", poses_gz, "application/gzip")):
             with open(path, "rb") as f:
                 requests.put(links[name], data=f, headers={"Content-Type": ctype}, timeout=600).raise_for_status()
@@ -1172,12 +1198,23 @@ def stash_for_archive(video, calib, poses):
                      timeout=60).raise_for_status()
         requests.post(url, headers=headers, timeout=30, json={"frames": frames, "seconds": frames / fps}).raise_for_status()
         _log(f"archive: part stashed for tonight's copy ({os.path.getsize(silent) / 1e6:.0f} MB video)")
-    except Exception as e:  # noqa: BLE001 -- see docstring
+    except Exception as e:  # noqa: BLE001 -- a missing stash only means no copy for this part
         _log(f"archive: nothing stashed for this part: {type(e).__name__}: {e}")
     finally:
-        for p in (silent, poses_gz):
-            if os.path.exists(p):
-                os.remove(p)
+        _remove(silent, poses_gz)
+
+
+def finish_stash(timeout=STASH_FINISH_SEC):
+    """Wait for the upload in progress, if any, before the pod exits."""
+    if _stash_upload is not None and _stash_upload.is_alive():
+        _log("archive: finishing the last part's stash upload before exiting")
+        _stash_upload.join(timeout)
+
+
+def _remove(*paths):
+    for p in paths:
+        if os.path.exists(p):
+            os.remove(p)
 
 
 def finish_with_no_rallies():
@@ -1323,6 +1360,7 @@ def main():
     try:
         _main()
     finally:
+        finish_stash()
         try:
             open(DONE_MARKER, "w").close()
         except OSError:
