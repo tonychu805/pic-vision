@@ -19,7 +19,8 @@
 // moved. Two stages are new and local to this file: "upload" (this
 // machine sending the video) and "queued" (waiting for a runner).
 import { sessionFieldsFor } from "./autoSplit.js";
-import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, statSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from "node:fs";
+import { renameWithRetry } from "./atomicFile.js";
 import path from "node:path";
 import { powerSaveBlocker } from "electron";
 import { consoleFetch, requireConnection, uploadFile } from "./consoleApi.js";
@@ -106,9 +107,31 @@ function writeStatus(jobDir, fields) {
   const next = { ...current, ...fields };
   const tmp = path.join(jobDir, "status.json.tmp");
   writeFileSync(tmp, JSON.stringify(next, null, 2));
-  renameSync(tmp, path.join(jobDir, "status.json"));
+  renameWithRetry(tmp, path.join(jobDir, "status.json"));
   return next;
 }
+
+// For writes that must never take the upload down with them: the progress
+// callback runs inside the upload stream, and the failure paths below would
+// otherwise replace the real error with a file-system one and leave the row
+// reading "Uploading..." forever (PGC, 2026-11-24).
+function writeStatusSafely(jobDir, fields) {
+  try {
+    return writeStatus(jobDir, fields);
+  } catch (err) {
+    console.error(`[pipeline] could not write ${jobDir}/status.json: ${err.message}`);
+    return null;
+  }
+}
+
+// Progress is a display, not a record: once a second is plenty, and every
+// write is one more chance for Windows to refuse the rename.
+const PROGRESS_WRITE_MS = 1_000;
+
+// A send the console never acknowledged, or an upload that ran out of
+// retries: the part stays on this machine and cloud.js's sweep sends it
+// again (autoSplit.js unsentParts). Not terminal, unlike "error".
+export const RETRY_STAGE = "retry";
 
 function segmentsIn(recordingDir) {
   return readdirSync(recordingDir)
@@ -151,6 +174,7 @@ async function uploadSegments(jobId, uploads, files, jobDir, rec) {
   const sizes = files.map((f) => statSync(f).size);
   const grandTotal = sizes.reduce((a, b) => a + b, 0);
   let done = 0;
+  let lastProgressWrite = 0;
 
   for (let i = 0; i < files.length; i++) {
     // Checked per segment as well as mid-transfer (the abort signal
@@ -166,7 +190,10 @@ async function uploadSegments(jobId, uploads, files, jobDir, rec) {
       message: `uploading ${name} (${i + 1} of ${files.length})...`,
     });
     await uploadWithRetry(jobId, upload, files[i], (sent) => {
-      writeStatus(jobDir, { progress: { current: done + sent, total: grandTotal, eta_sec: null } });
+      const now = Date.now();
+      if (now - lastProgressWrite < PROGRESS_WRITE_MS && sent < sizes[i]) return;
+      lastProgressWrite = now;
+      writeStatusSafely(jobDir, { progress: { current: done + sent, total: grandTotal, eta_sec: null } });
     }, rec);
     done += sizes[i];
   }
@@ -316,21 +343,34 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
     done: false,
   });
 
-  const { jobId, uploads } = await consoleFetch("/api/agents/jobs", {
-    method: "POST",
-    connection,
-    body: {
-      sessionId,
-      cameraId,
-      cameraLabel,
-      targetSec: targetSec || 180,
-      files: files.map((f) => ({ name: path.basename(f), sizeBytes: statSync(f).size })),
-      // The playing session and part this upload belongs to (ADR-128), so
-      // the console puts every part's reels on one share page. Empty for a
-      // recording without a console-issued session.
-      ...sessionFieldsFor(recordingDir, files),
-    },
-  });
+  let created;
+  try {
+    created = await consoleFetch("/api/agents/jobs", {
+      method: "POST",
+      connection,
+      body: {
+        sessionId,
+        cameraId,
+        cameraLabel,
+        targetSec: targetSec || 180,
+        files: files.map((f) => ({ name: path.basename(f), sizeBytes: statSync(f).size })),
+        // The playing session and part this upload belongs to (ADR-128), so
+        // the console puts every part's reels on one share page. Empty for a
+        // recording without a console-issued session.
+        ...sessionFieldsFor(recordingDir, files),
+      },
+    });
+  } catch (err) {
+    // The row said "preparing upload..." from just above; left alone it said
+    // so forever. A refusal (4xx) won't change on a resend; anything else --
+    // no internet, a timeout, a 5xx -- is worth another try.
+    const refused = err.status >= 400 && err.status < 500;
+    writeStatusSafely(jobDir, refused
+      ? { stage: "error", message: "the console refused this upload", error: err.message, done: false }
+      : { stage: RETRY_STAGE, message: "could not reach the console; will try again", error: err.message, done: false });
+    throw err;
+  }
+  const { jobId, uploads } = created;
 
   const rec = { jobId, label, cancelled: false, abort: new AbortController() };
   active.set(recordingDir, rec);
@@ -358,11 +398,11 @@ export async function runCloudJob({ recordingDir, videoPath, targetSec, sessionI
     // only other writer of a terminal state) doesn't start until the
     // upload has finished, which is exactly what just didn't happen.
     if (rec.cancelled || err.aborted) {
-      writeStatus(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
+      writeStatusSafely(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
       logEvent("pipeline_failed", msg("log.jobCancelled", { label }));
       return { jobDir, cancelled: true };
     }
-    writeStatus(jobDir, { stage: "error", message: "upload failed", error: err.message, done: false });
+    writeStatusSafely(jobDir, { stage: RETRY_STAGE, message: "upload failed; will try again", error: err.message, done: false });
     logEvent("pipeline_failed", msg("log.uploadFailed", { label }), err.message);
     throw err;
   } finally {
@@ -414,6 +454,15 @@ function recoverJobRecord(recordingDir) {
  */
 export async function cancelCloudJob(recordingDir) {
   const jobDir = path.join(recordingDir, "cloud_job");
+  // A part that never reached the console, or is waiting to be sent again,
+  // has no cloud job to stop. Marking it cancelled is the whole cancel, and
+  // keeps the resend sweep away from it. Before this the button did nothing
+  // and the row read "Uploading..." indefinitely (PGC, 2026-11-24).
+  const stage = pipelineStatus(jobDir).stage;
+  if (!active.has(recordingDir) && (stage === RETRY_STAGE || (stage === "upload" && !recoverJobRecord(recordingDir)))) {
+    writeStatusSafely(jobDir, { stage: "cancelled", message: "cancelled", progress: null, error: null, done: false });
+    return { cancelled: true, stopped: true };
+  }
   const rec = active.get(recordingDir) ?? recoverJobRecord(recordingDir);
   if (!rec?.jobId) return { cancelled: false };
 

@@ -2067,6 +2067,7 @@ pic-vision/
 │   ├── court_crop.py                    # crop box for the ball model (the court + its airspace) and the
 │   │                                      # grid -> calibration coordinate mapping; EXPERIMENTS.md 2026-11-01
 │   ├── ball_threshold.py                # per-video choice of the ball detector's confidence cut
+│   ├── two_ball.py                      # sideways ball jumps per second of a clip (two balls = warm-up dinking); EXPERIMENTS.md 2026-11-24
 │   ├── jev_sheet.py                     # 6-frame contact sheet of a rally (JPEG) the pod posts to the console for Jev; redacted (off-court, heads, faces)
 │   ├── face_detection_yunet_2023mar.onnx # OpenCV Zoo YuNet face detector (MIT, with _LICENSE) used by jev_sheet.py
 │   ├── players.py                      # player/court-position helpers

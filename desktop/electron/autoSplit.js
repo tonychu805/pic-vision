@@ -126,8 +126,48 @@ export function makeDueParts(recordingDir, { stillRecording, partMinutes, flush 
 }
 
 /** Parts whose send never got as far as a console job (no cloud_job/job.json) -- e.g. the console was unreachable. */
+/**
+ * Parts to send now: never sent, or sent and marked to try again (pipeline.js
+ * RETRY_STAGE) -- not one cancelled by hand, and not one already on its way.
+ */
 export function unsentParts(recordingDir, isRunning) {
-  return listParts(recordingDir).filter((p) => !existsSync(path.join(p.dir, "cloud_job", "job.json")) && !isRunning(p.dir));
+  return listParts(recordingDir).filter((p) => {
+    if (isRunning(p.dir)) return false;
+    const stage = partStage(p.dir);
+    if (stage === "cancelled") return false;
+    return stage === "retry" || !existsSync(path.join(p.dir, "cloud_job", "job.json"));
+  });
+}
+
+// A recording folder is named for when it started (capture.js): ISO time
+// with ":" and "." made file-safe, e.g. 2026-11-24T02-00-35-030Z.
+const RECORDING_NAME_RE = /^(\d{4}-\d{2}-\d{2})T(\d{2})-(\d{2})-(\d{2})-(\d{3})Z$/;
+export function recordingStartMs(name) {
+  const m = RECORDING_NAME_RE.exec(name);
+  return m ? Date.parse(`${m[1]}T${m[2]}:${m[3]}:${m[4]}.${m[5]}Z`) : null;
+}
+
+// How far back the resend sweep looks, and how often it tries one part.
+// Old enough to cover a venue's internet being down for an afternoon; short
+// enough that a part nobody wants (a session already written off) stops.
+export const RESEND_WINDOW_MS = 24 * 60 * 60 * 1000;
+export const RESEND_EVERY_MS = 5 * 60 * 1000;
+
+/** Recordings the resend sweep should look in: finished, started within RESEND_WINDOW_MS. */
+export function recentFinishedRecordings(recordings, now) {
+  return recordings.filter((r) => {
+    if (r.recording) return false;
+    const started = recordingStartMs(r.name);
+    return started !== null && now - started <= RESEND_WINDOW_MS;
+  });
+}
+
+function partStage(partDir) {
+  try {
+    return JSON.parse(readFileSync(path.join(partDir, "cloud_job", "status.json"), "utf8")).stage ?? null;
+  } catch {
+    return null;
+  }
 }
 
 /** A part's session id: distinct per part, or the console treats part 2 as a resend of part 1 and cancels its upload. */

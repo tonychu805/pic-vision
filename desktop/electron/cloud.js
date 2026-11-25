@@ -14,7 +14,7 @@ import Store from "electron-store";
 import { listCameras, testConnection, setCameraProfile, onCamerasChanged } from "./cameras/store.js";
 import { classifyProbeError, probeStateMsg } from "./cameras/probeResult.js";
 import { isRecording, listRecordings, startRecording, stopRecording, measureStreamFps, measureStreamProfile, authenticatedStreamUri, activeOutDir, uploadDirFor, newestSegment, cleanUpOrphanedRecordings } from "./capture.js";
-import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES, sessionEndReport } from "./autoSplit.js";
+import { getAutoSplitMinutes, makeDueParts, unsentParts, partSessionId, serialized, writeSessionMeta, readSessionMeta, stopTargets, startMatchesCurrent, listParts, SEGMENT_RE, SEGMENT_MINUTES, sessionEndReport, recentFinishedRecordings, RESEND_EVERY_MS } from "./autoSplit.js";
 import { processPendingHighResFetches } from "./highResFetch.js";
 import { grabAndUploadSnapshot } from "./calibration.js";
 import { basename, join } from "node:path";
@@ -1162,6 +1162,32 @@ export async function autoSplitTick() {
     // uploadDirFor: a dual-stream camera (Stage 2) auto-splits its
     // sub-stream, not its full-res main -- main stays local-only.
     if (dir) await sendDueParts(camera, uploadDirFor(dir), { stillRecording: true, flush: false }).catch((err) => console.error(`[autosplit] ${camera.label}: ${err.message}`));
+  }
+  await resendStrandedParts().catch((err) => console.error(`[autosplit] resend sweep: ${err.message}`));
+}
+
+// Parts of finished recordings that never reached the console, or whose
+// upload gave up: sent again until they do. The pass in sendDueParts only
+// covers the recording in progress, so a part stranded by an internet drop
+// stayed on the venue machine for good once its recording ended (PGC
+// 2026-11-24: parts 3-12 of the 10:00 session).
+const lastResendAt = new Map();
+
+async function resendStrandedParts(now = Date.now()) {
+  if (!getCloudConnection()?.apiToken) return;
+  const isRunning = (dir) => isPipelineRunning(dir) || partsInFlight.has(dir);
+  for (const camera of listCameras()) {
+    if (camera.connectionType === "sampleClip") continue;
+    for (const recording of recentFinishedRecordings(listRecordings(camera), now)) {
+      const uploadDir = uploadDirFor(recording.dir);
+      await serialized(async () => {
+        for (const part of unsentParts(uploadDir, isRunning)) {
+          if (now - (lastResendAt.get(part.dir) ?? 0) < RESEND_EVERY_MS) continue;
+          lastResendAt.set(part.dir, now);
+          sendPart(camera, uploadDir, part);
+        }
+      });
+    }
   }
 }
 

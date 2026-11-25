@@ -238,6 +238,9 @@ function CalibrationControl({ camera }) {
 // read once off this one machine's screen.
 function coarseStageLabel(stage, t) {
   if (stage === "upload") return t("detail.stage.upload");
+  // A send that didn't get through: the part is still here and goes again
+  // on the next sweep (cloud.js resendStrandedParts). Cancel stops that.
+  if (stage === "retry") return t("detail.stage.retry");
   if (stage === "done") return t("detail.stage.done");
   if (stage === "cancelling") return t("detail.stage.cancelling");
   if (stage === "cancelled") return t("detail.stage.cancelled");
