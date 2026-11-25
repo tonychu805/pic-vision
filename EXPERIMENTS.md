@@ -6338,3 +6338,13 @@ Two PGC parts (2026-09-25T08-40 session-002/003, 10 min each, 1080p proxy) repla
 **Staging run.** Two PGC parts (2026-09-25T08-40 session-002/003) replayed; both stashed, part 2's stash landed **97 s** after its job reported done (the pod waited for a next part meanwhile, so it was not idle-removed). Night job (venue clock set to America/Chicago, 02:16 there): **2/2 copies kept**, 0 inputs or stash files left. Cap: with 3 archive jobs already that night and a placeholder stash waiting, two dispatches queued **0** jobs.
 
 **Tests.** pytest 474 passed; console `npm test` 467 passed (with pic-vision's `cloud_pipeline` linked in for the pod-env test).
+
+## 2026-11-25 — Delivery speed: GPU busy per stage, and dropping each part's full reel and quick hits
+
+**GPU usage (workstation RTX 2000 Ada, 70 production jobs on 2026-11-24, nvidia-smi every 5 s against each job's stage times):** ball model p50 **93%** busy (p10 89%), **69 W of the 70 W limit**; hit finder p50 81% (p10 35%), 63 W. Running the two at the same time would mostly slow both: not pursued.
+
+**Dropping the per-part full reel and quick hits** (pic-vision `perf/drop-part-reels` e30e572; they're no longer shown since reel #47). Same PGC part (2026-09-25T08-40 session-002) on staging: before, RunPod RTX 4000 Ada, the final cut stage 30.0 s and the upload stage 18.7 s; after, AWS T4 (a slower machine), **17.2 s and 4.3 s**, so ~27 s saved per 10-min part. No full/burst reels were made; every rally found became a clip.
+
+**Side finding:** the hit finder found **18** rallies on the RTX 4000 and **14** on the T4 from the same footage (net-crossing rallies 10 on both; swing candidates 1205 vs 1220). Its output depends on the GPU type. Not caused by this change; worth checking before any comparison across machines.
+
+**Also changed:** a kept machine asks for the session's next part every 5 s instead of 15 s (2a3a291), ~5 s less waiting per part on average (reasoning, not measured).
