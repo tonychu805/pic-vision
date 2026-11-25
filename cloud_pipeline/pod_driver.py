@@ -76,8 +76,8 @@ report a terminal status, which runs every POD_POLL_SEC anyway.
 
 Reuses, unmodified: `scripts/pod_infer.py` (subprocess -- the ADR-064/065
 byte-identical-output guarantee is pinned to not touching this code), and
-`build_reel`/`build_burst_reel` (imported directly, no reason to subprocess
-these now that this runs as one process instead of over SSH).
+`build_top_rallies` (imported directly, no reason to subprocess it now that
+this runs as one process instead of over SSH).
 
 Progress reporting doubles as the cancellation channel: every PATCH to the
 console is answered with whether the operator asked to cancel (same
@@ -109,8 +109,6 @@ if __name__ == "__main__" and os.environ.get("JOB_KIND") == "archive":
     sys.exit(archive_main())
 
 from scripts.check_drift import measure as drift_measure  # noqa: E402
-from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
-from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
 from scripts.top_rallies_reel import build_top_rallies  # noqa: E402
 from src.drift import drift_span, find_bumps  # noqa: E402
 from src.ball_threshold import apply_adaptive_threshold  # noqa: E402
@@ -235,7 +233,6 @@ FFMPEG_R2_KEY = "pipeline/ffmpeg-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
 FFPROBE_R2_KEY = "pipeline/ffprobe-btbn-nvenc-linux-x64-n8.1.2-gc573a95381"
 FFMPEG_LOCAL = "/usr/local/bin/ffmpeg"
 FFPROBE_LOCAL = "/usr/local/bin/ffprobe"
-BURST_TARGET_SEC = 30.0  # matches pod_cut.py's own pin, same reasoning
 TOP_RALLIES_N = 10  # matches pod_cut.py's own pin, operator request 2026-09-12
 
 # pod_infer.py's own periodic progress line, e.g. "  300/29400  75 fps  ETA 6.5 min"
@@ -891,7 +888,6 @@ def run():
     # stored, full-frame one for working out the crop.
     full_calib = json.loads(os.environ["CALIB_JSON"])
     calib = calib_for_box(full_calib)
-    target_sec = float(os.environ.get("TARGET_SEC", "180"))
     session_id = os.environ.get("SESSION_ID", JOB_ID)
 
     calib_path = os.path.join(WORKDIR, "calib.json")
@@ -1041,23 +1037,15 @@ def run():
     _check_cancel("cut", "detecting rallies, ranking, cutting reel...")
     reel_dir = os.path.join(WORKDIR, "reel")
     logo_path = _fetch_logo(LOGO_URL, WORKDIR)
-    full_result = build_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "full"),
-                              target_sec, session_id, weights=WEIGHTS, include_chronological=False,
-                              logo_path=logo_path, occlusion_bridge=OCCLUSION_BRIDGE)
-    burst_result = build_burst_reel(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "burst"),
-                                     BURST_TARGET_SEC, session_id, logo_path=logo_path,
-                                     occlusion_bridge=OCCLUSION_BRIDGE)
-    has_burst = burst_result["chronological"] is not None
+    # Rally clips only (operator 2026-11-25): each part's own full reel and quick hits
+    # are no longer shown anywhere, so they are no longer cut, encoded or uploaded.
     top_result = build_top_rallies(proxy_video, csv_path, calib_path, os.path.join(reel_dir, "top"),
                                     session_id, n=None if BADGES else TOP_RALLIES_N, logo_path=logo_path,
                                     occlusion_bridge=OCCLUSION_BRIDGE,
                                     segments=segments if HIT_FINDER else None)
-    stats = {"full": full_result["stats"], "burst": burst_result["stats"] if has_burst else None,
-             "top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
+    stats = {"top_rallies": top_result["stats"], "hit_finder": hit_finder_info,
              "inference": inference_timing}
     _check_cancel("r2_download", "uploading finished reel(s) to R2...")
-    reel_id = os.environ.get("REEL_ID")
-    burst_reel_id = os.environ.get("BURST_REEL_ID")
     # Brand-prefixed, and uploaded to OUTPUT_BUCKET (the private reels bucket
     # since ADR-142, 2026-09-29; the public one before), not BUCKET (this
     # job's private input) -- PIC-153, 2026-09-18. Before this,
@@ -1065,16 +1053,10 @@ def run():
     # attached to it at all; lib/reels.ts (console) still accepts that
     # exact old shape too, for the separate SSH-driven path that wasn't
     # migrated in the same change (see that file's own comment).
-    ranked_key = reel_key(reel_id)
-    burst_key = reel_key(burst_reel_id)
-    # Top-rally clips: unlike full/burst (always exactly 0 or 1 file, ids
-    # pre-minted by job_runner.py before this pod even started), the count
-    # here is only known now, so each clip mints its own id at upload time.
+    # The count of clips is only known now, so each clip mints its own id at upload time.
     clip_ids = [str(uuid.uuid4()) for _ in top_result["manifest"]]
-    files = [(os.path.join(reel_dir, "full", "highlight_by_rank.mp4"), ranked_key)] + \
-        ([(os.path.join(reel_dir, "burst", "highlight.mp4"), burst_key)] if has_burst else []) + \
-        [(os.path.join(reel_dir, "top", clip["file"]), reel_key(cid))
-         for clip, cid in zip(top_result["manifest"], clip_ids)]
+    files = [(os.path.join(reel_dir, "top", clip["file"]), reel_key(cid))
+             for clip, cid in zip(top_result["manifest"], clip_ids)]
     # The uploads run while framing is worked out and Jev finishes; nothing below reads them.
     upload_pool = ThreadPoolExecutor(max_workers=4)
     uploads = [upload_pool.submit(s3_out.upload_file, path, OUTPUT_BUCKET, key) for path, key in files]
@@ -1118,9 +1100,6 @@ def run():
             # warm-up dinking (src/two_ball.py); absent if not measured.
             **({"two_ball_rate": two_ball[clip["file"]]} if clip["file"] in two_ball else {}),
         })
-    reels.append({"kind": "full", "reel_id": reel_id, "key": ranked_key, "stats": stats["full"]})
-    if has_burst:
-        reels.append({"kind": "burst", "reel_id": burst_reel_id, "key": burst_key, "stats": stats["burst"]})
 
     # Retried, not best-effort: every reel above is already in R2 and this
     # message is the only thing that will ever tell the console they exist.
@@ -1231,8 +1210,10 @@ def finish_with_no_rallies():
 # next part instead of shutting down; while it is asking, the console keeps
 # that part for it rather than renting another machine. Only one pod waits
 # per session, and it gives up after WARM_IDLE_SEC or once it's too close to
-# the orchestrator's job deadline (WARM_ACCEPT_UNTIL, epoch seconds).
-WARM_POLL_SEC = 15
+# the orchestrator's job deadline (WARM_ACCEPT_UNTIL, epoch seconds). Asked every
+# WARM_POLL_SEC: a part that is ready waits half of that on average before work starts
+# (15 s until 2026-11-25; 5 s costs a few more small requests while a machine waits).
+WARM_POLL_SEC = 5
 # Per-job settings the console sends for a next part: exactly the keys the
 # orchestrator's podEnv sets per job. Anything else in a response is ignored.
 JOB_ENV_KEYS = (

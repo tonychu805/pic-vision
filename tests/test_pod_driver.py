@@ -288,11 +288,10 @@ def test_every_reel_the_pod_uploads_lands_in_its_venues_reel_folder():
     # a real job 403s -- the most expensive place to find out.
     assert pod_driver.reel_key("abc") == f"{pod_driver.BRAND_ID}/reels/abc.mp4"
     source = inspect.getsource(pod_driver.run)
-    # The uploads are the (path, key) pairs in `files`: the full reel, the burst and every clip, each keyed by reel_key.
+    # The uploads are the (path, key) pairs in `files`: every rally clip, keyed by reel_key
+    # (a part's own full reel and quick hits are no longer made, operator 2026-11-25).
     files = source[source.index("files = "):source.index("upload_pool = ")]
-    assert re.findall(r"\(os\.path\.join\([^)]*\),\s*(\w+(?:\(\w+\))?)\)", files) == ["ranked_key", "burst_key", "reel_key(cid)"]
-    for var in ("ranked_key", "burst_key"):
-        assert re.search(rf"{var}\s*=\s*reel_key\(", source), f"{var} is not built by reel_key"
+    assert re.findall(r"\(os\.path\.join\([^)]*\),\s*(\w+(?:\(\w+\))?)\)", files) == ["reel_key(cid)"]
     assert "BRAND_ID}/reels" not in source, "a key is built by hand instead of reel_key"
 
 
