@@ -1210,8 +1210,10 @@ def finish_with_no_rallies():
 # next part instead of shutting down; while it is asking, the console keeps
 # that part for it rather than renting another machine. Only one pod waits
 # per session, and it gives up after WARM_IDLE_SEC or once it's too close to
-# the orchestrator's job deadline (WARM_ACCEPT_UNTIL, epoch seconds).
-WARM_POLL_SEC = 15
+# the orchestrator's job deadline (WARM_ACCEPT_UNTIL, epoch seconds). Asked every
+# WARM_POLL_SEC: a part that is ready waits half of that on average before work starts
+# (15 s until 2026-11-25; 5 s costs a few more small requests while a machine waits).
+WARM_POLL_SEC = 5
 # Per-job settings the console sends for a next part: exactly the keys the
 # orchestrator's podEnv sets per job. Anything else in a response is ignored.
 JOB_ENV_KEYS = (
