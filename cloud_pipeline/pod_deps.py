@@ -29,7 +29,7 @@ POD_DEPS_FILES = [
     "src/drift.py", "src/video_quality.py", "src/rallies.py",
     "src/pose.py", "src/badges.py", "src/framing.py", "src/ball_threshold.py", "src/court_crop.py",
     "src/hit_finder.py", "src/hit_finder_v0.json", "src/tracknet_torch.py", "src/cpus.py", "src/jev_sheet.py", "src/face_detection_yunet_2023mar.onnx",
-    "src/view_box.py",
+    "src/view_box.py", "src/two_ball.py",
     "scripts/check_drift.py", "scripts/rank_and_reel.py",
     "scripts/burst_moment_reel.py", "scripts/top_rallies_reel.py",
     "scripts/pod_infer.py",

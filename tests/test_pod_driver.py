@@ -650,3 +650,28 @@ def test_the_ball_model_sees_the_whole_frame_with_k14():
     assert pod_driver.CROP_TO_COURT is False
     assert "k14" in pod_driver.WEIGHTS_R2_KEY
     assert '"--crop-to-court"' in inspect.getsource(pod_driver.run)
+
+
+def _write_predictions(path, xs):
+    with open(path, "w") as f:
+        f.write("Frame,Visibility,X,Y\n")
+        for i, x in enumerate(xs):
+            f.write(f"{i},1,{x},{1080 * 0.6}\n" if x is not None else f"{i},0,-1,-1\n")
+
+
+def test_clip_two_ball_rates_reads_the_track_in_calibration_pixels(tmp_path):
+    # pod_infer writes predictions in calibration pixels on the pod; a 720p
+    # video (never opened here) must not rescale them. Court 0..20 ft spans
+    # x = 0..1920 px through this calibration, so 288 px is 3 ft, 1632 px 17 ft.
+    calib = {"calibration_resolution": [1920, 1080],
+             "homography": [[20 / 1920, 0, 0], [0, 44 / 1080, 0], [0, 0, 1]]}
+    csv_path = str(tmp_path / "p.csv")
+    _write_predictions(csv_path, [288, 1632] * 30 + [960 + i for i in range(60)])
+    clips = [{"file": "warmup.mp4", "start": 0.0, "end": 59 / 30}, {"file": "point.mp4", "start": 2.0, "end": 4.0}]
+    got = pod_driver.clip_two_ball_rates("/not/opened.mp4", csv_path, calib, clips)
+    assert got["warmup.mp4"] == pytest.approx(59 / (59 / 30), rel=1e-3)
+    assert got["point.mp4"] == 0
+
+
+def test_clip_two_ball_rates_never_costs_the_reel():
+    assert pod_driver.clip_two_ball_rates("/no/such/video.mp4", "/no/such.csv", {}, [{"file": "a", "start": 0, "end": 1}]) == {}
