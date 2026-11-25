@@ -315,11 +315,13 @@ def rallies_from_poses(full, far, n, w, csv_path, calib, crossings, model, setup
     return segs, {"candidates": len(C), "accepted": sum(p >= model.cut for p in prob)}
 
 
-def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, model=None, stride=None, keep_full=None):
+def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, model=None, stride=None, keep_full=None,
+                 keep_far=None):
     """Pose every `stride`-th frame of `video` (whole frame + far close-up, one decode) and return (rallies, info).
 
     keep_full, a dict, receives the whole-frame poses ({str(frame): [person]}): badges reuse them
-    rather than posing those frames again."""
+    rather than posing those frames again. keep_far receives the far close-up's, in frame pixels: the redacted
+    archive blurs the far players the whole-frame pass misses."""
     import cv2
     from src.pose import CropModel, pose_video_passes
     stride = stride or STRIDE
@@ -336,6 +338,8 @@ def find_rallies(video, csv_path, calib, crossings, pose_model, progress=None, m
     t1 = time.perf_counter()
     if keep_full is not None:
         keep_full.update(posed["full"])
+    if keep_far is not None:
+        keep_far.update(posed["far"])
     setup_step = SETUP_STEP if stride == STRIDE else 3 * stride
     segs, info = rallies_from_poses(posed["full"], posed["far"], n, w, csv_path, calib, crossings, model, setup_step)
     # Where the time went: pose (decode + GPU) vs features and chaining (pure Python).

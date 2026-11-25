@@ -102,6 +102,12 @@ import requests
 REPO_ROOT = "/workspace"
 sys.path.insert(0, REPO_ROOT)
 
+if __name__ == "__main__" and os.environ.get("JOB_KIND") == "archive":
+    # A venue's nightly blurred copies on a CPU-only machine: none of the reel
+    # job's environment, models or imports below apply.
+    from src.archive_job import main as archive_main  # noqa: E402
+    sys.exit(archive_main())
+
 from scripts.check_drift import measure as drift_measure  # noqa: E402
 from scripts.rank_and_reel import WEIGHTS, build_reel  # noqa: E402
 from scripts.burst_moment_reel import build_burst_reel  # noqa: E402
@@ -682,11 +688,12 @@ def measure_badges(s3_in, video, segments, crossings, calib, known=None):
         return None, None
 
 
-def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
+def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback, far_poses=None):
     """(rallies, info, poses): the hit finder's rallies, or `fallback` (the crossing
     rallies) when it fails or finds none. info goes into the job's stats so
     staging can compare the two finders part by part. poses are its whole-frame
-    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback."""
+    poses ({str(frame): [person]}, every 2nd frame), {} on the fallback. far_poses, a dict,
+    receives the far close-up's poses (frame pixels) for the redacted archive."""
     info = {"crossing_rallies": len(fallback)}
     try:
         from src import hit_finder
@@ -706,7 +713,7 @@ def hit_finder_segments(s3_in, video, csv_path, calib, crossings, fallback):
 
         poses = {}
         segs, found = hit_finder.find_rallies(video, csv_path, calib, crossings, PoseModel(POSE_LOCAL), progress=progress,
-                                              keep_full=poses)
+                                              keep_full=poses, keep_far=far_poses)
         info.update(found, rallies=len(segs), sec=round(time.time() - started, 1))
         _log(f"hit finder: {len(segs)} rallies ({len(fallback)} from net crossings), {found['candidates']} swings, "
              f"{found['posed']} of {found['frames']} frames posed (both passes, one decode) in {info['sec']}s")
@@ -1020,10 +1027,11 @@ def run():
         return
     # Clips and badges must share one rally list: a badge finds its clip by
     # the rally's own start/end (top_rallies_reel.py).
-    hit_finder_info, hit_poses = None, {}
+    hit_finder_info, hit_poses, far_poses = None, {}, {}
     if HIT_FINDER:
         segments, hit_finder_info, hit_poses = hit_finder_segments(s3_in, proxy_video, csv_path, calib,
-                                                                   detected["times_crossed"], segments)
+                                                                   detected["times_crossed"], segments,
+                                                                   far_poses=far_poses)
     # Jev needs only the rally times, so it asks while the GPU does badges and the clips are cut.
     jev_wait = None
     if JEV:
@@ -1127,6 +1135,49 @@ def run():
         **({"badge_measures": badge_measures} if badge_measures else {}),
     })
     _log(f"done: {reels}")
+    stash_for_archive(proxy_video, calib, {f: people + far_poses.get(f, []) for f, people in hit_poses.items()})
+
+
+def stash_for_archive(video, calib, poses):
+    """Leave this part's proxy video (no sound), poses and calibration in the ingest bucket for tonight's
+    blurred copy (src/archive_job.py), when the console wants one. Runs after the part is reported done, so
+    players never wait on it, and uploads through one-file links: this machine holds no key. Never raises: a
+    missing stash only means no copy for this part. The console deletes every stash by 06:00 venue time."""
+    import gzip
+    import cv2
+    headers = {"Authorization": f"Bearer {JOB_TOKEN}"}
+    url = f"{CONSOLE_URL}/api/runner/jobs/{JOB_ID}/archive/stash"
+    silent = os.path.join(WORKDIR, "stash_proxy.mp4")
+    poses_gz = os.path.join(WORKDIR, "stash_poses.json.gz")
+    if not poses:
+        _log("archive: nothing stashed: this part has no poses (the copy needs every 2nd frame posed)")
+        return
+    try:
+        r = requests.get(url, headers=headers, timeout=30)
+        if r.status_code in (409, 503):
+            return
+        r.raise_for_status()
+        links = r.json()["urls"]
+        _run_ffmpeg(["ffmpeg", "-y", "-v", "error", "-i", video, "-map", "0:v:0", "-c:v", "copy", "-an",
+                     "-movflags", "+faststart", silent])
+        with gzip.open(poses_gz, "wt") as f:
+            json.dump(poses, f, separators=(",", ":"))
+        cap = cv2.VideoCapture(silent)
+        frames, fps = int(cap.get(cv2.CAP_PROP_FRAME_COUNT)), cap.get(cv2.CAP_PROP_FPS) or 30.0
+        cap.release()
+        for name, path, ctype in (("proxy", silent, "video/mp4"), ("poses", poses_gz, "application/gzip")):
+            with open(path, "rb") as f:
+                requests.put(links[name], data=f, headers={"Content-Type": ctype}, timeout=600).raise_for_status()
+        requests.put(links["calib"], data=json.dumps(calib).encode(), headers={"Content-Type": "application/json"},
+                     timeout=60).raise_for_status()
+        requests.post(url, headers=headers, timeout=30, json={"frames": frames, "seconds": frames / fps}).raise_for_status()
+        _log(f"archive: part stashed for tonight's copy ({os.path.getsize(silent) / 1e6:.0f} MB video)")
+    except Exception as e:  # noqa: BLE001 -- see docstring
+        _log(f"archive: nothing stashed for this part: {type(e).__name__}: {e}")
+    finally:
+        for p in (silent, poses_gz):
+            if os.path.exists(p):
+                os.remove(p)
 
 
 def finish_with_no_rallies():
