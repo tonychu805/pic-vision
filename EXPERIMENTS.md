@@ -6330,3 +6330,11 @@ Two PGC parts (2026-09-25T08-40 session-002/003, 10 min each, 1080p proxy) repla
 - Run 3 (03:40): **2 of 2 kept**, 29.8 MB and 28.3 MB, 1280x720, 18,000 frames each. Job claimed 19:40:28 UTC, done 19:51:01: about 2 min boot, then about 4 min per part. Same part on the workstation (i7-7820X, 8 workers, libx264): 117 s, 28.2 MB.
 - After the run: 0 stash files and 0 `archive_inputs` rows left; `session_archives` rows hold venue, month (2026-11-01) and the random key only.
 - Visual check, 4 frames + 2 crops: everything off the main court blurred; every head blurred, including a person crouched at the baseline. Not a full blur audit (todo B13).
+
+## 2026-11-25 — Archive review fixes on staging: background stash upload, retry, 3 night jobs per venue
+
+**What.** A code review of the whole archive found: (1) the stash upload blocked the pod's next part (PGC runs on the office workstation; a 150 MB upload measured 33 s at 36.6 Mbps today, the office has also measured ~3.5 Mbps, i.e. ~6 min against parts every 5 min), and a pod neither working nor waiting is removed after 90 s; (2) a night job failing before taking any part was re-queued every minute until 06:00; (3) one failed `next` request ended the night's job; (4) a stale stop reason. Fixed in pic-vision `fix/archive-review` (fc0af5b) and console `fix/archive-night-job-cap` (3f8510f).
+
+**Staging run.** Two PGC parts (2026-09-25T08-40 session-002/003) replayed; both stashed, part 2's stash landed **97 s** after its job reported done (the pod waited for a next part meanwhile, so it was not idle-removed). Night job (venue clock set to America/Chicago, 02:16 there): **2/2 copies kept**, 0 inputs or stash files left. Cap: with 3 archive jobs already that night and a placeholder stash waiting, two dispatches queued **0** jobs.
+
+**Tests.** pytest 474 passed; console `npm test` 467 passed (with pic-vision's `cloud_pipeline` linked in for the pod-env test).

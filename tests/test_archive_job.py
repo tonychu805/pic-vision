@@ -4,6 +4,7 @@ import io
 import json
 import os
 
+import pytest
 import requests
 
 from src import archive_job
@@ -20,10 +21,10 @@ def item(n):
 class Reply:
     def __init__(self, status=200, body=None, raw=b""):
         self.status_code, self._body, self.raw = status, body, io.BytesIO(raw)
+        self.ok = status < 400
 
     def iter_content(self, size):
         return iter(lambda: self.raw.read(size), b"")
-        self.ok = status < 400
 
     def json(self):
         return self._body
@@ -42,11 +43,15 @@ class Reply:
 class Console:
     """Hands out `items` in order, then done; serves the stashed files; records uploads and reports."""
 
-    def __init__(self, items, broken_downloads=()):
+    def __init__(self, items, broken_downloads=(), next_failures=0):
         self.items, self.broken = list(items), set(broken_downloads)
         self.reports, self.uploads = [], []
+        self.next_failures = next_failures
 
     def get(self, url, stream=False, **k):
+        if url == f"{BASE}/next" and self.next_failures:
+            self.next_failures -= 1
+            return Reply(503)
         if url == f"{BASE}/next":
             return Reply(body=self.items.pop(0) if self.items else {"done": True})
         if url in self.broken:
@@ -157,3 +162,18 @@ def test_a_download_r2_sends_gzipped_on_the_fly_is_saved_decoded(tmp_path):
     finally:
         server.shutdown()
     assert json.loads((tmp_path / "calib.json").read_text()) == json.loads(calib)
+
+
+def test_a_brief_failure_asking_for_the_next_part_does_not_end_the_night(tmp_path):
+    console, waits = Console([item(1), item(2)], next_failures=2), []
+    kept, failures = archive_job.run("https://console", "j1", "t", deadline=1e12, workdir=str(tmp_path), http=console,
+                                     redact=redact_ok, sleep=waits.append)
+    assert (kept, len(failures)) == (2, 0)
+    assert len(waits) == 2
+
+
+def test_a_console_that_stays_down_ends_the_job_with_an_error(tmp_path):
+    console = Console([item(1)], next_failures=archive_job.NEXT_ATTEMPTS)
+    with pytest.raises(RuntimeError):
+        archive_job.run("https://console", "j1", "t", deadline=1e12, workdir=str(tmp_path), http=console,
+                        redact=redact_ok, sleep=lambda s: None)
